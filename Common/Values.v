@@ -166,10 +166,9 @@ Proof.
   by move: H => /Z.eqb_spec => H; rewrite H.
   done.
   by move: H => /Pointer.eqP => H; rewrite H.
-  destruct p2 as [[[p C] b] o].
-    apply /andP. split; last by apply /eqP.
-    apply /andP. split; last by apply /eqP.
-    apply /andP. split; last by apply /eqP.
+  destruct p2 as [[[p C] b] o]. simpl.
+  Locate "=?".
+  rewrite Z.eqb_refl !Nat.eqb_refl !andbT.
     by apply /Permission.eqP.
 Qed.
 

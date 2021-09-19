@@ -62,6 +62,10 @@ Module Type AbstractComponentMemory.
         end
       else None.
 
+  Axiom nextblock_prealloc:
+    forall (bufs: {fmap Block.id -> nat + list value}),
+      next_block (prealloc bufs) = S (fold_left Nat.max (fmap.domm bufs) 0).
+
   Axiom load_after_alloc:
     forall m m' n b,
       alloc m n = (m',b) ->
@@ -171,10 +175,20 @@ Module Type AbstractComponentMemory.
       alloc m n = (m', b) ->
       (b = next_block m /\ next_block m' = next_block m + 1).
 
+
+  Axiom alloc_next_block:
+    forall m n,
+    exists m', alloc m n = (m', next_block m).
+
   Axiom next_block_store_stable :
     forall m m' b i v,
       store m b i v = Some m' ->
       next_block m = next_block m'.
+
+  Axiom load_next_block :
+    forall m b i v,
+      load m b i = Some v ->
+      b < next_block m.
 
   Axiom load_after_reserve_block :
     forall m b i v,
@@ -489,6 +503,11 @@ Module ComponentMemory : AbstractComponentMemory.
     - simpl. now destruct (bufs b).
   Qed.
 
+  Lemma nextblock_prealloc:
+    forall bufs,
+      next_block (prealloc bufs) = S (fold_left Nat.max (fmap.domm bufs) 0).
+  Proof. by autounfold. Qed.
+    
   Lemma load_after_alloc:
     forall (m m' : mem) (n : nat) b,
       alloc m n = (m',b) ->
@@ -720,7 +739,15 @@ Module ComponentMemory : AbstractComponentMemory.
     unfold alloc. intros ? ? ? ? Halloc. inversion Halloc. subst.
     intuition. simpl. unfold next_block. by intuition.
   Qed.
-    
+
+  Lemma alloc_next_block:
+    forall m n,
+    exists m', alloc m n = (m', next_block m).
+  Proof.
+    rewrite /alloc => m n.
+    eexists; eauto.
+  Qed.
+
   Lemma next_block_store_stable :
     forall m m' b i v,
       store m b i v = Some m' ->
@@ -732,6 +759,11 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (list_upd ch (Z.to_nat i) v); try discriminate.
     inversion Hstore. by subst.
   Qed.
+
+  Lemma load_next_block m b i v :
+    load m b i = Some v ->
+    b < next_block m.
+  Admitted.
 
   Lemma load_after_reserve_block :
     forall m b i v,

@@ -51,8 +51,10 @@ Code at internal entry label:
 
 Require Import Common.Definitions.
 Require Import Common.CompCertExtensions.
+Require Import Common.RenamingOption.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
+Require Import Intermediate.CSInvariants.
 Require Import S2I.CompMonad.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -212,7 +214,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
                                   (* as expected by the prologue (see compile_proc) *)
          push R_RA ++
          [IPtrOfLabel ret_label R_RA] ++
-         [IJump R_AUX1] ++
+         [IJumpFunPtr R_AUX1] ++
          [ILabel ret_label] ++
          pop R_RA)
   | E_exit => ret [IHalt]
@@ -290,13 +292,13 @@ Definition gen_all_procedures_labels
       end
   in gen emptym procs.
 
+(*****************************************
 Definition gen_buffers
          (bufs: {fmap Component.id -> nat + list value})
-  : NMap {fmap Block.id -> nat + list value} :=
-  mapm (fun init_info => mkfmap [(0, init_info)]) bufs.
+  : NMap {fmap Block.id -> nat + list value} := bufs.
+*******************************************)
 
 Definition compile_components
-         (local_buffers : NMap {fmap Block.id -> nat + list value})
          (procs_labels : NMap (NMap label))
          (comps: list (Component.id * NMap expr))
   : COMP (list (Component.id * NMap code)) :=
@@ -305,8 +307,6 @@ Definition compile_components
       | [] => ret acc
       | (C,procs) :: cs' =>
         let local_buffer_block_id := 0 in
-        do blocks <- lift (local_buffers C);
-        do _ <- lift (blocks local_buffer_block_id );
         do P_labels <- lift (procs_labels C);
         do procs_code <- compile_procedures C
            (Permission.data, C, local_buffer_block_id, 0%Z)
@@ -361,14 +361,13 @@ Definition compile_program
            (p: Source.program) : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
   let bufs := Source.prog_buffers p in
-  let local_buffers := gen_buffers bufs in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
-    do code <- compile_components local_buffers procs_labels comps;
+    do code <- compile_components procs_labels comps;
     let p :=
         {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
-           Intermediate.prog_buffers := local_buffers;
+           Intermediate.prog_buffers := bufs;
            Intermediate.prog_main := Some Procedure.main |} in
    wrap_main procs_labels p).
 
@@ -384,8 +383,8 @@ Proof.
   destruct (gen_all_procedures_labels (elementsm (Source.prog_procedures p)) init_env)
     as [[labels cenv1]|] eqn:Hlabs;
     try discriminate.
-  destruct (compile_components (gen_buffers (Source.prog_buffers p)) labels
-                               (elementsm (Source.prog_procedures p)) cenv1)
+  destruct (compile_components  labels
+                                (elementsm (Source.prog_procedures p)) cenv1)
     as [[code cenv2]|] eqn:Hcompiled_comps;
     try discriminate.
   simpl in Hcompile.
@@ -503,15 +502,15 @@ Lemma compilation_has_matching_mains :
     matching_mains p p_compiled.
 Admitted.
 
-(* Local Axiom separate_compilation: *)
-(*   forall p c p_comp c_comp, *)
-(*     Source.well_formed_program p -> *)
-(*     Source.well_formed_program c -> *)
-(*     linkable (Source.prog_interface p) (Source.prog_interface c) -> *)
-(*     compile_program p = Some p_comp -> *)
-(*     compile_program c = Some c_comp -> *)
-(*     compile_program (Source.program_link p c) *)
-(*     = Some (Intermediate.program_link p_comp c_comp). *)
+Axiom separate_compilation:
+  forall p c p_comp c_comp,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_comp ->
+    compile_program c = Some c_comp ->
+    compile_program (Source.program_link p c)
+    = Some (Intermediate.program_link p_comp c_comp).
 
 (* We can currently do with a weaker notion of separate compilation *)
 Local Axiom separate_compilation_weaker:
@@ -539,13 +538,42 @@ Local Axiom compilation_preserves_well_formedness:
     Intermediate.well_formed_program p_compiled.
 
 (* FCC *)
-Local Axiom I_simulates_S:
+
+Section Simulation.
+
+  Context {p: Source.program}.
+  Variable p_closed: Source.closed_program p.
+  Variable p_wf: Source.well_formed_program p.
+  Context {tp: Intermediate.program}.
+  Variable p_tp: compile_program p = Some tp.
+
+  Let L1 := S.CS.sem p.
+  Let L2 := I.CS.sem_non_inform tp.
+  
+  Local Axiom index: Type.
+  Local Axiom order: index -> index -> Prop.
+  Local Axiom match_states : index -> state L1 -> state L2 -> Prop.
+  Local Axiom fsim_record : fsim_properties _ _ _ index order match_states.
+
+  Local Axiom no_refinement_of_undef:
+    forall (i: index) (s1 : state L1) (s2 : state L2),
+      match_states i s1 s2 ->
+      safe (I.CS.sem_non_inform tp) s2 ->
+      safe (S.CS.sem p) s1.
+  
+End Simulation.
+
+Lemma I_simulates_S:
   forall {p},
     Source.closed_program p ->
     Source.well_formed_program p ->
   forall {tp},
     compile_program p = Some tp ->
     forward_simulation (S.CS.sem p) (I.CS.sem_non_inform tp).
+Proof.
+  intros ? ? ? ? ?.
+  econstructor. exact fsim_record.
+Qed.
 
 (* BCC *)
 (* We derive BCC from FCC as in CompCert *)
@@ -571,6 +599,66 @@ Theorem well_formed_compilable :
     compile_program p = Some pc.
 Admitted.
 
+Lemma forward_simulation_star:
+  forall p p_compiled t s,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
+    compile_program p = Some p_compiled -> 
+    exists s',
+      Star (I.CS.sem_non_inform p_compiled)
+           (I.CS.initial_machine_state p_compiled) t s'.
+Proof.
+  intros ? ? ? ? Hcp Hwfp Hstar Hcmp.
+  assert(Hbs : forward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
+  { apply I_simulates_S; assumption. }
+  destruct Hbs.
+  specialize (simulation_star props Hstar) as G.
+  destruct props as [? ? ? ?].
+  specialize (fsim_match_initial_states _ Logic.eq_refl) as [i [s' [? Hmatch]]].
+  specialize (G _ _ Hmatch).
+  inversion H; subst.
+  destruct G as [? [? [? ?]]].
+  eauto.
+Qed.
+
+(** TODO: Prove this by relying on the Axioms fsim_record and no_refinement_of_undef *)
+(** together with lemma S_simulates_I. *)
+Lemma backward_simulation_star:
+  forall p p_compiled t s,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    Star (I.CS.sem_non_inform p_compiled)
+         (I.CS.initial_machine_state p_compiled) t s ->
+    exists s' i,
+      Star (S.CS.sem p) (S.CS.initial_machine_state p) t s'
+      /\
+      match_states i s' s.
+Proof.
+  intros ? ? ? ? Hcp Hwfp Hcmp Hstar.
+(*********************************  
+  Search _ "sim" "b".
+  assert(Hbs : backward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
+  { apply S_simulates_I; assumption. }
+  destruct Hbs.
+  
+  specialize (bsim_match_initial_states _ _ Logic.eq_refl Logic.eq_refl)
+    as [i [s' [? Hmatch]]].
+  specialize (backward_simulation_star props Hstar) as G.
+  destruct props as [? ? ? ?].
+
+  specialize (G _ _ (Terminates nil) Hmatch).
+  inversion H; subst.
+  destruct G as [? [? [? ?]]]; eauto.
+  intros ? ? ? ? Hinv.
+  simpl in Hinv. Search _ "safe". safe Source.CS.CS.final_state.
+  Search _ behavior_app.
+Qed.
+***********************************)
+Admitted.
+
+    
 Lemma forward_simulation_same_safe_prefix:
   forall p p_compiled m,
     Source.closed_program p ->
@@ -619,3 +707,38 @@ Proof.
       exists (Goes_wrong t''). reflexivity.
     + right. exists t. split. reflexivity. assumption.
 Qed.
+
+Definition shared_locations_have_only_shared_values mem metadata_size :=
+  forall (ptr : Pointer.t)
+         (addr : Component.id * Block.id) (v : value),
+    Memory.Memory.load mem ptr = Some v ->
+    addr = (Pointer.component ptr, Pointer.block ptr) ->
+    left_addr_good_for_shifting metadata_size addr ->
+    left_value_good_for_shifting metadata_size v. 
+  
+Definition private_pointers_never_leak_I p metadata_size :=
+  forall (s : I.CS.state) (t : Events.trace Events.event),
+    CSInvariants.CSInvariants.is_prefix s p t ->
+    good_trace_extensional (left_addr_good_for_shifting metadata_size) t /\
+    (forall (mem : eqtype.Equality.sort Memory.Memory.t),
+        I.CS.state_mem s = mem ->
+        shared_locations_have_only_shared_values mem metadata_size
+    ).
+
+
+Definition private_pointers_never_leak_S p metadata_size :=
+  forall (s : S.CS.state) (t : Events.trace Events.event),
+    Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
+    good_trace_extensional (left_addr_good_for_shifting metadata_size) t /\
+    (forall (mem : eqtype.Equality.sort Memory.Memory.t),
+        S.CS.s_memory s = mem ->
+        shared_locations_have_only_shared_values mem metadata_size
+    ).
+
+Local Axiom compiler_preserves_non_leakage_of_private_pointers:
+  forall p p_compiled metadata_size,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    private_pointers_never_leak_S p          metadata_size ->
+    private_pointers_never_leak_I p_compiled metadata_size.

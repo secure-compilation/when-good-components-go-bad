@@ -734,6 +734,42 @@ Section ThreewayMultisem1.
             rewrite H in Hcomp
           end.
           intuition.
+      + (* IJumpFunPtr --- proof the same as IJump *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            ++ (* is_prefix *)
+              unfold CSInvariants.is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
+              {
+                eauto.
+              }
+              by rewrite <- Hpc2''.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          find_and_invert_mergeable_states_well_formed.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
+
       + (* IBnz *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.

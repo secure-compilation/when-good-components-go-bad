@@ -93,6 +93,7 @@ Variant instr :=
 | IBnz : register -> label -> instr
 | IJump : register -> instr
 | IJal : label -> instr
+| IJumpFunPtr : register -> instr
 (* components interaction *)
 | ICall : Component.id -> Procedure.id -> instr
 | IReturn : instr
@@ -111,6 +112,7 @@ Definition instr_eqb (i1 i2 : instr) : bool :=
   | ICall C1 P1, ICall C2 P2
     => ssrnat.eqn C1 C2 && ssrnat.eqn P1 P2
   | IJump r1, IJump r2
+  | IJumpFunPtr r1, IJumpFunPtr r2
     => register_eqb r1 r2
   | ILoad r1 r1', ILoad r2 r2'
   | IStore r1 r1', IStore r2 r2'
@@ -424,6 +426,7 @@ Definition well_formed_instruction
   | IStore r1 r2 => True
   | IAlloc r1 r2 => True
   | IJump r => True
+  | IJumpFunPtr r => True
   | IReturn => True
   | IHalt => True
   end.

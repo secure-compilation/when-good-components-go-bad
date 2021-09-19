@@ -1,17 +1,15 @@
 Require Import CompCert.Behaviors.
+Require Import CompCert.Smallstep.
 Require Import Common.Definitions.
 Require Import Common.Linking.
-Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 Require Import Common.TracesInform.
 Require Import Common.RenamingOption.
 
-(*Require Import RSC_DC_MD_Sigs.*)
 Require Import Source.Definability.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
-(*Require Import Source.Blame.*)
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
 Require Import Intermediate.RecombinationRel.
@@ -26,20 +24,7 @@ Unset Strict Implicit.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(*
-Module RSC_DC_MD_Gen
-       (Source : Source_Sig)
-       (Intermediate : Intermediate_Sig)
-       (S2I : S2I_Sig Source Intermediate)
-       (Compiler : Compiler_Sig Source Intermediate S2I)
-       (Linker : Linker_Sig Source Intermediate S2I).
-*)
-
-Definition behavior_improves_blame b (m: @finpref_behavior Events.event) p :=
-  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
-            undef_in t (Source.prog_interface p).
-
-Section RSC_DC_MD_Section.
+Section RSC_Section.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
   Variable Ct: Intermediate.program.
@@ -71,22 +56,29 @@ Section RSC_DC_MD_Section.
    *)
 
   Theorem RSC_DC_MD:
-    forall (m: @finpref_behavior (*TracesInform.event_inform*) Events.event),
-      does_prefix (Intermediate.CS.CS.sem_non_inform (*_inform*)
-                     (Intermediate.program_link p_compiled Ct)) m ->
-      not_wrong_finpref m ->
-      exists Cs (beh: @program_behavior Events.event) m'
-             size_meta_m size_meta_m',
+    forall t s,
+      Star (Intermediate.CS.CS.sem_non_inform (Intermediate.program_link p_compiled Ct))
+           (Intermediate.CS.CS.initial_machine_state
+              (Intermediate.program_link p_compiled Ct)
+           )
+           t
+           s
+      ->
+      exists Cs t' s' size_meta size_meta',
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
-      program_behaves (Source.CS.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix ((*Definability.project_finpref_behavior*) m') beh) /\
-      behavior_rel_behavior size_meta_m size_meta_m'
-                            ((*Definability.project_finpref_behavior*) m) m'.
+      Star (Source.CS.CS.sem (Source.program_link p Cs))
+           (Source.CS.CS.initial_machine_state
+              (Source.program_link p Cs)
+           )
+           t'
+           s'
+      /\
+      traces_shift_each_other_option size_meta size_meta' t t'.
   Proof.
-    intros m [t [Hbeh Hprefix0]] Hsafe_pref.
+    intros t s Hstar.
 
     (* Some auxiliary results. *)
     pose proof
@@ -108,76 +100,48 @@ Section RSC_DC_MD_Section.
         now rewrite successful_compilation.
     }
 
-    assert (H_doesm_noninform: does_prefix
-                                 (Intermediate.CS.CS.sem_non_inform
-                                    (Intermediate.program_link p_compiled Ct)) m)
-      by (now exists t).
-
-    assert (H_doesm': exists m_inform,
-               does_prefix
+    assert (exists t_inform,
+               Star
                  (Intermediate.CS.CS.sem_inform
-                    (Intermediate.program_link p_compiled Ct)) m_inform).
+                    (Intermediate.program_link p_compiled Ct))
+                 (Intermediate.CS.CS.initial_machine_state
+                    (Intermediate.program_link p_compiled Ct)
+                 )
+                 t_inform
+                 s
+               /\ project_non_inform t_inform = t) as [t_inform [Hstarinform Hproj]].
     {
-      (** TODO: Replace this with apply CS.does_prefix_non_inform_inform *)
-      unfold does_prefix.
-      destruct H_doesm_noninform as [b_noninform [Hb_noninform Hpref]].
-      specialize (CS.behavior_prefix_star_non_inform Hb_noninform Hpref)
-        as [s_init [s' [Hinit Hstar]]].
-      apply CS.star_sem_non_inform_star_sem_inform in Hstar as [t_inform [Hstar Hproj]].
-      exists (FTbc t_inform).
-      eapply program_behaves_finpref_exists; eauto.
+      by eapply Intermediate.CS.CS.star_sem_non_inform_star_sem_inform.
     }
 
-    destruct H_doesm' as [m_inform H_doesm].
-
-    assert (m_m_inform: m = project_finpref_behavior m_inform).
-    { admit. }
-
-    Check project_finpref_behavior.
-    Locate finpref_behavior.
-
-    assert (Hbeh_inform': exists t_inform,
-               program_behaves
-                 (Intermediate.CS.CS.sem_inform
-                    (Intermediate.program_link p_compiled Ct)) t_inform
-           ).
-    { admit. }
-
-    destruct Hbeh_inform' as [t_inform Hbeh_inform].
-
-    assert (Hprefix0_inform: prefix m_inform t_inform).
-    { admit. }
-
-    assert (Hsafe_pref_inform: not_wrong_finpref m_inform).
-    { admit. }
-
-    (* intermediate decomposition (for p_compiled) *)
-    (* pose proof Intermediate.decomposition_prefix  *)
-    (*   well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains *)
-    (*   Hsafe_pref H_doesm  as HP_decomp. *)
+    
 
     (* definability *)
-    destruct (Linker.definability_with_linking
-                well_formed_p_compiled well_formed_Ct
-                linkability_pcomp_Ct closedness Hbeh_inform Hprefix0_inform Hsafe_pref_inform)
-      as [P' [Cs [m' [metadata_size
+    destruct (definability_with_linking
+                well_formed_p_compiled
+                well_formed_Ct
+                linkability_pcomp_Ct
+                closedness
+                Hstarinform)
+      as [P' [Cs [t' [s' [metadata_size
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_m' Hbeh_rel_beh]]]]]]]]]]]].
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' Ht_rel_t']]]]]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
 
+    
     (* FCC *)
 
     (* the definability output can be split in two programs *)
     (* probably need partialize to obtain them *)
 
     (* At this point, we compile P' and Cs and establish their basic properties. *)
-    destruct (Compiler.well_formed_compilable well_formed_P') as [P'_compiled HP'_compiles].
+    destruct (Compiler.well_formed_compilable P' well_formed_P') as [P'_compiled HP'_compiles].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
-    destruct (Compiler.well_formed_compilable well_formed_Cs) as [Cs_compiled HCs_compiles].
+    destruct (Compiler.well_formed_compilable Cs well_formed_Cs) as [Cs_compiled HCs_compiles].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
       as well_formed_Cs_compiled.
     assert
@@ -204,25 +168,27 @@ Section RSC_DC_MD_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-      have HP'_Cs_compiled_doesm :
-        does_prefix (Intermediate.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) m'.
+
+      assert(
+          exists s',
+            Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
+               (I.CS.initial_machine_state P'_Cs_compiled)
+               t' s') as [s'_compiled HP'_Cs_compiled_star].
       {
-        eapply Compiler.forward_simulation_same_safe_prefix; try eassumption. congruence.
-        (* [DynShare] The subgoal remaining here is "not_wrong_finpref m'". This subgoal
-         should follow from the fact that m' is produced by a back-translation.
-         A back-translation should not go wrong because it mimics well-defined events, 
-         and then directly terminates.
-         *)
-        (* However, right now it doesn't seem we have such a lemma? *)
-        admit.
+        by eapply forward_simulation_star; eauto.
       }
 
-    (* intermediate decomposition (for Cs_compiled) *)
-    rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm;
+      assert (P'_Cs_compiled = Intermediate.program_link P'_compiled Cs_compiled).
+      {
+        erewrite Compiler.separate_compilation in HP'_Cs_compiles; eauto;
+          last (by rewrite Hsame_iface1 Hsame_iface2).
+        
+          by inversion HP'_Cs_compiles.
+      }
+      subst.
+
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star;
        [| assumption |assumption | apply linkable_sym in linkability'; assumption].
-    (* pose proof (Intermediate.decomposition_prefix *)
-    (*        well_formed_Cs_compiled well_formed_P'_compiled *)
-    (*        linkability' mains' Hsafe_pref HP'_Cs_compiled_doesm) as HCs_decomp. *)
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -249,7 +215,8 @@ Section RSC_DC_MD_Section.
     }
     assert (Intermediate.closed_program (Intermediate.program_link p_compiled Cs_compiled))
       as HpCs_compiled_closed.
-    pose proof S2I.matching_mains_equiv
+    pose proof S2I.Definitions.matching_mains_equiv
+         _ _ _
          Hmatching_mains_Cs_Ct
          (Compiler.compilation_has_matching_mains well_formed_Cs HCs_compiles)
          as Hctx_match_mains.
@@ -273,12 +240,6 @@ Section RSC_DC_MD_Section.
       as Hmergeable_ifaces.
       by apply Intermediate.compose_mergeable_interfaces.
 
-    (* pose proof Intermediate.composition_prefix *)
-    (*      well_formed_p_compiled well_formed_Cs_compiled *)
-    (*      linkable_mains HpCs_compiled_closed *)
-    (*      Hmergeable_ifaces *)
-    (*      HP_decomp HCs_decomp *)
-    (*   as HpCs_compiled_beh. *)
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
       apply (Source.interface_preserves_closedness_l HP'Cs_closed); trivial.
       apply Compiler.compilation_preserves_interface in HP'_compiles.
@@ -306,76 +267,135 @@ Section RSC_DC_MD_Section.
       rewrite Intermediate.program_linkC; eauto.
       apply linkable_sym; eauto.
       apply Intermediate.linkable_mains_sym; eauto.
-      eapply S2I.matching_mains_equiv; eauto.
+      eapply S2I.Definitions.matching_mains_equiv; eauto.
       apply Compiler.compilation_has_matching_mains; eauto.
     }
 
-    rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm; try assumption.
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star; try assumption.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
 
-    assert (m_rel_m': behavior_rel_behavior_all_cids all_zeros_shift metadata_size m m').
-    { admit. }
+    assert (t_rel_t': traces_shift_each_other_option
+                        all_zeros_shift metadata_size (project_non_inform t_inform) t').
+    { by apply traces_shift_each_other_option_symmetric. }
 
-    pose proof Intermediate.recombination_prefix
-         well_formed_p_compiled well_formed_Ct well_formed_P'_compiled well_formed_Cs_compiled
-         Hmergeable_ifaces Hprog_same_iface Hctx_same_iface
-         closedness HP'Cs_compiled_closed
-         H_doesm_noninform HP'_Cs_compiled_doesm m_rel_m'
-         as [m'' [size_m'' [HpCs_compiled_beh m''_rel_m]]].
+    assert (H_p_Ct_good: forall (ss : CS.state) (tt : Events.trace Events.event),
+               CSInvariants.CSInvariants.is_prefix
+                 ss (Intermediate.program_link p_compiled Ct) tt ->
+               good_trace_extensional (left_addr_good_for_shifting all_zeros_shift) tt
+               /\
+               (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
+                       (addr : Component.id * Block.id) (v : value),
+                   CS.state_mem ss = mem ->
+                   Memory.Memory.load mem ptr = Some v ->
+                   addr = (Pointer.component ptr, Pointer.block ptr) ->
+                   left_addr_good_for_shifting all_zeros_shift addr ->
+                   left_value_good_for_shifting all_zeros_shift v)).
+    {
+      intros ? ? ?. split.
+      - constructor. intros ? ?. destruct a as [? ?].
+        unfold all_zeros_shift, uniform_shift. easy.
+      - intros ? ? ? ? ? ? ? ?.
+        destruct v as [| [[[[|] ?] ?] ?] |]; unfold all_zeros_shift, uniform_shift;
+          simpl; easy.
+    }
 
+    (** Need an axiom about the Compiler. The axiom will transfer goodness of *)
+    (** a source program to goodness of the compiled version, where goodness  *)
+    (** is described as conformance of the sharing behavior with the static   *)
+    (** address renaming convention (i.e., shared addresses are renamed into  *)
+    (** shared addresses). Viewed dually, the axiom about the compiler says   *)
+    (** that the compiler preserves the privacy of private (non-shared)       *) 
+    (** addresses.                                                            *)
+
+    (** With such an axiom in hand, we can assert the following from its      *)
+    (** corresponding source version.                                         *)
+
+    assert (good_P'_Cs: private_pointers_never_leak_S
+                          (Source.program_link P' Cs)
+                          metadata_size
+           ).
+    {
+      admit.
+      (** Should be a lemma from Source/Definability.v *)
+    }
+    
+    assert (HP'_compiled_Cs_compiled_good: forall (ss'' : CS.state) tt'',
+               CSInvariants.CSInvariants.is_prefix
+                 ss''
+                 (Intermediate.program_link P'_compiled Cs_compiled) tt'' ->
+               good_trace_extensional (left_addr_good_for_shifting metadata_size) tt''
+               /\
+               (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
+                       (addr : Component.id * Block.id) (v : value),
+                   CS.state_mem ss'' = mem ->
+                   Memory.Memory.load mem ptr = Some v ->
+                   addr = (Pointer.component ptr, Pointer.block ptr) ->
+                   left_addr_good_for_shifting metadata_size addr ->
+                   left_value_good_for_shifting metadata_size v)).
+    {
+      assert (P'_Cs_closed: Source.closed_program (Source.program_link P' Cs)).
+      {
+        eapply Source.interface_preserves_closedness_l; eauto.
+        rewrite Hsame_iface1.
+        erewrite compilation_preserves_interface; eauto.
+      }
+
+      assert (P'_Cs_wf: Source.well_formed_program (Source.program_link P' Cs)).
+      {
+        eapply Source.linking_well_formedness; eauto.
+        rewrite Hsame_iface1.
+        erewrite compilation_preserves_interface; eauto.
+      }
+      
+      specialize (Compiler.compiler_preserves_non_leakage_of_private_pointers
+                    _ _ _ P'_Cs_closed P'_Cs_wf HP'_Cs_compiles good_P'_Cs
+                 ) as G.
+      unfold CSInvariants.CSInvariants.is_prefix.
+      intros ? ? Hpref.
+      unfold private_pointers_never_leak_I, shared_locations_have_only_shared_values in *.
+      specialize (G ss'' tt'' Hpref) as [G1 G2].
+      split; first exact G1.
+      intros ? ? ? ? ? ? ? ?.
+      eapply G2; eauto.
+    }
+
+    pose proof Intermediate.RecombinationRel.recombination_trace_rel
+    well_formed_p_compiled
+    well_formed_Ct
+    well_formed_P'_compiled
+    well_formed_Cs_compiled
+    Hmergeable_ifaces
+    Hprog_same_iface
+    Hctx_same_iface
+    closedness
+    HP'Cs_compiled_closed
+    H_p_Ct_good
+    HP'_compiled_Cs_compiled_good
+    Hstar
+    HP'_Cs_compiled_star
+    t_rel_t'
+      as [s_recomb [t_recomb [Hstar_recomb [_ trel_recomb]]]].
+
+    
     (* BCC *)
     assert (exists pCs_compiled,
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles].
       by now apply Compiler.well_formed_compilable.
+      
+      eapply Compiler.backward_simulation_star in Hstar_recomb;
+        eauto; last
+        (by rewrite HpCs_compiles;
+         erewrite Compiler.separate_compilation in HpCs_compiles; eauto
+        ).
+      
+      destruct Hstar_recomb as [s'_pCs HpCs_star].
+      
+      do 5 eexists; split; last split; last split; last split; last split;
+        last exact trel_recomb; eauto.
 
-    assert (exists beh1,
-               program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
-               (prefix m'' beh1 \/ behavior_improves_finpref beh1 m'')) as HpCs_beh.
-    {
-      eapply Compiler.backward_simulation_behavior_improves_prefix in HpCs_compiled_beh;
-        eauto.
-    }
-    destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
-    assert (m_rel_m'': behavior_rel_behavior_all_cids all_zeros_shift size_m'' m m'').
-    { (*[DynShare] This should follow from m''_rel_m *)
-      admit.
-    }
-    (* Instantiate behavior, case analysis on improvement. *)
-    exists Cs. eexists. eexists m''. eexists all_zeros_shift. eexists.
-    destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
-    + repeat (split; try now eauto).
-    + subst pCs_beh.
-      repeat (split; try now auto).
-      (* Blame the program and close the diagram. *)
-      assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
-      {
-        pose proof Compiler.compilation_preserves_interface successful_compilation
-          as Hsame_iface3.
-        congruence.
-      }
-      unfold behavior_improves_blame.
-
-      (* [DynShare] Continue here. *)
   Admitted.
-(*      destruct (Source.blame_program well_formed_p well_formed_Cs
-                              Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
-                              well_formed_P' Hsame_iface3 HP'Cs_closed
-                             HP'_Cs_m' Hsafe_pref Klonger) as [H|H]; by eauto.
 
-  Qed.
-*)
-End RSC_DC_MD_Section.
-End RSC_DC_MD_Gen.
+End RSC_Section.
 
-Require Import RSC_DC_MD_Instance.
-
-Module RSC_DC_MD_Instance :=
-  RSC_DC_MD_Gen
-    Source_Instance Intermediate_Instance
-    S2I_Instance
-    Compiler_Instance Linker_Instance.
-
-Definition RSC_DC_MD :=
-  RSC_DC_MD_Instance.RSC_DC_MD.

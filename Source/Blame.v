@@ -309,7 +309,6 @@ Lemma parallel_concrete p ctx p1 p2 scs1 t scs1' scs2 :
     CS.kstep (prepare_global_env (program_link p p2)) scs2 t scs2' &
     partialize ctx scs1' = partialize ctx scs2'.
 Proof.
-(*
 move=> wf wf1 wf2 link clos int1 int2 e_part in_prog step.
 suffices : match CS.eval_kstep (prepare_global_env (program_link p p2)) scs2 return Prop with
            | Some (t', scs2') => t = t' /\ partialize ctx scs1' = partialize ctx scs2'
@@ -337,6 +336,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   rewrite -lock /= eqxx.
   rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_v) /=.
   by rewrite (negbTE in_prog) e_stk e_mem.
+- admit.
 - (* Store *)
   move=> C stk mem1 mem1' k v P' _ b' o' arg <- e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -348,6 +348,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /=.
   rewrite /to_partial_memory in e_mem'. (* TODO *)
   by rewrite (negbTE in_prog) e_stk e_mem'.
+- admit.
 - (* Internal Call *)
   move=> C stk1 mem1 k _ P v P_expr old <- e_P in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -379,7 +380,8 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     have in_prog' : C' \notin domm ctx.
       case: link => _ /fdisjointP/(_ C'); apply.
       by rewrite wfprog_defined_procedures // mem_domm C'_p.
-    by rewrite /= (negbTE in_prog') (partial_stack_push_by_program in_prog e_stk) e_mem.
+    (* by rewrite /= (negbTE in_prog') (partial_stack_push_by_program in_prog e_stk) e_mem. *)
+      admit.
   + (* Call into context *)
     case C'_ctx1: (prog_procedures p1 C')=> [C'_procs1|] //= C'_P1.
     have in_ctx : C' \in domm ctx.
@@ -399,7 +401,8 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     move: (wfprog_exported_procedures_existence wf2 C'_P').
     rewrite /find_procedure C'_ctx2.
     case: (C'_procs2 P)=> //= P_expr' _.
-    by rewrite in_ctx e_mem (partial_stack_push_by_program in_prog e_stk).
+    (* by rewrite in_ctx e_mem (partial_stack_push_by_program in_prog e_stk). *)
+    admit.
 - (* Internal return *)
   move=> C stk1 mem1 k v arg _ old <- in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -422,7 +425,8 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     rewrite to_partial_stackE (negbTE in_prog) /= in_ctx.
     rewrite [to_partial_stack stk2 _ _]to_partial_stackE (negbTE in_prog) /=.
     case: stk2=> [|[C2 v2 k2] stk2] //= [<- {C2} _ e_stk].
-    by rewrite -lock /= in_ctx (negbTE ne) e_stk e_mem.
+    (* by rewrite -lock /= in_ctx (negbTE ne) e_stk e_mem. *)
+    admit.
   + (* Return to program *)
     move: e_stk.
     rewrite to_partial_stackE (negbTE in_prog) /= (negbTE in_prog').
@@ -430,9 +434,9 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     case: stk2=> [|[_ old2 k2] stk2] //= [<-]; rewrite (negbTE in_prog').
     case=> <- <- {old2 k2} e_stk.
     rewrite -lock /=; move/eqP/negbTE: ne=> ->.
-    by rewrite (negbTE in_prog') e_stk e_mem.
-Qed.
-*)
+    (* by rewrite (negbTE in_prog') e_stk e_mem. *)
+    admit.
+(* Qed. *)
 Admitted.
 
 Lemma parallel_concrete' p ctx p1 p2 scs1 t1 scs1' scs2 t2 scs2' :

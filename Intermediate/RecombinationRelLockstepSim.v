@@ -516,11 +516,11 @@ Section ThreewayMultisem1.
             match goal with
             | H: regs_rel_of_executing_part _ _ _ _  |- _ => inversion H as [Hreg] end.
             intros reg.
-            pose proof (Hreg r1)
+            pose proof (Hreg rsrc)
               as [Hget_shift | [Hshift_r1_None Heq1]];
               pose proof (Hreg reg)
               as [Hreg_shift | [Hshift_reg_None Heq2]];
-              destruct ((Register.to_nat reg == Register.to_nat r2)) eqn:Hreg_r; simpl;
+              destruct ((Register.to_nat reg == Register.to_nat rdest)) eqn:Hreg_r; simpl;
                 unfold Register.set, Register.get; rewrite !setmE Hreg_r.
             ++ left. by simpl in *.
             ++ left. eauto.
@@ -3720,6 +3720,117 @@ Section ThreewayMultisem1.
         unfold negb, ic in Hcomp1.
         rewrite Hpccomp_s'_s in H_c'.
           by rewrite H_c' in Hcomp1.
+
+    - (* IJumpFunPtr *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      find_and_invert_mergeable_internal_states;
+        find_and_invert_mergeable_states_well_formed.
+      + assert (pc1' = pc). by simpl in *.
+        subst pc1'. (* PC lockstep. *)
+        assert (Pointer.component pc \in domm (prog_interface p)) as
+            Hpc_prog_interface_p.
+        {
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          unfold negb in Hcomp1.
+          pose proof @CS.star_pc_domm_non_inform p c
+                 Hwfp Hwfc Hmerge_ipic Hclosed_prog as Hor'.
+          assert (Pointer.component pc \in domm (prog_interface p)
+                    \/
+                    Pointer.component pc \in domm (prog_interface c))
+              as [G | Hcontra]; auto.
+            {
+              unfold CSInvariants.is_prefix in Hpref_t.
+              eapply Hor'; eauto.
+              - by unfold CS.initial_state.
+            }
+            by (unfold ic in *; rewrite Hcontra in Hcomp1).
+        }
+        
+        match goal with
+        | H : executing (prepare_global_env prog) ?PC ?INSTR |- _ =>
+          assert (Hex' : executing (prepare_global_env prog') PC INSTR)
+        end.
+        {
+          eapply execution_invariant_to_linking with (c1 := c); eauto.
+          + unfold mergeable_interfaces in *. by intuition.
+          + rewrite <- Hifc_cc'. unfold mergeable_interfaces in *. by intuition.
+        }
+
+        assert (Register.get r regs1' = Ptr pc') as Hregs1'_r.
+        {
+          inversion Hregsp as [Hregs].
+          unfold shift_value_option, rename_value_option,
+          rename_value_template_option in *.
+
+          specialize (Hregs r) as [Hshift | Hshift];
+            simpl in Hshift;
+            match goal with
+            | Hr: Register.get r regs = _ |- _ => rewrite Hr in Hshift
+            end;
+            destruct pc' as [[[perm ?] ?] ?];
+            simpl in *;
+            subst;
+            simpl in *;
+            by inversion Hshift.
+        }
+
+        assert (Step sem'
+                     (gps1', mem1', regs1', pc)
+                     E0
+                     (gps1', mem1', regs1', pc')
+               ) as Hstep12'.
+        {
+          eapply CS.Step_non_inform; first eapply CS.JumpFunPtr.
+          -- exact Hex'.
+          -- assumption.
+          -- assumption.
+          -- assumption.
+          -- assumption.
+          -- by simpl.
+        }
+
+
+        assert (CSInvariants.is_prefix
+                  (gps, mem, regs, pc')
+                  (program_link p c) t1)
+          as H_prefix_after_step.
+        {
+          unfold CSInvariants.is_prefix in *.
+          eapply star_right; try eassumption.
+          ++ by rewrite E0_right.
+        }
+        
+
+        assert (CSInvariants.is_prefix
+                  (gps1', mem1', regs1', pc')
+                  (program_link p c')
+                  t1'
+               )
+          as H_prefix_after_step'.
+        {
+          unfold CSInvariants.is_prefix in *.
+          eapply star_right; try eassumption.
+          ++ by rewrite E0_right.
+        }
+        
+        
+        eexists. split; eauto.
+        econstructor; try eassumption.
+        * (* mergeable_states_well_formed *)
+          eapply mergeable_states_well_formed_intro; try eassumption.
+          -- by simpl.
+          -- rewrite <- Hpccomp_s'_s''. simpl. assumption.
+        * by simpl.
+        
+      + simpl in *. subst.
+        unfold CS.is_program_component,
+        CS.is_context_component, turn_of, CS.state_turn in *.
+        unfold negb, ic in Hcomp1.
+        rewrite Hpccomp_s'_s in H_c'.
+          by rewrite H_c' in Hcomp1.
+
+
 
     - (* IBnz, non-zero case *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].

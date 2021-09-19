@@ -660,11 +660,11 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
            [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r) mem regs']
            (gps, mem, regs', Pointer.inc pc)
 
-| Mov: forall gps mem regs regs' pc r1 r2,
-    executing G pc (IMov r1 r2) ->
-    Register.set r2 (Register.get r1 regs) regs = regs' ->
+| Mov: forall gps mem regs regs' pc rsrc rdest,
+    executing G pc (IMov rsrc rdest) ->
+    Register.set rdest (Register.get rsrc regs) regs = regs' ->
     step G (gps, mem, regs, pc)
-           [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs']
+           [EMov (Pointer.component pc) (reg_to_Ereg rsrc) (reg_to_Ereg rdest) mem regs']
            (gps, mem, regs', Pointer.inc pc)
 
 | BinOp: forall gps mem regs regs' pc r1 r2 r3 op,
@@ -724,6 +724,20 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     step G (gps, mem, regs, pc) E0
            (gps, mem, regs, pc')
 
+(** IJumpFunPtr is nothing but a Jump together with an extra check on the offset. *)
+| JumpFunPtr: forall gps mem regs pc pc' r,
+    executing G pc (IJumpFunPtr r) ->
+    Register.get r regs = Ptr pc' ->
+    Pointer.permission pc' = Permission.code ->
+    Pointer.component pc' = Pointer.component pc ->
+    Pointer.offset pc' = 3%Z ->
+    (** The offset 3%Z makes sure that the destination is    *)
+    (** the beginning of the body of a compiled function.    *)
+    (** Compiled functions have a prologue of 3 instructions *)
+    (** before the entry ILabel instruction comes at offset 3*)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, pc')
+           
 | BnzNZ: forall gps mem regs pc pc' r l val,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int val ->
@@ -884,6 +898,21 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
             None
         | _ => None
         end
+      | IJumpFunPtr r =>
+        match Register.get r regs with
+        | Ptr pc' =>
+          if Component.eqb (Pointer.component pc') (Pointer.component pc) then
+            if Permission.eqb (Pointer.permission pc') Permission.code then
+              if Pointer.offset pc' == 3%Z then
+                ret (E0, (gps, mem, regs, pc'))
+              else
+                None
+            else
+              None
+          else
+            None
+        | _ => None
+        end
       | IBnz r l =>
         match Register.get r regs with
         | Int 0 =>
@@ -1016,6 +1045,16 @@ Proof.
     end.
     reflexivity.
 
+  - match goal with
+    | Hregs_value: Register.get _ _ = _,
+      Hsame_component: Pointer.component _ = Pointer.component _,
+      Hcode: Pointer.permission _ = Permission.code,
+      Hoff: Pointer.offset _ = _                        
+      |- _ =>
+      rewrite -> Hregs_value, Hsame_component, Hcode, Hoff, !Nat.eqb_refl
+    end.
+    reflexivity.
+    
   - match goal with
     | Hregs_value: Register.get _ _ = _,
       Hfind: find_label_in_procedure _ _ _ = _ |- _ =>
@@ -1243,24 +1282,46 @@ Proof.
              **** assumption.
 
            *** (*match goal with
-               | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
-                 rewrite Hpositive_offset in *
+               | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false,
+                 Hcond: (if (Pointer.offset _ <? 0) % Z then None else _) = Some _ |- _ =>
+                 rewrite Hpositive_offset in Hcond
                end.*)
-               destruct (Component.eqb (Pointer.component pc0) i) eqn:Hcomp;
-                 try discriminate; simpl in *.
-               destruct (imported_procedure_b (genv_interface G)
-                                              (Pointer.component pc0) i i0)
-                        eqn:Himport;
+               destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
-               destruct (EntryPoint.get i i0 (genv_entrypoints G)) eqn:Hentrypoint;
+               destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
+                        eqn:Hcompcheck;
                  try discriminate.
-               simpl in *. inversion H1. subst.
-               eapply Call;
+               destruct (Permission.eqb (Pointer.permission t0) Permission.code) eqn:Hcode;
+                 try discriminate.
+               destruct (Pointer.offset t0 == 3%Z) eqn:Hoff; last discriminate.
+               inversion H1; subst.
+               eapply JumpFunPtr with (pc':=pc);
                  try reflexivity.
                **** eexists. eexists. eauto.
-               **** apply Nat.eqb_neq. assumption.
-               **** apply imported_procedure_iff. auto.
                **** assumption.
+               **** by apply /Permission.eqP.
+               **** apply Nat.eqb_eq. assumption.
+               **** by apply/eqP.
+                  
+           *** (*match goal with
+                 | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
+                 rewrite Hpositive_offset in *
+               end.*)
+             destruct (Component.eqb (Pointer.component pc0) i) eqn:Hcomp;
+               try discriminate; simpl in *.
+             destruct (imported_procedure_b (genv_interface G)
+                                            (Pointer.component pc0) i i0)
+                      eqn:Himport;
+               try discriminate.
+             destruct (EntryPoint.get i i0 (genv_entrypoints G)) eqn:Hentrypoint;
+               try discriminate.
+             simpl in *. inversion H1. subst.
+             eapply Call;
+               try reflexivity.
+             **** eexists. eexists. eauto.
+             **** apply Nat.eqb_neq. assumption.
+             **** apply imported_procedure_iff. auto.
+             **** assumption.
 
            *** (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
@@ -1542,6 +1603,7 @@ try by move=> *; match goal with
                   apply find_label_in_component_1 in H; rewrite H
   end.
   assumption.
+- by move=> ????????? ->.
 - by move=> ????????? ->.
 - by move=> ??????????? /find_label_in_procedure_1 ->.
 - by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
@@ -1911,6 +1973,7 @@ Proof.
   inversion Hstep; subst; simpl;
     try now rewrite Pointer.inc_preserves_component.
   - auto.
+  - auto.
 (*  - erewrite find_label_in_component_1; try eassumption. reflexivity.
   - congruence.*)
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
@@ -1924,6 +1987,7 @@ Proof.
   inversion Hstep'; subst;
     try (now rewrite Pointer.inc_preserves_component).
   - eapply find_label_in_component_1; now eauto.
+  - eapply silent_step_preserves_component; eassumption.
   - eapply silent_step_preserves_component; eassumption.
   - eapply silent_step_preserves_component; eassumption.
   - discriminate.
@@ -1976,6 +2040,10 @@ Proof.
       | H: Pointer.component _ = Pointer.component _ |- _ =>
         now rewrite H
       end.
+    + match goal with
+      | H: Pointer.component _ = Pointer.component _ |- _ =>
+        now rewrite H
+      end.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 
@@ -1996,6 +2064,7 @@ Proof.
     inversion Hstep; subst; CS.simplify_turn;
       try (now rewrite Pointer.inc_preserves_component).
     + erewrite <- find_label_in_component_1; eassumption.
+    + congruence.
     + congruence.
     + erewrite <- find_label_in_procedure_1; eassumption.
     + discriminate.
@@ -2563,6 +2632,62 @@ Theorem does_prefix_inform_non_inform :
     does_prefix (sem_inform p) m ->
     does_prefix (sem_non_inform p) (project_finpref_behavior m).
 Admitted.
+
+Lemma star_final_no_more_events p t_inform sinit s':
+  star step (prepare_global_env p) sinit t_inform s' ->
+  forall s'0,
+  Star (sem_non_inform p) sinit (project_non_inform t_inform) s'0 ->
+  Smallstep.final_state (sem_non_inform p) s'0 ->
+  Star (sem_inform p) sinit t_inform s'0.
+Proof.
+  intros Hstarinform.
+  induction Hstarinform; intros s'0 Hstarproj Hfinal; simpl in *.
+  - 
+    apply star_sem_non_inform_star_sem_inform in Hstarproj as [t_inform Hstar].
+    
+(****    inversion Hstarproj; subst; first by apply star_refl.
+    + 
+ ******)
+Abort.
+
+(**********************
+Theorem does_prefix_non_inform_inform :
+  forall p m,
+ does_prefix (sem_non_inform p) m ->
+ exists m_inform,
+   does_prefix (sem_inform p) m_inform /\ project_finpref_behavior m_inform = m.
+Proof.
+   unfold does_prefix. intros ? ? H_doesm_noninform.
+   destruct H_doesm_noninform as [b_noninform [Hb_noninform Hpref]].
+   specialize (behavior_prefix_star_non_inform Hb_noninform Hpref)
+     as [s_init [s' [Hinit Hstar]]].
+   apply star_sem_non_inform_star_sem_inform in Hstar as [t_inform [Hstar Hproj]].
+   exists (match m with
+           | FTbc _ => FTbc t_inform
+           | FGoes_wrong _ => FGoes_wrong t_inform
+           | FTerminates _ => FTerminates t_inform
+           end
+          ).
+   destruct m; split; try (simpl; by rewrite Hproj).
+   - simpl in Hpref. destruct b_noninform; subst; try contradiction.
+     inversion Hb_noninform as [s ? Hinit2 Hbeh | ]; subst.
+     simpl in *.
+     unfold initial_state in *. rewrite -Hinit in Hinit2. subst.
+     exists (Terminates t_inform). split; last easy.
+     econstructor.
+     + simpl. reflexivity.
+     + inversion Hbeh; subst.
+       econstructor; last eassumption.
+       Search _ "det" step.
+       generalize dependent 
+       SearchAbout s'.
+       last eassumption.
+       Search _ "_non" "inform".
+       apply star_sem_non_inform_star_sem_inform in H0.
+   -  by eapply program_behaves_finpref_exists; eauto.
+       
+Qed.
+************************************)
 
 (* RB: TODO: Inspired by [domm_partition] on PS. Consider how to select the
    right semantics, the best shape of the premises, and naming conventions to

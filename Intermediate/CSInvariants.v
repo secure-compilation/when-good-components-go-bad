@@ -357,6 +357,13 @@ Proof.
         (* Since we dot change components, this follows from the IH. *)
         rewrite -> H2.
         exact (Hmem1 _ _ Hload).
+        
+      * (* IJumpFunPtr *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        (* Since we dot change components, this follows from the IH. *)
+        rewrite -> H2.
+        exact (Hmem1 _ _ Hload).
       * (* IBnz *)
         intros addr_load val_load Hload.
         clear Hstar01 Hstep12 Hstep12' H.
@@ -544,9 +551,9 @@ Proof.
       * (* IMov *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct (Register.eqP reg r2) as [Heq | Hneq].
+        destruct (Register.eqP reg rdest) as [Heq | Hneq].
         -- (* The new value comes from r1, which follows from the IH. *)
-           subst r2. rewrite Register.gss in Hget.
+           subst rdest. rewrite Register.gss in Hget.
            exact (Hregs1 _ _ Hget).
         -- (* The new value comes from reg, which follows from the IH. *)
            rewrite Register.gso in Hget; last assumption.
@@ -656,6 +663,11 @@ Proof.
            rewrite Register.gso in Hget; last assumption.
            exact (Hregs1 _ _ Hget).
       * (* IJump *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        rewrite H2.
+        exact (Hregs1 _ _ Hget).
+      * (* IJumpFunPtr *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
         rewrite H2.
@@ -942,9 +954,9 @@ Proof.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IMov *)
-        destruct (Register.eqb reg r2) eqn:Hcase;
+        destruct (Register.eqb reg rdest) eqn:Hcase;
           move: Hcase => /Register.eqP => Hcase.
-        -- subst r2. rewrite Register.gss in Hget.
+        -- subst rdest. rewrite Register.gss in Hget.
            eapply IHget; eassumption.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.

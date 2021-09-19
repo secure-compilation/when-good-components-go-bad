@@ -1074,8 +1074,8 @@ Section ThreewayMultisem4.
 
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1138,8 +1138,8 @@ Section ThreewayMultisem4.
                 
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1245,8 +1245,8 @@ Section ThreewayMultisem4.
 
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1333,8 +1333,8 @@ Section ThreewayMultisem4.
 
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto. split; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto. split; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1498,8 +1498,8 @@ Section ThreewayMultisem4.
 
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1582,8 +1582,8 @@ Section ThreewayMultisem4.
                 
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1705,8 +1705,8 @@ Section ThreewayMultisem4.
 
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -1784,8 +1784,8 @@ Section ThreewayMultisem4.
 
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
-                destruct (permv =? Permission.data) eqn:epermv; auto. split; auto.
-                assert (permv = Permission.data). by apply beq_nat_true. subst.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto. split; auto.
+                assert (permv = Permission.data). by apply/Permission.eqP. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
@@ -2027,6 +2027,7 @@ Section Recombination.
     traces_shift_each_other_option n n'' t t''           ->
   exists s' t',
     Star sem'  (CS.initial_machine_state prog')  t'  s'  /\
+    mergeable_internal_states p c p' c' n n'' s s' s'' t t' t'' /\
     traces_shift_each_other_option n n' t t'.
   Proof.
     assert (exists s',
@@ -2061,7 +2062,7 @@ Section Recombination.
       (** Instantiate lemma "mergeable_internal_states_matching_stars" *)
       specialize (threeway_multisem_star_program H_p_prog Hmerge Hstar Hstar'' Hshift)
         as [s' [t' [Hstar' Hmerge']]].
-      do 2 eexists; split; eauto.
+      do 2 eexists; split; last (split); eauto.
       rewrite !E0_left in Hmerge'.
         by find_and_invert_mergeable_internal_states;
           find_and_invert_mergeable_states_well_formed.
@@ -2108,15 +2109,89 @@ Section Recombination.
       (** Instantiate lemma "mergeable_internal_states_matching_stars" *)
       specialize (threeway_multisem_star_program H_p_prog Hmerge Hstar'' Hstar Hshift)
         as [s' [t' [Hstar' Hmerge']]].
-      do 2 eexists; split; eauto.
+      do 2 eexists; split; last (split); eauto.
+      + by apply mergeable_internal_states_sym.
+      + {
       
-      rewrite !E0_left in Hmerge'.
-      inversion Hmerge' as [Hwf | Hwf];
-        inversion Hwf.
-
-      (** TODO: Need lemma to use the version of n ' that mentions c' instead of p. *)
-  Admitted.
-
+          rewrite !E0_left in Hmerge'.
+          inversion Hmerge' as [Hwf | Hwf];
+            inversion Hwf.
+          
+          + constructor. eapply traces_rename_each_other_option_n'_if.
+            * inversion H26; subst. exact H27.
+            * intros [cid bid] Hshr''. simpl.
+              destruct (cid \in domm (prog_interface c')) eqn:ecid; rewrite ecid.
+              -- destruct Hmergeable_ifaces as [[_ G] _].
+                 rewrite fdisjointC in G.
+                 move : G => /fdisjointP => G. rewrite Hifacec in G.
+                 symmetry. by apply G.
+              -- assert (cid \in domm (prog_interface p) \/
+                                 cid \in domm (prog_interface c)) as [G | contra].
+                 {
+                   eapply CSInvariants.addr_shared_so_far_domm_partition; eauto.
+                   - unfold prog in eprog. rewrite eprog. eassumption.
+                   - apply linking_well_formedness; auto.
+                     by destruct Hmergeable_ifaces; intuition.
+                 }
+                 ++ by rewrite G.
+                 ++ by rewrite -Hifacec contra in ecid.
+            * intros [cid bid] Hshr''. simpl.
+              destruct (cid \in domm (prog_interface c')) eqn:ecid; rewrite ecid.
+              -- destruct Hmergeable_ifaces as [[_ G] _].
+                 rewrite fdisjointC in G.
+                 move : G => /fdisjointP => G. rewrite Hifacec in G.
+                 symmetry. by apply G.
+              -- assert (cid \in domm (prog_interface p) \/
+                                 cid \in domm (prog_interface c')) as [G | contra].
+                 {
+                   eapply CSInvariants.addr_shared_so_far_domm_partition; eauto.
+                   - by rewrite -Hifacec; destruct Hmergeable_ifaces; intuition.
+                   - unfold prog' in eprog'. rewrite eprog'. eassumption.
+                   - eapply merged_program_is_closed with (p := p) (c := c); eauto.
+                   - apply linking_well_formedness; auto.
+                       by rewrite -Hifacec; destruct Hmergeable_ifaces; intuition.
+                 }
+                 ++ by rewrite G.
+                 ++ by rewrite contra in ecid.
+          + constructor. eapply traces_rename_each_other_option_n'_if.
+            * inversion H26; subst. exact H27.
+            * intros [cid bid] Hshr''. simpl.
+              destruct (cid \in domm (prog_interface c')) eqn:ecid; rewrite ecid.
+              -- destruct Hmergeable_ifaces as [[_ G] _].
+                 rewrite fdisjointC in G.
+                 move : G => /fdisjointP => G. rewrite Hifacec in G.
+                 symmetry. by apply G.
+              -- assert (cid \in domm (prog_interface p) \/
+                                 cid \in domm (prog_interface c)) as [G | contra].
+                 {
+                   eapply CSInvariants.addr_shared_so_far_domm_partition;
+                     eauto.
+                   - unfold prog in eprog. rewrite eprog. eassumption.
+                   - apply linking_well_formedness; auto.
+                       by destruct Hmergeable_ifaces; intuition.
+                 }
+                 ++ by rewrite G.
+                 ++ by rewrite -Hifacec contra in ecid.
+            * intros [cid bid] Hshr''. simpl.
+              destruct (cid \in domm (prog_interface c')) eqn:ecid; rewrite ecid.
+              -- destruct Hmergeable_ifaces as [[_ G] _].
+                 rewrite fdisjointC in G.
+                 move : G => /fdisjointP => G. rewrite Hifacec in G.
+                 symmetry. by apply G.
+              -- assert (cid \in domm (prog_interface p) \/
+                                 cid \in domm (prog_interface c')) as [G | contra].
+                 {
+                   eapply CSInvariants.addr_shared_so_far_domm_partition; eauto.
+                   - by rewrite -Hifacec; destruct Hmergeable_ifaces; intuition.
+                   - unfold prog' in eprog'. rewrite eprog'. eassumption.
+                   - eapply merged_program_is_closed with (p := p) (c := c); eauto.
+                   - apply linking_well_formedness; auto.
+                       by rewrite -Hifacec; destruct Hmergeable_ifaces; intuition.
+                 }
+                 ++ by rewrite G.
+                 ++ by rewrite contra in ecid.
+        }
+  Qed.
       
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
@@ -2217,185 +2292,50 @@ Section Recombination.
       simpl in Hprefix, Hprefix''. subst t t''.
       inversion Hst_beh   as [? s2   Hstar12   Hfinal2   | | |]; subst.
       inversion Hst_beh'' as [? s2'' Hstar12'' Hfinal2'' | | |]; subst.
-      exists (Terminates tm). split; last reflexivity.
+
+      unfold CS.initial_state in *; subst.
+      inversion Hrel as [? ? Htraces|? ? Htraces]; try discriminate; subst.
       
-    (* In the standard proof, because the two executions produce the same
-       prefix, we know that the two runs either terminate, go wrong or are
-       unfinished. The third case is probably the most interesting here. *)
-    (***********************************************************
-    destruct (CS.behavior_prefix_star_non_inform Hbeh Hprefix)
-      as [s1_ [s2 [Hini1_ Hstar12]]].
-    destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
-      as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
-     **********************************************************)
-
-    (** TODO: Maybe get rid of the Hstar12 and Hstar12'' the way they are 
-        produced above. *)
-    (** And instead get them by inverting state_behaves (Will generate a side 
-        condition that asserts, e.g., final_state) *)
-    
-    inversion Hst_beh as [ t ? Hstar12 Hfin
-                         | t ? Hstar12
-                         |
-                         | t ? Hstar12];
-      inversion Hst_beh'' as [ t'' ? Hstar12'' Hfin''
-                             | t'' ? Hstar12''
-                             |
-                             | t'' ? Hstar12''];
-      (*subst; destruct m; simpl in *; subst; destruct m''; simpl in *; subst;*)
-      subst; simpl in *;
-        clear Hst_beh Hst_beh'';
-        
-        try (
-            apply star_iff_starR in Hstar12;
-            apply star_iff_starR in Hstar12'';
-            
-            unfold CS.initial_state in *;
-            
-            induction t'' as [|? e''] using last_ind;
-            subst;
-            induction t as [|? e] using last_ind;
-            subst;
-            simpl in *
-          ).
-    - Search _ finpref_behavior.
-
+      specialize (recombination_trace_rel Hstar12 Hstar12'' Htraces)
+        as [s2' [tm' [Hstar12' [Hmerge Htraces']]]].
       
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - 
-    
-    clear Hbeh Hbeh''.
+      exists (FTerminates tm'), n'.
+      split.
+      + exists (Terminates tm').
+        split.
+        * eapply program_runs with (s := (CS.initial_machine_state prog')); eauto.
+          -- reflexivity.
+          -- econstructor; eauto.
+             eapply match_final_states; eauto.
+        * by simpl.
+      + constructor. by apply traces_shift_each_other_option_symmetric.
 
-    apply star_iff_starR in Hstar12.
-    apply star_iff_starR in Hstar12''.
-    
-    unfold CS.initial_state in *.
-    
-    remember (finpref_trace m) as t.
-    remember (finpref_trace m'') as t''.
-    generalize dependent t. generalize dependent t''.
+    - destruct b   as [t   | ? | ? | ?]; try contradiction;
+        destruct b'' as [t'' | ? | ? | ?]; try contradiction;
+          simpl in *;
+        destruct Hprefix as [tm2 Hrewr]; subst;
+        destruct Hprefix'' as [tm''2 Hrewr'']; subst;
+        rewrite Hrewr in Hst_beh;
+        rewrite Hrewr'' in Hst_beh'';
+        (apply state_behaves_app_inv in Hst_beh as [s2 [Hstar12 Hst_beh]];
+         last (by apply CS.singleton_traces_non_inform));
+        (apply state_behaves_app_inv in Hst_beh'' as [s2'' [Hstar12'' Hst_beh'']];
+         last by apply CS.singleton_traces_non_inform);
+        unfold CS.initial_state in *; subst;
+          inversion Hrel as [? ? Htraces|? ? Htraces]; try discriminate; subst;
+            specialize (recombination_trace_rel Hstar12 Hstar12'' Htraces)
+            as [s2' [tm' [Hstar12' [_ Htraces']]]];
+            exists (FTbc tm'), n';
+            (split;
+             [eapply program_behaves_finpref_exists; eauto; by simpl
+             | econstructor; by apply traces_shift_each_other_option_symmetric
+             ]
+            ).
 
-    intros ?.
-    induction t'' as [|? e''] using last_ind; intros ? Hstar12''; subst.
-    - intros ?; induction t as [|? e] using last_ind; intros ? Hstar12; subst.
-      + destruct m; simpl in *; subst; destruct m''; simpl in *; try by inversion Hrel.
-        * exists (FTerminates E0).
-          exists (fun cid => if cid \in domm (prog_interface p)
-                             then n cid else n'' cid).
-          split; last (by repeat constructor).
-          unfold does_prefix. exists (Terminates E0). split; last by simpl.
-          apply program_runs with (s := (CS.initial_machine_state prog'));
-            first by simpl.
-          eapply state_terminates.
-    - 
-      assert (Hrewr: rcons t'' e'' = rcons t'' e'' ++ nil).
-        by rewrite <- app_nil_r at 1.
-      Search _ rcons cons.
-      rewrite cat_rcons in Hrewr.
-      rewrite Hrewr in Hstar12''.
-      rewrite <- star_iff_starR in Hstar12''.
-      apply star_middle1_inv in Hstar12''.
-      Search _ star starR.
-      
-        
-    intros ? ? Hstar12''.
-    induction Hstar12''.
-    - destruct m''; simpl in *.
-      + intros ? ? Hstar12; induction Hstar12; subst.
-        * destruct m; simpl in *; subst; try by inversion Hrel.
-          exists (FTerminates E0).
-          exists (fun cid => if cid \in domm (prog_interface p)
-                             then n cid else n'' cid).
-          constructor; last (by constructor; constructor; constructor).
-          unfold does_prefix.
-          (** Invert Hst_beh, and get a contradiction to Hprefix *)
-          inversion Hst_beh as [? ? Hstar Hfin | | |]; subst; try by exfalso.
-          exists (Terminates E0).
-          apply mergeable_border_mergeable_internal in Hmerge1.
-          split; last by simpl.
-          eapply program_runs; first constructor.
-          (** Need a lemma that assumes Hstar, Hfin, Hmergewf1, Hbeh, and Hbeh'' *)
-          (** The lemma will use mergeable_internal_states_final_state_prog      *)
-          (** and mergeable_internal_states_final_state_prog'', and will apply   *)
-          (** the constructor state_terminates.                                  *)
-          (** The proof of this lemma will proceed by induction on Hstar.        *)
-
-          (*****************************************
-          find_and_invert_mergeable_internal_states.
-               ** 
-                eapply state_terminates; first eapply star_refl.
-                ** eapply mergeable_internal_states_final_state_prog; eauto.
-                   
-                ** eapply mergeable_internal_states_final_state_prog''; eauto.
-                *******************************************)
-          admit.
-        * 
-
-
-               
-(*FIXME
-    pose proof match_initial_states (*n n''*) Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-         Hprog_is_closed Hprog_is_closed' Hprog_is_good Hprog''_is_good Hini1_ Hini1''_
-      as [s1'_ [Hini1' Hmerge1_]].
-    (* By determinacy of initial program states: *)
-    assert (Heq1 : s1 = s1_) by admit.
-    assert (Heq1' : s1' = s1'_) by admit.
-    assert (Heq1'' : s1'' = s1''_) by admit.
-    subst s1_ s1'_ s1''_.
-    clear Hini1_ Hini1''_ Hmerge1_.
-*)
-
-
-    (* Now we should be able to apply a modified star simulation. *)
-
-    (* AEK: TODO: Uncomment after having defined Hmerge1. See the TODO above. *)
-    (************
-    pose proof star_simulation Hmerge1 Hstar12 Hstar12''
-      as [t' [s2' [Hstar12' Hmerge2]]].
-    {
-      (* For this, however, we need to be able to establish the memory
-         relation between the two, in principle starting from [Hmerge1] and
-         [Hrel]. *)
-      (* NOTE: The memory relation is designed to hold at the boundaries!
-         vs. higher-level memory relation *)
-      admit.
-    }
-`   *************)
-
-
-
-    (* AEK: TODO: Uncomment after having defined t'. See the TODO above. *)
-    (*************
-    (* Actually, we need to ensure that the executed trace corresponds to a
-       finite prefix behavior (and that the obtained relation extends to
-       it.) *)
-    assert (exists m', t' = finpref_trace m') as [m' Heq] by admit; subst.
-
-
-    (* Now we can instantiate the quantifiers (assume the mapping [n'] can be
-       obtained easily). *)
-    exists m'. eexists. split.
-    - (* In principle, the same lemma that was used for the third case of the
-         original proof should work here. *)
-      pose proof program_behaves_finpref_exists Hini1' Hstar12'
-             as [beh' [Hbeh' Hprefix']].
-      exists beh'. admit.
-    - (* We would then be left to establish the trace relation. *)
-      admit.
-     *********)
-
-
-
-  Admitted.
+  Qed.
+  
 
 End Recombination.
+
+
+Print Assumptions recombination_prefix_rel.
