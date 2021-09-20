@@ -534,6 +534,13 @@ Section Semantics.
     unfold initial_state, initial_machine_state;
       by eauto.
   Qed.
+
+  Lemma load_component_prog_interface s t s' ptr ptr' :
+    initial_state p s ->
+    Star sem s t s' ->
+    Memory.load (s_memory s') ptr = Some (Ptr ptr') ->
+    Pointer.component ptr' \in domm (prog_interface p).
+  Admitted.
 End Semantics.
 
 End CS.

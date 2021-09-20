@@ -5538,7 +5538,35 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (ELoad C reg0 reg1 s0 eregs).
           destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
-          destruct v0 as [n0 | ptr0 | ]; [admit | | admit].
+          assert (exists C0 b0' o0, v0 = Ptr (Permission.data, C0, S b0', o0))
+            as [C0 [b0' [o0 ?]]]. {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+              [ destruct prefix; discriminate (* contra *)
+              | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
+              | rewrite Hprefix01 in Ht;
+                symmetry in Ht; apply cats2_inv in Ht as [? [? ?]]; subst prefint eint1 eint2;
+                inversion Hstep as [| | | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | |];
+                subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                subst eregs].
+            destruct ptr as [[[[] C'] b'] o'];
+              first discriminate. (* Contra on load *)
+            destruct (wfmem wf_mem Hprefix01) as [Hregs [Hsteady Hinitial]].
+            destruct (Hregs (Ereg_to_reg reg0) _ Logic.eq_refl)
+              as [v0'' [v0' [Hload0 [Hshift0 Hget0]]]].
+            rewrite H in Hget0. subst v0'.
+            rewrite reg_to_Ereg_to_reg in Hload0.
+            rewrite Hcomp1 Hreg0mem0 in Hload0.
+            injection Hload0 as ?; subst v0''.
+            destruct v0 as [| [[[[] C0] [| b0']] o0] |]; try discriminate.
+            rewrite /= /ssrnat.addn /ssrnat.addn_rec
+                    /ssrnat.subn /ssrnat.subn_rec
+                    /all_zeros_shift /uniform_shift
+                    /= Nat.add_0_r Nat.sub_0_r in Hshift0.
+            injection Hshift0 as ? ? ?; subst C' b' o'.
+            now eauto.
+          }
+          subst v0.
           assert (Hreg0mem := Hreg0mem0).
           erewrite <- Memory.load_after_store_neq in Hreg0mem;
             last exact Hmem;
@@ -5550,11 +5578,8 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
             last (injection; now destruct reg1).
           (* set (saved := v1). *)
           (* NOTE: In previous cases, we got to the store by a different route. *)
-          assert (exists v, Memory.load mem ptr0 = Some v) as [vptr0 Hptr0mem] by admit.
+          assert (exists v, Memory.load mem (Permission.data, C0, S b0', o0) = Some v) as [vptr0 Hptr0mem] by admit.
           destruct (Memory.store_after_load _ _ _ vptr0 Hreg1mem) as [mem'' Hstore']. (* "Standard" names here... *)
-          destruct ptr0 as [[[p0 C0] b0] o0].
-          assert (p0 = Permission.data) by admit; subst p0.
-          destruct b0 as [| b0']; first admit.
           (* Continue. *)
           exists (StackState C (callers s)).
           eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
@@ -5739,7 +5764,16 @@ Local Transparent expr_of_const_val loc_of_reg.
                           injection H as ?; subst ptr.
                           rewrite H0 in Hload'.
                           now injection Hload'.
-                        + assert (C0_b : component_buffer C0) by admit. (* Hptr0mem, Star0 -> general lemma... (or as part of the well-formed memory relation) *)
+                        + assert (C0_b : component_buffer C0).
+                          {
+                            unfold component_buffer.
+                            change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
+                            change intf with (Source.prog_interface p).
+                            eapply CS.load_component_prog_interface; eauto.
+                            - now eapply well_formed_events_well_formed_program; eauto.
+                            - now apply closed_program_of_trace.
+                            - reflexivity.
+                          }
                           unfold C in HC0neq.
                           rewrite <- Hcomp1 in HC0neq.
                           specialize (Hinitial _ C0_b (nesym HC0neq))
