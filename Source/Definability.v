@@ -749,24 +749,25 @@ Section Definability.
       returns from those recursive calls.  We describe this pattern with the
       following properties.  *)
 
-  Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) : Prop :=
+  Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) (mem: Memory.t) : Prop :=
     match callers with
     | [] => True
     | C :: callers' =>
-      exists v P top bot,
+      Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) = Some (Int 1%Z) /\
+      (exists v P top bot,
       stk = CS.Frame C v (Kseq
                    (invalidate_metadata;; E_assign EXTCALL (E_val (Int 0));; E_call C P (E_val (Int 0)))
                    Kstop)  :: top ++ bot /\
       valid_procedure C P /\
       All (fun '(CS.Frame C' _ k) => C' = C /\ k = Kstop) top /\
-      well_formed_callers callers' bot
+      well_formed_callers callers' bot mem)
     end.
 
-  Definition well_formed_stack (s: stack_state) (stk: CS.stack) : Prop :=
+  Definition well_formed_stack (s: stack_state) (stk: CS.stack) (mem: Memory.t) : Prop :=
     exists top bot,
       stk = top ++ bot /\
       All (fun '(CS.Frame C' _ k) => C' = cur_comp s /\ k = Kstop) top /\
-      well_formed_callers (callers s) bot.
+      well_formed_callers (callers s) bot mem.
 
   (** The read and write events will also need to rely on the paths. Should the
       (read and write?) events include the paths so as to make back-translation
@@ -1605,7 +1606,7 @@ Local Opaque Memory.store.
       &  exp = procedure_of_trace C P t
       &  well_bracketed_trace stk_st suffix
       &  all (@well_formed_event T intf procs) suffix
-      &  well_formed_stack stk_st stk
+      &  well_formed_stack stk_st stk mem
       &  well_formed_memory prefix mem
       &  valid_procedure C P
       :  well_formed_state stk_st prefix suffix [CState C, stk, mem, k, exp, arg].
@@ -1623,7 +1624,7 @@ Local Opaque Memory.store.
     &  exp = expr_of_trace C P (comp_subtrace C t)
     &  well_bracketed_trace stk_st suffix
     &  all (@well_formed_event T intf procs) suffix
-    &  well_formed_stack stk_st stk
+    &  well_formed_stack stk_st stk mem
     &  well_formed_memory prefix mem
     &  valid_procedure C P
     :  well_formed_state_r stk_st prefix suffix [CState C, stk, mem, k, exp, arg].
@@ -2787,9 +2788,28 @@ Local Transparent loc_of_reg.
           + econstructor; eauto.
             * destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
               eexists []; eexists; simpl; split; eauto.
-              split; trivial.
-              eexists arg, P, top, bot.
-              by do 3 (split; trivial).
+              split; [| split]; trivial.
+              -- simplify_memory. rewrite -Hmem2'; last congruence.
+                 now simplify_memory.
+              -- eexists arg, P, top, bot.
+                 split; trivial.
+                 split; trivial.
+                 split; trivial.
+                 clear Star0 Star12.
+                 elim: (callers s) bot Hbot; trivial.
+                 move=> a l IH bot [] H1 H2.
+                 fold well_formed_callers in *.
+                 split.
+                 ++ simplify_memory.
+                    destruct (a == C') eqn:eq;
+                      move: eq => /eqP eq; subst.
+                    simplify_memory.
+                    ** now destruct Postcond1.
+                    ** rewrite -Hmem2'; last congruence.
+                       now simplify_memory.
+                 ++ destruct H2 as [? [? [? [? [? [? [? H2]]]]]]].
+                    eexists; eexists; eexists; eexists.
+                    repeat split; eauto.
             * constructor.
               -- (* wfmem_counter *)
                  move=> C0 C0_b.
@@ -2941,16 +2961,17 @@ Local Transparent loc_of_reg.
             case/andP: wb=> [/eqP HC' wb_suffix].
             subst C'_. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
+            destruct Hbot as [Hbot_load Hbot].
             (* clear Hmem Hmem1. *)
-            clear Hmem1.
-            revert mem1 Hmem2 arg.
+            (* clear Hmem1. *)
+            revert mem1 Hmem1 Hmem2 arg.
             induction top as [|[C_ saved k_] top IHtop].
             - clear Htop. rename bot into bot'.
 
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
               subst bot'. simpl.
               (* have C'_b := valid_procedure_has_block P'_exp. *)
-              intros mem1 Hmem2 arg.
+              intros mem1 Hmem1 Hmem2 arg.
               eexists. split.
               + simpl.
                 eapply star_step.
@@ -2964,7 +2985,7 @@ Local Transparent loc_of_reg.
                   take_steps; eauto.
                   take_steps. simpl. by rewrite /= (find_procedures_of_trace _ P'_exp).
                   take_steps. simplify_memory.
-                  instantiate (1 := Int 1); admit.
+                  (* instantiate (1 := Int 1); admit. *)
                   take_steps; simplify_memory.
                   take_steps.
                   eapply star_refl.
@@ -2972,11 +2993,24 @@ Local Transparent loc_of_reg.
               + econstructor; trivial.
                 exact wf_suffix.
                 exists (CS.Frame C' saved Kstop :: top), bot; simpl; auto.
+                split. reflexivity. split. split. eauto. eauto.
+                subst C.
+                {
+                elim: callers Hmem Hmem1 bot Hbot
+                              {Et wf_int_pref' wf_e Hextcall_C C_next_e1 wf_C C_b P_exp Hcom wb_suffix}.
+                * by [].
+                * move=> a l IH Hmem Hmem1 bot [] H1 H2.
+                  fold well_formed_callers in *.
+                  split.
+                  -- simplify_memory.
+                  -- destruct H2 as [? [? [? [? [? [? [? H2]]]]]]].
+                     eexists; eexists; eexists; eexists; eauto.
+                }
                 admit.
-            - intros mem1 Hmem2 arg.
+            - intros mem1 Hmem1 Hmem2 arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
-              specialize (IHtop mem1 Hmem2 saved). destruct IHtop as [cs' [StarRet wf_cs']].
+              specialize (IHtop mem1 Hmem1 Hmem2 saved). destruct IHtop as [cs' [StarRet wf_cs']].
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
               * by apply/CS.eval_kstep_sound; rewrite /= eqxx.
@@ -3090,7 +3124,9 @@ Local Transparent expr_of_const_val loc_of_reg.
             { destruct s. rewrite -Hmain. exact wb. }
             { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := Component.main; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. rewrite -Hmain. split; [| split]; easy. }
+              exists bot. rewrite -Hmain. split; [| split]; [easy | easy |].
+              simpl. admit. (* Induction on [callers s] *)
+            }
             (* Reestablish memory well-formedness.
                TODO: Refactor, automate. *)
             { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
