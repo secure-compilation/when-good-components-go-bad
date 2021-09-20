@@ -3006,7 +3006,46 @@ Local Transparent loc_of_reg.
                   -- destruct H2 as [? [? [? [? [? [? [? H2]]]]]]].
                      eexists; eexists; eexists; eexists; eauto.
                 }
-                admit.
+                {
+  subst C. simpl in *. rename cur_comp into C.
+  constructor.
+  - (* [wfmem_counter] *)
+    move=> C0 C0_b.
+    rewrite counter_value_snoc.
+    case: ifP => //= /eqP C_C0; [subst C0 |]; simplify_memory=> //=.
+    + by rewrite counter_value_snoc eqxx.
+    + rewrite Z.add_0_r.
+      by apply wfmem_counter.
+  - (* [wfmem_extcall_ini] *)
+    by case prefix.
+  - (* [wfmem_extcall] *)
+    move=> prefix'0 e'0.
+    rewrite 2!cats1 => /rcons_inj [] ? ?; subst prefix'0 e'0.
+    split.
+    + move=> C0 C0_b //= ->.
+      simplify_memory.
+    + move=> C0 C0_b //= C0_C'.
+      case C0_C: (C0 == C);
+        move: C0_C => /eqP C0_C; [subst C0|]; simplify_memory.
+      by eapply Hextcall_notC; congruence.
+  - (* [wfmem_meta] *)
+    move=> C0 r C0_b.
+    case C0_C: (C0 == C);
+      move: C0_C => /eqP C0_C; [subst C0|
+                             case C0_C': (C0 == C');
+                             move: C0_C' => /eqP C0_C'; [subst C0|]].
+    + edestruct wfmem_meta with (r := r) as [v Hv]; eauto.
+      exists v. by simplify_memory'.
+    + edestruct (wfmem_meta) with (r := E_R_COM) as [vcomC' HcomC']; eauto.
+      by destruct r; eexists; simplify_memory'; eauto.
+    + edestruct wfmem_meta with (r := r) as [v Hv]; eauto.
+      exists v. by simplify_memory'.
+  - (* [wfmem_ini] *)
+    by case prefix.
+  - (* [wfmem] *)
+    admit.
+                }
+
             - intros mem1 Hmem1 Hmem2 arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
