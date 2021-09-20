@@ -14,6 +14,7 @@ Common/Linking.v
 Common/CompCertExtensions.v
 Common/Either.v
 Common/CoqMaps.v
+Common/Blame.v
 Common/Traces.v
 Common/TracesInform.v
 Common/RenamingOption.v
@@ -60,6 +61,4 @@ S2I/Examples/DefaultInitBuffer.v
 S2I/Examples/NestedCalls.v
 S2I/Examples/Factorial.v
 
-RSC_DC_MD_Sigs.v
-RSC_DC_MD_Instance.v
 RSC_DC_MD.v
