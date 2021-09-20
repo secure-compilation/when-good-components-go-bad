@@ -5183,11 +5183,11 @@ Local Transparent binop_of_Ebinop. (* TODO: This was made locally opaque earlier
 Ltac t_postcondition_event_registers_binop_case
      mem prefix prefix0 Hprefix01 eregs Hstore' Hget0 Hget1 Hshift0 Hshift1 vs0' vs1' :=
   repeat match goal with
-  | Hload : Memory.load mem _ = Some (Ptr (?PERM, _, ?B, _)) |- _ =>
-    assert (PERM = Permission.data) by admit;
-    subst PERM;
+  | Hload : Memory.load mem _ = Some (Ptr (Permission.data, _, ?B, _)),
+    HBsub : context [ ssrnat.subn_rec 1 ?B ] |- _ =>
     destruct B as [| ?];
-    [discriminate |]
+    [discriminate |];
+    simpl in HBsub
   end;
   [eexists; eexists];
   split; [| split];
@@ -5202,11 +5202,11 @@ Ltac t_postcondition_event_registers_binop_case
 
 Ltac t_postcondition_event_registers_data_pointers mem :=
   repeat match goal with
-  | Hload : Memory.load mem _ = Some (Ptr (?PERM, _, ?B, _)) |- _ =>
-    assert (PERM = Permission.data) by admit;
-    subst PERM;
+  | Hload : Memory.load mem _ = Some (Ptr (Permission.data, _, ?B, _)),
+    HBsub : context [ ssrnat.subn_rec 1 ?B ] |- _ =>
     destruct B as [| ?];
-    [discriminate |]
+    [discriminate |];
+    simpl in HBsub
   end.
 
 Ltac t_postcondition_event_registers_pointer_Cb
@@ -5244,6 +5244,24 @@ Ltac t_postcondition_event_registers_pointer_Cbo
   rewrite !Nat.add_0_r !Nat.sub_0_r HeqC Heqb Heqo;
   reflexivity.
 
+Ltac t_postcondition_event_registers_code_pointer_Cb
+     Hstore' HeqC Heqb prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0' vs1' HeqC Heqb :=
+  eexists; eexists;
+    [split; [| split]];
+  [ erewrite Memory.load_after_store_eq; [reflexivity | exact Hstore']
+  | rewrite /= HeqC Heqb //
+  |];
+  simpl;
+  t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs;
+  rewrite Hget0 Hget1;
+  injection Hshift0 as ?; subst vs0';
+  injection Hshift1 as ?; subst vs1';
+  unfold ssrnat.addn, ssrnat.subn, ssrnat.addn_rec, ssrnat.subn_rec,
+  all_zeros_shift, uniform_shift;
+  simpl;
+  rewrite HeqC Heqb;
+  reflexivity.
+
                         (* General case analysis on values and operations. Most
                            cases can be solved from this information alone. *)
                         unfold shift_value_option,
@@ -5257,8 +5275,8 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                         all_zeros_shift, uniform_shift in *.
                         unfold saved in *.
                         simpl.
-                        destruct v0 as [n0 | [[[p0 C0] b0] o0] |];
-                          destruct v1 as [n1 | [[[p1 C1] b1] o1] |];
+                        destruct v0 as [n0 | [[[[] C0] b0] o0] |];
+                          destruct v1 as [n1 | [[[[] C1] b1] o1] |];
                           destruct op;
                           simpl;
                           (* t_postcondition_event_registers_shift_pointers. *)
@@ -5270,6 +5288,17 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                            is overkill in the sense that one false check
                            suffices to short-circuit evaluation (and similar
                            optimizations may be possible above). *)
+                        -- simpl;
+                             destruct (C0 =? C1) eqn:HeqC;
+                             destruct (b0 =? b1) eqn:Heqb;
+                             t_postcondition_event_registers_code_pointer_Cb
+                               Hstore' HeqC Heqb prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0' vs1' HeqC Heqb.
+
+                        -- simpl;
+                             destruct (C0 =? C1) eqn:HeqC;
+                             destruct (b0 =? b1) eqn:Heqb;
+                             t_postcondition_event_registers_code_pointer_Cb
+                               Hstore' HeqC Heqb prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0' vs1' HeqC Heqb.
 
                         -- t_postcondition_event_registers_data_pointers mem;
                              simpl;
