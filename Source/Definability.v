@@ -3026,7 +3026,12 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
             destruct prefix; first by auto.
             right. rewrite lastI -cats1. by eauto.
           }
-          admit.
+          { (* This should result in a contradiction: the first event cannot be a return *)
+            exfalso.
+            subst.
+            move: wb_trace.
+            by rewrite Et => /andP [].
+          }
 
           (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
           simpl.
@@ -3036,9 +3041,17 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           specialize (Hextcall_C C C_b C_next_e1).
           assert (C'_next_e1: C' <> next_comp_of_event e1)
             by (rewrite -C_next_e1 /C; move: wf_e => /eqP; congruence).
-          assert (C'_b: component_buffer C') by admit.
-          (* Proof: by using [valid_procedure_has_block] and
-             by well-formedness of the stack *)
+          assert (C'_b: component_buffer C').
+          {
+            destruct s.
+            destruct callers as [|C'_ callers]; try easy.
+            case/andP: wb=> [/eqP HC' wb_suffix].
+            subst C'_.
+            destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
+            destruct Hbot as [Hbot_load Hbot].
+            destruct Hbot as (saved & P' & top' & bot' & ? & P'_exp & Htop' & Hbot').
+            eapply valid_procedure_has_block; eassumption.
+          }
           have HextcallC' := Hextcall_notC C' C'_b C'_next_e1.
 
 
@@ -3185,7 +3198,19 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
   - (* [wfmem_ini] *)
     by case prefix.
   - (* [wfmem] *)
-    admit.
+    move=> prefix'0 e'0.
+    rewrite 2!cats1 => /rcons_inj [] ? ?; subst prefix'0 e'0.
+    split; last split.
+    + rewrite /postcondition_event_registers.
+      move=> r n <- //=.
+      eexists; eexists; split.
+      * destruct r; simplify_memory. admit.
+      * split; eauto. simpl.
+        (* using well_formed_intermediate_prefix *)
+        admit.
+
+    + admit.
+    + admit.
                 }
 
             - intros mem1 Hmem1 Hmem2 arg.
@@ -3201,7 +3226,20 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           eexists. eexists. split; last split.
           eapply star_trans; eauto.
           eauto.
-          admit.
+          {
+            rewrite CS.CS.project_non_inform_append. simpl.
+            replace (project_non_inform prefix ** [:: ERet (cur_comp s) ret_val mem' C'])
+                             with (project_non_inform prefix ++ [:: ERet (cur_comp s) ret_val mem' C']); last by reflexivity.
+            rewrite 2!cats1.
+            eapply rcons_renames_rcons_option; eauto.
+            - inversion Hshift; eauto.
+            - admit.
+            - admit.
+            - easy.
+            - admit.
+            - admit.
+            - admit.
+          }
 
 
         (* NOTE: ... And there is a series of new events to consider. *)
@@ -3989,7 +4027,7 @@ Local Transparent expr_of_const_val loc_of_reg.
               { destruct s. exact wb. }
               { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
                 eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-                exists bot. split; [| split]; easy. }
+                exists bot. split; [reflexivity | split; [easy |]]. admit. (* induction on [callers s] *) }
               (* Reestablish memory well-formedness.
                  TODO: Refactor, automate. *)
               { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
