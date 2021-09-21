@@ -5625,7 +5625,15 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                   as [[Cmem0 [buf0 [HCmem0 [Hbuf0 [Hnext0 Hprealloc0]]]]]
                         [Cmem0' [HCmem0' Hblock0']]].
                 subst Cmem0.
-                admit.
+                assert (wf_p : Source.well_formed_program p)
+                  by (now eapply well_formed_events_well_formed_program; eauto).
+                destruct (CS.load_data_next_block
+                            wf_p (closed_program_of_trace t) Logic.eq_refl
+                            Star0 Hreg0mem0)
+                  as [Cmem0'' [HCmem0'' Hcontra]].
+                rewrite HCmem0' in HCmem0''.
+                injection HCmem0'' as ?; subst Cmem0''.
+                rewrite Hblock0' /LOCALBUF_blockid in Hcontra. lia.
           }
           destruct (Memory.store_after_load _ _ _ vptr0 Hreg1mem) as [mem'' Hstore']. (* "Standard" names here... *)
           (* Continue. *)
@@ -6238,8 +6246,15 @@ Local Opaque Memory.load.
                   as [Hinitialflag [Hlocalbuf [Hprealloc Hnextblock]]].
                 destruct Hprealloc as [Cmem [buf [HCmem [Hbuf [Hnext Hprealloc]]]]].
                 destruct Hnextblock as [mem0C0 [Hmem0C0 Hnext0]].
-                admit.
-                (* Hreg0mem0 *)
+                assert (wf_p : Source.well_formed_program p)
+                  by (now eapply well_formed_events_well_formed_program; eauto).
+                destruct (CS.load_data_next_block
+                            wf_p (closed_program_of_trace t) Logic.eq_refl
+                            Star0 Hreg0mem0)
+                  as [Cmem0'' [HCmem0'' Hcontra]].
+                rewrite Hmem0C0 in HCmem0''.
+                injection HCmem0'' as ?; subst Cmem0''.
+                rewrite Hnext0 /LOCALBUF_blockid in Hcontra. lia.
           }
           destruct (Memory.store_after_load _ _ _ v1 Hvptrmem) as [mem'' Hstore'].
 
