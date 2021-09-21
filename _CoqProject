@@ -1,9 +1,6 @@
 -arg "-w -parsing -exclude-dir _opam"
 -R . RobustImp
 
-RSC_DC.v
-RSC_DC_4_compcert.v
-
 Common/Definitions.v
 Common/Values.v
 Common/Maps.v
@@ -61,4 +58,4 @@ S2I/Examples/DefaultInitBuffer.v
 S2I/Examples/NestedCalls.v
 S2I/Examples/Factorial.v
 
-RSC_DC_MD.v
+RSC.v
