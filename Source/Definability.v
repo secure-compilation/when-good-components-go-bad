@@ -2522,7 +2522,6 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
 
       move: Hwf_cs Star0.
       rename procs into t_procs. (* TODO: Better name! *)
-(* FIXME *)
       (* case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp. *)
       case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] /andP [[]] /eqP wf_C_orig wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
 
@@ -3233,20 +3232,30 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
                        ++ rewrite ComponentMemory.nextblock_prealloc
                                   domm_set domm0 /=.
                           by rewrite fsetU0.
-                    -- admit.
-                       (* exists Cmem. split. *)
-                       (* ++ repeat *)
-                       (*      ((erewrite <- component_memory_after_store_neq; *)
-                       (*        [| eassumption | intro Hcontra; subst C'; contradiction]) *)
-                       (*       || *)
-                       (*       (erewrite <- component_memory_after_alloc_neq; *)
-                       (*        [| eassumption | intro Hcontra; subst C'; contradiction])). *)
-                       (*    exact HCmem. *)
-                       (* ++ exact Hnextblock. *)
+                    -- destruct (mem0 C') as [Cmem |] eqn:HCmem.
+                       ++ exists Cmem. split.
+                          ** repeat
+                               ((erewrite <- component_memory_after_store_neq;
+                                 [| eassumption | intro Hcontra; subst C'; contradiction])
+                                ||
+                                (erewrite <- component_memory_after_alloc_neq;
+                                 [| eassumption | intro Hcontra; subst C'; contradiction])).
+                             exact HCmem.
+                          ** rewrite /next_block HCmem in Hnextblock.
+                             now injection Hnextblock.
+                       ++
+Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
+                          rewrite /= HCmem in Hinitflag. discriminate.
             }
               }
               {
-                admit.
+                destruct prefix' as [| e prefix'].
+                - rewrite cats0. now constructor.
+                - rewrite lastI in Hshift.
+                  inversion Hshift. subst t1 t'.
+                  inversion H.
+                  + rewrite -lastI in H0. discriminate.
+                  + destruct tprefix; discriminate.
               }
             + (* EConst-Ptr *)
               admit.
@@ -3296,12 +3305,6 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
 
           + (* EConst-Int *)
             (* Before processing the goal, introduce existential witnesses. *)
-            (* match goal with *)
-            (* | H : Memory.store _ ?PTR _ = Some ?MEM |- *)
-            (*   Memory.store ?MEM ?PTR' _ = _ *)
-            (*   => *)
-            (*   assert (Hneq : PTR <> PTR') by admit *)
-            (* end. *)
             pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [mem'' Hstore'].
             eexists. (* NOTE: Moved from above! *)
             (* Continue. *)
@@ -3927,7 +3930,6 @@ Local Opaque Memory.store.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
             }
-            (* assert (ptrp = Permission.data) by admit; subst ptrp. *)
             set (saved := (eval_binop Add (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)) (Int ptro))).
             pose proof proj1 (Memory.store_some_load_some _ _ (*Ptr ptr*) saved) Hload as [mem'' Hstore'].
             (* Continue. *)
@@ -5582,7 +5584,6 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
           {
             destruct (wfmem wf_mem Hprefix01) as [Hregs [Hsteady Hinitial]].
             destruct (Hregs (Ereg_to_reg reg0) _ Logic.eq_refl) as [v0'' [v0 [Hload0 [Hshift0 Hget0]]]].
-
             rewrite reg_to_Ereg_to_reg Hcomp1 Hreg0mem0 in Hload0.
             injection Hload0 as ?; subst v0''.
             rewrite /= /ssrnat.addn /ssrnat.addn_rec /ssrnat.subn /ssrnat.subn_rec
@@ -5601,7 +5602,14 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
             injection H0 as ?; subst ptr.
             destruct (Nat.eqb_spec C C0) as [| Hneq].
             - subst C0.
-              admit. (* Easy *)
+              destruct (Hsteady _ C_b (Logic.eq_sym Hcomp1))
+                as [Hinitflag0 [Hlocalbuf [Hshift0 Hblock0]]].
+              destruct (Hshift0 (S b0') (Nat.neq_succ_0 _))
+                as [[cid bid] [Hshift0' [Hrename0 Hrename0']]].
+              rewrite shift_S_Some in Hshift0'.
+              injection Hshift0' as ? ?; subst cid bid.
+              destruct (Hrename0' _ _ H1) as [v' [Hload' Hshift']].
+              eexists. simplify_memory'. exact Hload'.
             - assert (C0_b : component_buffer C0).
               {
                 unfold component_buffer.
@@ -5617,7 +5625,15 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
               specialize (Hinitial _ C0_b (nesym Hneq))
                 as [Hsteady0 | Hinitial0].
               * (* This is identical to the C = C0 case above. *)
-                admit. (* Easy *)
+                destruct Hsteady0
+                  as [Hinitflag0 [Hlocalbuf [Hshift0 Hblock0]]].
+                destruct (Hshift0 (S b0') (Nat.neq_succ_0 _))
+                  as [[cid bid] [Hshift0' [Hrename0 Hrename0']]].
+                rewrite shift_S_Some in Hshift0'.
+                injection Hshift0' as ? ?; subst cid bid.
+                  simpl in *.
+                destruct (Hrename0' _ _ H1) as [v' [Hload' Hshift']].
+                eexists. simplify_memory'. exact Hload'.
               * (* Contradiction on uninitialized C0. *)
                 destruct Hinitial0
                   as [Hinitflag0 [Hlocalbuf0 Hsnapshot0]].
@@ -6783,9 +6799,7 @@ Local Transparent expr_of_const_val loc_of_reg.
           rewrite H7 in Hget1. subst v1'.
           rewrite reg_to_Ereg_to_reg in Hshift1.
           destruct v1''; try discriminate. injection Hshift1' as ?; subst z.
-          (* destruct v1 as [n1 | ptr1 |]; [| admit | admit]. *)
           rename size0 into n1.
-          (* assert (Hsize : (n1 > 0)%Z) by admit. *)
           rename H9 into Hsize.
           rewrite Hcomp1 in Hshift1.
           rewrite Hreg1mem0 in Hshift1.
@@ -6979,8 +6993,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         (* subst v. *)
                         specialize (Hsnapshot1 _ Hb')
                           as [[cid bid] [Hshift' [Hrename Hrename']]].
-                        (* destruct bnew as [| bnew']; *)
-                        (*   first admit. (* contra *) *)
                         injection Hshift' as Hcid Hbid.
                         rewrite /ssrnat.addn /ssrnat.addn_rec /ssrnat.subn /ssrnat.subn_rec
                                 /all_zeros_shift /uniform_shift /= Nat.add_0_r Nat.sub_0_r
