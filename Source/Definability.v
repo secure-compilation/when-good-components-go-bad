@@ -5578,7 +5578,55 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
             last (injection; now destruct reg1).
           (* set (saved := v1). *)
           (* NOTE: In previous cases, we got to the store by a different route. *)
-          assert (exists v, Memory.load mem (Permission.data, C0, S b0', o0) = Some v) as [vptr0 Hptr0mem] by admit.
+          assert (exists v, Memory.load mem (Permission.data, C0, S b0', o0) = Some v) as [vptr0 Hptr0mem].
+          {
+            destruct (wfmem wf_mem Hprefix01) as [Hregs [Hsteady Hinitial]].
+            destruct (Hregs (Ereg_to_reg reg0) _ Logic.eq_refl) as [v0'' [v0 [Hload0 [Hshift0 Hget0]]]].
+
+            rewrite reg_to_Ereg_to_reg Hcomp1 Hreg0mem0 in Hload0.
+            injection Hload0 as ?; subst v0''.
+            rewrite /= /ssrnat.addn /ssrnat.addn_rec /ssrnat.subn /ssrnat.subn_rec
+                    /= Nat.add_0_r Nat.sub_0_r in Hshift0.
+            injection Hshift0 as ?; subst v0.
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+              [ destruct prefix; discriminate (* contra *)
+              | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
+              | rewrite Hprefix01 in Ht;
+                symmetry in Ht; apply cats2_inv in Ht as [? [? ?]]; subst prefint eint1 eint2;
+                inversion Hstep as [| | | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | |];
+                subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                subst eregs].
+            rewrite -H in H0.
+            injection H0 as ?; subst ptr.
+            destruct (Nat.eqb_spec C C0) as [| Hneq].
+            - subst C0.
+              admit. (* Easy *)
+            - assert (C0_b : component_buffer C0).
+              {
+                unfold component_buffer.
+                change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
+                change intf with (Source.prog_interface p).
+                eapply CS.load_component_prog_interface; eauto.
+                - now eapply well_formed_events_well_formed_program; eauto.
+                - now apply closed_program_of_trace.
+                - reflexivity.
+              }
+              unfold C in Hneq.
+              rewrite <- Hcomp1 in Hneq.
+              specialize (Hinitial _ C0_b (nesym Hneq))
+                as [Hsteady0 | Hinitial0].
+              * (* This is identical to the C = C0 case above. *)
+                admit. (* Easy *)
+              * (* Contradiction on uninitialized C0. *)
+                destruct Hinitial0
+                  as [Hinitflag0 [Hlocalbuf0 Hsnapshot0]].
+                destruct Hsnapshot0
+                  as [[Cmem0 [buf0 [HCmem0 [Hbuf0 [Hnext0 Hprealloc0]]]]]
+                        [Cmem0' [HCmem0' Hblock0']]].
+                subst Cmem0.
+                admit.
+          }
           destruct (Memory.store_after_load _ _ _ vptr0 Hreg1mem) as [mem'' Hstore']. (* "Standard" names here... *)
           (* Continue. *)
           exists (StackState C (callers s)).
