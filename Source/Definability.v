@@ -439,7 +439,7 @@ Section Definability.
     match e with
     | ECallInform _ P' arg _ _ C' =>
       E_assign EXTCALL (E_val (Int 1%Z));;
-      E_call C' P' (E_deref (loc_of_reg E_R_COM));;
+      E_assign (loc_of_reg E_R_COM) (E_call C' P' (E_deref (loc_of_reg E_R_COM)));;
       invalidate_metadata;;
       E_assign EXTCALL (E_val (Int 0%Z));;
       E_call C P (E_val (Int 0%Z)) (* This is really (C, P) calling itself *)
@@ -755,9 +755,10 @@ Section Definability.
     | C :: callers' =>
       Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) = Some (Int 1%Z) /\
       (exists v P top bot,
-      stk = CS.Frame C v (Kseq
+          stk = CS.Frame C v (Kassign1 (loc_of_reg E_R_COM)
+                                (Kseq
                    (invalidate_metadata;; E_assign EXTCALL (E_val (Int 0));; E_call C P (E_val (Int 0)))
-                   Kstop)  :: top ++ bot /\
+                   Kstop))  :: top ++ bot /\
       valid_procedure C P /\
       All (fun '(CS.Frame C' _ k) => C' = C /\ k = Kstop) top /\
       well_formed_callers callers' bot mem)
@@ -2889,17 +2890,20 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           exists (ECallInform C P' vcom mem1 regs C').
           exists (StackState C' (C :: callers s)).
           exists [CState C', CS.Frame C arg
-                                 (Kseq
+                                 (Kassign1 (loc_of_reg E_R_COM)
+                                    (Kseq
                                     (invalidate_metadata;;
                                      E_assign EXTCALL (E_val (Int 0));; E_call C P (E_val (Int 0)))
                                     Kstop
-                                 )
+                                 ))
                                  :: stk, mem10,
                   Kstop, expr_of_trace C' P' (comp_subtrace C' t), vcom].
 
           split; last split.
           + Local Transparent loc_of_reg.
-            do 17 (take_step; eauto). simplify_memory.
+            take_steps; eauto.
+            take_steps; simplify_memory.
+            (* do 17 (take_step; eauto). simplify_memory. *)
 
             eapply star_step. simpl.
             apply CS.eval_kstep_sound. simpl.
@@ -3079,6 +3083,9 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           pose proof (wfmem_meta wf_mem E_R_ARG C'_b) as [v6 Hv6].
           pose proof (wfmem_meta wf_mem E_R_COM C'_b) as [v7 Hv7].
           destruct (Memory.store_after_load mem1
+                                            (Permission.data, C', Block.local, reg_offset E_R_COM)
+                                            v7 vcom) as [mem1' Hmem1']; simplify_memory.
+          destruct (Memory.store_after_load mem1'
                                             (Permission.data, C', Block.local, reg_offset E_R_ONE)
                                             v1 Undef) as [mem2 Hmem2]; simplify_memory.
           destruct (Memory.store_after_load mem2
@@ -3119,19 +3126,20 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
             destruct Hbot as [Hbot_load Hbot].
             (* clear Hmem Hmem1. *)
             (* clear Hmem1. *)
-            revert mem1 Hmem1 Hmem2 arg.
+            revert mem1 Hmem1' Hmem1 Hmem2 arg.
             induction top as [|[C_ saved k_] top IHtop].
             - clear Htop. rename bot into bot'.
 
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
               subst bot'. simpl.
               (* have C'_b := valid_procedure_has_block P'_exp. *)
-              intros mem1 Hmem1 Hmem2 arg.
+              intros mem1 Hmem1' Hmem1 Hmem2 arg.
               eexists. split.
               + simpl.
                 eapply star_step.
                 * eapply CS.KS_ExternalReturn; congruence.
                 * take_steps; eauto.
+                  take_steps; eauto.
                   take_steps; eauto.
                   take_steps; eauto.
                   take_steps; eauto.
@@ -3201,22 +3209,120 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
     move=> prefix'0 e'0.
     rewrite 2!cats1 => /rcons_inj [] ? ?; subst prefix'0 e'0.
     split; last split.
-    + rewrite /postcondition_event_registers.
-      move=> r n <- //=.
-      eexists; eexists; split.
-      * destruct r; simplify_memory. admit.
-      * split; eauto. simpl.
-        (* using well_formed_intermediate_prefix *)
-        admit.
+  (*   + rewrite /postcondition_event_registers. *)
+  (*     move=> r n <- //=. *)
+  (*     eexists; eexists; split. *)
+  (*     * destruct r; simplify_memory. admit. *)
+  (*     * split; eauto. simpl. *)
+  (*       (* using well_formed_intermediate_prefix *) *)
+  (*       admit. *)
 
-    + admit.
+  (*   + admit. *)
+  (*   + admit. *)
+    + {
+      intros reg off Hoffset.
+      pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp Hnotnextcomp]].
+      subst off.
+      destruct reg; eexists; eexists; (split; [| split]);
+        try by simplify_memory';
+        try by reflexivity.
+      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        + now destruct prefix.
+        + destruct prefix as [|? []]; try discriminate.
+          inversion H; subst e; clear H.
+          inversion H0; subst; clear H0.
+          now auto.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          inversion H1; subst; clear H1. auto.
+      - (* RCOM! *)
+        specialize (Hregs Machine.R_COM _ Logic.eq_refl) as [v [v' [Hload [Hshift' Hblock']]]].
+        simpl in Hload.
+        rewrite -C_next_e1 Hcom in Hload. inversion Hload; subst; clear Hload.
+        rewrite Hshift'. simpl.
+        destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'; subst.
+        + now destruct prefix0.
+        + destruct prefix0 as [|? []]; try discriminate.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+          inversion H1; subst; clear H1. auto.
+      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        + now destruct prefix.
+        + destruct prefix as [|? []]; try discriminate.
+          inversion H; subst e; clear H.
+          inversion H0; subst; clear H0.
+          now auto.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          inversion H1; subst; clear H1. auto.
+      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        + now destruct prefix.
+        + destruct prefix as [|? []]; try discriminate.
+          inversion H; subst e; clear H.
+          inversion H0; subst; clear H0.
+          now auto.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          inversion H1; subst; clear H1. auto.
+      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        + now destruct prefix.
+        + destruct prefix as [|? []]; try discriminate.
+          inversion H; subst e; clear H.
+          inversion H0; subst; clear H0.
+          now auto.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          inversion H1; subst; clear H1. auto.
+      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        + now destruct prefix.
+        + destruct prefix as [|? []]; try discriminate.
+          inversion H; subst e; clear H.
+          inversion H0; subst; clear H0.
+          now auto.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          inversion H1; subst; clear H1. auto.
+      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        + now destruct prefix.
+        + destruct prefix as [|? []]; try discriminate.
+          inversion H; subst e; clear H.
+          inversion H0; subst; clear H0.
+          now auto.
+        + rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+          inversion H1; subst; clear H1. auto.
+    }
+    + intros C0 _ ?; subst C0. simpl. (* lookup *)
+      pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp Hnotnextcomp]].
+      split; [| split; [| split]].
+      * by simplify_memory'.
+      * admit.
+      * move=> b Hb //=.
+        destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+        inversion wf_int_pref'.
+        -- now destruct prefix.
+        -- destruct prefix as [|? []]; try discriminate.
+           now destruct prefix0.
+        -- rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+           rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+           inversion H1; subst; clear H1.
+           unfold Block.local in Hb.
+           destruct b as [| b']; first congruence.
+           eexists. split; [| split].
+           ++ simpl. rewrite shift_S_Some. reflexivity.
+           ++ simpl. intros off v' Hload.
+              Locate "<>".
+              specialize (Hnotnextcomp C' C'_b (nesym H6)).
+              admit.
+           ++ admit.
+      * admit.
     + admit.
                 }
-
-            - intros mem1 Hmem1 Hmem2 arg.
+            - intros mem1 Hmem1' Hmem1 Hmem2 arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
-              specialize (IHtop mem1 Hmem1 Hmem2 saved). destruct IHtop as [cs' [StarRet wf_cs']].
+              specialize (IHtop mem1 Hmem1' Hmem1 Hmem2 saved). destruct IHtop as [cs' [StarRet wf_cs']].
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
               * by apply/CS.eval_kstep_sound; rewrite /= eqxx.
