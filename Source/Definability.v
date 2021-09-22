@@ -3353,7 +3353,64 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
   + intros C0 C0_b C0_neq.
     destruct (C0 == C) eqn:C0_C;
       move: C0_C => /eqP C0_C; [subst C0|].
-    * admit.
+    * (* C0 is C. We know it's initialized. *)
+      left.
+      pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp _]].
+      specialize (Hnextcomp C C_b C_next_e1) as [Hinitflag [Hlocalbuf Hsteady']].
+      { split; [| split; [| split]].
+        - simplify_memory.
+        - simplify_memory.
+        - simpl.
+          intros b Hb.
+          unfold Block.local in Hb.
+          destruct b as [| b']; first congruence.
+          eexists. split; [| split].
+          ++ simpl. rewrite shift_S_Some. reflexivity.
+          ++ simpl. intros off v' Hload.
+              repeat match goal with
+              | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                     end.
+             destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+             inversion wf_int_pref'.
+             ** now destruct prefix.
+             ** destruct prefix as [|? []]; try discriminate.
+                now destruct prefix0.
+             ** rewrite cats1 in H. apply rcons_inj in H. inversion H. subst; clear H.
+                rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                inversion H1; subst; clear H1. simpl in *.
+                destruct Hsteady' as [Hshift0 Hblock0].
+                specialize (Hshift0 (S b')) as [? [Haddr [Hshift1 Hshift2]]]; eauto.
+                rewrite shift_S_Some in Haddr. inversion Haddr; subst; clear Haddr. simpl in *.
+                by specialize (Hshift1 _ _ Hload).
+           ++ simpl. intros off v' Hload.
+              destruct Hsteady' as [Hshift0 Hblock0].
+              specialize (Hshift0 (S b')) as [? [Haddr [Hshift1 Hshift2]]]; eauto.
+              rewrite shift_S_Some in Haddr. inversion Haddr; subst; clear Haddr. simpl in *.
+              destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+              inversion wf_int_pref'.
+              ** now destruct prefix0.
+              ** destruct prefix0 as [|? []]; try discriminate.
+              ** rewrite cats1 in H. apply rcons_inj in H. inversion H. subst; clear H.
+                 rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                 inversion H1; subst; clear H1. simpl in *.
+                 specialize (Hshift2 _ _ Hload) as [v [? ?]].
+                 by exists v; split; simplify_memory.
+       - move=> b Hb //=.
+         do 10 (erewrite next_block_store_stable; eauto).
+         destruct Hsteady' as [Hshift0 Hblock0].
+         destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+         inversion wf_int_pref'.
+         -- now destruct prefix.
+         -- destruct prefix as [|? []]; try discriminate.
+            now destruct prefix0.
+         -- rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+            rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+            inversion H1; subst; clear H1. simpl in *.
+            by specialize (Hblock0 b Hb).
+      }
+
     * pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp Hnotnextcomp]].
       rewrite //= -C_next_e1 in Hnotnextcomp.
       specialize (Hnotnextcomp _ C0_b C0_C) as [Hsteady' | Hinitial].
@@ -3404,7 +3461,59 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
                       *** eauto.
             ** intros b Hnextb.
               unfold next_block.
-               admit.
+               assert (asmp: mem0 C0 = mem8 C0).
+               {
+                 Local Transparent Memory.store.
+                 unfold Memory.store in *.
+                 Local Opaque Memory.store.
+                 simpl in *.
+
+                 destruct (mem0 C) eqn:e0C; last discriminate.
+                 destruct (mem C) eqn:eC; last discriminate.
+                 destruct (mem1 C') eqn:e1C'; last discriminate.
+                 destruct (mem1' C') eqn:e1'C'; last discriminate.
+                 destruct (mem2 C') eqn:e2C'; last discriminate.
+                 destruct (mem3 C') eqn:e3C'; last discriminate.
+                 destruct (mem4 C') eqn:e4C'; last discriminate.
+                 destruct (mem5 C') eqn:e5C'; last discriminate.
+                 destruct (mem6 C') eqn:e6C'; last discriminate.
+                 destruct (mem7 C') eqn:e7C'; last discriminate.
+
+                 destruct (ComponentMemory.store s Block.local 0%Z
+                                                 (Int (counter_value C (prefix ++ [:: ERetInform C ret_val mem' regs C'])))) eqn:eq1; last discriminate.
+                 destruct (ComponentMemory.store s0 Block.local EXTCALL_offset (Int 1)) eqn:eq2; last discriminate.
+                 destruct (ComponentMemory.store s1 Block.local 5%Z vcom) eqn:eq3; last discriminate.
+                 destruct (ComponentMemory.store s2 Block.local 4%Z Undef) eqn:eq4; last discriminate.
+                 destruct (ComponentMemory.store s3 Block.local 6%Z Undef) eqn:eq5; last discriminate.
+                 destruct (ComponentMemory.store s4 Block.local 7%Z Undef) eqn:eq6; last discriminate.
+                 destruct (ComponentMemory.store s5 Block.local 8%Z Undef) eqn:eq7; last discriminate.
+                 destruct (ComponentMemory.store s6 Block.local 9%Z Undef) eqn:eq8; last discriminate.
+                 destruct (ComponentMemory.store s7 Block.local 10%Z Undef) eqn:eq9; last discriminate.
+                 destruct (ComponentMemory.store s8 Block.local EXTCALL_offset (Int 0)) eqn:eq10; last discriminate.
+                 repeat match goal with
+                        | H: Some _ = Some _ |- _ => inversion H; subst; clear H
+                        end.
+                 rewrite !setmE.
+                 assert (C0 == C' = false) as rewr by now apply /eqP.
+                 rewrite rewr.
+                 assert (C0 == match e1 with
+                               | ECallInform _ _ _ _ _ C | ERetInform _ _ _ _ C |
+                                EConst C _ _ _ _ | EMov C _ _ _ _ | EBinop C _ _ _ _ _ _ |
+                                ELoad C _ _ _ _ | EStore C _ _ _ _ | EAlloc C _ _ _ _ => C
+                               end = false) as rewr' by now apply /eqP.
+                 rewrite rewr'.
+                 reflexivity.
+              }
+              rewrite <- asmp. simpl in Hnextb.
+               destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+               inversion wf_int_pref'.
+               --- now destruct prefix.
+               --- destruct prefix as [|? []]; try discriminate.
+                   now destruct prefix0.
+               --- rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                   rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                   inversion H1; subst; clear H1. simpl in *.
+                   by specialize (Hnextblock _ Hnextb).
       -- destruct Hinitial
           as [Hinitflag [Hlocalbuf [
                              [compMem [buf [He1 Hbuf]]]
@@ -3416,10 +3525,78 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
         ++ simplify_memory.
         ++ unfold postcondition_event_snapshot_uninitialized
             in *.
-           split.
-           ** simpl. exists compMem, buf.
-              admit.
-           ** admit.
+           destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+           inversion wf_int_pref'.
+           ** now destruct prefix.
+           ** destruct prefix as [|? []]; try discriminate.
+              now destruct prefix0.
+           ** rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+              rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+              inversion H1; subst; clear H1. simpl in *.
+              split.
+              --- simpl. exists compMem, buf.
+                  eauto.
+              ---
+
+               assert (asmp: mem0 C0 = mem8 C0).
+               {
+                 Local Transparent Memory.store.
+                 unfold Memory.store in *.
+                 Local Opaque Memory.store.
+                 simpl in *.
+
+                 remember (match e1 with
+                           | ECallInform _ _ _ _ _ C | ERetInform _ _ _ _ C |
+                            EConst C _ _ _ _ | EMov C _ _ _ _ |
+                            EBinop C _ _ _ _ _ _ | ELoad C _ _ _ _ |
+                            EStore C _ _ _ _ | EAlloc C _ _ _ _ => C
+                           end) as C.
+
+                 destruct (mem0 C) eqn:e0C; last (discriminate).
+                 destruct (mem C) eqn:eC; last discriminate.
+                 destruct (mem1 C') eqn:e1C'; last discriminate.
+                 destruct (mem1' C') eqn:e1'C'; last discriminate.
+                 destruct (mem2 C') eqn:e2C'; last discriminate.
+                 destruct (mem3 C') eqn:e3C'; last discriminate.
+                 destruct (mem4 C') eqn:e4C'; last discriminate.
+                 destruct (mem5 C') eqn:e5C'; last discriminate.
+                 destruct (mem6 C') eqn:e6C'; last discriminate.
+                 destruct (mem7 C') eqn:e7C'; last discriminate.
+
+                 destruct (ComponentMemory.store s Block.local 0%Z
+                                                 (Int
+                                                    (counter_value C
+                                                                   ((prefix0 ++ [:: e1]) ++
+                                                                                        [:: ERetInform C
+                                                                                           (Machine.Intermediate.Register.get Machine.R_COM
+                                                                                                                              (register_file_of_event_inform e1))
+                                                                                           (mem_of_event_inform e1)
+                                                                                           (Machine.Intermediate.Register.invalidate
+                                                                                              (register_file_of_event_inform e1)) C'])))) eqn:eq1; last discriminate.
+                 destruct (ComponentMemory.store s0 Block.local EXTCALL_offset (Int 1)) eqn:eq2; last discriminate.
+                 destruct (ComponentMemory.store s1 Block.local 5%Z vcom) eqn:eq3; last discriminate.
+                 destruct (ComponentMemory.store s2 Block.local 4%Z Undef) eqn:eq4; last discriminate.
+                 destruct (ComponentMemory.store s3 Block.local 6%Z Undef) eqn:eq5; last discriminate.
+                 destruct (ComponentMemory.store s4 Block.local 7%Z Undef) eqn:eq6; last discriminate.
+                 destruct (ComponentMemory.store s5 Block.local 8%Z Undef) eqn:eq7; last discriminate.
+                 destruct (ComponentMemory.store s6 Block.local 9%Z Undef) eqn:eq8; last discriminate.
+                 destruct (ComponentMemory.store s7 Block.local 10%Z Undef) eqn:eq9; last discriminate.
+                 destruct (ComponentMemory.store s8 Block.local EXTCALL_offset (Int 0)) eqn:eq10; last discriminate.
+                 repeat match goal with
+                        | H: Some _ = Some _ |- _ => inversion H; subst; clear H
+                        end.
+                 rewrite !setmE.
+                 assert (C0 == C' = false) as rewr by now apply /eqP.
+                 rewrite rewr.
+                 assert (C0 == match e1 with
+                               | ECallInform _ _ _ _ _ C | ERetInform _ _ _ _ C |
+                                EConst C _ _ _ _ | EMov C _ _ _ _ | EBinop C _ _ _ _ _ _ |
+                                ELoad C _ _ _ _ | EStore C _ _ _ _ | EAlloc C _ _ _ _ => C
+                               end = false) as rewr' by now apply /eqP.
+                 rewrite rewr'.
+                 reflexivity.
+              }
+              by rewrite <- asmp.
                 }
             - intros mem1 Hmem1' Hmem1 Hmem2 arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
@@ -3429,6 +3606,9 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
               eapply star_step; try eassumption.
               * by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity. }
+
+          (* Now we can conclude *)
+
           destruct Star_ret as [s' [cs' [Star_ret wf_cs']]].
           exists (ERetInform C vcom mem1 regs C').
           eexists. eexists. split; last split.
