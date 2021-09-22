@@ -2787,7 +2787,7 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
           simpl.
           pose proof (wfmem_extcall wf_mem Hprefix01) as [Hextcall_C Hextcall_notC].
-          have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
+          have C'_b := valid_procedure_has_block (or_intror (or_introl (closed_intf Himport))).
           assert (C_next_e1: C = next_comp_of_event e1) by admit.
           specialize (Hextcall_C C C_b C_next_e1).
           assert (C'_next_e1: C' <> next_comp_of_event e1)
@@ -3026,7 +3026,7 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
                  ++ admit.
                  ++ admit.
                  ++ admit.
-            * right. by apply: (closed_intf Himport).
+            * right. left. by apply: (closed_intf Himport).
           + admit.
               (* END CASE: CALL *)
 
@@ -3041,7 +3041,7 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
             exfalso.
             subst.
             move: wb_trace.
-            by rewrite Et => /andP [].
+            by move => /andP [].
           }
 
           (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
@@ -3153,7 +3153,7 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
                   take_steps; eauto.
                   take_steps; eauto.
                   take_steps; eauto.
-                  take_steps. simpl. by rewrite /= (find_procedures_of_trace _ P'_exp).
+                  take_steps. simpl. by rewrite find_procedures_of_trace.
                   take_steps. simplify_memory.
                   (* instantiate (1 := Int 1); admit. *)
                   take_steps; simplify_memory.
