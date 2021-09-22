@@ -1486,7 +1486,7 @@ Local Opaque Memory.store.
               /\
               next_block mem C = Some LOCALBUF_blockid
               /\
-              well_formed_memory_snapshot_uninitialized (Source.prepare_buffers p) mem C))
+              well_formed_memory_snapshot_uninitialized initial_memory mem C))
             /\
             (C = Component.main ->
              (Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
@@ -1495,7 +1495,7 @@ Local Opaque Memory.store.
               Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
               Some (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z))
               /\
-              well_formed_memory_snapshot_steadystate (Source.prepare_buffers p) mem C))
+              well_formed_memory_snapshot_steadystate initial_memory mem C))
         ;
         wfmem: forall prefix' e,
             prefix = prefix' ++ [:: e] ->
@@ -1985,6 +1985,11 @@ Local Opaque Memory.store.
     Lemma next_block_prepare_buffers C :
       component_buffer C ->
       next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
+    Admitted.
+
+    Lemma next_block_initial_memory C :
+      component_buffer C ->
+      next_block initial_memory C = Some 1.
     Admitted.
 
     (* TODO: Inline idiomatic proof of this. *)
@@ -2484,7 +2489,7 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
                          repeat
                            (erewrite next_block_store_stable;
                             last eassumption).
-                         rewrite (next_block_prepare_buffers C_b) in Hnext.
+                         rewrite (next_block_initial_memory C_b) in Hnext.
                          injection Hnext as ?; subst b.
                          rewrite /next_block setmE /=.
                          (* erewrite ComponentMemory.next_block_alloc. *)
@@ -3119,7 +3124,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- rewrite shift_S_Some. reflexivity.
                     -- simpl. intros off v' Hload.
                        (* Check next_block_prepare_buffers C_b. *)
-                       pose proof Hblock0 _ (next_block_prepare_buffers C_b)
+                       pose proof Hblock0 _ (next_block_initial_memory C_b)
                          as Hnext0.
                        erewrite Memory.load_after_store_neq in Hload;
                          last eassumption;
@@ -3137,39 +3142,19 @@ Local Transparent expr_of_const_val loc_of_reg.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''.
-                       split; last exact Hrename''.
-                       rewrite -Hload'' /initial_memory.
-Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
-                       rewrite /component_buffer in C_b.
-                       rewrite /= mkfmapfE C_b
-                               (prepare_buffers_prealloc C_b)
-                               !ComponentMemory.load_prealloc.
-                       destruct (0 <=? off)%Z; last reflexivity.
-
-                       admit.
+                       split; assumption.
                     -- simpl. intros off v' Hload.
-                       rewrite /initial_memory in Hload.
-Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.load.
-                       rewrite /component_buffer in C_b.
-                       rewrite /= mkfmapfE C_b ComponentMemory.load_prealloc
-                         in Hload.
-                       destruct (0 <=? off)%Z eqn:Hoff;
-                         last discriminate.
-                       destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
-                         last discriminate.
-                       rewrite setmE in Hload.
-                       destruct b' as [| b''].
-                       simpl in Hload. admit.
-                       (* simpl. *)
-                       (* search _ setm. *)
-                       (* 2:{ simpl in hload. } *)
-                       (* specialize (Hrename' off v'). *)
-
-                       admit.
-                    (* inversion wf_mem. *)
-                    (* rewrite / memory_shifts_memory_at_shared_addr *)
-                    (*         / memory_renames_memory_at_shared_addr. *)
-                    (* admit. *)
+                       pose proof next_block_initial_memory C_b as Hnext0.
+                       destruct b' as [| b''];
+                         last (erewrite load_next_block_None in Hload;
+                               [ discriminate
+                               | eassumption
+                               | rewrite /LOCALBUF_blockid /=; lia]).
+                       specialize (Hrename' _ _ Hload)
+                         as [v'' [Hload'' Hrename'']].
+                       exists v''. split.
+                       ++ now simplify_memory'.
+                       ++ eassumption.
                   * intros b Hnext'. simpl in Hnext'.
                     destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
                     inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
@@ -3192,7 +3177,7 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
                             rewrite -domm_buffers => Hcontra;
                             by rewrite C_b in Hcontra).
                     rewrite domm_set domm0 fsetU0 /= in Hnext'; subst b.
-                    exact (Hblock0 _ (next_block_prepare_buffers C_b)).
+                    exact (Hblock0 _ (next_block_initial_memory C_b)).
                 + intros C' Hcomp Hneq.
                   simpl in Hneq. rewrite Hmain in Hneq. (* Needed for simplify_memory' *)
                   (* rewrite <- Hcomp1 in Hnext. *)
