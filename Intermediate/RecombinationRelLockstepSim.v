@@ -405,16 +405,14 @@ Section ThreewayMultisem1.
                   | Hexec: executing (prepare_global_env prog) _ _ |- _ =>
                     specialize (CS.IConst_possible_values
                                   _
-                                  Hwf Hclosed_prog pc v r Hexec)
+                                  Hwf pc v r Hexec)
                       as Hv
                   end.
                   destruct Hv as [[i Hvi] |
-                                  [perm [cid [bid [off [procs
-                                                          [Hvptr [Hcid [_ _]
-                                             ]]]]]]]].
+                                  [perm [cid [bid [off [? [? [? ?]]]
+                                             ]]]]].
                 ** left. by subst.
                 ** subst. simpl.
-                   destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                    unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr.
                    simpl.
                    assert (Pointer.component pc \in domm (prog_interface p))
@@ -426,7 +424,7 @@ Section ThreewayMultisem1.
                    rewrite Hpc_p.
                    destruct (sigma_shifting_lefttoright_option
                                (n (Pointer.component pc))
-                               (n (Pointer.component pc)) bid) eqn:ebid.
+                               (n (Pointer.component pc)) Block.local) eqn:ebid.
                    --- by
                          left;
                          apply

@@ -2742,13 +2742,13 @@ Lemma IConst_possible_values pc v r:
     (exists i : Z, v = IInt i) \/
     (exists
         (perm : Permission.id) (cid : Component.id) (bid : Block.id) 
-        (off : Block.offset) procs,
+        (off : Block.offset) (*procs*),
         v = IPtr (perm, cid, bid, off) /\
         cid = Pointer.component pc /\
         bid = Block.local /\
-        perm = Permission.data /\
-        prog_procedures p (Pointer.component pc) = Some procs /\
-        procs bid
+        perm = Permission.data (*/\*)
+        (*prog_procedures p (Pointer.component pc) = Some procs /\
+        procs bid*)
     )
   ).
 Proof.
@@ -2771,16 +2771,16 @@ Proof.
   destruct v as [|[[[perm c] b] off]]; first by left; eexists; eauto.
   right. simpl in *.
   destruct wfprog_well_formed_instructions0 as [? [? [buf [Hbuf ?]]]]. subst.
-  exists Permission.data, pcc, Block.local, off, C_procs'.
-  repeat (split; first reflexivity).
-  split; first assumption.
-
+  exists Permission.data, pcc, Block.local, off (*, C_procs'*).
+  repeat (split; try reflexivity).
+  (*split; first assumption.*)
+Qed.
   (** Remains to show that "C_procs' Block.local".        *)
   (** I am not exactly sure why we need to prove that.    *)
   (** TODO: Look at the uses of this lemma and figure out *)
   (** whether there is a bug in its statement.            *)
 
-Admitted.
+(*Admitted.*)
 
 Lemma intermediate_well_formed_events st t st' :
   Star (sem_inform p) st t st' ->
@@ -2796,9 +2796,9 @@ case: st1 t1 st2 / Hstep => //=.
 - (* Relies on lemma IConst_possible_values above. *)
   intros _ _ ? ? ? ? ? Hexec Hreg.
   specialize (IConst_possible_values _ _ _ Hexec)
-    as [[i ev]|[perm [cid [bid [off [procs' [? [? [Hprocs ?]]]]]]]]];
+    as [[i ev]|[perm [cid [bid [off [? [? [? ?]]] (*[procs' [? [? [Hprocs ?]]]]*)]]]]];
     subst; auto.
-  destruct H1 as [Hperm [? ?]]. subst perm.
+  (*destruct H1 as [Hperm [? ?]]. subst perm.*)
   simpl. by rewrite !eqxx.
   (*******************************************
   simpl.
