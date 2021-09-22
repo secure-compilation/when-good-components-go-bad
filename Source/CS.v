@@ -540,6 +540,8 @@ Section Semantics.
     Star sem s t s' ->
     Memory.load (s_memory s') ptr = Some (Ptr ptr') ->
     Pointer.component ptr' \in domm (prog_interface p).
+  Admitted.
+
 
   Lemma load_data_next_block s t s' ptr C b o :
     initial_state p s ->
