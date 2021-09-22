@@ -6,7 +6,6 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.CompCertExtensions.
 Require Import Common.Traces.
-Require Import Common.Blame.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
