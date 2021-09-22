@@ -2551,7 +2551,8 @@ Local Transparent loc_of_reg.
             -- move=> C _ C_b.
                split.
                ++ move=> R n ?; subst n.
-                  destruct (C == Component.main) eqn:Heq.
+                  destruct (C
+ == Component.main) eqn:Heq.
                   ** move: Heq => /eqP Heq; subst C.
                      destruct R; simpl in *; simplify_memory.
 
@@ -3297,7 +3298,10 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
       pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp Hnotnextcomp]].
       split; [| split; [| split]].
       * by simplify_memory'.
-      * admit.
+      * simplify_memory. simpl in Hnotnextcomp. specialize (Hnotnextcomp C' C'_b C'_next_e1).
+        destruct Hnotnextcomp.
+        -- destruct H as [? [? ?]]. eauto.
+        -- destruct H as [? [? ?]]. congruence.
       * move=> b Hb //=.
         destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
         inversion wf_int_pref'.
@@ -3312,12 +3316,110 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
            eexists. split; [| split].
            ++ simpl. rewrite shift_S_Some. reflexivity.
            ++ simpl. intros off v' Hload.
-              Locate "<>".
-              specialize (Hnotnextcomp C' C'_b (nesym H6)).
+              specialize (Hnotnextcomp C' C'_b C'_next_e1).
+              destruct Hnotnextcomp as [[? [? ?]] | [? [? ?]]]; last congruence.
+              repeat match goal with
+              | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                     end.
+              destruct H2 as [Hshift0 Hblock0].
+              specialize (Hshift0 (S b')) as [? [Haddr [Hshift1 Hshift2]]]; eauto.
+              rewrite shift_S_Some in Haddr. inversion Haddr; subst; clear Haddr. simpl in *.
+              by specialize (Hshift1 _ _ Hload).
+           ++ simpl. intros off v' Hload.
+              specialize (Hnotnextcomp C' C'_b C'_next_e1).
+              destruct Hnotnextcomp as [[? [? ?]] | [? [? ?]]]; last congruence.
+              destruct H2 as [Hshift0 Hblock0].
+              specialize (Hshift0 (S b')) as [? [Haddr [Hshift1 Hshift2]]]; eauto.
+              rewrite shift_S_Some in Haddr. inversion Haddr; subst; clear Haddr. simpl in *.
+              specialize (Hshift2 _ _ Hload) as [v [? ?]].
+              by exists v; split; simplify_memory.
+    * move=> b Hb //=.
+      do 10 (erewrite next_block_store_stable; eauto).
+      specialize (Hnotnextcomp C' C'_b C'_next_e1).
+      destruct Hnotnextcomp as [[? [? ?]] | [? [? ?]]]; last congruence.
+      destruct H1 as [Hshift0 Hblock0].
+      destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+      inversion wf_int_pref'.
+      -- now destruct prefix.
+      -- destruct prefix as [|? []]; try discriminate.
+         now destruct prefix0.
+      -- rewrite cats1 in H1. apply rcons_inj in H1. inversion H1; subst; clear H1.
+         rewrite cats1 in H5. apply rcons_inj in H5. inversion H5; subst; clear H5.
+         inversion H3; subst; clear H3. simpl in *.
+         by specialize (Hblock0 b Hb).
+
+  + intros C0 C0_b C0_neq.
+    destruct (C0 == C) eqn:C0_C;
+      move: C0_C => /eqP C0_C; [subst C0|].
+    * admit.
+    * pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp Hnotnextcomp]].
+      rewrite //= -C_next_e1 in Hnotnextcomp.
+      specialize (Hnotnextcomp _ C0_b C0_C) as [Hsteady' | Hinitial].
+      -- destruct Hsteady' as [Hinitflag [Hlocalbuf Hsteady']].
+         left. split; [| split].
+         ++ simplify_memory.
+         ++ simplify_memory.
+         ++ unfold postcondition_event_snapshot_steadystate
+            in *.
+            destruct Hsteady' as [Hsteady' Hnextblock].
+            split.
+            ** intros b Hlocal.
+              specialize (Hsteady' b Hlocal)
+                as [Cb [Hshift' [Hrename Hrename']]].
+               exists Cb. split; [| split].
+              --- exact Hshift'.
+              --- intros off v' Hload. simpl in *.
+                  repeat match goal with
+                         | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                           Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                           erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                         end.
+                  specialize (Hrename off v' Hload)
+                    as [v'' [Hload'' Hrename]].
+                  exists v''. split; eauto.
+                  destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                  inversion wf_int_pref'.
+                  +++ now destruct prefix.
+                  +++ destruct prefix as [|? []]; try discriminate.
+                      now destruct prefix0.
+                  +++ rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                      rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                      by inversion H1; subst; clear H1.
+              --- intros off v' Hload.
+                  destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                  inversion wf_int_pref'.
+                  +++ now destruct prefix.
+                  +++ destruct prefix as [|? []]; try discriminate.
+                      now destruct prefix0.
+                  +++ rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                      rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                      inversion H1; subst; clear H1.
+
+                 specialize (Hrename' off v' Hload)
+                   as [v'' [Hload'' Hrename']].
+                 exists v''. split; simpl.
+                      *** simplify_memory'. eauto.
+                      *** eauto.
+            ** intros b Hnextb.
+              unfold next_block.
+               admit.
+      -- destruct Hinitial
+          as [Hinitflag [Hlocalbuf [
+                             [compMem [buf [He1 Hbuf]]]
+                               Hintial2
+                           ]
+             ]].
+        right. split; [| split].
+        ++ simplify_memory.
+        ++ simplify_memory.
+        ++ unfold postcondition_event_snapshot_uninitialized
+            in *.
+           split.
+           ** simpl. exists compMem, buf.
               admit.
-           ++ admit.
-      * admit.
-    + admit.
+           ** admit.
                 }
             - intros mem1 Hmem1' Hmem1 Hmem2 arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
