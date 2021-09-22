@@ -696,9 +696,10 @@ Section Definability.
           intf.
 
   (* FIXME *)
-  Definition valid_procedure C P :=
+  Definition valid_procedure C P t :=
     C = Component.main /\ P = Procedure.main
-    \/ exported_procedure intf C P.
+    \/ exported_procedure intf C P
+    \/ P \in procedure_ids_of_trace C t.
 
   Lemma find_procedures_of_trace_exp (t: trace event_inform) C P :
     exported_procedure intf C P ->
@@ -724,13 +725,14 @@ Section Definability.
   Qed.
 
   Lemma find_procedures_of_trace (t: trace event_inform) C P :
-    valid_procedure C P ->
+    valid_procedure C P t ->
     Source.find_procedure (procedures_of_trace t) C P
     = Some (procedure_of_trace C P t).
   Proof.
-    by move=> [[-> ->]|?];
-    [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
-  Qed.
+    move=> [[-> ->]|[?|?]];
+    [apply: find_procedures_of_trace_main|by apply: find_procedures_of_trace_exp|].
+    admit.
+  Admitted.
 
   Definition program_of_trace (t: trace event_inform) : Source.program :=
     {| Source.prog_interface  := intf;
@@ -748,22 +750,22 @@ Section Definability.
       returns from those recursive calls.  We describe this pattern with the
       following properties.  *)
 
-  Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) : Prop :=
+  Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) (t: trace event_inform) : Prop :=
     match callers with
     | [] => True
     | C :: callers' =>
       exists v P top bot,
       stk = CS.Frame C v (Kseq (E_call C P (E_val (Int 0))) Kstop) :: top ++ bot /\
-      valid_procedure C P /\
+      valid_procedure C P t /\
       All (fun '(CS.Frame C' _ k) => C' = C /\ k = Kstop) top /\
-      well_formed_callers callers' bot
+      well_formed_callers callers' bot t
     end.
 
-  Definition well_formed_stack (s: stack_state) (stk: CS.stack) : Prop :=
+  Definition well_formed_stack (s: stack_state) (stk: CS.stack) (t: trace event_inform) : Prop :=
     exists top bot,
       stk = top ++ bot /\
       All (fun '(CS.Frame C' _ k) => C' = cur_comp s /\ k = Kstop) top /\
-      well_formed_callers (callers s) bot.
+      well_formed_callers (callers s) bot t.
 
   (** The read and write events will also need to rely on the paths. Should the
       (read and write?) events include the paths so as to make back-translation
@@ -897,10 +899,10 @@ Section Definability.
             case/fsetU1P=> [->|P_CI]; eauto.
             move:P_CI => /fsetUP => [[P_CI|P_CI]]. (* New case analysis *)
             { admit. } (* New case *)
-            by right; exists CI; split.
+            by right; left; exists CI; split.
           move => /fsetUP => [[|]]. (* New case analysis *)
           { admit. } (* New case *)
-          by move=> P_CI; right; exists CI; split.
+          by move=> P_CI; right; left; exists CI; split.
         * rewrite in_fset /= => C'_P'.
           suffices ? : imported_procedure intf C C' P'.
             by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
@@ -957,14 +959,15 @@ Section Definability.
      *)
 
     Lemma valid_procedure_has_block C P :
-      valid_procedure C P ->
+      valid_procedure C P t ->
       component_buffer C.
     Proof.
-      case=> [[-> _ {C P}]|[CI]]; rewrite /component_buffer /=.
+      case=> [[-> _ {C P}]|[CI|?]]; rewrite /component_buffer /=.
         by rewrite mem_domm.
       rewrite /Program.has_component /Component.is_exporting /=.
-      by rewrite mem_domm; case=> ->.
-    Qed.
+      (* by rewrite mem_domm; case=> ->. *)
+    (* Qed. *)
+    Admitted.
 
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
@@ -1655,9 +1658,9 @@ Local Opaque Memory.store.
       &  exp = procedure_of_trace C P t
       &  well_bracketed_trace stk_st suffix
       &  all (@well_formed_event T intf procs) suffix
-      &  well_formed_stack stk_st stk
+      &  well_formed_stack stk_st stk t
       &  well_formed_memory prefix mem
-      &  valid_procedure C P
+      &  valid_procedure C P t
       :  well_formed_state stk_st prefix suffix [CState C, stk, mem, k, exp, arg].
 
   (* [DynShare] Rephrase state well-formedness invariants in terms of reverse
@@ -1673,9 +1676,9 @@ Local Opaque Memory.store.
     &  exp = expr_of_trace C P (comp_subtrace C t)
     &  well_bracketed_trace stk_st suffix
     &  all (@well_formed_event T intf procs) suffix
-    &  well_formed_stack stk_st stk
+    &  well_formed_stack stk_st stk t
     &  well_formed_memory prefix mem
-    &  valid_procedure C P
+    &  valid_procedure C P t
     :  well_formed_state_r stk_st prefix suffix [CState C, stk, mem, k, exp, arg].
 
   (* [DynShare] This second version of the right-to-left invariant does away
@@ -1695,7 +1698,7 @@ Local Opaque Memory.store.
   &  all (@well_formed_event T intf procs) suffix
   (* &  well_formed_stack stk_st stk *)
   (* &  well_formed_memory prefix mem *) (* FIXME *)
-  &  valid_procedure C P
+  &  valid_procedure C P t
   :  well_formed_state_right (* stk_st *) suffix [CState C, stk, mem, k, exp, arg].
 
   (* NOTE: Do we need/want to split off memory invariants, etc., so that they
@@ -3624,7 +3627,17 @@ Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
               { rewrite find_procedures_of_trace.
                 - reflexivity.
-                - admit. (* TODO: Connect [procs] and [valid_procedure] *) }
+                - right. right. rewrite Et /=.
+                  (* NOTE: Inlined proof, refactor lemma later. *)
+                  clear. elim:prefix => [| e t IH].
+                  + by rewrite /procedure_ids_of_trace /comp_subtrace
+                               /= eqxx /= in_fsetU1 eqxx /=.
+                  + rewrite /= /procedure_ids_of_trace /comp_subtrace /=.
+                    match goal with
+                    | |- context [ C == ?X ] => destruct (C == X)
+                    end.
+                    * by rewrite /= in_fsetU IH orbC.
+                    * by rewrite IH. }
               take_steps;
                 first exact Hstore'.
               take_steps;
