@@ -2343,26 +2343,41 @@ Proof.
                        (prog_procedures p)
                        cid) eqn:contra;
        idtac "ExStructures 0.1 legacy"
-      ).
+      ); try discriminate.
   
-  (* unable to use the destruct equation due to type inference problems. *)
-        (*erewrite contra in e1. try discriminate; split; auto; clear e1;
-          unfold reserve_component_blocks; intros H.*)
-
-  (*
   - assert (etmp : is_true (cid \in domm (prog_interface p))).
-    { erewrite domm_domm; rewrite e; auto. }
-    pose (dommP (prog_interface p) cid etmp) as e0.
-    destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+    { by erewrite domm_domm. }
+    move : etmp => /dommP => e0.
+    destruct ((prog_interface p) cid) eqn:e1';
+      destruct e0 as [x H0]; rewrite -e1' in H0; rewrite e1' in H0; last discriminate.
+    inversion H0. subst. clear H0 e. simpl in *.
+    unfold reserve_component_blocks.
     destruct (ComponentMemoryExtra.reserve_blocks
-         (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
-         (length (elementsm (odflt emptym (Some n)))))
-             as [compMem bs] eqn:rsvblk.
-    rewrite rsvblk in H.
-    simpl in H. rewrite <- H.
-   *)
+                (ComponentMemory.prealloc
+                   match prog_buffers p cid with
+                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
+                   | None => emptym
+                   end)
+                (length (elementsm n)))
+      as [compMem bs] eqn:rsvblk.
+    split; intros H.
+    + rewrite rsvblk in H.
+      simpl in H. rewrite <- H.
+      rewrite mkfmapE. destruct n. simpl.
+      (* Search _ bs. *)
+      (** Is there really any relationship between bs and the domain of the NMap n? *)
+      admit.
+    + rewrite rsvblk. simpl.
+      rewrite <- H.
+      rewrite mkfmapE. destruct n. simpl.
+      (* Search _ bs. *)
+      (** Is there really any relationship between bs and the domain of the NMap n? *)
+      admit.
+    
+  - split; by intros.
+
 Admitted.
+
 Lemma genv_procedures_prog_procedures p cid proc :
   well_formed_program p ->
   (genv_procedures (globalenv (sem_inform p))) cid = proc <-> (prog_procedures p) cid = proc.
