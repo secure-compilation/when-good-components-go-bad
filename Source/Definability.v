@@ -496,7 +496,7 @@ Section Definability.
      in terms of [Register.to_nat], and their initial values in terms of
      [Register.init]. *)
   Definition meta_buffer : list value :=
-    [Int 0; Int 1; Int 0; Undef] ++ [Undef; Undef; Undef; Undef; Undef; Undef; Undef].
+    [Int 0; Int 1; Int 0; Undef] ++ [Undef; Int 0; Undef; Undef; Undef; Undef; Undef].
 
   (* Compute component buffer side, assuming argument [C] is in the domain of
      [intf]. *)
@@ -1413,9 +1413,12 @@ Local Opaque Memory.store.
 *)  
 
     Definition postcondition_event_registers_ini (C: Component.id) (mem: Memory.t): Prop :=
-        forall (R: Machine.register) (n: Z),
-          reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
-          Memory.load mem (Permission.data, C, Block.local, n) = Some Undef.
+      (forall (R: Machine.register) (n: Z),
+        R <> Machine.R_COM ->
+        reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
+        Memory.load mem (Permission.data, C, Block.local, n) = Some Undef)
+      /\
+      Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some (Int 0).
 
     Definition postcondition_steady_state
                (e: event_inform) (mem: Memory.t) (C: Component.id) :=
@@ -2278,6 +2281,7 @@ Local Opaque Memory.store.
         }
 
         assert (ini_mem_regs: forall reg,
+                   reg <> E_R_COM ->
                    Memory.load (Source.prepare_buffers p)
                                (Permission.data, Component.main,
                                 Block.local, reg_offset reg) = Some Undef).
@@ -2389,43 +2393,54 @@ Local Opaque Memory.store.
         destruct (Memory.store_after_load
                     mem0
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
-                    Undef Undef) as [mem1 Hmem1]; eauto; simplify_memory.
+                    Undef Undef) as [mem1 Hmem1]; eauto; simplify_memory;
+          first by apply ini_mem_regs.
 
         destruct (Memory.store_after_load
                     mem1
                     (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)
-                    Undef Undef) as [mem2 Hmem2]; eauto; simplify_memory.
+                    Undef Undef) as [mem2 Hmem2]; eauto; simplify_memory;
+          first by apply ini_mem_regs.
 
         destruct (Memory.store_after_load
                     mem2
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_AUX2)
-                    Undef Undef) as [mem3 Hmem3]; eauto; simplify_memory.
+                    Undef Undef) as [mem3 Hmem3]; eauto; simplify_memory;
+          first by apply ini_mem_regs.
 
         destruct (Memory.store_after_load
                     mem3
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_RA)
-                    Undef Undef) as [mem4 Hmem4]; eauto; simplify_memory.
+                    Undef Undef) as [mem4 Hmem4]; eauto; simplify_memory;
+          first by apply ini_mem_regs.
 
         destruct (Memory.store_after_load
                     mem4
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_SP)
-                    Undef Undef) as [mem5 Hmem5]; eauto; simplify_memory.
+                    Undef Undef) as [mem5 Hmem5]; eauto; simplify_memory;
+          first by apply ini_mem_regs.
 
         destruct (Memory.store_after_load
                     mem5
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_ARG)
-                    Undef Undef) as [mem6 Hmem6]; eauto; simplify_memory.
+                    Undef Undef) as [mem6 Hmem6]; eauto; simplify_memory;
+          first by apply ini_mem_regs.
 
         destruct (Memory.store_after_load
                     mem6
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_COM)
-                 Undef (Int 0%Z)) as [mem7 Hmem7].
+                 (Int 0%Z) (Int 0%Z)) as [mem7 Hmem7].
         simplify_memory.
+        unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+        simpl. rewrite !mapmE.
+        destruct (intf Component.main); last discriminate; auto.
+        simpl. by rewrite ComponentMemory.load_prealloc setmE.
+
         destruct (Memory.store_after_load
                     mem7
                     (Permission.data, Component.main,
@@ -2558,16 +2573,12 @@ Local Transparent loc_of_reg.
                     by rewrite load_prepare_buffers.
             -- move=> C _ C_b.
                split.
-               ++ move=> R n ?; subst n.
+               ++ split.
+                  {
+                  move=> R n ? ?; subst n.
                   destruct (C == Component.main) eqn:Heq.
                   ** move: Heq => /eqP Heq; subst C.
                      destruct R; simpl in *; simplify_memory.
-
-                     (* FIXME: Broke when merging! *)
-                     (* rewrite -(Z2Nat.id 5); [| lia]. *)
-                     (* by rewrite load_prepare_buffers. *)
-                     admit.
-
                   ** move: Heq => /eqP Heq.
                      destruct R; simpl in *; simplify_memory;
                      (* NOTE: What can we actually say about the initialization
@@ -2577,6 +2588,21 @@ Local Transparent loc_of_reg.
                          rewrite -(Z2Nat.id N); [| lia]
                        end;
                        by rewrite load_prepare_buffers.
+                  }
+                  {
+                  destruct (C == Component.main) eqn:Heq.
+                  ** move: Heq => /eqP Heq; subst C.
+                     simpl in *; simplify_memory.
+                  ** move: Heq => /eqP Heq.
+                     simpl in *; simplify_memory;
+                     (* NOTE: What can we actually say about the initialization
+                        of other components? *)
+                       match goal with
+                       | |- Memory.load _ (_, _, _, ?N) = _ =>
+                         rewrite -(Z2Nat.id N); [| lia]
+                       end;
+                       by rewrite load_prepare_buffers.
+                  }
                ++ destruct (Nat.eqb_spec C Component.main) as [| Heq].
                   ** subst C.
                      split; first congruence.
