@@ -2789,7 +2789,12 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           simpl.
           pose proof (wfmem_extcall wf_mem Hprefix01) as [Hextcall_C Hextcall_notC].
           have C'_b := valid_procedure_has_block (or_intror (or_introl (closed_intf Himport))).
-          assert (C_next_e1: C = next_comp_of_event e1) by admit.
+          assert (C_next_e1: C = next_comp_of_event e1).
+          { destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. auto. }
           specialize (Hextcall_C C C_b C_next_e1).
           assert (C'_next_e1: C' <> next_comp_of_event e1)
             by (rewrite -C_next_e1 /C; move: C_ne_C' => /eqP; congruence).
@@ -3049,7 +3054,12 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
           simpl.
           pose proof (wfmem_extcall wf_mem Hprefix01) as [Hextcall_C Hextcall_notC].
           (* have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)). *)
-          assert (C_next_e1: C = next_comp_of_event e1) by admit.
+          assert (C_next_e1: C = next_comp_of_event e1).
+          { destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. auto. }
           specialize (Hextcall_C C C_b C_next_e1).
           assert (C'_next_e1: C' <> next_comp_of_event e1)
             by (rewrite -C_next_e1 /C; move: wf_e => /eqP; congruence).
@@ -3628,12 +3638,86 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
             rewrite 2!cats1.
             eapply rcons_renames_rcons_option; eauto.
             - inversion Hshift; eauto.
-            - admit.
-            - admit.
+            - intros [Cb b] Hshared.
+              split.
+              + rewrite /all_zeros_shift /uniform_shift
+                        /event_renames_event_at_shared_addr //=
+                        /memory_renames_memory_at_shared_addr.
+                simpl in *.
+                exists (Cb, S b). split; [| split].
+                * rewrite /sigma_shifting_wrap_bid_in_addr. simpl.
+                  by rewrite ssrnat.subn0 ssrnat.addn1.
+                * intros off v Hload.
+                  simpl in *.
+                  admit. (* TODO: factorize what we did before *)
+                * admit. (* idem: that's the other direction *)
+              + exists (Cb, S b). split.
+                * rewrite /sigma_shifting_wrap_bid_in_addr. simpl.
+                  by rewrite ssrnat.subn0 ssrnat.addn1.
+                * admit.
+            - admit. (* Other direction *)
             - easy.
-            - admit.
-            - admit.
-            - admit.
+            - rewrite /all_zeros_shift /uniform_shift
+                      /sigma_shifting_wrap_bid_in_addr
+                      /sigma_shifting_lefttoright_addr_bid /=.
+              destruct ret_val.
+              + rewrite //=.
+                destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                inversion wf_int_pref'.
+                * now destruct prefix.
+                * destruct prefix as [|? []]; try discriminate.
+                  now destruct prefix0.
+                * rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                  rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                  inversion H1; subst; clear H1. simpl in *.
+                  pose proof (wfmem wf_mem Logic.eq_refl) as [Hregs [Hnextcomp Hnotnextcomp]].
+                  specialize (Hregs Machine.R_COM _ Logic.eq_refl) as [v [v' [H1 H2]]].
+                  simpl in *.
+                  rewrite -C_next_e1 in H1.
+                  rewrite H1 in Hcom. inversion Hcom. subst. destruct H2 as [H2 H3].
+                  rewrite H3 in H9; subst. rewrite H9 in H2.
+                  destruct vcom; try discriminate. simpl in H2. eauto. simpl in H2.
+                  destruct t0 as [[[]]]. destruct (Permission.eqb i Permission.data);
+                                           try discriminate.
+                  rewrite /all_zeros_shift /uniform_shift in H2.
+                  rewrite /rename_addr_option //= in H2.
+                  rewrite /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid
+                          /sigma_shifting_lefttoright_option in H2.
+                  destruct i1; simpl in H2. discriminate.
+                  inversion H2.
+              + admit.
+              + rewrite //=.
+                destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                inversion wf_int_pref'.
+                * now destruct prefix.
+                * destruct prefix as [|? []]; try discriminate.
+                  now destruct prefix0.
+                * rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                  rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                  inversion H1; subst; clear H1. simpl in *.
+                  pose proof (wfmem wf_mem Logic.eq_refl) as [Hregs [Hnextcomp Hnotnextcomp]].
+                  specialize (Hregs Machine.R_COM _ Logic.eq_refl) as [v [v' [H1 H2]]].
+                  simpl in *.
+                  rewrite -C_next_e1 in H1.
+                  rewrite H1 in Hcom. inversion Hcom. subst. destruct H2 as [H2 H3].
+                  rewrite H3 in H9; subst. rewrite H9 in H2.
+                  destruct vcom; try discriminate. simpl in H2. eauto. simpl in H2.
+                  destruct t0 as [[[]]]. destruct (Permission.eqb i Permission.data);
+                                           try discriminate.
+                  rewrite /all_zeros_shift /uniform_shift in H2.
+                  rewrite /rename_addr_option //= in H2.
+                  rewrite /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid
+                          /sigma_shifting_lefttoright_option in H2.
+                  destruct i1; simpl in H2. discriminate.
+                  inversion H2. auto.
+            - constructor.
+              intros [Cb b].
+              admit.
+            - constructor.
+              intros [Cb b].
+              admit.
           }
 
 
