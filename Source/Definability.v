@@ -3686,7 +3686,42 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
                           /sigma_shifting_lefttoright_option in H2.
                   destruct i1; simpl in H2. discriminate.
                   inversion H2.
-              + admit.
+              + destruct t0 as [[[? ?] ?] ?].
+                destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                inversion wf_int_pref'.
+                * now destruct prefix.
+                * destruct prefix as [|? []]; try discriminate.
+                  now destruct prefix0.
+                * rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                  rewrite cats1 in H3. apply rcons_inj in H3. inversion H3; subst; clear H3.
+                  inversion H1; subst; clear H1. simpl in *.
+                  pose proof (wfmem wf_mem Logic.eq_refl) as [Hregs [Hnextcomp Hnotnextcomp]].
+                  specialize (Hregs Machine.R_COM _ Logic.eq_refl) as [v [v' [H1 H2]]].
+                  simpl in *.
+                  rewrite -C_next_e1 in H1.
+                  rewrite H1 in Hcom. inversion Hcom. subst; clear Hcom.
+                  destruct H2 as [H2 H3].
+                  rewrite H3 in H9; subst. rewrite H9 in H2.
+                  destruct vcom; try discriminate. simpl in H2.
+                  destruct t0 as [[[]]].
+                  (* destruct (Permission.eqb i2 Permission.data); *)
+                  (*   try discriminate. *)
+                  rewrite /all_zeros_shift /uniform_shift in H2.
+                  rewrite /rename_addr_option //= in H2.
+                  rewrite /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid
+                          /sigma_shifting_lefttoright_option in H2.
+                  destruct (Permission.eqb i2 Permission.data) eqn:perm1;
+                    destruct (Permission.eqb i Permission.data) eqn:perm2; simpl in *.
+                  -- destruct i4; simpl in H2; try discriminate.
+                     inversion H2; subst; clear H2.
+                     rewrite ssrnat.subn1 //= ssrnat.addn0 ssrnat.subn0 ssrnat.addn1 //=.
+                  -- destruct i4; simpl in H2; try discriminate.
+                     inversion H2; subst; clear H2. congruence.
+                  -- destruct i4; simpl in H2; try discriminate;
+                     inversion H2; subst; clear H2; congruence.
+                  -- destruct i4; simpl in H2; try discriminate;
+                     inversion H2; subst; clear H2; reflexivity.
               + rewrite //=.
                 destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
                 inversion wf_int_pref'.
