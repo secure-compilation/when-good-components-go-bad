@@ -2382,53 +2382,101 @@ Local Opaque Memory.store.
           - unfold Block.local. discriminate.
         }
 
-        destruct (exec_init_local_buffer_expr
-                    Component.main [::] mem_localbufptr
+        assert (C_b : component_buffer Component.main). {
+          rewrite /component_buffer. apply /dommP.
+          destruct (intf Component.main); last discriminate. now eauto. }
+        (* HACK: Invariants take an event argument, but in the empty case no
+           events are available. However only the memory is of interest. *)
+        set e_dummy := EConst
+                       Component.main Undef E_R_ONE
+                       initial_memory
+                       Machine.Intermediate.Register.init.
+        assert (Hpost_ini : postcondition_uninitialized e_dummy (Source.prepare_buffers p) Component.main). {
+          split; [| split; [| split]].
+          - unfold INITFLAG_offset. setoid_rewrite <- Z2Nat.id; try lia.
+            rewrite (load_prepare_buffers _ C_b).
+            reflexivity.
+          - unfold LOCALBUF_offset. setoid_rewrite <- Z2Nat.id; try lia.
+            rewrite (load_prepare_buffers _ C_b).
+            reflexivity.
+          - eexists. exists buf_main.
+            split; [| split; [| split]];
+              last reflexivity.
+            + simpl. rewrite /initial_memory mkfmapfE.
+              unfold component_buffer in C_b.
+              now rewrite C_b Hbuf_main.
+            + assumption.
+            + rewrite ComponentMemory.nextblock_prealloc.
+              by rewrite domm_set domm0 fsetU0.
+          - rewrite /Source.prepare_buffers
+                    mapmE /omap /obind /oapp /=
+                    mapmE /omap /obind /oapp /=.
+            destruct (intf Component.main); last discriminate.
+            eexists. split; first reflexivity.
+            rewrite ComponentMemory.nextblock_prealloc.
+            now rewrite domm_set domm0 fsetU0. }
+
+        destruct (initialization_correct
+                    [::]
                     (Kseq (extcall_check;;
                            expr_of_trace Component.main Procedure.main
                                          (comp_subtrace Component.main t)) Kstop)
-                    1)
-          as [mem0 [Hstar0 [Hstore0 Hmem0]]].
+                    (Int 0) C_b (or_intror Hpost_ini))
+          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 Hothercomp0]]]]].
+
+        (* destruct (exec_init_local_buffer_expr *)
+        (*             Component.main [::] mem_localbufptr *)
+        (*             (Kseq (extcall_check;; *)
+        (*                    expr_of_trace Component.main Procedure.main *)
+        (*                                  (comp_subtrace Component.main t)) Kstop) *)
+        (*             1) *)
+        (*   as [mem0 [Hstar0 [Hstore0 Hmem0]]]. *)
 
         destruct (Memory.store_after_load
                     mem0
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
                     Undef Undef) as [mem1 Hmem1]; eauto; simplify_memory;
-          first by apply ini_mem_regs.
+          first (rewrite -Hsamecomp0; try discriminate;
+                 by apply ini_mem_regs).
 
         destruct (Memory.store_after_load
                     mem1
                     (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)
                     Undef Undef) as [mem2 Hmem2]; eauto; simplify_memory;
-          first by apply ini_mem_regs.
+          first (rewrite -Hsamecomp0; try discriminate;
+                 by apply ini_mem_regs).
 
         destruct (Memory.store_after_load
                     mem2
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_AUX2)
                     Undef Undef) as [mem3 Hmem3]; eauto; simplify_memory;
-          first by apply ini_mem_regs.
+          first (rewrite -Hsamecomp0; try discriminate;
+                 by apply ini_mem_regs).
 
         destruct (Memory.store_after_load
                     mem3
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_RA)
                     Undef Undef) as [mem4 Hmem4]; eauto; simplify_memory;
-          first by apply ini_mem_regs.
+          first (rewrite -Hsamecomp0; try discriminate;
+                 by apply ini_mem_regs).
 
         destruct (Memory.store_after_load
                     mem4
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_SP)
                     Undef Undef) as [mem5 Hmem5]; eauto; simplify_memory;
-          first by apply ini_mem_regs.
+          first (rewrite -Hsamecomp0; try discriminate;
+                 by apply ini_mem_regs).
 
         destruct (Memory.store_after_load
                     mem5
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_ARG)
                     Undef Undef) as [mem6 Hmem6]; eauto; simplify_memory;
-          first by apply ini_mem_regs.
+          first (rewrite -Hsamecomp0; try discriminate;
+                 by apply ini_mem_regs).
 
         destruct (Memory.store_after_load
                     mem6
@@ -2436,6 +2484,7 @@ Local Opaque Memory.store.
                      Block.local, reg_offset E_R_COM)
                  (Int 0%Z) (Int 0%Z)) as [mem7 Hmem7].
         simplify_memory.
+        rewrite -Hsamecomp0; try discriminate.
         unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
         simpl. rewrite !mapmE.
         destruct (intf Component.main); last discriminate; auto.
@@ -2447,6 +2496,8 @@ Local Opaque Memory.store.
                      Block.local, EXTCALL_offset)
                     (Int 1%Z) (Int 0%Z)) as [mem8 Hmem8].
         simplify_memory.
+        rewrite -Hsamecomp0; try discriminate.
+        assumption.
 
         exists (CS.State (Component.main)
                     [:: ]
@@ -2460,34 +2511,40 @@ Local Opaque Memory.store.
         split; [| split; [| split]].
         + rewrite /CS.initial_machine_state /Source.prog_main
                   find_procedures_of_trace_main.
+          take_step.
+          eapply star_trans with (t2 := E0);
+            first exact Hstar0;
+            last reflexivity.
+
           take_steps; simpl; auto; simplify_memory.
 
           {
-            instantiate (1 := Int 0%Z).
+            instantiate (1 := Int 1%Z).
             (** Follows from the definition of meta_buffer. *)
+            rewrite -Hsamecomp0; try discriminate.
             unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
             simpl. rewrite !mapmE.
             destruct (intf Component.main); last discriminate; auto.
             simpl. by rewrite ComponentMemory.load_prealloc setmE.
           }
 
-          take_steps; simpl.
-          {
-            exact Hbufsize.
-          }
-          {
-            exact Halloc.
-          }
+          (* take_steps; simpl. *)
+          (* { *)
+          (*   exact Hbufsize. *)
+          (* } *)
+          (* { *)
+          (*   exact Halloc. *)
+          (* } *)
 
-          take_steps; auto; simplify_memory.
-          {
-            exact Hstoreptr.
-          }
+          (* take_steps; auto; simplify_memory. *)
+          (* { *)
+          (*   exact Hstoreptr. *)
+          (* } *)
 
-          (** About to execute "init_local_buffer_expr Component.main" *)
-          eapply star_trans with (t2 := E0);
-            first exact Hstar0;
-            last reflexivity.
+          (* (** About to execute "init_local_buffer_expr Component.main" *) *)
+          (* eapply star_trans with (t2 := E0); *)
+          (*   first exact Hstar0; *)
+          (*   last reflexivity. *)
           (*****************************************
           unfold init_local_buffer_expr, copy_local_datum_expr.
 
@@ -2511,8 +2568,8 @@ Local Opaque Memory.store.
           take_steps.
           ******************************************************)
 
-          take_steps;
-            first by simplify_memory.
+          (* take_steps; *)
+          (*   first by simplify_memory. *)
 Local Transparent loc_of_reg.
           take_steps;
             first exact Hmem1.
@@ -2542,10 +2599,13 @@ Local Transparent loc_of_reg.
           * constructor.
             -- move=> C H.
                simplify_memory.
-               move: H.
-               rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
-               case HCint: (intf C) => [Cint|] //=.
-               by rewrite ComponentMemory.load_prealloc.
+               destruct (Nat.eqb_spec C Component.main) as [| Hneq].
+               ++ subst C. rewrite -Hsamecomp0; try discriminate.
+                  erewrite <- (Z2Nat.id 0); last lia.
+                  rewrite (load_prepare_buffers _ H). reflexivity.
+               ++ rewrite -Hothercomp0; try congruence.
+                  erewrite <- (Z2Nat.id 0); last lia.
+                  rewrite (load_prepare_buffers _ H). reflexivity.
             -- simpl in *.
                move=> _. split.
                ++ move=> ? ? ?; subst.
@@ -2553,25 +2613,27 @@ Local Transparent loc_of_reg.
                ++ move=> ? ? ?; subst.
                   simplify_memory.
                   rewrite -(Z2Nat.id EXTCALL_offset) /EXTCALL_offset; [| lia].
-                  by rewrite load_prepare_buffers.
+                  rewrite -Hothercomp0; try congruence.
+                  now rewrite load_prepare_buffers.
             -- by move=> [].
             (* -- admit. *)
             -- move=> C r H.
-               destruct (C == Component.main) eqn:Heq.
-               ++ move: Heq => /eqP Heq; subst C.
+               destruct (Nat.eqb_spec C Component.main) as [| Heq].
+               ++ subst C.
                   destruct r; simpl in *; eexists; simplify_memory.
 
                   (* rewrite -(Z2Nat.id 5); [| lia]. *)
                   (* by rewrite load_prepare_buffers. *)
 
-               ++ move: Heq => /eqP Heq.
-                  destruct r; simpl in *; eexists; simplify_memory;
+               ++ destruct r; simpl in *;
+                    eexists;
+                    simplify_memory; rewrite -Hothercomp0; try congruence;
                     match goal with
                     | |- Memory.load _ (_, _, _, ?N) = _ =>
                       rewrite -(Z2Nat.id N); [| lia]
                     end;
                     by rewrite load_prepare_buffers.
-            -- move=> C _ C_b.
+            -- move=> C _ C_b'.
                split.
                ++ split.
                   {
@@ -2580,7 +2642,8 @@ Local Transparent loc_of_reg.
                   ** move: Heq => /eqP Heq; subst C.
                      destruct R; simpl in *; simplify_memory.
                   ** move: Heq => /eqP Heq.
-                     destruct R; simpl in *; simplify_memory;
+                     simplify_memory. erewrite <- Hothercomp0; try congruence.
+                     destruct R; simpl in *;
                      (* NOTE: What can we actually say about the initialization
                         of other components? *)
                        match goal with
@@ -2594,7 +2657,8 @@ Local Transparent loc_of_reg.
                   ** move: Heq => /eqP Heq; subst C.
                      simpl in *; simplify_memory.
                   ** move: Heq => /eqP Heq.
-                     simpl in *; simplify_memory;
+                     simpl in *; simplify_memory.
+                     rewrite -Hothercomp0; try congruence.
                      (* NOTE: What can we actually say about the initialization
                         of other components? *)
                        match goal with
@@ -2607,6 +2671,8 @@ Local Transparent loc_of_reg.
                   ** subst C.
                      split; first congruence.
                      intros _.
+                     destruct Hsteady0
+                       as [Hinitflag0 [Hlocalbuf0 [Hshift0 Hblock0]]].
                      split; [| split; [| split]].
                      --- by simplify_memory.
                      --- by simplify_memory.
@@ -2615,65 +2681,80 @@ Local Transparent loc_of_reg.
                                  /memory_renames_memory_at_shared_addr.
                          (* NOTE: Source vs. Intermediate prepare buffers?*)
                          destruct b as [| b']; first contradiction.
+                         specialize (Hshift0 _ Hb)
+                           as [[cid bid] [Hshift0 [Hrename0 Hrename0']]].
                          eexists. split; first by rewrite shift_S_Some.
-                         destruct b' as [| b''].
-                         +++ split.
-                             *** intros off v Hload.
-                                 repeat
-                                   (erewrite Memory.load_after_store_neq in Hload;
-                                    last eassumption;
-                                    last (injection; discriminate)).
-                                 erewrite Memory.load_after_alloc_eq in Hload;
-                                   [| eassumption | reflexivity].
-                                 rewrite /= Z2Nat.id in Hload;
-                                   last admit. (* Easy *)
-                                 destruct (off <? Z.of_nat (buffer_size Component.main))%Z eqn:Hoff;
-                                   last discriminate.
-                                 destruct (0 <=? off)%Z eqn:Hoff';
-                                   last discriminate.
-                                 injection Hload as ?; subst v.
-
-                                 destruct (prog_buffers Component.main) as [buf |] eqn:Hbuf;
-                                   last admit. (* Contra *)
-                                 Check wf_buffers Hbuf.
-                                 Check nth_error (unfold_buffer buf) (Z.to_nat off).
-                                 admit. (* Easy *)
-                             *** simpl. intros off v Hload.
-                                 eexists. split.
-                                 {
-                                   simplify_memory'.
-Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
-                                   rewrite /= setmE /=.
-                                   admit. (* ??? *)
-                                 }
-                                 { admit. }
-                         +++ admit. (* contra *)
+                         split.
+                         *** intros off v Hload.
+                             repeat
+                               (erewrite Memory.load_after_store_neq in Hload;
+                                last eassumption;
+                                last (injection; discriminate)).
+                             rewrite shift_S_Some in Hshift0.
+                             injection Hshift0 as ? ?; subst cid bid.
+                             specialize (Hrename0 _ _ Hload)
+                               as [v0 [Hload0 Hrename0]].
+                             eexists. split; eassumption.
+                         *** simpl. intros off v Hload.
+                             rewrite shift_S_Some in Hshift0.
+                             injection Hshift0 as ? ?; subst cid bid.
+                             specialize (Hrename0' _ _ Hload)
+                               as [v0 [Hload0 Hrename0']].
+                             eexists. split; last eassumption.
+                               by simplify_memory.
                      --- intros b Hnext.
                          repeat
                            (erewrite next_block_store_stable;
                             last eassumption).
                          rewrite (next_block_initial_memory C_b) in Hnext.
                          injection Hnext as ?; subst b.
-                         rewrite /next_block setmE /=.
-                         (* erewrite ComponentMemory.next_block_alloc. *)
-                         destruct (ComponentMemory.next_block_alloc _ _ _ _ eAllocCompMem)
-                           as [Hnext Hnext'].
-                         by rewrite Hnext' -Hnext.
+                         erewrite Hblock0; first reflexivity.
+                         simpl. now rewrite next_block_initial_memory.
                   ** split; last congruence.
                      intros _. split; [| split; [| split]].
                      --- simplify_memory.
                          rewrite /INITFLAG_offset -(Z2Nat.id 2);
                            last lia.
+                         rewrite -Hothercomp0; try congruence.
                          by rewrite load_prepare_buffers.
                      --- simplify_memory.
                          rewrite /LOCALBUF_offset -(Z2Nat.id 3);
                            last lia.
+                         rewrite -Hothercomp0; try congruence.
                          by rewrite load_prepare_buffers.
                      --- repeat
                            (erewrite next_block_store_stable;
                             last eassumption).
-                         admit.
-                     --- split; admit.
+                         admit. (* Missing from init lemma *)
+                     --- split.
+                         +++ destruct (prog_buffers C) as [buf |] eqn:Hbuf.
+                             *** eexists. exists buf.
+                                 split; [| split; [| split]];
+                                   try reflexivity.
+                                 ---- rewrite /initial_memory mkfmapfE.
+                                      unfold component_buffer in C_b'.
+                                      now rewrite C_b' Hbuf.
+                                 ---- rewrite ComponentMemory.nextblock_prealloc.
+                                      now rewrite domm_set domm0 fsetU0.
+                             *** unfold component_buffer in C_b'.
+                                 move: Hbuf => /dommPn => Hcontra.
+                                 now rewrite -domm_buffers C_b' in Hcontra.
+                         +++ destruct (mem8 C) as [Cmem |] eqn:HCmem.
+                             *** exists Cmem. split; first reflexivity.
+                                 admit. (* Missing from init lemma (same as above) *)
+                             *** exfalso.
+                                 assert (Hdomm : C \in domm (Source.prepare_buffers p)). {
+                                   rewrite /Source.prepare_buffers /=.
+                                   rewrite mem_domm
+                                           mapmE /omap /obind /oapp
+                                           mapmE /omap /obind /oapp.
+                                   destruct (intf C) as [CI |] eqn:H_CI;
+                                     first reflexivity.
+                                   rewrite /component_buffer in C_b'.
+                                   move: H_CI => /dommPn.
+                                   now rewrite C_b'.
+                                 }
+                                 admit. (* Hstar0 and Memory.store preserve memory domain *)
             -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
