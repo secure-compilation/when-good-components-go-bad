@@ -10015,7 +10015,8 @@ Local Transparent expr_of_const_val loc_of_reg.
           destruct (Hregs1 (Ereg_to_reg reg1) _ Logic.eq_refl) as [v1'' [v1' [Hshift1 [Hshift1' Hget1]]]].
           rewrite H7 in Hget1. subst v1'.
           rewrite reg_to_Ereg_to_reg in Hshift1.
-          destruct v1''; try discriminate. injection Hshift1' as ?; subst z.
+          destruct v1'' as [| [[[[] ?] []] ?] | ]; try discriminate.
+          injection Hshift1' as ?; subst z.
           rename size0 into n1.
           rename H9 into Hsize.
           rewrite Hcomp1 in Hshift1.
@@ -10505,7 +10506,6 @@ Local Transparent expr_of_const_val loc_of_reg.
             rewrite -cats2 CS.CS.project_non_inform_append /=.
             rewrite -> !cats0, <- Hprefix01.
             by inversion Hshift; eauto.
-          + admit. (* FIXME *)
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs' & Hshift').
