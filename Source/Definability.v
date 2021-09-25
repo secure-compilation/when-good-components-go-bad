@@ -2141,7 +2141,10 @@ Local Opaque Memory.store.
           (forall C' b offset,
               C <> C' ->
               Memory.load mem (Permission.data, C', b, offset) =
-              Memory.load mem' (Permission.data, C', b, offset)).
+              Memory.load mem' (Permission.data, C', b, offset)) /\
+          (forall C',
+              C <> C' ->
+              next_block mem C' = next_block mem' C').
     Proof.
       move=> C stk mem k arg e C_b.
       case.
@@ -2467,7 +2470,6 @@ Local Opaque Memory.store.
         admit.
     Admitted.
 
-
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
@@ -2648,7 +2650,7 @@ Local Opaque Memory.store.
                            expr_of_trace Component.main Procedure.main
                                          (comp_subtrace Component.main t)) Kstop)
                     (Int 0) C_b (or_intror Hpost_ini))
-          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 Hothercomp0]]]]].
+          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 [Hothercomp0 Hotherblock0]]]]]].
 
         (* destruct (exec_init_local_buffer_expr *)
         (*             Component.main [::] mem_localbufptr *)
@@ -2951,7 +2953,8 @@ Local Transparent loc_of_reg.
                      --- repeat
                            (erewrite next_block_store_stable;
                             last eassumption).
-                         admit. (* Missing from init lemma *)
+                         rewrite -Hotherblock0; last congruence.
+                         now rewrite next_block_prepare_buffers.
                      --- split.
                          +++ destruct (prog_buffers C) as [buf |] eqn:Hbuf.
                              *** eexists. exists buf.
@@ -2967,7 +2970,21 @@ Local Transparent loc_of_reg.
                                  now rewrite -domm_buffers C_b' in Hcontra.
                          +++ destruct (mem8 C) as [Cmem |] eqn:HCmem.
                              *** exists Cmem. split; first reflexivity.
-                                 admit. (* Missing from init lemma (same as above) *)
+                                 repeat
+                                   (erewrite <- component_memory_after_store_neq in HCmem;
+                                    [| eassumption | simpl; congruence]).
+                                 unfold next_block in Hotherblock0.
+                                 specialize (Hotherblock0 _ (nesym Heq)).
+                                 rewrite HCmem in Hotherblock0.
+                                 rewrite /Source.prepare_buffers
+                                         mapmE /omap /obind /oapp /=
+                                         mapmE /omap /obind /oapp /=
+                                   in Hotherblock0.
+                                 destruct (intf C) as [CI |]; last discriminate.
+                                 injection Hotherblock0 as Hotherblock.
+                                 rewrite -Hotherblock.
+                                 rewrite ComponentMemory.nextblock_prealloc.
+                                 now rewrite domm_set domm0 fsetU0.
                              *** exfalso.
                                  assert (Hdomm : C \in domm (Source.prepare_buffers p)). {
                                    rewrite /Source.prepare_buffers /=.
