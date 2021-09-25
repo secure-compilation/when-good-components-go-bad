@@ -3190,7 +3190,7 @@ Local Transparent loc_of_reg.
             (*   admit. *)
           }
 
-          eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 Hmem2']]]]];
+          eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' Hmem2'']]]]]];
             last exact C'_b.
           (* assert (exists (mem' : Memory.t) (i : Z), *)
           (*            star CS.kstep (prepare_global_env p) *)
@@ -3243,7 +3243,8 @@ Local Transparent loc_of_reg.
             [simplify_memory_init Hmem2 |].
           destruct (Memory.store_after_load mem7 (Permission.data, C', Block.local, reg_offset E_R_ARG)
                                             v6 Undef) as [mem8 Hmem8];
-            [simplify_memory_init Hmem2 |].
+            [simplify_memory_init Hmem2 |]
+.
           destruct (Memory.store_after_load mem8 (Permission.data, C', Block.local, reg_offset E_R_COM)
                                             v7 vcom) as [mem9 Hmem9];
             [simplify_memory_init Hmem2 |].
@@ -4302,7 +4303,7 @@ Local Transparent loc_of_reg.
               as [Hregs0 [_ Hmaincomp]].
             specialize (Hmaincomp Hmain)
               as [Hload0init [Hload0local Hsnapshot0]].
-            assert (Hload0v := Hregs0 (Ereg_to_reg v) _ Logic.eq_refl).
+            assert (Hload0v := (proj1 Hregs0) (Ereg_to_reg v) _ Logic.eq_refl).
             rewrite reg_to_Ereg_to_reg in Hload0v.
             assert (Hload1v := Hload0v).
             erewrite <- Memory.load_after_store_neq in Hload1v;
