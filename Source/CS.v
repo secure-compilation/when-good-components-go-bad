@@ -541,7 +541,6 @@ Section Semantics.
     Pointer.component ptr' \in domm (prog_interface p).
   Admitted.
 
-
   Lemma load_data_next_block s t s' ptr C b o :
     initial_state p s ->
     Star sem s t s' ->
@@ -550,6 +549,17 @@ Section Semantics.
     (* Memory.next_block (s_memory s') c = some b' /\ *)
     (s_memory s') C = Some Cmem /\
     b < ComponentMemory.next_block Cmem.
+  Admitted.
+
+  Lemma step_preserves_mem_domm s t s' :
+    Step sem s t s' ->
+    domm (s_memory s) = domm (s_memory s').
+  Admitted.
+
+  Lemma comes_from_initial_state_mem_domm s t s' :
+    initial_state p s ->
+    Star sem s t s' ->
+    domm (s_memory s') = domm (prog_interface p).
   Admitted.
 End Semantics.
 
