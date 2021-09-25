@@ -2202,7 +2202,7 @@ Local Opaque Memory.store.
               Memory.load mem'' (Permission.data, C, S Block.local, o) =
               Some Undef.
           { intros. simplify_memory'.
-            clear -H H0 Hbuf mem_mem'.
+            clear -H H0 Hbuf wf_buffers mem_mem'.
             unfold buffer_size in mem_mem'. rewrite Hbuf in mem_mem'.
             unfold Memory.alloc in mem_mem'.
             destruct (mem C) as [memC |]; last discriminate.
@@ -2321,7 +2321,16 @@ Local Opaque Memory.store.
                     (ptr' := (Permission.data, C, Block.local, o)); eauto.
                   congruence.
                 * intros.
-                  assert (size_already_done = size (unfold_buffer buf)) by admit.
+                  assert (size_already_done = size (unfold_buffer buf)).
+                  { apply Nat.le_antisymm. eauto.
+                    clear -drop_sz.
+                    generalize dependent size_already_done.
+                    elim: (unfold_buffer buf).
+                    - intros. simpl. lia.
+                    - intros; simpl.
+                      destruct size_already_done. inversion drop_sz.
+                      simpl in drop_sz. apply H in drop_sz.
+                      lia. }
                   erewrite (Memory.load_after_store_neq) with
                     (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
                     (ptr' := (Permission.data, C, S Block.local, o)); eauto.
@@ -2552,7 +2561,7 @@ Local Opaque Memory.store.
                         destruct (mem''' C); try discriminate.
                         (* need lemma *)
                         admit. }
-                      assert (off_size: Z.to_nat off <= size (unfold_buffer buf))
+                      assert (off_size: Z.to_nat off < size (unfold_buffer buf))
                         by admit.
                       destruct postcond_mem as [[compMem [buff X]] Y].
                       destruct X as [X1 [X2 [X3 X4]]].
@@ -2560,13 +2569,85 @@ Local Opaque Memory.store.
                       assert (buff = buf) by congruence; subst buff.
                       rewrite ComponentMemory.load_prealloc.
                       rewrite /ComponentMemory.prealloc off_0. simpl.
-                      assert (exists v', nth_error (unfold_buffer buf) (Z.to_nat off) = Some v')
-                        as [v' Hv'].
-                      { admit. }
-                      exists v'. rewrite <- Hv'. split.
-                      --- admit.
-                      --- admit. (* It's either an integer, a *code* pointer, or Undef by
-                                    the well-formedness of the memory buffer *)
+                      assert (Hrewr: match buf with
+                              | inl size => if (off <? Z.of_nat size)%Z then Some Undef else None
+                              | inr chunk => nth_error chunk (Z.to_nat off)
+                              end =
+                              nth_error (unfold_buffer buf) (Z.to_nat off)
+                             ).
+                      { clear -off_0. generalize dependent off.
+                        destruct buf.
+                        - intros. simpl.
+                          destruct ((off <? Z.of_nat n)%Z) eqn:Hoff.
+                          +
+                            remember (Z.to_nat off) as n'.
+                            assert (n' < n).
+                            { subst.
+                              move: Hoff => /Z.ltb_spec0.
+                              rewrite -(Nat2Z.id n).
+                              rewrite Z2Nat.inj_lt.
+                              by rewrite Nat2Z.id.
+                              by move: off_0 => /Z.leb_spec0.
+                              rewrite Nat2Z.id.
+                              by apply Nat2Z.is_nonneg.
+                            }
+                            clear Heqn' Hoff off off_0.
+                            generalize dependent n'.
+                            induction n.
+                            * by lia.
+                            * intros [| n'] => //=.
+                              intros H; eapply IHn; lia.
+                          + move: Hoff => /Z.ltb_spec0 Hoff.
+                            remember (Z.to_nat off) as n'.
+                            assert (n <= n').
+                            { subst.
+                              apply Nat2Z.inj_le. lia. }
+                            clear Heqn' Hoff off off_0.
+                            generalize dependent n'.
+                            induction n.
+                            * intros. by destruct n'.
+                            * intros [| n'] => //=; [lia |].
+                              intros H; eapply IHn; lia.
+                        - intros. simpl. eauto.
+                      }
+                      rewrite Hrewr.
+                      pose proof (proj2 (nth_error_Some (unfold_buffer buf) (Z.to_nat off)))
+                        as X.
+                      specialize (X off_size).
+                      destruct (nth_error (unfold_buffer buf) (Z.to_nat off)) as [v' |] eqn:Hv';
+                        last congruence.
+                      assert (v = v').
+                      { rewrite H6 in Hload. rewrite Hv' in Hload. now inversion Hload.
+                        by apply /Z.leb_spec0.
+                        auto. }
+                      subst v'.
+                      exists v; split; first reflexivity.
+                      rewrite /sigma_shifting_wrap_bid_in_addr /sigma_shifting_lefttoright_addr_bid //=.
+                      destruct v; auto.
+                      specialize (wf_buffers Hbuf).
+                      clear -wf_buffers Hv'. exfalso.
+                      unfold Buffer.well_formed_buffer in wf_buffers.
+                      destruct buf; simpl in *.
+                      --- remember (Z.to_nat off) as n'.
+                          clear wf_buffers.
+                          move: n n' Hv' {off Heqn'}.
+                          induction n.
+                          +++ by move=> [].
+                          +++ case=> [| n'].
+                              *** by [].
+                              *** simpl in *. eapply IHn; eauto.
+                      --- move: wf_buffers => /andP [] _.
+                          clear wf_buffers.
+                          remember (Z.to_nat off) as n.
+                          move: n {off Heqn} Hv'.
+                          induction l.
+                          +++ by move=> [].
+                          +++ move=> n H /= /andP [] ?.
+                              case: n H => [| n] H.
+                              *** simpl in *. inversion H. subst.
+                                  simpl in *. congruence.
+                              *** simpl in *.
+                                  eapply IHl; eauto.
                    ** move=> //= off v Hload.
                       admit.
                 ++ intros b Hb.
