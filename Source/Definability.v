@@ -1963,19 +1963,6 @@ Local Opaque Memory.store.
            simpl. exists compMem, buf. by rewrite -Hmem'2.
     Qed.
 
-    (* k = (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) *)
-    (* stk_st = {| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk *)
-    (* mem = mem4 *)
-    Lemma exec_init_local_buffer_expr C stk_st mem k bnew :
-      exists mem',
-        star CS.kstep (prepare_global_env p)
-             [CState C, stk_st, mem,  Kseq (init_local_buffer_expr C) k, E_val (Ptr (Permission.data, C, bnew, 0%Z)), Int 0]
-             E0
-             [CState C, stk_st, mem',                                 k, E_val (Int 1),                               Int 0] /\
-        Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem' /\
-        mem' C = Source.prepare_buffers p C. (* TODO: Correct/refine this spec! *) (* Could also relate to (prog_buffers C). *)
-    Admitted.
-
     (* Lemma prepare_prog_buffers C : *)
     (*   (* unfold_buffer *) *)
     (*     (prog_buffers C) = Source.prepare_buffers p C. *)
@@ -2535,80 +2522,10 @@ Local Opaque Memory.store.
           simpl. by rewrite ComponentMemory.load_prealloc setmE.
         }
 
-        assert (exists compMem, (Source.prepare_buffers p) Component.main =
-                                  Some compMem) as [compMem HcompMem].
-        {
-          unfold Source.prepare_buffers.
-          apply/dommP. by rewrite domm_map.
-        }
-        destruct (ComponentMemory.alloc
-                    compMem
-                    (Z.to_nat (Z.of_nat (buffer_size Component.main))))
-          as [compMem' bfresh] eqn:eAllocCompMem.
-
-        assert (Halloc: Memory.alloc
-                          (Source.prepare_buffers p)
-                          Component.main
-                          (Z.to_nat (Z.of_nat (buffer_size Component.main))) =
-                        Some
-                          (setm (Source.prepare_buffers p) Component.main compMem',
-                           (Permission.data, Component.main, bfresh, 0%Z))
-               ).
-        {
-          unfold Memory.alloc; rewrite HcompMem eAllocCompMem; reflexivity.
-        }
-
-        assert (bfresh = 1).
-        {
-          unfold Source.prepare_buffers, p in HcompMem.
-          move : Hmain_buffers_p => /dommP => G.
-          destruct G as [buf Hbuf]. unfold p in Hbuf.
-          rewrite mapmE Hbuf in HcompMem. simpl in HcompMem.
-          inversion HcompMem. subst compMem. clear HcompMem.
-          specialize (ComponentMemory.nextblock_prealloc (setm emptym 0 buf)) as G.
-          specialize (ComponentMemory.next_block_alloc _ _ _ _ eAllocCompMem)
-            as [G' _].
-          rewrite G domm_set domm0 fsetU0 in G'. by simpl in G'.
-        }
-        subst bfresh.
-
         assert (exists buf_main, prog_buffers Component.main = Some buf_main)
           as [buf_main Hbuf_main].
           by (apply/dommP; rewrite <- domm_buffers; apply/dommP;
               destruct (intf Component.main); last discriminate; eauto).
-
-        assert (Hbufsize: (Z.of_nat (buffer_size Component.main) > 0)%Z).
-        {
-          specialize (wf_buffers Hbuf_main).
-          unfold buffer_size. rewrite Hbuf_main.
-          destruct buf_main; simpl in *.
-          - rewrite size_nseq -Nat2Z.inj_0.
-            apply inj_gt. by apply Nat.ltb_lt in wf_buffers.
-          - rewrite -Nat2Z.inj_0. apply inj_gt.
-            move: wf_buffers => /andP. intros [G _]. by apply Nat.ltb_lt in G.
-        }
-
-        assert (exists mem_localbufptr,
-                   Memory.store
-                     (setm (Source.prepare_buffers p) Component.main compMem')
-                     (Permission.data, Component.main,
-                      Block.local, (0 + LOCALBUF_offset)%Z)
-                     (Ptr (Permission.data, Component.main, 1, 0%Z)) =
-                   Some mem_localbufptr) as [mem_localbufptr Hstoreptr].
-        {
-          eapply Memory.store_after_load.
-          erewrite Memory.load_after_alloc; eauto; simpl.
-          - unfold Source.prepare_buffers, p.
-            move : Hmain_buffers_p => /dommP => G.
-            destruct G as [buf Hbuf]. unfold p in Hbuf.
-            unfold Memory.load. simpl.
-            rewrite mapmE Hbuf. simpl.
-            rewrite ComponentMemory.load_prealloc setmE. simpl.
-            rewrite mapmE in Hbuf.
-            destruct (intf Component.main); last discriminate; auto.
-            simpl in Hbuf. inversion Hbuf. by simpl.
-          - unfold Block.local. discriminate.
-        }
 
         assert (C_b : component_buffer Component.main). {
           rewrite /component_buffer. apply /dommP.
@@ -2651,14 +2568,6 @@ Local Opaque Memory.store.
                                          (comp_subtrace Component.main t)) Kstop)
                     (Int 0) C_b (or_intror Hpost_ini))
           as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 [Hothercomp0 Hotherblock0]]]]]].
-
-        (* destruct (exec_init_local_buffer_expr *)
-        (*             Component.main [::] mem_localbufptr *)
-        (*             (Kseq (extcall_check;; *)
-        (*                    expr_of_trace Component.main Procedure.main *)
-        (*                                  (comp_subtrace Component.main t)) Kstop) *)
-        (*             1) *)
-        (*   as [mem0 [Hstar0 [Hstore0 Hmem0]]]. *)
 
         destruct (Memory.store_after_load
                     mem0
@@ -2756,48 +2665,6 @@ Local Opaque Memory.store.
             simpl. by rewrite ComponentMemory.load_prealloc setmE.
           }
 
-          (* take_steps; simpl. *)
-          (* { *)
-          (*   exact Hbufsize. *)
-          (* } *)
-          (* { *)
-          (*   exact Halloc. *)
-          (* } *)
-
-          (* take_steps; auto; simplify_memory. *)
-          (* { *)
-          (*   exact Hstoreptr. *)
-          (* } *)
-
-          (* (** About to execute "init_local_buffer_expr Component.main" *) *)
-          (* eapply star_trans with (t2 := E0); *)
-          (*   first exact Hstar0; *)
-          (*   last reflexivity. *)
-          (*****************************************
-          unfold init_local_buffer_expr, copy_local_datum_expr.
-
-          rewrite bigop.foldrE.
-          Search _ bigop.BigOp.bigop.
-          (* induction ??  using bigop.big_ind[|2|3]. *)
-          remember (buffer_size Component.main) as bufsize.
-          generalize dependent bufsize.
-          intros ? ?.
-          induction bufsize.
-          {
-            (** base case; contra to Hbufsize *)
-            by auto.
-          }
-          {
-            Search _ foldr.
-          }
-          Search _ foldr.
-          
-          rewrite foldr_map.
-          take_steps.
-          ******************************************************)
-
-          (* take_steps; *)
-          (*   first by simplify_memory. *)
 Local Transparent loc_of_reg.
           take_steps;
             first exact Hmem1.
@@ -2820,9 +2687,6 @@ Local Transparent loc_of_reg.
         + reflexivity.
         + now do 2 constructor.
         + econstructor; eauto.
-          (* unfold CS.initial_machine_state, Source.prog_main. *)
-          (* rewrite find_procedures_of_trace_main. *)
-          (* econstructor; eauto. *)
           * now exists [], [].
           * constructor.
             -- move=> C H.
@@ -2848,10 +2712,6 @@ Local Transparent loc_of_reg.
                destruct (Nat.eqb_spec C Component.main) as [| Heq].
                ++ subst C.
                   destruct r; simpl in *; eexists; simplify_memory.
-
-                  (* rewrite -(Z2Nat.id 5); [| lia]. *)
-                  (* by rewrite load_prepare_buffers. *)
-
                ++ destruct r; simpl in *;
                     eexists;
                     simplify_memory; rewrite -Hothercomp0; try congruence;
