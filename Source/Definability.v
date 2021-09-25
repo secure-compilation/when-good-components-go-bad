@@ -2844,7 +2844,6 @@ Local Transparent loc_of_reg.
                   rewrite -Hothercomp0; try congruence.
                   now rewrite load_prepare_buffers.
             -- by move=> [].
-            (* -- admit. *)
             -- move=> C r H.
                destruct (Nat.eqb_spec C Component.main) as [| Heq].
                ++ subst C.
@@ -2986,7 +2985,7 @@ Local Transparent loc_of_reg.
                                  rewrite ComponentMemory.nextblock_prealloc.
                                  now rewrite domm_set domm0 fsetU0.
                              *** exfalso.
-                                 assert (Hdomm : C \in domm (Source.prepare_buffers p)). {
+                                 assert (Hdomm_bufs : C \in domm (Source.prepare_buffers p)). {
                                    rewrite /Source.prepare_buffers /=.
                                    rewrite mem_domm
                                            mapmE /omap /obind /oapp
@@ -2997,7 +2996,29 @@ Local Transparent loc_of_reg.
                                    move: H_CI => /dommPn.
                                    now rewrite C_b'.
                                  }
-                                 admit. (* Hstar0 and Memory.store preserve memory domain *)
+                                 assert (Hdomm0 : C \in domm mem0). {
+                                   assert (Hdomm_p : domm (Source.prepare_buffers p) = domm (Source.prog_interface p))
+                                     by (by rewrite /Source.prepare_buffers
+                                                    /p /program_of_trace
+                                                    !domm_map).
+                                   rewrite Hdomm_p in Hdomm_bufs.
+                                   erewrite <- CS.comes_from_initial_state_mem_domm in Hdomm_bufs;
+                                     last first;
+                                     try reflexivity.
+                                   - simpl.
+                                     rewrite /CS.initial_machine_state /Source.prog_main
+                                             find_procedures_of_trace_main.
+                                     take_step.
+                                     exact Hstar0.
+                                   - now apply closed_program_of_trace.
+                                   - now eapply well_formed_events_well_formed_program; eauto.
+                                   - exact Hdomm_bufs.
+                                 }
+                                 repeat
+                                   (erewrite Memory.domm_store in Hdomm0;
+                                      last eassumption).
+                                 move: HCmem => /dommPn.
+                                 now rewrite Hdomm0.
             -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
