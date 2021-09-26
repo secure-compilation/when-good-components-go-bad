@@ -988,7 +988,26 @@ Section Definability.
     Lemma next_block_store_stable mem ptr v mem' C:
       Memory.store mem ptr v = Some mem' ->
       next_block mem' C = next_block mem C.
-    Admitted.
+    Proof.
+Local Transparent Memory.store.
+      unfold Memory.store.
+Local Opaque Memory.store.
+      unfold next_block.
+      destruct ptr as [[[[] C'] b] o];
+        first discriminate.
+      simpl.
+      destruct (mem C') as [memC |] eqn:HmemC;
+        last discriminate.
+      destruct (ComponentMemory.store memC b o v) as [memC' |] eqn:Hstore;
+        last discriminate.
+      intros H. injection H as ?; subst mem'.
+      rewrite setmE.
+      destruct (C == C') eqn:Heq; rewrite Heq;
+        last reflexivity.
+      move: Heq => /eqP => ?; subst C'.
+      apply ComponentMemory.next_block_store_stable in Hstore.
+      now rewrite -Hstore HmemC.
+    Qed.
 
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
@@ -3534,13 +3553,53 @@ Local Transparent loc_of_reg.
               -- (* wfmem_ini *)
                  by case prefix.
               -- (* wfmem *)
-                 move=> ? ? H; eapply rcons_inv in H as [? ?]; subst.
+                 move=> es e H; eapply rcons_inv in H as [? ?]; subst.
                  specialize (wfmem wf_mem Logic.eq_refl) as [Hregs [Hnext_comp Hnot_next_comp]].
+                 destruct Postcond1 as [Hinitflag2 [Hlocalbuf2 [Hshift2 Hnextblock2]]].
                  (* specialize (wfmem wf_mem Logic.eq_refl) as [Hsnapshot Hregs]. *)
+                 assert (Hmem' : mem' = mem_of_event_inform e1). { (* NOTE: In other cases this asser is at the top *)
+                   clear -wf_int_pref'.
+                   destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                   move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+                   inversion wf_int_pref.
+                   - now destruct prefix0.
+                   - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
+                   - apply rcons_inj in H. inversion H; subst; clear H.
+                     apply rcons_inj in H3. inversion H3; subst; clear H3.
+                     inversion H1; subst; clear H1.
+                     reflexivity. }
                  split; last split.
-                 ++ admit.
-                 ++ admit.
-                 ++ admit.
+                 ++ intros reg off Hoffset.
+                    admit.
+                 ++ simpl. intros C0 _ ?; subst C0.
+                    split; [| split; [| split]].
+                    ** by simplify_memory.
+                    ** by simplify_memory.
+                    ** intros [| b] Hblock; first contradiction.
+                       destruct (Hshift2 _ Hblock) as [[cid bid] [Hshift2' [Hrename2 Hrename2']]].
+                       rewrite shift_S_Some in Hshift2'.
+                       injection Hshift2' as ? ?; subst cid bid.
+                       eexists. split; first reflexivity. split.
+                       --- intros off v Hload.
+                           repeat (erewrite Memory.load_after_store_neq in Hload;
+                                   last eassumption;
+                                   last (injection; discriminate)).
+                           rewrite /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                           specialize (Hrename2 _ _ Hload) as [v' [Hloadv' Hrenamev]].
+                           eexists. split; last eassumption.
+                           subst mem'.
+                           exact Hloadv'.
+                       --- rewrite /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                           intros off v Hload. subst mem'.
+                           specialize (Hrename2' _ _ Hload) as [v' [Hloadv' Hrenamev]].
+                           eexists. split; last eassumption.
+                           by simplify_memory.
+                    ** simpl. intros b Hnextblock.
+                       subst mem'.
+                       (* erewrite next_block_store_stable. *)
+                       (* rewrite (Hnextblock2 _ Hnextblock). *)
+                       admit.
+                 ++ simpl. intros C0 C0_b HC0_C'. admit.
             * right. left. by apply: (closed_intf Himport).
           + admit.
               (* END CASE: CALL *)
