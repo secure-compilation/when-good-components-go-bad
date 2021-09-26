@@ -670,7 +670,7 @@ Section Definability.
     | e :: t' =>
       let procs_of_e :=
           match e with
-          | EConst _ (Ptr (perm, cid, bid, off)) _ _ _ =>
+          | EConst _ (Ptr (Permission.code, cid, bid, off)) _ _ _ =>
             (* What we are collecting right now is a superset of the bids that
                really correspond to a procedure id. *)
             (* If we want to make this superset tighter, then we should check *)
@@ -818,12 +818,25 @@ Section Definability.
           simpl. repeat (rewrite <- andbA; simpl).
           rewrite !values_are_integers_loc_of_reg; simpl.
           apply /andP. split.
-          { admit. }
+          { rewrite /init_local_buffer_expr /buffer_size.
+            case eq_buf: (prog_buffers C) => [buf|] //=.
+            generalize dependent 0.
+            elim: (unfold_buffer buf).
+            - by [].
+            - move=> v ls IH n //=.
+              rewrite IH.
+              move: (wf_buffers eq_buf).
+              rewrite /Buffer.well_formed_buffer /buffer_nth eq_buf
+                      /unfold_buffer.
+              case: buf {eq_buf} => [p | buf] //=.
+              + admit.
+              + move=> /andP [] O_size_buf all_wf.
+                admit.
+          }
           elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
           by case: e=> /=; intros;
                          try rewrite values_are_integers_expr_of_const_val;
                          apply IH.
-
         *
           (*clear.
           rewrite /procedure_of_trace /expr_of_trace /switch
@@ -959,6 +972,7 @@ Section Definability.
     (* NOTE: need assumption of goodness of the trace *)
     Variable T : Type.
     Variable t_procs : NMap (NMap T). (* Code-independent *)
+    Hypothesis domm_t_procs : domm t_procs = domm intf.
     Hypothesis wf_events : all (well_formed_event intf t_procs) t.
 
     (* Let t    :=  *)
@@ -980,12 +994,32 @@ Section Definability.
       valid_procedure C P t ->
       component_buffer C.
     Proof.
-      case=> [[-> _ {C P}]|[CI|?]]; rewrite /component_buffer /=.
+      case=> [[-> _ {C P}]|[CI|in_trace]]; rewrite /component_buffer /=.
         by rewrite mem_domm.
       rewrite /Program.has_component /Component.is_exporting /=.
-      (* by rewrite mem_domm; case=> ->. *)
-    (* Qed. *)
-    Admitted.
+      destruct CI as [? [? ?]]. apply /dommP. eexists; eauto.
+      move: in_trace.
+      elim: t wf_events.
+      - by [].
+      - move=> e ls IH /andP [] e_wf ls_wf.
+        rewrite /procedure_ids_of_trace
+                /procedure_ids_of_subtrace
+                /comp_subtrace //.
+        destruct (C == cur_comp_of_event e) eqn:curC.
+        + simpl. rewrite curC.
+          case: e curC e_wf => //=; try (rewrite fset0U; intros; eapply IH; eauto).
+          move=> C' [z | [[[perm ?] ?] ?] |] ? ? ? curC e_wf;
+                  try (rewrite fset0U; intros; eapply IH; eauto).
+          destruct perm;
+                  try (rewrite fset0U; intros; eapply IH; eauto).
+          rewrite in_fsetU1 => /orP [in_C|]; [|by eapply IH].
+          move: curC => /eqP curC; subst C'; move: e_wf => //=.
+          rewrite <- domm_t_procs.
+          destruct (t_procs C) eqn:t_procs_C; last discriminate.
+          move=> _. apply /dommP. eexists; eassumption.
+        + simpl; rewrite curC.
+          eapply IH. eauto.
+    Qed.
 
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
@@ -11248,11 +11282,14 @@ Proof.
     intros ? ? Hsome.
     by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
   }
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ wf_t.
+  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _ wf_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf bufs t) => Hback.
-  specialize (Hback procs wf_events (*all_zeros_shift*)) as [t' [const_map [Hback Hshift]]].
+  assert (domm_procs: domm procs = domm intf).
+  { unfold procs, intf.
+    by rewrite -Intermediate.wfprog_defined_procedures. }
+  specialize (Hback procs domm_procs wf_events (*all_zeros_shift*)) as [t' [const_map [Hback Hshift]]].
   assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t))
                                    (Terminates t')).
   {
