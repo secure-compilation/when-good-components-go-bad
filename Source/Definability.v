@@ -726,14 +726,22 @@ Section Definability.
   Qed.
 
   Lemma find_procedures_of_trace (t: trace event_inform) C P :
+    C \in domm intf ->
     valid_procedure C P t ->
     Source.find_procedure (procedures_of_trace t) C P
     = Some (procedure_of_trace C P t).
   Proof.
-    move=> [[-> ->]|[?|?]];
-    [apply: find_procedures_of_trace_main|by apply: find_procedures_of_trace_exp|].
-    admit.
-  Admitted.
+    move=> /dommP [CI C_CI] [[-> ->]|[?|H]];
+    [by apply: find_procedures_of_trace_main | by apply: find_procedures_of_trace_exp|].
+    move: H.
+    rewrite /Source.find_procedure /procedures_of_trace
+            /procedure_ids_of_trace.
+    rewrite mapimE C_CI //= mkfmapfE.
+    case: eqP=> _ //= H.
+    - by rewrite in_fsetU in_fsetU H !orbT.
+    - by rewrite in_fsetU H.
+  Qed.
+
 
   Definition program_of_trace (t: trace event_inform) : Source.program :=
     {| Source.prog_interface  := intf;
@@ -898,7 +906,7 @@ Section Definability.
       }
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         * rewrite eqxx find_procedures_of_trace;
-            first reflexivity.
+            [reflexivity | apply /dommP; eexists; eauto|].
           move: P_CI; case: eqP intf_C=> [->|_] intf_C.
             rewrite /valid_procedure.
             case/fsetU1P=> [->|P_CI]; eauto.
@@ -929,6 +937,9 @@ Section Definability.
         destruct (intf Component.main) as [mainP |] eqn:Hcase.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
+      + destruct (intf Component.main) as [mainP |] eqn:Hcase.
+        * apply /dommP. exists mainP. assumption.
+        * discriminate.
       + by left.
   (* Qed. *)
   Admitted.
@@ -953,6 +964,7 @@ Section Definability.
     (* Let t    :=  *)
     (* [DynShare]: This should be the projection of t_inform.
        This projection function may be defined in the Intermedicate/CS.v *)
+
     Let p    := program_of_trace t.
     Let init := Source.prepare_buffers p.
 
@@ -5151,6 +5163,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                 take_steps.
               { rewrite find_procedures_of_trace.
                 - reflexivity.
+                - assumption.
                 - right. right. rewrite Et /=.
                   (* NOTE: Inlined proof, refactor lemma later. *)
                   by rewrite /procedure_ids_of_trace /comp_subtrace
@@ -6461,6 +6474,7 @@ Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
               { rewrite find_procedures_of_trace.
                 - reflexivity.
+                - exact C_b.
                 - right. right. rewrite Et /=.
                   (* NOTE: Inlined proof, refactor lemma later. *)
                   clear. elim:prefix => [| e t IH].
