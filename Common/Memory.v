@@ -200,6 +200,11 @@ Module Type AbstractComponentMemory.
       load (fst (reserve_block m)) b o = Some v ->
       load m b o = Some v.
 
+  Axiom load_offset :
+    forall s b off v,
+      load s b off = Some v ->
+      (0 <= off)%Z.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -778,6 +783,18 @@ Module ComponentMemory : AbstractComponentMemory.
     load m b o = Some v.
   Proof.
     unfold load. intros Hload. rewrite Hload. reflexivity.
+  Qed.
+
+
+  Lemma load_offset :
+    forall s b off v,
+      load s b off = Some v ->
+      (0 <= off)%Z.
+  Proof.
+    unfold load. intros s b off v Hload.
+    destruct (content s b); try discriminate.
+    destruct (0 <=? off)%Z eqn:H; try discriminate.
+    by move: H => /Z.leb_spec0.
   Qed.
 
 End ComponentMemory.

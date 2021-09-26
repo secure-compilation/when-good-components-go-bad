@@ -2282,6 +2282,8 @@ Local Opaque Memory.store.
                          size (unfold_buffer buf) <= Z.to_nat o ->
                          Memory.load mem'' (Permission.data, C, S (Block.local), o) =
                          None) ->
+                     (forall b o,
+                         Memory.load mem'' (Permission.data, C, S (S b), o) = None) ->
                    exists (mem''': Memory.t) (i: Z),
                      star CS.kstep (prepare_global_env p)
                      [CState C, stk, mem'', k, foldr (fun e0 : expr => [eta E_seq e0])
@@ -2333,20 +2335,22 @@ Local Opaque Memory.store.
                          (0 <= o)% Z ->
                          size (unfold_buffer buf) <= Z.to_nat o ->
                          Memory.load mem''' (Permission.data, C, S (Block.local), o) =
-                         None)
+                         None) /\
+                     (forall b o,
+                         Memory.load mem''' (Permission.data, C, S (S b), o) = None)
                  ).
           { move=> buf_left_to_copy.
             elim: buf_left_to_copy mem'' {mem'_mem''} => //=.
             - move=> mem'' size_already_done size_lt drop_sz
                           load_localbuf' load_initflag' load_simulated'
-                          load_already_done load_oob.
+                          load_already_done load_oob load_S_S_b.
               destruct (Memory.store_after_load mem''
                                                 (Permission.data, C, Block.local, INITFLAG_offset)
                                                 (Int 0) (Int 1)) as [mem''' mem''_mem''']; simplify_memory; eauto.
               exists mem'''; exists 1%Z.
               split.
               + take_steps; eauto. eapply star_refl.
-              + split; [| split; [| split; [| split; [| split; [| split]]]]].
+              + split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
                 * intros.
                   erewrite (Memory.load_after_store_neq) with
                     (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
@@ -2387,9 +2391,14 @@ Local Opaque Memory.store.
                     (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
                     (ptr' := (Permission.data, C, S Block.local, o)); eauto.
                   unfold Block.local; congruence.
+                * intros.
+                  erewrite (Memory.load_after_store_neq) with
+                    (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
+                    (ptr' := (Permission.data, C, S (S b), o)); eauto.
+                  unfold Block.local; congruence.
             - move=> v ls IH mem'' size_already_done size_lt drop_sz
                       load_localbuf' load_initflag' load_simulated
-                      load_already_done load_oob.
+                      load_already_done load_oob load_S_S_b.
               assert (drop_S_sz: ls = drop (size_already_done + 1) (unfold_buffer buf)).
               { rewrite Nat.add_1_r //=.
                 clear -size_lt drop_sz.
@@ -2493,10 +2502,18 @@ Local Opaque Memory.store.
                     (ptr' := (Permission.data, C, S Block.local, off)); eauto.
                 injection. lia.
               }
+              assert (load_S_S_b': forall b o,
+                         Memory.load mem''' (Permission.data, C, S (S b), o) = None).
+              { intros b o.
+                erewrite (Memory.load_after_store_neq) with
+                  (ptr := (Permission.data, C, S Block.local, Z.of_nat size_already_done))
+                  (ptr' := (Permission.data, C, S (S b), o)); eauto.
+                unfold Block.local; congruence.
+              }
               destruct (IH mem''' (size_already_done + 1) S_size_lt drop_S_sz
                            load_localbuf'' load_initflag'' load_simulated''
-                           load_alreadydone' load_oob') as
-                  [mem'''' [i' [star_mem'''' [H1 [H2 [H3 [H4 [H5 [H6 H7]]]]]]]]].
+                           load_alreadydone' load_oob' load_S_S_b') as
+                  [mem'''' [i' [star_mem'''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
               eexists; eexists.
               split.
               + take_steps. eauto.
@@ -2554,7 +2571,7 @@ Local Opaque Memory.store.
                        -2!Nat2Z.inj_add -Nat.add_assoc.
                 }
                 rewrite Hrewr. eauto.
-              + split; [| split; [| split; [| split; [| split; [| split]]]]].
+              + split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
                 * intros. rewrite H1; eauto.
                   erewrite (Memory.load_after_store_neq) with
                     (ptr := (Permission.data, C, LOCALBUF_blockid, Z.of_nat size_already_done))
@@ -2577,7 +2594,8 @@ Local Opaque Memory.store.
                 * intros.
                   eapply H6. eauto. lia.
                 * intros.
-                  rewrite H7. eauto. eauto. eauto.
+                  rewrite H7; eauto.
+                * eauto.
           }
           intros H1' H2' H3'.
           assert (size_ge: 0 <= size (unfold_buffer buf)) by lia.
@@ -2618,11 +2636,40 @@ Local Opaque Memory.store.
                      None).
           { intros. eauto.
             erewrite (Memory.load_after_store_neq _ _ _ _ _ _ mem'_mem'').
-            admit. }
+            rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ mem_mem').
+            simpl. move: H => /Z.leb_spec0 H; rewrite H.
+            case: ifP => //= => /Z.ltb_spec0.
+            rewrite Z2Nat.inj_lt. rewrite Nat2Z.id. intros.
+            unfold buffer_size in H1. rewrite Hbuf in H1. lia.
+            by move: H => /Z.leb_spec0.
+            by apply Nat2Z.is_nonneg.
+            simpl. reflexivity. }
+          assert (load_S_S_b: forall b o,
+                     Memory.load mem'' (Permission.data, C, S (S b), o) = None).
+          { intros.
+            erewrite (Memory.load_after_store_neq _ _ _ _ _ _ mem'_mem'').
+            (* ComponentMemory.load_next_block *)
+            clear -mem_mem' postcond_mem.
+            rewrite /Memory.alloc in mem_mem'.
+            destruct (mem C) eqn:memC; try discriminate.
+            destruct (ComponentMemory.alloc s (buffer_size C)) eqn:alloc_buf.
+            inversion mem_mem'; subst; clear mem_mem'.
+            apply ComponentMemory.next_block_alloc in alloc_buf as
+                  [H1 H2].
+            rewrite /Memory.load //=. rewrite setmE eqxx.
+            destruct (ComponentMemory.load s0 (S (S b)) o) eqn:contra; auto.
+            apply ComponentMemory.load_next_block in contra.
+            rewrite H2 in contra.
+            rewrite ssrnat.addn1 in contra.
+            rewrite <- H1 in contra; unfold LOCALBUF_blockid in contra.
+            exfalso. unfold ssrnat.leq in contra.
+            rewrite ssrnat.subn2 in contra. simpl in contra.
+            move: contra => /eqP //=.
+          }
           specialize (STAR2 (unfold_buffer buf) 0
                             size_ge left_to_copy H3' H2'
-                            current_sim_buff already_copied load_oob)
-            as [mem''' [i' [star_mem''' [H1 [H2 [H3 [H4 [H5 [H6 H7]]]]]]]]].
+                            current_sim_buff already_copied load_oob load_S_S_b)
+            as [mem''' [i' [star_mem''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
           exists mem''', i'.
           split.
           + eapply star_mem'''.
@@ -2642,16 +2689,21 @@ Local Opaque Memory.store.
                    ** move=> //= off v Hload.
                       assert (b' = 0).
                       { destruct b'; auto.
-                        admit. }
+                        rewrite H8 in Hload. discriminate. }
                       subst b'.
                       assert (off_0: (0 <=? off)%Z).
                       { clear -Hload.
                         rewrite /Memory.load /= in Hload.
                         destruct (mem''' C); try discriminate.
-                        (* need lemma *)
-                        admit. }
-                      assert (off_size: Z.to_nat off < size (unfold_buffer buf))
-                        by admit.
+                        eapply ComponentMemory.load_offset in Hload.
+                        by apply /Z.leb_spec0. }
+                      assert (off_size: Z.to_nat off < size (unfold_buffer buf)).
+                      { assert (Z.to_nat off < size (unfold_buffer buf) \/
+                                size (unfold_buffer buf) <= Z.to_nat off) as [H|H]
+                            by lia.
+                        - assumption.
+                        - rewrite H7 in Hload; eauto. discriminate.
+                          by move: off_0 => /Z.leb_spec0. }
                       destruct postcond_mem as [[compMem [buff X]] Y].
                       destruct X as [X1 [X2 [X3 X4]]].
                       rewrite /Memory.load /= X1 X4.
