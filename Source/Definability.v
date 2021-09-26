@@ -2793,8 +2793,15 @@ Local Opaque Memory.store.
                       admit.
                 ++ intros b Hb.
                    rewrite H3.
-                   destruct postcond_mem as [_ [compMem [memC compMem_next_block]]].
-                   unfold next_block. admit. (* using the fact it's alloc'd*)
+                   destruct postcond_mem
+                     as [[compMem' [buff [memC' [Hbuff [nextBlock prea]]]]]
+                           [compMem [memC compMem_next_block]]].
+                   unfold next_block in Hb.
+                   rewrite memC' in Hb. inversion Hb; subst; clear Hb.
+                   simpl. rewrite nextBlock.
+                   rewrite (next_block_store_stable _ mem'_mem'').
+                   pose proof (next_block_alloc mem_mem') as [X1 X2].
+                   rewrite X2. simpl in *. eauto.
             }
         }
         destruct STAR2 as [mem''' [i [STAR2 POST]]].
