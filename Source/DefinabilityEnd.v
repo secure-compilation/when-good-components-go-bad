@@ -103,6 +103,16 @@ Qed.
 
 (* RB: Relocate? As the S2I require above seems to indicate, this is not where
    this result belongs. *)
+Lemma star_well_formed_intermediate_prefix:
+  forall p t s,
+    Intermediate.well_formed_program p ->
+    Star (I.CS.sem_inform p) (I.CS.initial_machine_state p) t s ->
+    well_formed_intermediate_prefix (Intermediate.prog_interface p)
+                                    (Intermediate.prog_buffers p) t.
+Proof.
+  admit.
+Admitted.
+
 
 Lemma definability_with_linking:
   forall p c t s,
@@ -175,30 +185,38 @@ Proof.
     intros ? ? Hsome.
     by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
   }
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _ wf_t.
+  have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hstar.
+  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _ wf_t wf_i_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf bufs t) => Hback.
   assert (domm_procs: domm procs = domm intf).
   { unfold procs, intf.
     by rewrite -Intermediate.wfprog_defined_procedures. }
-  specialize (Hback procs domm_procs wf_events (*all_zeros_shift*)) as [t' [const_map [Hback Hshift]]].
-  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t))
-                                   (Terminates t')).
-  {
-    (* This should follow directly from the definability lemma. *)
-    apply Hback.
-  }
-    (* RB: TODO: [DynShare] Passing the section variables above should not be
-       needed, nor should the additional assumption. *)
+  specialize (Hback procs domm_procs wf_events (*all_zeros_shift*)) as
+    [s' [t' [const_map [Hstar' Hshift]]]].
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
   (* Check project_finpref_behavior (FTerminates m'). *)
-  exists t'.
-  inversion Hback as [? ? Hinit Hbeh|]; subst. clear Hback.
-  inversion Hbeh as [? s' Hstar' Hfinal| | |]; subst.
-  simpl in Hinit. unfold Source.CS.CS.initial_state in *. subst.
-  exists s', const_map.
+  exists t'. exists s'. exists const_map.
+
+  (*   [t' [const_map [Hback Hshift]]]. *)
+  (* assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t)) *)
+  (*                                  (Terminates t')). *)
+  (* { *)
+  (*   (* This should follow directly from the definability lemma. *) *)
+  (*   apply Hback. *)
+  (* } *)
+  (*   (* RB: TODO: [DynShare] Passing the section variables above should not be *)
+  (*      needed, nor should the additional assumption. *) *)
+  (* exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back). *)
+  (* exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back). *)
+  (* (* Check project_finpref_behavior (FTerminates m'). *) *)
+  (* exists t'. *)
+  (* inversion Hback as [? ? Hinit Hbeh|]; subst. clear Hback. *)
+  (* inversion Hbeh as [? s' Hstar' Hfinal| | |]; subst. *)
+  (* simpl in Hinit. unfold Source.CS.CS.initial_state in *. subst. *)
+  (* exists s', const_map. *)
 
   split=> /=; last split.
   - rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).

@@ -10621,8 +10621,10 @@ Print Assumptions definability_gen_rel_right.
     Lemma definability :
       forall procs, (* TODO: What to do with procs? *)
         @well_formed_trace T intf procs t ->
-        exists t' const_map,
-          program_behaves (CS.sem p) (Terminates t') /\
+        well_formed_intermediate_prefix t ->
+        exists s' t' const_map,
+          Star (CS.sem p) (CS.initial_machine_state p) t' s' /\
+          (* program_behaves (CS.sem p) (Terminates t') /\ *)
           traces_shift_each_other_option
             (* metadata_size_lhs *)
             all_zeros_shift
@@ -10630,40 +10632,13 @@ Print Assumptions definability_gen_rel_right.
             (project_non_inform t)
             t'.
     Proof.
-    Admitted.
-      (****************************************************
-      move=> procs wf_t; eapply program_runs=> /=; try reflexivity.
-      pose cs := CS.initial_machine_state p.
-      suffices H : well_formed_state (StackState Component.main [::]) [::] t cs.
-        have [cs' [suffix' run_cs Hsuffix'] final_cs'] := @definability_gen _ [::] t _ erefl H.
-        subst suffix'. by econstructor; eauto.
-      case/andP: wf_t => wb_t wf_t_events.
-      rewrite /cs /CS.initial_machine_state /Source.prog_main /= find_procedures_of_trace_main //.
-      econstructor; eauto; last by left; eauto.
-        exists [::], [::]. by do ![split; trivial].
-      constructor.
-      - intros C.
-        unfold component_buffer, Memory.load.
-        simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
-        case HCint: (intf C) => [Cint|] //=.
-        by rewrite ComponentMemory.load_prealloc /=.
-      - intros C r Hbuf.
-(* TODO: Rewrite lemma to turn [Memory.load] into [ComponentMemory.load]. *)
-Local Transparent Memory.load. unfold Memory.load; simpl. Local Opaque Memory.load.
-        unfold Source.prepare_buffers.
-        rewrite mapmE. unfold omap, obind, oapp.
-        destruct (Source.prog_buffers p C) as [Cbufs |] eqn:HCbufs;
-          move: HCbufs;
-          rewrite /p /program_of_trace /= mapmE /omap /obind /oapp => HCbufs.
-        + destruct (intf C); last discriminate.
-          rewrite ComponentMemory.load_prealloc.
-          injection HCbufs as ?; subst.
-          destruct r; simpl; by eauto.
-        + destruct (intf C) eqn:Hcontra; first discriminate.
-          move: Hbuf. rewrite /component_buffer => /dommPn. contradiction.
-      - intros prefix e Hcontra. destruct prefix; discriminate.
+      move=> procs /andP [] wb_t _ wf_i_t.
+      pose proof (@definability_gen_rel_right t [::] wb_t wf_i_t
+                                              (Logic.eq_sym (app_nil_r _))).
+      destruct H as [cs [s [pref_inform [t' [Hstar [Hproj [Htraces Hwf]]]]]]].
+      exists cs. exists t'. exists (uniform_shift 1).
+      split. eauto. eauto.
     Qed.
-************************************************************)
 
 End WithTrace.
 End Definability.
