@@ -1886,3 +1886,16 @@ Section Partial.
     now reflexivity.
   Qed.
 End Partial.
+
+(* NOTE: These could be derived from existing partial memory lemmas. *)
+Lemma component_memory_after_store_neq mem ptr v mem' C :
+  Memory.store mem ptr v = Some mem' ->
+  Pointer.component ptr <> C ->
+  mem C = mem' C.
+Admitted.
+
+Lemma component_memory_after_alloc_neq mem C sz mem' ptr C' :
+  Memory.alloc mem C sz = Some (mem', ptr) ->
+  C' <> C ->
+  mem C' = mem' C'.
+Admitted.

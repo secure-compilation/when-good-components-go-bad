@@ -1903,20 +1903,6 @@ Local Opaque Memory.store.
       reflexivity.
     Qed.
 
-    (* NOTE: Should live in Memory *)
-    Lemma component_memory_after_store_neq mem ptr v mem' C :
-      Memory.store mem ptr v = Some mem' ->
-      Pointer.component ptr <> C ->
-      mem C = mem' C.
-    Admitted.
-
-    (* NOTE: Should live in Memory *)
-    Lemma component_memory_after_alloc_neq mem C sz mem' ptr C' :
-      Memory.alloc mem C sz = Some (mem', ptr) ->
-      C' <> C ->
-      mem C' = mem' C'.
-    Admitted.
-
     (* TODO: [DynShare] Trace relation should appear here too!
 
        Well-bracketedness, etc., probably need to be rewritten to operate "in
