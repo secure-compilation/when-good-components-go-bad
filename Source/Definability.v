@@ -3396,7 +3396,9 @@ Local Transparent loc_of_reg.
              ).
       {
 
-        clear Star1 (*wf_mem*) C_local (*Hmem'*). revert mem' (*wf_mem'*) Hmem'. rename mem into mem0. intros mem (*wf_mem'*) Hmem.
+        clear (* Star1 *) (*wf_mem*) C_local (*Hmem'*).
+        revert mem' Star1  (*wf_mem'*) Hmem'. rename mem into mem0.
+        intros mem Star1 (*wf_mem'*) Hmem.
         (* Case analysis on observable events, which in this rich setting
            extend to calls and returns and various memory accesses and related
            manipulations, of which only calls and returns are observable at
@@ -3584,7 +3586,7 @@ Local Transparent loc_of_reg.
                  split; trivial.
                  split; trivial.
                  split; trivial.
-                 clear Star0 Star12.
+                 clear Star0 Star1 Star12.
                  elim: (callers s) bot Hbot; trivial.
                  move=> a l IH bot [] H1 H2.
                  fold well_formed_callers in *.
@@ -3945,6 +3947,7 @@ Local Transparent loc_of_reg.
                           [CState C, stk, mem1, Kstop, E_val vcom, arg]
                           [:: ERet C vcom mem1 C']
                           cs' /\
+                     CS.s_memory cs' = mem8 /\
                      well_formed_state_r
                        s'
                        (prefix ++ [:: ERetInform (cur_comp s) ret_val mem' regs C']) suffix
@@ -3958,6 +3961,7 @@ Local Transparent loc_of_reg.
             destruct Hbot as [Hbot_load Hbot].
             (* clear Hmem Hmem1. *)
             (* clear Hmem1. *)
+            clear Star1.
             revert mem1 Hmem1' Hmem1 Hmem2 arg.
             induction top as [|[C_ saved k_] top IHtop].
             - clear Htop. rename bot into bot'.
@@ -3966,7 +3970,7 @@ Local Transparent loc_of_reg.
               subst bot'. simpl.
               (* have C'_b := valid_procedure_has_block P'_exp. *)
               intros mem1 Hmem1' Hmem1 Hmem2 arg.
-              eexists. split.
+              eexists. split; last split. 
               + simpl.
                 eapply star_step.
                 * eapply CS.KS_ExternalReturn; congruence.
@@ -3985,6 +3989,7 @@ Local Transparent loc_of_reg.
                   take_steps.
                   eapply star_refl.
                 * now rewrite E0_right.
+              + by simpl.
               + econstructor; trivial.
                 exact wf_suffix.
                 exists (CS.Frame C' saved Kstop :: top), bot; simpl; auto.
@@ -4430,7 +4435,7 @@ Local Transparent loc_of_reg.
 
           (* Now we can conclude *)
 
-          destruct Star_ret as [s' [cs' [Star_ret wf_cs']]].
+          destruct Star_ret as [s' [cs' [Star_ret [mem_cs' wf_cs']]]].
           exists (ERetInform C vcom mem1 regs C').
           eexists. eexists. split; last split.
           eapply star_trans; eauto.
@@ -4446,7 +4451,6 @@ Local Transparent loc_of_reg.
               split.
               + rewrite /all_zeros_shift /uniform_shift
                         /event_renames_event_at_shared_addr //=.
-                assert (mem_cs': CS.s_memory cs' = mem8) by admit.
                 destruct cs'. simpl in mem_cs'; subst s_memory.
                 inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem8 ?].
                 subst C0 stk0 mem9 s_cont s_expr s_arg k exp s_component.
@@ -4508,7 +4512,119 @@ Local Transparent loc_of_reg.
                    * load and [1 <= b]. Now we can get a contradiction to
                    * [postcondition_uninitialized] *)
                   (* *)
-                  admit.
+                  exists (Cb, S b).
+                  split.
+                  -- rewrite /all_zeros_shift /uniform_shift //=.
+                     rewrite /sigma_shifting_wrap_bid_in_addr //=.
+                       by rewrite ssrnat.subn0 ssrnat.addn1.
+                  --
+                    Ltac simplify_memory_in_assm :=
+                      repeat match goal with
+                             | Hload: Memory.load ?mem
+                                                  ?PTR = Some ?v,
+                                      Hstore: Memory.store ?memprev ?PTR' ?v'
+                                              = Some ?mem
+                               |- _ =>
+                               erewrite Memory.load_after_store_neq in Hload;
+                               try (exact Hstore); try congruence
+                             end.
+                    
+                    assert (Hwf_p: Source.well_formed_program p).
+                    {
+                        by eapply well_formed_events_well_formed_program; eauto.
+                    }
+                    assert (Hclosed_p: Source.closed_program p).
+                    {
+                        by eapply closed_program_of_trace; eauto.
+                    }
+                    
+                    assert (Star_init_ret:
+                                  Star
+                                    (CS.sem p)
+                                    (CS.initial_machine_state p)
+                                    (prefix' ++ [:: ERet C vcom mem1 C'])
+                                    [CState cur_comp s',
+                                     s_stack,
+                                     mem8,
+                                     Kstop,
+                                     expr_of_trace 
+                                       (cur_comp s') P0
+                                       (comp_subtrace (cur_comp s') t),
+                                     arg0]
+                               ).
+                        {
+                          eapply star_trans.
+                          - eapply Star0.
+                          - eapply star_trans; eauto.
+                            eapply star_trans; eauto.
+                          - reflexivity.
+                        }
+                        split; intros ? ? Hload.
+                    ++ simpl in *.
+                       assert (HCb: component_buffer Cb).
+                       {
+                         (** This essentially follows IF we knew that the 
+                          intermediate trace came from an intermediate execution.
+                          Then, we can possibly use a lemma in CSInvariants? *)
+                         admit.
+                       }
+                       specialize (wf_mem8' _ HCb Cb_C) as
+                           [[? [? [? ?]]] | [? [? [[compMem [? HcompMem]] ?]]] ].
+                       ** assert (Hnoteq: S b <> Block.local).
+                           { by unfold Block.local. }
+                           specialize (steadysnap_shift0 _ Hnoteq)
+                             as [[C_ b_] [Hb_ [mem8_mem' mem'_mem8]]].
+                           rewrite shift_S_Some in Hb_.
+                           inversion Hb_; subst C_ b_; clear Hb_.
+                           simpl in *.
+                           specialize (mem'_mem8 _ _ Hload) as [v' [Hloadv' Hv']].
+                           exists v'. split.
+                           ---
+                             simplify_memory_in_assm.
+                           --- specialize (shift_value_option_symmetry
+                                             (fun=> 1) (fun=> 0)) as Lem.
+                               unfold shift_value_option,
+                               sigma_shifting_wrap_bid_in_addr,
+                               sigma_shifting_lefttoright_addr_bid,
+                               rename_addr_option in *.
+                                 by eapply Lem.
+                        ** simpl in *. destruct HcompMem as [HcompMem [_ [Hnext _]]].
+                           (** Intuitively, there should be a contradiction. *)
+                           (** In particular, ** is the case where Cb is not *)
+                           (** initialized. What we know about Cb is that it *)
+                           (** shared an address and that this address also was *)
+                           (** loaded from memory (Hload). *)
+
+                           (** Normally, we would have Hload contradict the alloc *)
+                           (** status, namely Hnext. But here, something is missing? *)
+
+                           (** Can alternatively strengthen the description of *)
+                           (** an uninit component, saying that it couldn't have *)
+                           (** shared any addresses so far (parameterize 
+                               'postcondition' defs with a trace prefix). *)
+                           admit.
+                     ++ simpl in *.
+                        assert (Hload': Memory.load
+                                          mem8
+                                          (Permission.data, Cb, S b, offset) = Some v').
+                        {
+                            by simplify_memory.
+                        }
+                        (** Need to know component_buffer Cb. *)
+                        (** Intuitively, we should know it from Hload *)
+                        (** Knowing it from Hload should be a source "CSInvariant". *)
+
+                       assert (HCb: component_buffer Cb).
+                       {
+                        (** TODO: Add a lemma similar to 
+                            CS.load_component_prog_interface, but instead of  *)
+                        (** asserting the loaded value is in intf, assert that the 
+                            load_at addr is in the intf. *)
+                         admit.
+                       }
+
+                       admit.
+                        
               + exists (Cb, S b).
                 split.
                 * rewrite /all_zeros_shift /uniform_shift //=.
