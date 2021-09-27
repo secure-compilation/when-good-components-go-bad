@@ -362,7 +362,6 @@ Section Definability.
     (* Pointer values need to take into account some amount of shifting, here
        corresponding to the counter and space reserved to locate register
        values.  *)
-    (* FIXME: Offset vs. block-based shifting *)
     | Ptr (perm, cid, bid, o) =>
       if Permission.eqb perm Permission.data then
         (* We make the implicit assumption that all such values refer to
@@ -425,14 +424,6 @@ Section Definability.
     E_assign (loc_of_reg E_R_RA) error_expr;;
     E_assign (loc_of_reg E_R_SP) error_expr;;
     E_assign (loc_of_reg E_R_ARG) error_expr.
-  (* Lemma invalidate_metadata_spec (p: Source.program): forall cp st mem k arg, *)
-  (*     exists mem', *)
-  (*       Star (CS.sem p) (CS.State cp st mem k invalidate_metadata arg) [] *)
-  (*            (CS.State cp st mem' k (E_val Undef) arg) /\ *)
-  (*       True. *)
-  (* Proof. *)
-  (*   intros cp st mem k arg. *)
-  (* Abort. *)
 
   (* We call this function when in component C executing P. *)
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
@@ -539,25 +530,6 @@ Section Definability.
      hardcoded initialization code instead of having a copy of the original
      local buffer in the metadata buffer.
    *)
-  (* Definition buffer_nth (C : Component.id) (b : Block.id) (i : nat) : expr := *)
-  (*   match prog_buffers C with *)
-  (*   | Some bufs => *)
-  (*     match bufs b with *)
-  (*     | Some buf => *)
-  (*       match nth_error (unfold_buffer buf) i with *)
-  (*       | Some v => E_val v *)
-  (*       | None => error_expr (* should not happen *) *)
-  (*       end *)
-  (*     | None => error_expr (* should not happen *) *)
-  (*     end *)
-  (*   | None => error_expr (* should not happen *) *)
-  (*   end. *)
-
-  (* Definition copy_local_datum_expr (C : Component.id) (b : Block.id) (i : nat) : expr := *)
-  (*   E_assign *)
-  (*     (E_binop Add (E_deref E_local) *)
-  (*                  (E_val (Int (Z.of_nat i)))) *)
-  (*     (buffer_nth C b i). *)
 
   (* To initialize the acting local buffer from its temporary location in the
      private local buffer, allocate a new block of adequate size in memory,
@@ -570,14 +542,6 @@ Section Definability.
      the first position, which holds the program counter, while noting that
      this instruction will be executed at the first value of the counter (and
      prior to its increment), is rather ugly and brittle. *)
-  (* Definition init_local_buffer_expr (C : Component.id) : expr := *)
-  (*   (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *) *)
-  (*   (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *) *)
-  (*   (* [E_assign E_local (E_val (Int 0))] *) *)
-  (*   foldr (fun e acc => E_seq e acc) *)
-  (*         (E_assign E_local (E_val (Int 0))) (* last instruction *) *)
-  (*         ([E_assign E_local (alloc_local_buffer_expr C b)] ++ *)
-  (*          map (copy_local_datum_expr C b) (iota 0 (buffer_size C b))). *)
 
   Definition comp_call (C : Component.id) (e : event_inform) : bool :=
     match e with
@@ -984,12 +948,6 @@ Section Definability.
 
     Local Definition component_buffer C := C \in domm intf.
 
-    (* [DynShare] Probably here we should write a spec for expr_of_const_val *)
-    (*Lemma expr_of_const_val_well_formed :
-    forall v, (* assumption about v being an integer or a "well_formed" pointer*)
-      rename_value v = .. (expr_of_const_val v)
-     *)
-
     Lemma valid_procedure_has_block C P :
       valid_procedure C P t ->
       component_buffer C.
@@ -1077,21 +1035,6 @@ Local Opaque Memory.store.
       steadysnap_block :
         well_formed_memory_snapshot_steadystate_block mem_snapshot mem C
     }.
-      (* forall ptr, *)
-      (*   Pointer.block ptr <> Block.local -> *)
-      (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
-
-      (***************************************************
-      forall Cb,
-        addr_shared_so_far Cb (project_non_inform prefix) ->
-        (* Precondition on Cb:*)
-        (*rename_addr_option
-          (sigma_shifting_wrap_bid_in_addr
-             (sigma_shifting_lefttoright_addr_bid (uniform_shift 1) all_zeros_shift)) Cb
-        = Some Cb' ->*)
-        memory_shifts_memory_at_shared_addr
-          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
-       *********************************************)
 
     Definition well_formed_memory_snapshot_uninitialized
                (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
@@ -1324,17 +1267,6 @@ Local Opaque Memory.store.
             (Ptr ptr)
             regs ->
           event_step_from_regfile_mem regs mem (EAlloc C erptr ersize mem' regs').
-    (* | step_EInvalidateRA: *)
-    (*     forall mem regs regs' C, *)
-    (*       Machine.Intermediate.Register.set *)
-    (*         Machine.R_RA *)
-    (*         Undef (* We could have chosen any value here.     *) *)
-    (*               (* When relating event_step_from_regfile_mem  *) *)
-    (*               (* to Intermediate.CS.step, we should be    *) *)
-    (*               (* careful to exclude R_RA from the register*) *)
-    (*               (* equality relation.                       *) *)
-    (*         regs = regs' -> *)
-    (*       event_step_from_regfile_mem (EInvalidateRA C mem regs) regs' mem. *)
 
     Let initial_memory :=
       mkfmapf (fun C =>
@@ -1467,17 +1399,6 @@ Local Opaque Memory.store.
             shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
             Machine.Intermediate.Register.get reg regs = v'.
 
-(*
-    Definition postcondition_event_memory_steadystate
-               (e: event_inform) (mem': Memory.t) (C: Component.id) :=
-      postcondition_event_snapshot_steadystate e mem' C /\
-      postcondition_event_registers e mem'.
-
-    Definition postcondition_event_memory_uninitialized
-               (e: event_inform) (mem': Memory.t) (C: Component.id) :=
-      postcondition_event_snapshot_uninitialized e mem' C /\
-      postcondition_event_registers e mem'.
-*)  
 
     Definition postcondition_event_registers_ini (C: Component.id) (mem: Memory.t): Prop :=
       (forall (R: Machine.register) (n: Z),
@@ -1557,13 +1478,6 @@ Local Opaque Memory.store.
             component_buffer C ->
           exists v,
             Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v;
-        (* NOTE: Reuse memory relation (renaming). *)
-        (* Precondition: the memory must be in a state ready to execute the event [e] *)
-        (* wfmem: forall prefix' e, *)
-        (*     prefix = prefix' ++ [:: e] -> *)
-        (*     precondition_event_memory e mem; *)
-        (* NOTE: no, this is wrong. We need a post-condition: in what shape is the memory
-         after having executed the event [e] *)
         wfmem_ini: forall C,
             prefix = [] ->
             component_buffer C ->
@@ -1607,19 +1521,6 @@ Local Opaque Memory.store.
                 )
             )
       }.
-
-    (* NOTE: it doesn't preserve [well_formed_memory].*)
-
-    (***********************************************
-    Lemma well_formed_memory_star_postcondition:
-      forall p cs prefix e mem,
-        mem = CS.s_memory cs ->
-        well_formed_memory (prefix ++ [:: e]) mem ->
-        exists cs',
-          Star (CS.sem p) cs (project_non_inform [:: e]) cs' /\
-          postcondition_event_memory e (CS.s_memory cs').
-    Admitted.
-    *****************************************************)
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
@@ -1665,67 +1566,6 @@ Local Opaque Memory.store.
           specialize (IHl1' l2' e1 e2 Heq) as [? ?]; subst e2 l2'.
           split; reflexivity.
     Qed.
-
-    (* FIXME *)
-    (* Lemma well_formed_memory_store_counter prefix mem C e : *)
-    (*   component_buffer C -> *)
-    (*   well_formed_memory prefix mem -> *)
-    (*   C = cur_comp_of_event e -> *)
-    (*   well_formed_memory_event e mem -> *)
-    (*   exists mem', *)
-    (*     Memory.store mem (Permission.data, C, Block.local, 0%Z) *)
-    (*                  (Int (counter_value C (prefix ++ [e]))) = Some mem' /\ *)
-    (*     well_formed_memory (prefix ++ [e]) mem'. *)
-    (* Proof. *)
-    (*   move=> C_b (*wf_mem*) HC He. *)
-    (*   have C_local := (wfmem_counter (*wf_mem*)) _ C_b. *)
-    (*   specialize (C_local _ _ HC). *)
-    (*   have [mem' Hmem'] := Memory.store_after_load *)
-    (*                          _ _ _ (Int (counter_value C (prefix ++ [e]))) *)
-    (*                          C_local. *)
-    (*   exists mem'. split; [now trivial |]. constructor. *)
-    (*   - move=> C' C'_b. *)
-    (*     (* exists mem'. split; trivial=> C' C'_b. *) *)
-    (*     have C'_local := wfmem_counter _ C'_b. *)
-    (*     specialize (C'_local _ _ HC). *)
-    (*     rewrite <- Hmem'. *)
-    (*     rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *. *)
-    (*     case: (altP (C' =P C)) => [?|C_neq_C']. *)
-    (*     + subst C'. *)
-    (*       by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem'). *)
-    (*     + have neq : (Permission.data, C, Block.local, 0%Z) <> *)
-    (*                  (Permission.data, C', Block.local, 0%Z) *)
-    (*         by move/eqP in C_neq_C'; congruence. *)
-    (*       rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). *)
-    (*       now rewrite Z.add_0_r. *)
-    (*   - move=> C' r C'_b. *)
-    (*     destruct ((wfmem_meta wf_mem) C' r C'_b) as [v Hload]. *)
-    (*     exists v. *)
-    (*     erewrite Memory.load_after_store_neq; try eassumption. *)
-    (*     intros Hcontra. injection Hcontra as Hcomp Hoffset. *)
-    (*     now destruct r. *)
-    (*   - move=> prefix' Csrc P arg mem'' regs Cdst Hprefix C'_b. *)
-    (*     apply rcons_inv in Hprefix as [? ?]; subst prefix' e. *)
-    (*     inversion He as [Hsnap Harg]. *)
-    (*     split. *)
-    (*     + eapply metadata_store_preserves_snapshot; eassumption. *)
-    (*     + erewrite Memory.load_after_store_neq; try eassumption. *)
-    (*       now injection. *)
-    (*   - move=> prefix' Csrc ret mem'' regs Cdst Hprefix C'_b. *)
-    (*     apply rcons_inv in Hprefix as [? ?]; subst prefix' e. *)
-    (*     inversion He as [Hsnap Hret]. *)
-    (*     split. *)
-    (*     + eapply metadata_store_preserves_snapshot; eassumption. *)
-    (*     + erewrite Memory.load_after_store_neq; try eassumption. *)
-    (*       now injection. *)
-    (*   - move=> prefix' C' rptr rsize mem'' regs Hprefix C'_b. *)
-    (*     apply rcons_inv in Hprefix as [? ?]; subst prefix' e. *)
-    (*     inversion He as [size [Hsize Hload]]. *)
-    (*     exists size. split. *)
-    (*     + eassumption. *)
-    (*     + erewrite Memory.load_after_store_neq; try eassumption. *)
-    (*       injection as _ Hoffset. now destruct rsize. *)
-    (* Qed. *)
 
     Lemma well_formed_memory_store_reg_offset prefix mem C r v :
       component_buffer C ->
@@ -2043,11 +1883,6 @@ Local Opaque Memory.store.
            simpl. exists compMem, buf. by rewrite -Hmem'2.
     Qed.
 
-    (* Lemma prepare_prog_buffers C : *)
-    (*   (* unfold_buffer *) *)
-    (*     (prog_buffers C) = Source.prepare_buffers p C. *)
-    (* Admitted. *)
-
     Lemma prepare_buffers_prealloc C :
       (* prog_buffers C = Some buf -> *)
       component_buffer C ->
@@ -2165,14 +2000,6 @@ Local Opaque Memory.store.
                    | _ => fail
                    end
                  end)]
-              (* || match O with *)
-              (*    | reg_offset ?R => now destruct R *)
-              (*    | _ => fail *)
-              (*    end *)
-              (* || match O' with *)
-              (*    | reg_offset ?R => now destruct R *)
-              (*    | _ => fail *)
-              (*    end)] *)
         | H : Memory.alloc ?MEM ?C ?N = Some (?MEM', ?B')
           |- Memory.load ?MEM' (_, ?C', ?B'', ?O') = ?V'
           =>
@@ -2374,9 +2201,6 @@ Local Opaque Memory.store.
                       Memory.load mem'''
                                   (Permission.data, C, Block.local, INITFLAG_offset)
                                   = Some (Int 1)) /\
-                     (* (exists i, Memory.load mem''' *)
-                     (*                   (Permission.data, C, Block.local, INITFLAG_offset) *)
-                     (*       = Some (Int i)) /\ *)
                      (forall o,
                          o <> INITFLAG_offset ->
                          Memory.load mem''' (Permission.data, C, Block.local, o) =
@@ -3064,13 +2888,6 @@ Local Opaque Memory.store.
       traces_shift_each_other_option all_zeros_shift (uniform_shift 1) (project_non_inform prefix) prefix' /\
       well_formed_state_r s prefix suffix cs.
     Proof.
-      (*
-      Ltac solve_load_from_Halloc :=
-        erewrite Memory.load_after_alloc; eauto; by autounfold with definabilitydb.
-
-      Ltac solve_neq :=
-        simpl; by autounfold with definabilitydb.
-      *)
       have Eintf : genv_interface (prepare_global_env p) = intf by [].
       have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p
         by [].
@@ -3507,13 +3324,6 @@ Local Transparent loc_of_reg.
       (*     [mem' [Hmem' wf_mem']]. *)
 
       set C := cur_comp s.
-      (* FIXME: The event may modify the memory, the store needs to take place
-         in that memory, after the event has been "executed". *)
-      (* assert (exists mem', *)
-      (*            Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem' /\ *)
-      (*            well_formed_memory (prefix ++ [:: e]) mem') *)
-      (*   as [mem' [Hmem' wf_mem']] *)
-      (*   by admit. *)
       assert (exists mem',
                  Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem')
         as [mem' Hmem'].
@@ -3642,59 +3452,11 @@ Local Transparent loc_of_reg.
           destruct (Memory.store_after_load mem (Permission.data, C, Block.local, EXTCALL_offset)
                                             (Int 0) (Int 1)) as [mem1 Hmem1]; simplify_memory.
           assert (steady_C3': postcondition_steady_state e1 mem1 C' \/ postcondition_uninitialized e1 mem1 C').
-          { (* clear -steady_C3. *)
-            admit.
-            (* destruct steady_C3. *)
-            (* - left. *)
-            (*   move: H. *)
-            (*   rewrite /postcondition_steady_state /postcondition_event_snapshot_steadystate *)
-            (*           /well_formed_memory_snapshot_steadystate. *)
-            (*   move=> [] load_ini [] load_loca shifts. *)
-            (*   split; last split. *)
-            (*   + simplify_memory. *)
-            (*   + simplify_memory. *)
-            (*   + move=> b b_neq_local; move: shifts => /(_ b b_neq_local). *)
-            (*     rewrite /all_zeros_shift /uniform_shift *)
-            (*             /memory_shifts_memory_at_shared_addr *)
-            (*             /memory_renames_memory_at_shared_addr. *)
-            (*     admit. *)
-            (* - right. *)
-            (*   admit. *)
+          { admit.
           }
 
           eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' Hblock2]]]]]];
             last exact C'_b.
-          (* assert (exists (mem' : Memory.t) (i : Z), *)
-          (*            star CS.kstep (prepare_global_env p) *)
-          (*                 [CState C', *)
-          (*                 {| CS.f_component := C; *)
-          (*                 CS.f_arg := arg; *)
-          (*                 CS.f_cont := Kseq (invalidate_metadata;; *)
-          (*                                    E_assign EXTCALL (E_val (Int 0));; *)
-          (*                                    E_call C P (E_val (Int 0))) Kstop |} :: stk, *)
-          (*                 mem1, *)
-          (*                 Kseq (extcall_check;; expr_of_trace C' P' (comp_subtrace C' t)) Kstop, *)
-          (*                 init_check C', vcom] E0 *)
-          (*                 [CState C', *)
-          (*                 {| CS.f_component := C; *)
-          (*                 CS.f_arg := arg; *)
-          (*                 CS.f_cont := Kseq (invalidate_metadata;; *)
-          (*                                    E_assign EXTCALL (E_val (Int 0));; *)
-          (*                                    E_call C P (E_val (Int 0))) Kstop |} :: stk, *)
-          (*                 mem', *)
-          (*                 Kseq (extcall_check;; expr_of_trace C' P' (comp_subtrace C' t)) Kstop, *)
-          (*                 E_val (Int i), vcom] /\ *)
-          (*            postcondition_steady_state e1 mem' C' /\ *)
-          (*            (forall offset : Z, *)
-          (*                offset <> INITFLAG_offset -> *)
-          (*                offset <> LOCALBUF_offset -> *)
-          (*                Memory.load mem1 (Permission.data, C', Block.local, offset) = *)
-          (*                Memory.load mem' (Permission.data, C', Block.local, offset)) /\ *)
-          (*            (forall (C : nat_ordType) (b : Block.id) (offset : Block.offset), *)
-          (*                C' <> C -> *)
-          (*                Memory.load mem1 (Permission.data, C, b, offset) = *)
-          (*                Memory.load mem' (Permission.data, C, b, offset))) as [mem2 [i' [Star12 [Postcond1 [Hmem2 Hmem2']]]]]. *)
-          (* admit. *)
 
           Ltac simplify_memory_init H:=
             simplify_memory; rewrite -H;  [simplify_memory | simpl; ucongruence | simpl; ucongruence].
@@ -4090,16 +3852,6 @@ Local Transparent loc_of_reg.
     move=> prefix'0 e'0.
     rewrite 2!cats1 => /rcons_inj [] ? ?; subst prefix'0 e'0.
     split; last split.
-  (*   + rewrite /postcondition_event_registers. *)
-  (*     move=> r n <- //=. *)
-  (*     eexists; eexists; split. *)
-  (*     * destruct r; simplify_memory. admit. *)
-  (*     * split; eauto. simpl. *)
-  (*       (* using well_formed_intermediate_prefix *) *)
-  (*       admit. *)
-
-  (*   + admit. *)
-  (*   + admit. *)
     + {
       intros reg off Hoffset.
       pose proof (wfmem wf_mem Hprefix01) as [Hregs [Hnextcomp Hnotnextcomp]].
@@ -4829,10 +4581,6 @@ Local Transparent loc_of_reg.
                      end.
             destruct (proj1 (Memory.store_some_load_some _ _ saved) (ex_intro _ _ Hload1v))
               as [mem2 Hstore2].
-(*             assert (Hload1init := Hload0init). *)
-(*             erewrite <- Memory.load_after_store_neq in Hload1init; *)
-(*               last exact Hmem; *)
-(*               last (injection; discriminate). *)
             destruct (Memory.alloc_after_load
                         _ _ _ _ _ _ (buffer_size Component.main)
                         (Memory.load_after_store_eq _ _ _ _ Hstore2))
@@ -4848,18 +4596,6 @@ Local Transparent loc_of_reg.
               [ | exact Halloc3 | injection; congruence].
             destruct (proj1 (Memory.store_some_load_some _ _ (Ptr (Permission.data, Component.main, bnew, 0%Z))) (ex_intro _ _ Hload3local))
               as [mem4 Hstore4].
-            (* destruct (exec_init_local_buffer_expr *)
-            (*             Component.main *)
-            (*             ({| CS.f_component := Component.main; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk) *)
-            (*             mem4 *)
-            (*             (Kseq (extcall_check;; expr_of_trace Component.main P (comp_subtrace Component.main t)) Kstop) *)
-            (*             bnew) as [mem5 [Hstar_init [Hstore5 Hmem5C]]]. *)
-            (* NOTE: Separate lemma? The execution only makes sense if C is main. *)
-            (* assert (exists n, Memory.load mem0 (Permission.data, C, Block.local, EXTCALL_offset) = Some (Int n)) as [extcal Hload0extcall]. { *)
-            (*   destruct (wfmem_extcall_ini wf_mem Logic.eq_refl) as [Hextmain Hector]. *)
-            (*   destruct (Nat.eqb_spec C Component.main); *)
-            (*     eauto. *)
-            (* } *)
             assert (Hload0extcall := proj1 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ C_b Hmain).
 
             (* NOTE: These sub-cases are fundamentally identical and easily refactored. *)
@@ -5034,17 +4770,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
                     as [Hregs [_ Hmaincomp]].
                   specialize (Hmaincomp Hmain) as [Hinitflag [Hlocalbuf [Hshift0 Hblock0]]].
-                  (* [Cmem [HCmem Hnextblock]]]]. (* Up front? *) *)
-                  (* assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). { *)
-                  (*   by rewrite /next_block HCmem Hnextblock. *)
-                  (* } *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hmem. *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hstore2. *)
-                  (* destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3]. *)
-                  (* rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew. *)
-                  (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
                   * by simplify_memory'. (* Trivial due to work up front. *)
@@ -5351,16 +5076,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
                     as [Hregs [_ Hmaincomp]].
                   specialize (Hmaincomp Hmain) as [Hinitflag [Hlocalbuf [Hshift0 Hblock0]]].
-                  (* [Cmem [HCmem Hnextblock]]]]. (* Up front? *) *)
-                  (* assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). { *)
-                  (*   by rewrite /next_block HCmem Hnextblock. *)
-                  (* } *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hmem. *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hstore2. *)
-                  (* destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3]. *)
-                  (* rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew. *)
                   (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
@@ -5527,13 +5242,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   + simplify_memory; by destruct v.
                 (* - rewrite Nat2Z.id. exact Halloc3. *)
                 - take_steps.
-                  (*   first exact Hstore4. *)
-                  (* eapply star_trans with (t2 := E0); *)
-                  (*   first exact Hstar_init; *)
-                  (*   last reflexivity. *)
-                  (* take_steps; *)
-                  (*   first (simplify_memory'; exact Hload0extcall). *)
-                  (* take_steps. *)
                   apply star_refl.
               }
               { (** well-formed state *)
@@ -5673,16 +5381,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
                     as [Hregs [_ Hmaincomp]].
                   specialize (Hmaincomp Hmain) as [Hinitflag [Hlocalbuf [Hshift0 Hblock0]]].
-                  (* [Cmem [HCmem Hnextblock]]]]. (* Up front? *) *)
-                  (* assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). { *)
-                  (*   by rewrite /next_block HCmem Hnextblock. *)
-                  (* } *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hmem. *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hstore2. *)
-                  (* destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3]. *)
-                  (* rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew. *)
                   (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
@@ -5977,16 +5675,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
                     as [Hregs [_ Hmaincomp]].
                   specialize (Hmaincomp Hmain) as [Hinitflag [Hlocalbuf [Hshift0 Hblock0]]].
-                  (* [Cmem [HCmem Hnextblock]]]]. (* Up front? *) *)
-                  (* assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). { *)
-                  (*   by rewrite /next_block HCmem Hnextblock. *)
-                  (* } *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hmem. *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hstore2. *)
-                  (* destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3]. *)
-                  (* rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew. *)
                   (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
@@ -6076,11 +5764,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   split; [| split].
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
-                    (* erewrite Memory.load_after_store_neq; (* TODO: Add to tactic *) *)
-                    (*   last exact Hstore4; *)
-                    (*   last (fold C; injection; congruence). *)
-                    (* simplify_memory'. *)
-                    (* exact Hlocalbuf. *)
                   * split.
                     -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
@@ -6334,20 +6017,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                           as [v' Hload'].
                         rewrite Hoffset in Hload'.
-                        (* assert (v = v'). { *)
-                        (*   assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                        (*     subst off. now destruct (CS.CS.reg_to_Ereg n). *)
-                        (*   } *)
-                        (*   setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
-                        (*   assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                        (*     injection as ?. contradiction. *)
-                        (*   } *)
-                        (*   rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneqv0 Hstore') in Hload'. *)
-                        (*   rewrite Hload' in Hload. now injection Hload. *)
-                        (* } *)
-                        (* subst v'. *)
-                        (* destruct (Hpostreg _ _ _ Hoffset Hload') as [v' [Hshift' Hget']]. *)
-                        (* exists v'. *)
                         destruct (Hpostreg n _ Logic.eq_refl)
                           as [v [v'' [Hloadv [Hshiftv Hgetv'']]]].
                         assert (v = v'). {
@@ -6477,12 +6146,6 @@ Local Opaque Memory.store.
               by inversion Hshift; eauto.
 
           + (* EConst-Ptr *)
-            (* Before processing the goal, introduce existential witnesses. *)
-            (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset v)) *)
-            (*   by (now destruct v). (* Lemma? *) *)
-            (* assert (Hload : exists v', Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
-            (*   by (eapply Memory.store_some_load_some; eauto). *)
-            (* setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload. *)
             destruct ptr as [[[ptrp ptrC] ptrb] ptro].
             destruct ptrp.
             { (* New sub-goal: code pointer *)
@@ -6662,19 +6325,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                           as [v' Hload'].
                         rewrite Hoffset in Hload'.
-                        (* assert (v = v'). { *)
-                        (*   assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                        (*     subst off. now destruct (CS.CS.reg_to_Ereg n). *)
-                        (*   } *)
-                        (*   setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
-                        (*   assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                        (*     injection as ?. contradiction. *)
-                        (*   } *)
-                        (*   rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneqv0 Hstore') in Hload'. *)
-                        (*   rewrite Hload' in Hload. now injection Hload. *)
-                        (* } *)
-                        (* subst v'. *)
-                        (* destruct (Hpostreg _ _ _ Hoffset Hload') as [v' [Hshift' Hget']]. *)
                         specialize (Hpostreg n _ Logic.eq_refl)
                           as [v [v'' [Hloadv [Hshiftv Hgetv'']]]].
                         assert (v  = v'). {
@@ -6821,9 +6471,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
               -- destruct (wfmem wf_mem Hprefix01) as [_ [Hsteady _]].
                  specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1)) as [_ [Hlocalbuf _]].
-                 (* erewrite Memory.load_after_store_neq; *)
-                 (*   last exact Hstore'; *)
-                 (*   last (injection; now destruct reg2). *)
                  erewrite Memory.load_after_store_neq;
                    last exact Hmem;
                    last (injection; discriminate).
@@ -6987,19 +6634,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                           as [v' Hload'].
                         rewrite Hoffset in Hload'.
-                        (* assert (v = v'). { *)
-                        (*   assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                        (*     subst off. now destruct (CS.CS.reg_to_Ereg n). *)
-                        (*   } *)
-                        (*   setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
-                        (*   assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                        (*     injection as ?. contradiction. *)
-                        (*   } *)
-                        (*   rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneqv0 Hstore') in Hload'. *)
-                        (*   rewrite Hload' in Hload. now injection Hload. *)
-                        (* } *)
-                        (* subst v'. *)
-                        (* destruct (Hpostreg _ _ _ Hoffset Hload') as [v' [Hshift' Hget']]. *)
                         specialize (Hpostreg n _ Logic.eq_refl)
                           as [v [v'' [Hloadv [Hshiftv Hgetv'']]]].
                         assert (v  = v'). {
@@ -7135,14 +6769,8 @@ Local Opaque Memory.store.
               by inversion Hshift; eauto.
 
           + (* EConst-Undef *)
-            (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset v)) *)
-            (*   by (now destruct v). (* Lemma? *) *)
-            (* assert (Hload : exists v', Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
-            (*   by (eapply Memory.store_some_load_some; eauto). *)
-            (* setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload. *)
-            pose proof proj1 (Memory.store_some_load_some _ _ Undef) Hload as [mem'' Hstore'].
             (* Continue. *)
-            (* exists (StackState C (callers s)). *)
+            pose proof proj1 (Memory.store_some_load_some _ _ Undef) Hload as [mem'' Hstore'].
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
             split; [| split].
             * (* Evaluate steps of back-translated event first. *)
@@ -7665,16 +7293,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
                     as [Hregs [_ Hmaincomp]].
                   specialize (Hmaincomp Hmain) as [Hinitflag [Hlocalbuf [Hshift0 Hblock0]]].
-                  (* [Cmem [HCmem Hnextblock]]]]. (* Up front? *) *)
-                  (* assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). { *)
-                  (*   by rewrite /next_block HCmem Hnextblock. *)
-                  (* } *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hmem. *)
-                  (* erewrite <- next_block_store_stable in Hnext; *)
-                  (*   last exact Hstore2. *)
-                  (* destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3]. *)
-                  (* rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew. *)
                   (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
@@ -7764,11 +7382,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   split; [| split].
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
-                    (* erewrite Memory.load_after_store_neq; (* TODO: Add to tactic *) *)
-                    (*   last exact Hstore4; *)
-                    (*   last (fold C; injection; congruence). *)
-                    (* simplify_memory'. *)
-                    (* exact Hlocalbuf. *)
                   * split.
                     -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
@@ -7846,11 +7459,8 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
             by (now destruct dst). (* Lemma? *)
           assert (Hoffsetneq2: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset src))
             by (now destruct src).
-          (* assert (Hload : exists v', Memory.load mem0 (Permission.data, C, Block.local, reg_offset ptr) = Some v') *)
-            (* by (eapply Memory.store_some_load_some; eauto). *)
           assert (Hload := wfmem_meta wf_mem dst C_b). fold C in Hload.
           setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload.
-          (* setoid_rewrite -> (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hloadptr. *)
 
           assert (exists v', Memory.load
                                mem0
@@ -8234,8 +7844,6 @@ Local Transparent expr_of_const_val loc_of_reg.
           specialize (Hmaincomp Hmain)
             as [Hload0init [Hload0local Hsnapshot0]].
           destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
-          (* destruct (postcondition_event_registers_load reg0 Hregs0) *)
-          (*   as [v0' [Hreg0mem0' Hv0]]. *)
           assert (Hreg0mem := Hreg0mem0).
           erewrite <- Memory.load_after_store_neq in Hreg0mem;
             last exact Hmem;
@@ -8254,7 +7862,6 @@ Local Transparent expr_of_const_val loc_of_reg.
             last (injection; now destruct reg2).
           destruct (Memory.store_after_load _ _ _ saved Hreg2mem) as [mem'' Hstore']. (* "Standard" names here... *)
             assert (Hload0extcall := proj1 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ C_b Hmain).
-            (* exists (EMov Component.main src dst s0 t0). *)
             exists (EBinop Component.main op reg0 reg1 reg2 s0 eregs).
             exists (StackState Component.main (callers s)).
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
@@ -8324,8 +7931,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               - intros C_ reg Hcomp.
                 destruct (postcondition_event_registers_load reg Hregs0)
                   as [v_reg_reg [Hload0reg _]].
-                (* assert (Hload0reg := Hregs0 (Ereg_to_reg reg) _ Logic.eq_refl). *)
-                (* rewrite reg_to_Ereg_to_reg in Hload0reg. *)
                 destruct (Nat.eqb_spec Component.main C_) as [Heq | Hneq].
                 + subst C_.
                   rewrite -Hmain.
@@ -8663,12 +8268,6 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
             last exact Hmem;
             last (injection; now destruct reg2).
           destruct (Memory.store_after_load _ _ _ saved Hreg2mem) as [mem'' Hstore']. (* "Standard" names here... *)
-          (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset regs1)) *)
-          (*   by (now destruct v). (* Lemma? *) *)
-          (* assert (Hload : exists v', Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
-          (*   by (eapply Memory.store_some_load_some; eauto). *)
-          (* setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload. *)
-          (* pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [mem'' Hstore']. *)
           (* Continue. *)
           exists (StackState C (callers s)).
           eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
@@ -8794,17 +8393,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                       subst mem'.
                       intros n off Hoffset.
                       simpl in *.
-                      (* subst v prefix. *)
                       unfold postcondition_event_registers in Hregs.
                       destruct (Z.eqb_spec (reg_offset reg2) off) as [Heq | Hneq].
                       * subst off.
                         assert (reg2 = CS.CS.reg_to_Ereg n)
                           by (now apply reg_offset_inj in Heq).
                         subst reg2.
-                        (* assert (v = saved). { *)
-                        (*   rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload. *)
-                        (*   now injection Hload as ?. } *)
-                        (* subst v. *)
 
 Ltac t_postcondition_event_registers_get
 prefix prefix0 Hprefix01 eregs :=
@@ -11023,69 +10617,6 @@ Local Transparent expr_of_const_val loc_of_reg.
 
 Print Assumptions definability_gen_rel_right.
 
-    (* Some other experiments on rephrasings of the definability lemma.
-
-       First, a naive version of the original lemma, where reusing its proof
-       leads to the usual prefix-suffix inconsistencies.
-
-    Lemma definability_gen_rel_right s prefix suffix cs :
-      t = prefix ++ suffix ->
-      well_formed_state_r s prefix suffix cs ->
-    exists cs' suffix_inform suffix' const_map,
-      Star (CS.sem p) cs suffix' cs' /\
-      project_non_inform suffix_inform = suffix' /\
-      traces_shift_each_other metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
-      CS.final_state cs'.
-
-       Using [t] for the induction directly is a little painful in the base
-       case, but especially in the inductive case because of sectioning, and
-       because [p] needs be defined in terms of [t] throughout the proof.
-
-    (* Lemma definability_gen_rel_right (*s prefix suffix cs*) : *)
-    (*   (* t = prefix ++ suffix -> *) *)
-    (*   (* well_formed_state s prefix suffix cs -> *) *)
-    (* exists cs' t_inform t' const_map, *)
-    (*   (* Star (CS.sem p) cs suffix' cs' /\ *) *)
-    (*   Star (CS.sem p) (CS.initial_machine_state p) t' cs' /\ *)
-    (*   project_non_inform t_inform = t' /\ *)
-    (*   traces_shift_each_other metadata_size_lhs const_map (project_non_inform t) t' /\ *)
-    (*   CS.final_state cs'. *)
-
-      Another idea: induction on the right on prefix.
-
-    Lemma definability_gen_rel_right suffix cs :
-      (*t = suffix ->*) (* TODO: Reestablish the connection later *)
-      well_formed_state_right suffix cs ->
-    exists cs' suffix_inform suffix' const_map,
-      Star (CS.sem p) cs suffix' cs' /\
-      project_non_inform suffix_inform = suffix' /\
-      traces_shift_each_other metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
-      well_formed_state_right E0 cs' (* /\
-      CS.final_state cs' *)
-      .
-
-    *)
-
-    (* Lemma definability_gen_rel s prefix suffix cs : *)
-    (*   t = prefix ++ suffix -> *)
-    (*   well_formed_state s prefix suffix cs -> *)
-    (* exists cs' suffix_inform suffix' const_map, *)
-    (*   Star (CS.sem p) cs suffix' cs' /\ *)
-    (*   project_non_inform suffix_inform = suffix' /\ *)
-    (*   traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform suffix) suffix' /\ *)
-    (*   CS.final_state cs'. *)
-    (* Admitted. *)
-
-    (**********************
-    Lemma definability_gen s prefix suffix cs :
-      t = prefix ++ suffix ->
-      well_formed_state s prefix suffix cs ->
-      exists2 cs',
-      exists2 suffix', Star (CS.sem p) cs suffix' cs' &
-                       project_non_inform suffix = suffix' &
-                       CS.final_state cs'.
-    Admitted.
-    ***************************)
 
     Lemma definability :
       forall procs, (* TODO: What to do with procs? *)
@@ -11137,201 +10668,3 @@ Local Transparent Memory.load. unfold Memory.load; simpl. Local Opaque Memory.lo
 End WithTrace.
 End Definability.
 
-(* NOTE: [DynShare] Do we need the metadata size to range over components?
-   (Likely, for composition of partial programs.) We may not need the more
-   general setup in this particular setting of back-translation, however. *)
-(* NOTE: [DynShare] It is unlikely that we would ever need more than one block
-   of metadata per component. That is, metadata would be an optional block for
-   each component containing certain fixed data, such as the shift to apply to
-   block identifiers. *)
-(* Definition metadata_size : Component.id -> nat (* := uniform_shift metadata_size_per_cid*). *)
-(* Admitted. *)
-
-Require Import Intermediate.Machine.
-Require Import Intermediate.CS.
-Require Import S2I.Definitions.
-
-(*Section MainDefinability.*)
-
-(* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
-Lemma matching_mains_backtranslated_program p c intf bufs back m:
-  Intermediate.well_formed_program p ->
-  Intermediate.well_formed_program c ->
-  (* intf = unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *)
-  back = program_of_trace intf m bufs ->
-  intf Component.main ->
-  (* well_formed_trace intf m -> *)
-  matching_mains (Source.program_unlink (domm (Intermediate.prog_interface p)) back) p.
-Proof.
-  move => wf_p wf_c (* intf' *) Hback intf_main (* wf_back *).
-  unfold matching_mains.
-  split.
-  - (* <-, no main in intermediate implies no main in source bactkanslated *)
-    unfold Source.prog_main, Source.program_unlink. simpl.
-    rewrite Source.find_procedure_filter_comp.
-    move => Hinterm.
-    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hcase.
-    + inversion wf_p as [_ _ _ _ _ _ Hmain_component].
-      pose proof (proj1 (Intermediate.wfprog_main_component wf_p) Hcase) as Hmainp.
-      done.
-    + rewrite Hcase in Hinterm. done.
-  - (* -> *) (* maybe can be done with more finesse *)
-    unfold Source.prog_main. unfold Source.program_unlink. rewrite Hback. simpl. rewrite Source.find_procedure_filter_comp.
-    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain_comp ; rewrite Hmain_comp.
-    + intros Hprog_main.
-      rewrite find_procedures_of_trace_main. done.
-      assumption.
-    + intros Hcontra.
-      apply (Intermediate.wfprog_main_component wf_p) in Hcontra.
-      rewrite Hmain_comp in Hcontra. done.
-Qed.
-
-(* Definability *)
-
-(* RB: TODO: Refactor and relocate. *)
-Lemma prefix_project m :
-  not_wrong_finpref m ->
-  prefix (project_finpref_behavior m)
-         (Terminates (project_non_inform (finpref_trace m))).
-Proof.
-  unfold project_finpref_behavior, finpref_trace.
-  destruct m as [t | t | t]; simpl.
-  - reflexivity.
-  - done.
-  - intros _. exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
-Qed.
-
-Lemma not_wrong_finpref_project m :
- not_wrong_finpref m ->
- not_wrong_finpref (project_finpref_behavior m).
-Proof.
-  now destruct m.
-Qed.
-
-(* RB: Relocate? As the S2I require above seems to indicate, this is not where
-   this result belongs. *)
-
-Lemma definability_with_linking:
-  forall p c t s,
-    Intermediate.well_formed_program p ->
-    Intermediate.well_formed_program c ->
-    linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
-    Intermediate.closed_program (Intermediate.program_link p c) ->
-    Star (I.CS.sem_inform (Intermediate.program_link p c))
-         (I.CS.initial_machine_state (Intermediate.program_link p c))
-         t
-         s
-    ->
-    exists p' c' t' s' metadata_size,
-      Source.prog_interface p' = Intermediate.prog_interface p /\
-      Source.prog_interface c' = Intermediate.prog_interface c /\
-      matching_mains p' p /\
-      matching_mains c' c /\
-      Source.well_formed_program p' /\
-      Source.well_formed_program c' /\
-      Source.closed_program (Source.program_link p' c') /\
-      Star (Source.CS.CS.sem (Source.program_link p' c'))
-           (Source.CS.CS.initial_machine_state (Source.program_link p' c'))
-           t'
-           s'
-      /\
-      traces_shift_each_other_option
-        metadata_size all_zeros_shift t' (project_non_inform t).
-Proof.
-  move=> p c t s wf_p wf_c Hlinkable Hclosed Hstar.
-  pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
-  have Hclosed_intf : closed_interface intf by case: Hclosed.
-  have intf_main : intf Component.main.
-  case: Hclosed => [? [main_procs [? [/= e ?]]]].
-  rewrite /intf -mem_domm domm_union.
-  do 2![rewrite Intermediate.wfprog_defined_procedures //].
-  {  by rewrite -domm_union mem_domm e. }
-  set procs := Intermediate.prog_procedures (Intermediate.program_link p c).
-  have wf_events : all (well_formed_event intf procs) t.
-    (* by apply: CS.intermediate_well_formed_events Hstar. *)
-  {
-    apply: CS.intermediate_well_formed_events Hstar.
-    - by apply: Intermediate.linking_well_formedness.
-    - assumption.
-  }
-  have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
-  have wf_t : well_formed_trace intf procs t.
-  {
-    have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
-      (* TODO: Duplicate assumption, new non-implicit parameters. *)
-      by apply: (CS.intermediate_well_formed_trace
-                   _ wf_p_c Hclosed _ _ _ Hstar Logic.eq_refl HmainP wf_p_c).
-  }
-  pose bufs := Intermediate.prog_buffers (Intermediate.program_link p c).
-  have intf_dom_buf:
-    domm intf = domm bufs.
-  {
-    unfold intf, bufs.
-    assert (Intermediate.prog_interface (Intermediate.program_link p c) =
-            unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c)
-           ) as Hrewr.
-      by easy.
-      rewrite -Hrewr.
-      by apply Intermediate.wfprog_defined_buffers.
-  }
-  have wf_buf : (forall (C : nat_ordType) (buf : nat + seq value),
-                      bufs C =
-                      Some buf ->
-                      Buffer.well_formed_buffer buf).
-  {
-    intros ? ? Hsome.
-    by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
-  }
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _ wf_t.
-    (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
-       admits? *)
-  set back := (program_of_trace intf bufs t) => Hback.
-  assert (domm_procs: domm procs = domm intf).
-  { unfold procs, intf.
-    by rewrite -Intermediate.wfprog_defined_procedures. }
-  specialize (Hback procs domm_procs wf_events (*all_zeros_shift*)) as [t' [const_map [Hback Hshift]]].
-  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t))
-                                   (Terminates t')).
-  {
-    (* This should follow directly from the definability lemma. *)
-    apply Hback.
-  }
-    (* RB: TODO: [DynShare] Passing the section variables above should not be
-       needed, nor should the additional assumption. *)
-  exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
-  exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
-  (* Check project_finpref_behavior (FTerminates m'). *)
-  exists t'.
-  inversion Hback as [? ? Hinit Hbeh|]; subst. clear Hback.
-  inversion Hbeh as [? s' Hstar' Hfinal| | |]; subst.
-  simpl in Hinit. unfold Source.CS.CS.initial_state in *. subst.
-  exists s', const_map.
-
-  split=> /=; last split.
-  - rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
-      by apply/eq_filterm=> ??; rewrite mem_domm.
-  - rewrite /intf unionmC; last by case: Hlinkable.
-    rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
-    by apply/eq_filterm=> ??; rewrite mem_domm.
-  (* have wf_back : Source.well_formed_program back by exact: well_formed_events_well_formed_program. *)
-  - have wf_back : Source.well_formed_program back.
-    { 
-      eapply well_formed_events_well_formed_program; auto.
-      (* by exact: well_formed_events_well_formed_program. *)
-      eassumption.
-    }
-    (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
-    split; first exact: matching_mains_backtranslated_program
-                          wf_p wf_c Logic.eq_refl intf_main.
-    split; first exact: matching_mains_backtranslated_program
-                          wf_c wf_p Logic.eq_refl intf_main.
-    
-  split; first exact: Source.well_formed_program_unlink.
-  split; first exact: Source.well_formed_program_unlink.
-  rewrite Source.program_unlinkK //; split; first exact: closed_program_of_trace.
-  (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
-  split; auto.
-  by apply traces_shift_each_other_option_symmetric.
-Qed.
-
-Print Assumptions definability_with_linking.

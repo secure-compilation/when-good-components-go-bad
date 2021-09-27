@@ -41,6 +41,7 @@ Source/Language.v
 Source/GlobalEnv.v
 Source/CS.v
 Source/Definability.v
+Source/DefinabilityEnd.v
 Source/Examples/Helper.v
 Source/Examples/Identity.v
 Source/Examples/Increment.v

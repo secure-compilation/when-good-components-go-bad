@@ -6,7 +6,7 @@ Require Import Common.CompCertExtensions.
 Require Import Common.TracesInform.
 Require Import Common.RenamingOption.
 
-Require Import Source.Definability.
+Require Import Source.DefinabilityEnd.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
