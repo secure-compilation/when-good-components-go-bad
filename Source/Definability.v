@@ -2868,6 +2868,21 @@ Local Opaque Memory.store.
           unfold Block.local; congruence.
     Qed.
 
+    Corollary initialization_correct_component_memory C mem mem':
+      (forall C' b offset,
+          C <> C' ->
+          Memory.load mem (Permission.data, C', b, offset) =
+          Memory.load mem' (Permission.data, C', b, offset)) ->
+      (forall C',
+          C <> C' ->
+          next_block mem C' = next_block mem' C') ->
+      forall C', C <> C' -> mem C' = mem' C'.
+    Proof.
+      clear.
+    Admitted. (* Quick and dirty corollary, component memory equality is easy to
+                 prove but requires exposing some additional principles in
+                 ComponentMemory. *)
+
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
@@ -3767,13 +3782,15 @@ Local Transparent loc_of_reg.
                                       last now apply nesym.
                                     simplify_memory'. eassumption.
                                ---- eassumption.
-                       +++ simpl. intros b Hnextblock.
+                       +++ simpl. intros b Hblock.
                            subst mem'.
+                           apply Hblock0 in Hblock.
                            repeat (erewrite next_block_store_stable;
                                    last eassumption).
-                           (* assert (Hnext12 : next_block mem1 C = next_block mem2 C) *)
-                           (*   by admit. *)
-                           admit. (* See sub-goal below. *)
+                           erewrite <- Hblock2; last congruence.
+                           repeat (erewrite next_block_store_stable;
+                                   last eassumption).
+                           exact Hblock.
                     ** simpl.
                        rewrite C_next_e1 in HC0_C.
                        specialize (Hnot_next_comp _ C0_b HC0_C) as [Hsteady0 | Hinitial0].
@@ -3818,7 +3835,15 @@ Local Transparent loc_of_reg.
                                           last (intros ?; subst C0; contradiction).
                                         simplify_memory'. eassumption.
                                    ---- eassumption.
-                           +++ admit.
+                           +++ simpl. intros b Hblock.
+                               subst mem'.
+                               apply Hblock0 in Hblock.
+                               repeat (erewrite next_block_store_stable;
+                                       last eassumption).
+                               erewrite <- Hblock2; last congruence.
+                               repeat (erewrite next_block_store_stable;
+                                       last eassumption).
+                               exact Hblock.
                        --- right.
                            destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hblock0]]].
                            split; [| split; [| split]].
@@ -3842,8 +3867,11 @@ Local Transparent loc_of_reg.
                                       (erewrite <- Memory.component_memory_after_store_neq;
                                        [| eassumption |];
                                        last (simpl; intros ?; subst C'; rewrite /C //= in C_ne_C')).
-                                    admit. (* Hmem2' entails component memory equality *)
-                                    (* exact HCmem0. *)
+                                    rewrite -(initialization_correct_component_memory Hmem2' Hblock2 (nesym HC0_C')).
+                                    repeat (erewrite <- Memory.component_memory_after_store_neq;
+                                            [| eassumption |];
+                                            last (simpl; congruence)).
+                                    exact HCmem0.
                                 *** exact Hblock0.
             * right. left. by apply: (closed_intf Himport).
           + rewrite CS.CS.project_non_inform_append /=.
