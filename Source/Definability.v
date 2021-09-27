@@ -3594,24 +3594,59 @@ Local Transparent loc_of_reg.
           destruct (Memory.store_after_load mem (Permission.data, C, Block.local, EXTCALL_offset)
                                             (Int 0) (Int 1)) as [mem1 Hmem1]; simplify_memory.
           assert (steady_C3': postcondition_steady_state e1 mem1 C' \/ postcondition_uninitialized e1 mem1 C').
-          { (* clear -steady_C3. *)
-            admit.
-            (* destruct steady_C3. *)
-            (* - left. *)
-            (*   move: H. *)
-            (*   rewrite /postcondition_steady_state /postcondition_event_snapshot_steadystate *)
-            (*           /well_formed_memory_snapshot_steadystate. *)
-            (*   move=> [] load_ini [] load_loca shifts. *)
-            (*   split; last split. *)
-            (*   + simplify_memory. *)
-            (*   + simplify_memory. *)
-            (*   + move=> b b_neq_local; move: shifts => /(_ b b_neq_local). *)
-            (*     rewrite /all_zeros_shift /uniform_shift *)
-            (*             /memory_shifts_memory_at_shared_addr *)
-            (*             /memory_renames_memory_at_shared_addr. *)
-            (*     admit. *)
-            (* - right. *)
-            (*   admit. *)
+          { destruct steady_C3 as [Hsteady0 | Hinitial0].
+            - left.
+              destruct Hsteady0 as [Hinitflag0 [Hlocalbuf0 [Hshift0 Hblock0]]].
+              split; [| split; [| split]].
+              + by simplify_memory.
+              + by simplify_memory.
+              + intros [| b] Hb; first contradiction.
+                specialize (Hshift0 _ Hb) as [[cid bid] [Hshift0 [Hrename0 Hrename0']]].
+                rewrite shift_S_Some in Hshift0. injection Hshift0 as ? ?; subst cid bid.
+                eexists. split; [| split].
+                * reflexivity.
+                * intros off v Hload.
+                  erewrite Memory.load_after_store_neq in Hload;
+                    last eassumption;
+                    last (injection; discriminate).
+                  erewrite Memory.load_after_store_neq in Hload;
+                    last eassumption;
+                    last (injection; discriminate).
+                  specialize (Hrename0 _ _ Hload) as [v'' [v' Hshiftv]].
+                  eexists. split.
+                  -- rewrite /= /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                     eassumption.
+                  -- eassumption.
+                * rewrite /= /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                  intros off v Hload.
+                  specialize (Hrename0' _ _ Hload) as [v'' [v' Hshiftv]].
+                  eexists. split.
+                  -- by simplify_memory.
+                  -- eassumption.
+              + intros b Hnext.
+                erewrite next_block_store_stable; last eassumption.
+                erewrite next_block_store_stable; last eassumption.
+                exact (Hblock0 _ Hnext).
+            - right.
+              destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hblock0]]].
+              split; [| split; [| split]].
+              + by simplify_memory.
+              + by simplify_memory.
+              + destruct Hprealloc0 as [Cmem0 [buf [HCmem0 [Hbuf [Hnext0 Hprealloc]]]]].
+                subst Cmem0.
+                eexists. eexists.
+                split; [| split; [| split]];
+                  last reflexivity; eassumption.
+              + destruct Hblock0 as [Cmem0 [HCmem0 Hblock0]].
+                exists Cmem0. split.
+                * erewrite <- component_memory_after_store_neq;
+                    [| eassumption |];
+                    last (simpl; intros ?; subst C'; rewrite /C //= in C_ne_C').
+                  erewrite <- component_memory_after_store_neq;
+                    [| eassumption |];
+                    last (simpl; intros ?; subst C'; rewrite /C //= in C_ne_C').
+                  exact HCmem0.
+                * exact Hblock0.
           }
 
           eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' Hblock2]]]]]];
@@ -3816,8 +3851,26 @@ Local Transparent loc_of_reg.
                      inversion H1; subst; clear H1.
                      reflexivity. }
                  split; last split.
-                 ++ intros reg off Hoffset.
-                    admit.
+                 ++ intros reg off Hoffset. simpl.
+                    destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                    inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
+                      [now destruct prefix0 | now destruct prefix0 as [| ? []] | ].
+                    rewrite cats2 in Ht.
+                    apply rcons_inj in Ht. injection Ht as Ht ?; subst eint2.
+                    apply rcons_inj in Ht. injection Ht as ? ?; subst prefint eint1.
+                    inversion Hstep as [tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | | | |];
+                      subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                      subst regs.
+                    subst new_arg mem' C'0 off.
+                    destruct reg;
+                      try (eexists; eexists; split; [by simplify_memory' |]; split; reflexivity).
+                    destruct (Hregs Machine.R_COM _ Logic.eq_refl) as [vcom'' [vcom' [Hv7' [Hshiftv7 Hgetv7]]]].
+                    rewrite -C_next_e1 in Hv7'. simpl in Hvcom, Hv7'. rewrite Hvcom in Hv7'.
+                    injection Hv7' as ?; subst vcom''.
+                    eexists vcom, vcom'. split; [| split].
+                    ** by simplify_memory'.
+                    ** eassumption.
+                    ** by rewrite Machine.Intermediate.Register.gicom.
                  ++ simpl. intros C0 _ ?; subst C0.
                     split; [| split; [| split]].
                     ** by simplify_memory.
@@ -3843,12 +3896,137 @@ Local Transparent loc_of_reg.
                            by simplify_memory.
                     ** simpl. intros b Hnextblock.
                        subst mem'.
-                       (* erewrite next_block_store_stable. *)
-                       (* rewrite (Hnextblock2 _ Hnextblock). *)
-                       admit.
-                 ++ simpl. intros C0 C0_b HC0_C'. admit.
+                       repeat (erewrite next_block_store_stable;
+                               last eassumption).
+                       exact (Hnextblock2 _ Hnextblock).
+                 ++ simpl. intros C0 C0_b HC0_C'.
+                    destruct (Nat.eqb_spec C0 C) as [| HC0_C].
+                    ** subst C0.
+                       left.
+                       specialize (Hnext_comp _ C_b C_next_e1) as Hsteady0.
+                       destruct Hsteady0 as [Hinitflag0 [Hlocalbuf0 [Hshift0 Hblock0]]].
+                       split; [| split; [| split]].
+                       +++ simplify_memory'.
+                           erewrite <- Hmem2';
+                             last now apply nesym.
+                           now simplify_memory'.
+                       +++ simplify_memory'.
+                           erewrite <- Hmem2';
+                             last now apply nesym.
+                           now simplify_memory'.
+                       +++ intros [| b] Hb; first contradiction.
+                           specialize (Hshift0 _ Hb) as [[cid bid] [Hshift0 [Hrename0 Hrename0']]].
+                           rewrite shift_S_Some in Hshift0. injection Hshift0 as ? ?; subst cid bid.
+                           eexists. split; [| split].
+                           *** reflexivity.
+                           *** intros off v Hload.
+                               repeat
+                                 (erewrite Memory.load_after_store_neq in Hload;
+                                  last eassumption;
+                                  last (injection; discriminate)).
+                               erewrite <- Hmem2' in Hload;
+                                 last now apply nesym.
+                               repeat
+                                 (erewrite Memory.load_after_store_neq in Hload;
+                                  last eassumption;
+                                  last (injection; discriminate)).
+                               specialize (Hrename0 _ _ Hload) as [v'' [v' Hshiftv]].
+                               eexists. split.
+                               ---- rewrite /= /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                                    subst mem'. eassumption.
+                               ---- eassumption.
+                           *** rewrite /= /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                               intros off v Hload. subst mem'.
+                               specialize (Hrename0' _ _ Hload) as [v'' [v' Hshiftv]].
+                               eexists. split.
+                               ---- simplify_memory'.
+                                    erewrite <- Hmem2';
+                                      last now apply nesym.
+                                    simplify_memory'. eassumption.
+                               ---- eassumption.
+                       +++ simpl. intros b Hnextblock.
+                           subst mem'.
+                           repeat (erewrite next_block_store_stable;
+                                   last eassumption).
+                           (* assert (Hnext12 : next_block mem1 C = next_block mem2 C) *)
+                           (*   by admit. *)
+                           admit. (* See sub-goal below. *)
+                    ** simpl.
+                       rewrite C_next_e1 in HC0_C.
+                       specialize (Hnot_next_comp _ C0_b HC0_C) as [Hsteady0 | Hinitial0].
+                       --- left.
+                           destruct Hsteady0 as [Hinitflag0 [Hlocalbuf0 [Hshift0 Hblock0]]].
+                           split; [| split; [| split]].
+                           +++ simplify_memory'.
+                               erewrite <- Hmem2';
+                                 last (intros ?; subst C0; contradiction).
+                               now simplify_memory'.
+                           +++ simplify_memory'.
+                               erewrite <- Hmem2';
+                                 last (intros ?; subst C0; contradiction).
+                               now simplify_memory'.
+                           +++ intros [| b] Hb; first contradiction.
+                               specialize (Hshift0 _ Hb) as [[cid bid] [Hshift0 [Hrename0 Hrename0']]].
+                               rewrite shift_S_Some in Hshift0. injection Hshift0 as ? ?; subst cid bid.
+                               eexists. split; [| split].
+                               *** reflexivity.
+                               *** intros off v Hload.
+                                   repeat
+                                     (erewrite Memory.load_after_store_neq in Hload;
+                                      last eassumption;
+                                      last (injection; discriminate)).
+                                   erewrite <- Hmem2' in Hload;
+                                     last (simpl; intros ?; subst C0; contradiction).
+                                   repeat
+                                     (erewrite Memory.load_after_store_neq in Hload;
+                                      last eassumption;
+                                      last (injection; discriminate)).
+                                   specialize (Hrename0 _ _ Hload) as [v'' [v' Hshiftv]].
+                                   eexists. split.
+                                   ---- rewrite /= /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                                        subst mem'. eassumption.
+                                   ---- eassumption.
+                               *** rewrite /= /all_zeros_shift /uniform_shift ssrnat.subn1 ssrnat.addn0 /=.
+                                   intros off v Hload. subst mem'.
+                                   specialize (Hrename0' _ _ Hload) as [v'' [v' Hshiftv]].
+                                   eexists. split.
+                                   ---- simplify_memory'.
+                                        erewrite <- Hmem2';
+                                          last (intros ?; subst C0; contradiction).
+                                        simplify_memory'. eassumption.
+                                   ---- eassumption.
+                           +++ admit.
+                       --- right.
+                           destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hblock0]]].
+                           split; [| split; [| split]].
+                           +++ simplify_memory'.
+                               erewrite <- Hmem2';
+                                 last (intros ?; subst C0; contradiction).
+                               now simplify_memory'.
+                            +++ simplify_memory'.
+                                erewrite <- Hmem2';
+                                  last (intros ?; subst C0; contradiction).
+                                now simplify_memory'.
+                            +++ destruct Hprealloc0 as [Cmem0 [buf [HCmem0 [Hbuf [Hnext0 Hprealloc]]]]].
+                                subst Cmem0.
+                                eexists. eexists.
+                                split; [| split; [| split]];
+                                  last reflexivity; try eassumption.
+                                simpl. now rewrite Hmem' HCmem0.
+                            +++ destruct Hblock0 as [Cmem0 [HCmem0 Hblock0]].
+                                exists Cmem0. split.
+                                *** repeat
+                                      (erewrite <- Memory.component_memory_after_store_neq;
+                                       [| eassumption |];
+                                       last (simpl; intros ?; subst C'; rewrite /C //= in C_ne_C')).
+                                    admit. (* Hmem2' entails component memory equality *)
+                                    (* exact HCmem0. *)
+                                *** exact Hblock0.
             * right. left. by apply: (closed_intf Himport).
-          + admit.
+          + rewrite CS.CS.project_non_inform_append /=.
+            setoid_rewrite cats1.
+            econstructor.
+            all:admit.
               (* END CASE: CALL *)
 
         (* CASE: [ERet], [ERetInform] *)
