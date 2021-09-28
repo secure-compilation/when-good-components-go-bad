@@ -1219,4 +1219,13 @@ Proof.
         exact Permission.data. (* FIXME: New subgoal after changing permission equality, suspect. *)
 Qed.
 
+Lemma not_executing_can_not_share s p t e C b:
+  well_formed_program p ->
+  closed_program p ->
+  is_prefix s p (rcons t e) ->
+  C <> cur_comp_of_event e ->
+  (forall b', ~ addr_shared_so_far (C, b') t) ->
+  ~ addr_shared_so_far (C, b) (rcons t e).
+Admitted.
+
 End CSInvariants.

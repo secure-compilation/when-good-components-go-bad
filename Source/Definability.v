@@ -16,7 +16,9 @@ Require Import Source.GlobalEnv.
 Require Import Source.CS.
 
 Require Import Lia.
+Require Intermediate.Machine.
 Require Intermediate.CS.
+Require Intermediate.CSInvariants.
 
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.
@@ -939,6 +941,9 @@ Section Definability.
     Hypothesis domm_t_procs : domm t_procs = domm intf.
     Hypothesis wf_events : all (well_formed_event intf t_procs) t.
 
+    Variable p_interm : Machine.Intermediate.program.
+    Hypothesis p_gens_t : exists s, CSInvariants.CSInvariants.is_prefix s p_interm (project_non_inform t).
+
     (* Let t    :=  *)
     (* [DynShare]: This should be the projection of t_inform.
        This projection function may be defined in the Intermedicate/CS.v *)
@@ -1432,13 +1437,15 @@ Local Opaque Memory.store.
       postcondition_event_snapshot_steadystate e mem C.
 
     Definition postcondition_uninitialized
-               (e: event_inform) (mem: Memory.t) (C: Component.id) :=
+               (t: trace event_inform) (e: event_inform) (mem: Memory.t) (C: Component.id) :=
       Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
       Some (Int 0%Z)
       /\
       Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) = Some Undef
       /\
-      postcondition_event_snapshot_uninitialized e mem C.
+      postcondition_event_snapshot_uninitialized e mem C
+      /\
+      (forall b, ~ addr_shared_so_far (C, b) (project_non_inform (rcons t e))).
 
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
@@ -1517,7 +1524,7 @@ Local Opaque Memory.store.
                 (
                   postcondition_steady_state e mem C
                   \/
-                  postcondition_uninitialized e mem C
+                  postcondition_uninitialized prefix' e mem C
                 )
             )
       }.
@@ -1786,8 +1793,23 @@ Local Opaque Memory.store.
        NOTE: Propositional and not boolean conjunction in the conclusion at the
        moment. *)
 
+    (* TODO: Move these hypotheses up *)
+    Hypothesis wf_p_interm: Machine.Intermediate.well_formed_program p_interm.
+    Hypothesis closed_p_interm: Machine.Intermediate.closed_program p_interm.
+
+    (* Cf. event_non_inform_of_nil_or_singleton *)
+    Lemma project_non_inform_singleton e:
+      project_non_inform [:: e] = [::] \/
+      exists e', project_non_inform [:: e] = [:: e'].
+    Proof.
+      destruct e; simpl;
+        try (now (right; eauto));
+        now left.
+    Qed.
+
     Lemma wfmem_postcondition_initial_preserved
-          eprev ecur curC (mem' mem0 mem'': Memory.t):
+          eprev ecur curC (mem' mem0 mem'': Memory.t) tpref:
+      (exists s, CSInvariants.CSInvariants.is_prefix s p_interm (project_non_inform (rcons (rcons tpref eprev) ecur))) ->
       mem' = mem_of_event_inform eprev ->
       mem' = mem_of_event_inform ecur ->
       next_comp_of_event eprev = curC ->
@@ -1797,7 +1819,7 @@ Local Opaque Memory.store.
           component_buffer C ->
           C <> next_comp_of_event eprev ->
           postcondition_steady_state eprev mem0 C \/
-          postcondition_uninitialized eprev mem0 C
+          postcondition_uninitialized tpref eprev mem0 C
       ) ->
       (forall C : Component.id, C <> curC -> mem0 C = mem'' C)
       ->
@@ -1805,9 +1827,9 @@ Local Opaque Memory.store.
         component_buffer C ->
         C <> next_comp_of_event ecur ->
         postcondition_steady_state ecur mem'' C \/
-        postcondition_uninitialized ecur mem'' C.
+        postcondition_uninitialized (rcons tpref eprev) ecur mem'' C.
     Proof.
-      intros Hmem' Hmem'2 Hcomp1 Hcomp2 Hcomp3 Hinitial mem0_mem''_asmp.
+      intros [s is_prefix] Hmem' Hmem'2 Hcomp1 Hcomp2 Hcomp3 Hinitial mem0_mem''_asmp.
 
       assert (mem0_mem'': forall C b o,
                  C <> curC ->
@@ -1855,11 +1877,11 @@ Local Opaque Memory.store.
               assumption.
       * destruct Hinitial
           as [Hinitflag [Hlocalbuf [
-                             [compMem [buf [He1 Hbuf]]]
-                               Hintial2
+                             [[compMem [buf [He1 Hbuf]]]
+                               Hinitial2] Hshared
                            ]
              ]].
-        right. split; [| split].
+        right. split; [| split; [| split]].
         -- rewrite -mem0_mem''; by auto.
         -- rewrite -mem0_mem''; by auto. 
         -- unfold postcondition_event_snapshot_uninitialized
@@ -1867,6 +1889,29 @@ Local Opaque Memory.store.
            split;
              last by rewrite -mem0_mem''_asmp.
            simpl. exists compMem, buf. by rewrite -Hmem'2.
+        -- intros b Hcontra.
+           (* destruct p_gens_t as [s_p is_prefix]. *)
+           destruct (project_non_inform_singleton ecur) as [Hecur0 | [ecur' Hecur1]].
+           ++ rewrite -Hcomp2 in Hnext.
+              clear -Hcontra Hshared Hnext Hecur0.
+              rewrite -!cats1 CS.CS.project_non_inform_append Hecur0 E0_right cats1 in Hcontra.
+              now apply (Hshared b).
+           ++
+
+             rewrite -!cats1 CS.CS.project_non_inform_append Hecur1 !cats1 in Hcontra.
+             unfold Eapp in Hcontra. setoid_rewrite cats1 in Hcontra.
+             rewrite -!cats1 CS.CS.project_non_inform_append Hecur1 !cats1 in is_prefix.
+             unfold Eapp in is_prefix. setoid_rewrite cats1 in is_prefix.
+             rewrite -Hcomp2 in Hnext.
+             assert (Hcomp_ecur : cur_comp_of_event ecur = cur_comp_of_event ecur'). {
+               destruct ecur; destruct ecur'; inversion Hecur1; reflexivity.
+             }
+             rewrite Hcomp_ecur in Hnext.
+             pose proof CSInvariants.CSInvariants.not_executing_can_not_share
+                  _ _ _ _ _ b
+                  wf_p_interm closed_p_interm is_prefix Hnext Hshared
+               as Hnot_shared.
+             contradiction.
     Qed.
 
     Lemma prepare_buffers_prealloc C :
@@ -1914,8 +1959,8 @@ Local Opaque Memory.store.
       Memory.load mem ptr = None.
     Admitted.
 
-    Lemma load_postcondition_steady_state C e mem b o v :
-      postcondition_steady_state e mem C \/ postcondition_uninitialized e mem C ->
+    Lemma load_postcondition_steady_state C prefix e mem b o v :
+      postcondition_steady_state e mem C \/ postcondition_uninitialized prefix e mem C ->
       Memory.load mem (Permission.data, C, S b, o) = Some v ->
       postcondition_steady_state e mem C.
     Proof.
@@ -1923,9 +1968,9 @@ Local Opaque Memory.store.
       - assumption.
       - exfalso.
         destruct Hinitial
-          as [Hinitflag [Hlocalbuf
-                           [Hprealloc
-                              [Cmem [HCmem Hblock]]]]].
+          as [Hinitflag [Hlocalbuf [[Hprealloc
+                                       [Cmem [HCmem Hblock]]]
+                                      Hnot_shared]]].
         assert (Hnextblock : next_block mem C = Some LOCALBUF_blockid)
           by (by rewrite /next_block HCmem Hblock).
         erewrite load_next_block_None in Hload.
@@ -2013,9 +2058,9 @@ Local Opaque Memory.store.
                  end)]
         end.
 
-    Lemma initialization_correct: forall C stk mem k arg e,
+    Lemma initialization_correct: forall C stk mem k arg prefix e,
         component_buffer C ->
-        postcondition_steady_state e mem C \/ postcondition_uninitialized e mem C ->
+        postcondition_steady_state e mem C \/ postcondition_uninitialized prefix e mem C ->
         exists mem' i,
           star CS.kstep (prepare_global_env p)
                [CState C, stk, mem, k, init_check C, arg] E0
@@ -2034,7 +2079,7 @@ Local Opaque Memory.store.
               C <> C' ->
               next_block mem C' = next_block mem' C').
     Proof.
-      move=> C stk mem k arg e C_b.
+      move=> C stk mem k arg prefix e C_b.
       case.
       - move=> [] load_initflag [] load_localbuf postcond.
         exists mem, 0%Z.
@@ -2051,7 +2096,7 @@ Local Opaque Memory.store.
           rewrite /postcondition_event_snapshot_uninitialized
                   /well_formed_memory_snapshot_uninitialized
                   /Memory.alloc.
-          move=> [] _ [] memC [] ->.
+          move=> [] [] _ [] memC [] ->.
           move: (ComponentMemory.alloc_next_block memC (buffer_size C)) => [] memC' -> ->.
           by eexists. }
         move=> [] mem' mem_mem'.
@@ -2496,7 +2541,7 @@ Local Opaque Memory.store.
           assert (load_C_ge_2:
                    forall b off,
                  Memory.load mem (Permission.data, C, S (S b), off) = None).
-          { destruct (postcond_mem) as [_ X].
+          { destruct (postcond_mem) as [[_ X] _].
             destruct X as [compMem [X1 X2]].
             intros b off.
             rewrite /Memory.load //= X1.
@@ -2580,7 +2625,7 @@ Local Opaque Memory.store.
                         - assumption.
                         - rewrite H7 in Hload; eauto. discriminate.
                           by move: off_0 => /Z.leb_spec0. }
-                      destruct postcond_mem as [[compMem [buff X]] Y].
+                      destruct postcond_mem as [[[compMem [buff X]] Y] _].
                       destruct X as [X1 [X2 [X3 X4]]].
                       rewrite /Memory.load /= X1 X4.
                       assert (buff = buf) by congruence; subst buff.
@@ -2669,7 +2714,7 @@ Local Opaque Memory.store.
                       assert (b' = 0).
                       { destruct b'; auto.
                         destruct postcond_mem
-                          as [[compMem [buff [memC [Hbuff [Hnext Hprea]]]]] _].
+                          as [[[compMem [buff [memC [Hbuff [Hnext Hprea]]]]] _] _].
                         pose proof (load_next_block_None) as H.
                         unfold next_block in H.
                         specialize (H (mem_of_event_inform e)
@@ -2690,7 +2735,7 @@ Local Opaque Memory.store.
                             by lia.
                         - assumption.
                         - destruct postcond_mem
-                            as [[compMem [buff [memC [Hbuff [Hnext Hprea]]]]] _].
+                            as [[[compMem [buff [memC [Hbuff [Hnext Hprea]]]]] _] _].
                           rewrite /Memory.load memC Hprea /= in Hload.
                           rewrite ComponentMemory.load_prealloc in Hload.
                           rewrite off_0 in Hload. simpl in Hload.
@@ -2743,7 +2788,7 @@ Local Opaque Memory.store.
                                  by now destruct (nth_error (unfold_buffer buf) (Z.to_nat off)); congruence.
                           eauto.
                       }
-                      destruct postcond_mem as [[compMem [buff X]] Y].
+                      destruct postcond_mem as [[[compMem [buff X]] Y] _].
                       destruct X as [X1 [X2 [X3 X4]]].
                       destruct Y as [src_compMem [Y1 Y2]].
                       rewrite H6; eauto; last by move: off_0 => /Z.leb_spec0.
@@ -2829,8 +2874,8 @@ Local Opaque Memory.store.
                 ++ intros b Hb.
                    rewrite H3.
                    destruct postcond_mem
-                     as [[compMem' [buff [memC' [Hbuff [nextBlock prea]]]]]
-                           [compMem [memC compMem_next_block]]].
+                     as [[[compMem' [buff [memC' [Hbuff [nextBlock prea]]]]]
+                           [compMem [memC compMem_next_block]]] _].
                    unfold next_block in Hb.
                    rewrite memC' in Hb. inversion Hb; subst; clear Hb.
                    simpl. rewrite nextBlock.
@@ -2955,8 +3000,8 @@ Local Opaque Memory.store.
                        Component.main Undef E_R_ONE
                        initial_memory
                        Machine.Intermediate.Register.init.
-        assert (Hpost_ini : postcondition_uninitialized e_dummy (Source.prepare_buffers p) Component.main). {
-          split; [| split; [| split]].
+        assert (Hpost_ini : postcondition_uninitialized [::] e_dummy (Source.prepare_buffers p) Component.main). {
+          split; [| split; [| split; [split |]]].
           - unfold INITFLAG_offset. setoid_rewrite <- Z2Nat.id; try lia.
             rewrite (load_prepare_buffers _ C_b).
             reflexivity.
@@ -2978,7 +3023,9 @@ Local Opaque Memory.store.
             destruct (intf Component.main); last discriminate.
             eexists. split; first reflexivity.
             rewrite ComponentMemory.nextblock_prealloc.
-            now rewrite domm_set domm0 fsetU0. }
+            now rewrite domm_set domm0 fsetU0.
+          - intros b Hshared. simpl in Hshared.
+            inversion Hshared; now destruct t0. }
 
         destruct (initialization_correct
                     [::]
@@ -3462,7 +3509,7 @@ Local Transparent loc_of_reg.
           (* Memory operations and initialization check *)
           destruct (Memory.store_after_load mem (Permission.data, C, Block.local, EXTCALL_offset)
                                             (Int 0) (Int 1)) as [mem1 Hmem1]; simplify_memory.
-          assert (steady_C3': postcondition_steady_state e1 mem1 C' \/ postcondition_uninitialized e1 mem1 C').
+          assert (steady_C3': postcondition_steady_state e1 mem1 C' \/ postcondition_uninitialized prefix0 e1 mem1 C').
           { destruct steady_C3 as [Hsteady0 | Hinitial0].
             - left.
               destruct Hsteady0 as [Hinitflag0 [Hlocalbuf0 [Hshift0 Hblock0]]].
@@ -3497,16 +3544,17 @@ Local Transparent loc_of_reg.
                 erewrite next_block_store_stable; last eassumption.
                 exact (Hblock0 _ Hnext).
             - right.
-              destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hblock0]]].
-              split; [| split; [| split]].
+              destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hnot_shared0]]].
+              split; [| split; [| split; [split |]]].
               + by simplify_memory.
               + by simplify_memory.
-              + destruct Hprealloc0 as [Cmem0 [buf [HCmem0 [Hbuf [Hnext0 Hprealloc]]]]].
+              + destruct Hprealloc0 as [[Cmem0 [buf [HCmmem0 [Hbuf [Hnext0 Hprealloc]]]]] _].
                 subst Cmem0.
                 eexists. eexists.
                 split; [| split; [| split]];
                   last reflexivity; eassumption.
-              + destruct Hblock0 as [Cmem0 [HCmem0 Hblock0]].
+              + destruct Hprealloc0 as [_ Hblock0].
+                destruct Hblock0 as [Cmem0 [HCmem0 Hblock0]].
                 exists Cmem0. split.
                 * erewrite <- component_memory_after_store_neq;
                     [| eassumption |];
@@ -3516,6 +3564,7 @@ Local Transparent loc_of_reg.
                     last (simpl; intros ?; subst C'; rewrite /C //= in C_ne_C').
                   exact HCmem0.
                 * exact Hblock0.
+              + exact Hnot_shared0.
           }
 
           eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' Hblock2]]]]]];
@@ -3572,7 +3621,6 @@ Local Transparent loc_of_reg.
             rewrite -> imported_procedure_iff in Himport. rewrite Himport.
             rewrite <- imported_procedure_iff in Himport.
             now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
-
             take_step.
             eapply star_trans.
             eapply Star12.
@@ -3845,8 +3893,8 @@ Local Transparent loc_of_reg.
                                        last eassumption).
                                exact Hblock.
                        --- right.
-                           destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hblock0]]].
-                           split; [| split; [| split]].
+                           destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hnot_shared0]]].
+                           split; [| split; [| split; [split |]]].
                            +++ simplify_memory'.
                                erewrite <- Hmem2';
                                  last (intros ?; subst C0; contradiction).
@@ -3855,13 +3903,14 @@ Local Transparent loc_of_reg.
                                 erewrite <- Hmem2';
                                   last (intros ?; subst C0; contradiction).
                                 now simplify_memory'.
-                            +++ destruct Hprealloc0 as [Cmem0 [buf [HCmem0 [Hbuf [Hnext0 Hprealloc]]]]].
+                            +++ destruct Hprealloc0 as [[Cmem0 [buf [HCmem0 [Hbuf [Hnext0 Hprealloc]]]]] _].
                                 subst Cmem0.
                                 eexists. eexists.
                                 split; [| split; [| split]];
                                   last reflexivity; try eassumption.
                                 simpl. now rewrite Hmem' HCmem0.
-                            +++ destruct Hblock0 as [Cmem0 [HCmem0 Hblock0]].
+                            +++ destruct Hprealloc0 as [_ Hblock0].
+                                destruct Hblock0 as [Cmem0 [HCmem0 Hblock0]].
                                 exists Cmem0. split.
                                 *** repeat
                                       (erewrite <- Memory.component_memory_after_store_neq;
@@ -3873,6 +3922,7 @@ Local Transparent loc_of_reg.
                                             last (simpl; congruence)).
                                     exact HCmem0.
                                 *** exact Hblock0.
+                            +++ admit.
             * right. left. by apply: (closed_intf Himport).
           + rewrite CS.CS.project_non_inform_append /=.
             setoid_rewrite cats1.
@@ -4370,11 +4420,11 @@ Local Transparent loc_of_reg.
                    by specialize (Hnextblock _ Hnextb).
       -- destruct Hinitial
           as [Hinitflag [Hlocalbuf [
-                             [compMem [buf [He1 Hbuf]]]
+                             [[compMem [buf [He1 Hbuf]]]
                                Hintial2
-                           ]
+                           ] Hnot_shared]
              ]].
-        right. split; [| split].
+        right. split; [| split; [| split]].
         ++ simplify_memory.
         ++ simplify_memory.
         ++ unfold postcondition_event_snapshot_uninitialized
@@ -4450,7 +4500,8 @@ Local Transparent loc_of_reg.
                  rewrite rewr'.
                  reflexivity.
               }
-              by rewrite <- asmp.
+               by rewrite <- asmp.
+        ++ admit.
                 }
             - intros mem1 Hmem1' Hmem1 Hmem2 arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
@@ -4597,7 +4648,7 @@ Local Transparent loc_of_reg.
                          admit.
                        }
                        specialize (wf_mem8' _ HCb Cb_C) as
-                           [[? [? [? ?]]] | [? [? [[compMem [? HcompMem]] ?]]] ].
+                           [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
                        ** assert (Hnoteq: S b <> Block.local).
                            { by unfold Block.local. }
                            specialize (steadysnap_shift0 _ Hnoteq)
@@ -4616,21 +4667,17 @@ Local Transparent loc_of_reg.
                                sigma_shifting_lefttoright_addr_bid,
                                rename_addr_option in *.
                                  by eapply Lem.
-                        ** simpl in *. destruct HcompMem as [HcompMem [_ [Hnext _]]].
+                        ** simpl in *. destruct HcompMem as [HcompMem [? [Hnext ?]]].
                            (** Intuitively, there should be a contradiction. *)
                            (** In particular, ** is the case where Cb is not *)
                            (** initialized. What we know about Cb is that it *)
                            (** shared an address and that this address also was *)
                            (** loaded from memory (Hload). *)
-
-                           (** Normally, we would have Hload contradict the alloc *)
-                           (** status, namely Hnext. But here, something is missing? *)
-
-                           (** Can alternatively strengthen the description of *)
-                           (** an uninit component, saying that it couldn't have *)
-                           (** shared any addresses so far (parameterize 
-                               'postcondition' defs with a trace prefix). *)
-                           admit.
+                           specialize (Hnot_shared b).
+                           rewrite -!cats1 CS.CS.project_non_inform_append /= in Hnot_shared.
+                           setoid_rewrite cats1 in Hnot_shared.
+                           apply Hnot_shared in Hshared.
+                           contradiction.
                      ++ simpl in *.
                         assert (Hload': Memory.load
                                           mem8
@@ -4651,8 +4698,26 @@ Local Transparent loc_of_reg.
                          admit.
                        }
 
-                       admit.
-                        
+                       specialize (wf_mem8' _ HCb Cb_C) as
+                           [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
+                       ** assert (Hnoteq: S b <> Block.local).
+                           { by unfold Block.local. }
+                           specialize (steadysnap_shift0 _ Hnoteq)
+                             as [[C_ b_] [Hb_ [mem8_mem' mem'_mem8]]].
+                           rewrite shift_S_Some in Hb_.
+                           inversion Hb_; subst C_ b_; clear Hb_.
+                           simpl in *.
+                           specialize (mem8_mem' _ _ Hload') as [v'' [Hloadv' Hv']].
+                           exists v''. split.
+                           --- assumption.
+                           --- specialize (shift_value_option_symmetry
+                                             (fun=> 1) (fun=> 0)) as Lem.
+                               unfold shift_value_option,
+                               sigma_shifting_wrap_bid_in_addr,
+                               sigma_shifting_lefttoright_addr_bid,
+                               rename_addr_option in *.
+                                 by eapply Lem.
+                       ** admit. (* Easy *)
               + exists (Cb, S b).
                 split.
                 * rewrite /all_zeros_shift /uniform_shift //=.
@@ -5196,7 +5261,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                     (*   last (fold C; injection; congruence). *)
                     (* simplify_memory'. *)
                     (* exact Hlocalbuf. *)
-                  * split.
+                  * split; [split |].
                     -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
                                   move: HCbuf => /dommPn => Hcontra;
@@ -5232,6 +5297,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
+                    -- intros b Hshared.
+                       rewrite -!cats1 in Hshared. simpl in Hshared.
+                       inversion Hshared; now find_nil_rcons.
             }
               }
               {
@@ -5503,7 +5571,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                     (*   last (fold C; injection; congruence). *)
                     (* simplify_memory'. *)
                     (* exact Hlocalbuf. *)
-                  * split.
+                  * split; [split |].
                     -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
                                   move: HCbuf => /dommPn => Hcontra;
@@ -5539,6 +5607,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
+                    -- admit.
             }
               }
               {
@@ -5808,7 +5877,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                     (*   last (fold C; injection; congruence). *)
                     (* simplify_memory'. *)
                     (* exact Hlocalbuf. *)
-                  * split.
+                  * split; [split |].
                     -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
                                   move: HCbuf => /dommPn => Hcontra;
@@ -5844,6 +5913,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
+                    -- admit.
             }
               }
               {
@@ -6097,7 +6167,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                   split; [| split].
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
-                  * split.
+                  * split; [split |].
                     -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
                                   move: HCbuf => /dommPn => Hcontra;
@@ -6133,6 +6203,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
+                    -- intros b Hshared.
+                       admit.
             }
               }
               {
@@ -6471,7 +6543,18 @@ Local Opaque Memory.store.
                       assert (C0 == cur_comp s = false) as rewr. by apply /eqP.
                       by rewrite rewr.
                     }
+                    rewrite Hprefix01 cats1.
                     eapply wfmem_postcondition_initial_preserved; eauto.
+                    assert (p_gens_t' := p_gens_t).
+                    rewrite Et Hprefix01 cats1 in p_gens_t'.
+                    setoid_rewrite app_assoc in p_gens_t'.
+                    setoid_rewrite cats1 in p_gens_t'.
+                    destruct p_gens_t' as [s' Hstar_prefix].
+                    unfold CSInvariants.CSInvariants.is_prefix in *.
+                    rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                    apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
+                      last by apply CS.CS.singleton_traces_non_inform.
+                    exists s''. exact Hstar_prefix.
               }
             * simpl.
               rewrite CS.CS.project_non_inform_append /=.
