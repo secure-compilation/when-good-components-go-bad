@@ -4750,7 +4750,7 @@ Local Transparent loc_of_reg.
               specialize (wf_regs Machine.R_COM _ Logic.eq_refl)
                 as [v' [v'' [Hcom1 [Hcom2 Hcom3]]]].
               simpl in *.
-              assert (mem9 = mem8) by admit. subst mem9.
+              (* assert (mem9 = mem8) by admit. subst mem9. *) (* Equality obtained and subst'd above *)
               assert (v' = vcom).
               { unfold EXTCALL_offset in Hmem1.
                 eapply (Memory.load_after_store_eq _ (Permission.data,
