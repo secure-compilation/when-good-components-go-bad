@@ -110,9 +110,39 @@ Lemma star_well_formed_intermediate_prefix:
     well_formed_intermediate_prefix (Intermediate.prog_interface p)
                                     (Intermediate.prog_buffers p) t.
 Proof.
-  admit.
+  intros p t s wfp Hstar.
+  remember (CS.initial_machine_state p) as s0 eqn:Hs0.
+  revert Hs0.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros; subst.
+  - by constructor; constructor.
+  - assert (length t2 <= 1). by eapply I.CS.singleton_traces_inform; eauto.
+    destruct t2; first by rewrite E0_right; apply IHstar.
+    destruct t2; simpl in *; last lia.
+    setoid_rewrite cats1.
+    destruct t1; simpl.
+    + constructor; constructor.
+      CS.unfold_states.
+      assert (mem0 =
+              (mkfmapf
+                 (fun C : nat_ordType =>
+                    ComponentMemory.prealloc
+                      match Intermediate.prog_buffers p C with
+                      | Some buf => [fmap (Block.local, buf)]
+                      | None => emptym
+                      end) (domm (Intermediate.prog_interface p)))).
+      {
+        admit.
+        (** Should follow from Hstar01. *)
+      }
+      subst.
+      destruct e; inversion Hstep12; subst; simpl in *.
+      (***********************
+      * constructor; auto.
+        rewrite Intermediate.Register.gss.
+       ***********************)
 Admitted.
-
 
 Lemma definability_with_linking:
   forall p c t s,
