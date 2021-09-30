@@ -2947,6 +2947,142 @@ Local Opaque Memory.store.
                  prove but requires exposing some additional principles in
                  ComponentMemory. *)
 
+    Lemma addr_shared_so_far_inv_1
+            (ret_val : value)
+            (mem' : Memory.tt)
+            (regs : Machine.Intermediate.Register.t)
+            (C C' : Component.id)
+            (s : stack_state)
+            (prefix0 : seq event_inform)
+            (eprev ecur : event_inform)
+            (ecur_noninf : event)
+            (ecur_proj : project_non_inform [:: ecur] = [:: ecur_noninf])
+            (wf_int_pref' : well_formed_intermediate_prefix
+                              ((prefix0 ++ [:: eprev]) ++ [:: ecur]))
+            (mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 : Memory.tt)
+            (cur_comp_C : C = cur_comp s)
+            (vcom : value)
+            (Hcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, 5%Z) = Some vcom)
+            (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1)
+            (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1')
+            (Hmem2 : Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef = Some mem2)
+            (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef = Some mem3)
+            (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef = Some mem4)
+            (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef = Some mem5)
+            (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef = Some mem6)
+            (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef = Some mem7)
+            (* (s' : stack_state) *)
+            (* (stk0 : CS.stack) *)
+            (* (arg0 : value) *)
+            (* (P0 : Procedure.id) *)
+            (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset) (Int 0) =
+                     Some mem8)
+            (Cb : Component.id)
+            (b : Block.id)
+            (H1 : Reachability.Reachable mem' (addr_of_value ret_val) (Cb, b))
+            (wf_regs : postcondition_event_registers (ERetInform (cur_comp s) ret_val mem' regs C') mem8)
+            (Hshared : addr_shared_so_far (Cb, b)
+                                                          (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf))
+            (wf_mem8 : forall C : nat_ordType,
+                component_buffer C ->
+                C = next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
+                postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem8 C)
+            (wf_mem8' : forall C : nat_ordType,
+                component_buffer C ->
+                C <> next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
+                postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem8 C \/
+                postcondition_uninitialized (prefix0 ++ [:: eprev]) ecur mem8 C):
+            Reachability.Reachable mem1 (addr_of_value vcom) (Cb, S b).
+      Admitted.
+           (* destruct wf_int_pref' as [wf_int_pref' wf_ev_comps']. *)
+           (* inversion wf_int_pref'. *)
+           (* ++ now destruct prefix0. *)
+           (* ++ destruct prefix0 as [|? []]; try discriminate. *)
+           (* ++ rewrite cats1 in H0. apply rcons_inj in H0. inversion H0; subst; clear H0. *)
+           (*    rewrite cats1 in H5. apply rcons_inj in H5. inversion H5; subst; clear H5. *)
+           (*    inversion H3; subst; clear H3. simpl in *. *)
+           (*    destruct ((Machine.Intermediate.Register.get *)
+           (*                 Machine.R_COM *)
+           (*                 (register_file_of_event_inform e1))) *)
+           (*      as [ | *)
+           (*          [[[[] ?] ?] ?] *)
+           (*         | ] eqn:content_R_COM; *)
+           (*      simpl in *; try by rewrite in_fset0 in H. *)
+           (*    rewrite in_fset1 in H. move: H => /eqP [] ? ?; subst. *)
+           (*    specialize (wf_regs Machine.R_COM _ Logic.eq_refl) *)
+           (*      as [v' [v'' [Hcom1 [Hcom2 Hcom3]]]]. *)
+           (*    simpl in *. *)
+           (*    (* assert (mem9 = mem8) by admit. subst mem9. *) (* Equality obtained and subst'd above *) *)
+           (*    assert (v' = vcom). *)
+           (*    { unfold EXTCALL_offset in Hmem1. *)
+           (*      eapply (Memory.load_after_store_eq _ (Permission.data, *)
+           (*                                           C', *)
+           (*                                           Block.local, *)
+           (*                                           5%Z)) in Hmem1'. *)
+           (*      repeat match goal with *)
+           (*             | Hload: Memory.load ?mem' ?ptr' = Some ?v', *)
+           (*               Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ => *)
+           (*               erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload *)
+           (*             end. *)
+           (*      rewrite Hcom1 in Hmem1'. now inversion Hmem1'. } *)
+           (*    subst v'. *)
+           (*    rewrite (Machine.Intermediate.Register.gicom) in Hcom3. *)
+           (*    rewrite Hcom3 in content_R_COM. subst v''. *)
+           (*    rewrite content_R_COM in Hcom2. *)
+           (*    rewrite /all_zeros_shift /uniform_shift in Hcom2. *)
+           (*    destruct vcom; try discriminate. *)
+           (*    destruct t0 as [[[[] ?] ?] ?]; try discriminate. *)
+           (*    simpl in Hcom2. destruct i2; try discriminate. *)
+           (*    simpl in Hcom2. inversion Hcom2; subst. *)
+           (*    simpl in *. *)
+           (*    rewrite ssrnat.subn1 ssrnat.addn0. constructor. *)
+           (*    now rewrite in_fset1. *)
+
+    Lemma addr_shared_so_far_inv_2
+            (ret_val : value)
+            (mem' : Memory.tt)
+            (regs : Machine.Intermediate.Register.t)
+            (C C' : Component.id)
+            (s : stack_state)
+            (prefix0 : seq event_inform)
+            (eprev ecur : event_inform)
+            (ecur_noninf : event)
+            (ecur_proj : project_non_inform [:: ecur] = [:: ecur_noninf])
+            (wf_int_pref' : well_formed_intermediate_prefix
+                              ((prefix0 ++ [:: eprev]) ++ [:: ecur]))
+            (mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 mem9 : Memory.tt)
+            (cur_comp_C : C = cur_comp s)
+            (vcom : value)
+            (Hcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, 5%Z) = Some vcom)
+            (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1)
+            (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1')
+            (Hmem2 : Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef = Some mem2)
+            (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef = Some mem3)
+            (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef = Some mem4)
+            (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef = Some mem5)
+            (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef = Some mem6)
+            (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef = Some mem7)
+            (* (t : trace event_inform) *)
+            (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset) (Int 0) =
+                     Some mem8)
+            (Cb : Component.id)
+            (b : Block.id)
+            (addr' : addr_t)
+            (Hshared : addr_shared_so_far (Cb, b)
+                                          (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf))
+            (wf_regs : postcondition_event_registers (ERetInform (cur_comp s) ret_val mem' regs C') mem9)
+            (wf_mem8 : forall C : nat_ordType,
+                 component_buffer C ->
+                 C = next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
+                 postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C)
+            (wf_mem8' : forall C : nat_ordType,
+                component_buffer C ->
+                C <> next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
+                postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C \/
+                postcondition_uninitialized (prefix0 ++ [:: eprev]) ecur mem9 C) :
+      Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) (fset1 addr') (Cb, S b).
+    Admitted.
+
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Admitted.
@@ -4747,159 +4883,16 @@ Local Transparent loc_of_reg.
                   subst.
                   eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
                     last reflexivity.
-
                   (* clear -wf_int_pref' Hmem1 Hmem1' Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hcom Hshared wf_regs wf_mem8 wf_mem8'. *)
                   (* clear. *)
-assert (LEMMA2 :
-          forall
-            (ret_val : value)
-            (mem' : Memory.tt)
-            (regs : Machine.Intermediate.Register.t)
-            (C' : Component.id)
-            (s : stack_state)
-            (prefix0 : seq event_inform)
-            (e1 : event_inform)
-            (wf_int_pref' : well_formed_intermediate_prefix
-                              ((prefix0 ++ [:: e1]) ++ [:: ERetInform (cur_comp s) ret_val mem' regs C']))
-            (mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 mem9 : Memory.tt)
-            (* (C := cur_comp s : Component.id) *)
-            (vcom : value)
-            (Hcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, 5%Z) = Some vcom)
-            (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1)
-            (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1')
-            (Hmem2 : Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef = Some mem2)
-            (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef = Some mem3)
-            (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef = Some mem4)
-            (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef = Some mem5)
-            (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef = Some mem6)
-            (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef = Some mem7)
-            (s' : stack_state)
-            (stk0 : CS.stack)
-            (arg0 : value)
-            (P0 : Procedure.id)
-            (t : trace event_inform)
-            (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset) (Int 0) =
-                     Some
-                       (CS.s_memory
-                          [CState cur_comp s', stk0, mem8, Kstop, expr_of_trace (cur_comp s') P0
-                                                                                (comp_subtrace (cur_comp s') t), arg0]))
-            (Cb : Component.id)
-            (b : Block.id)
-            (addr' : addr_t)
-            (Hshared : addr_shared_so_far (Cb, b)
-                                          (rcons (project_non_inform (prefix0 ++ [:: e1])) (ERet (cur_comp s) ret_val mem' C')))
-            (wf_regs : postcondition_event_registers (ERetInform (cur_comp s) ret_val mem' regs C') mem9)
-            (wf_mem8 : forall C : nat_ordType,
-                 component_buffer C ->
-                 C = next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
-                 postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C)
-            (wf_mem8' : forall C : nat_ordType,
-                component_buffer C ->
-                C <> next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
-                postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C \/
-                postcondition_uninitialized (prefix0 ++ [:: e1]) (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C),
-             Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) (fset1 addr') (Cb, S b)). { admit. }
-
                   inversion Hshared.
                   -- find_rcons_rcons.
                      constructor. simpl in *.
                      (* Use [H1] and [wf_cs'] *)
-assert (LEMMA1 :
-          forall
-            (ret_val : value)
-            (mem' : Memory.tt)
-            (regs : Machine.Intermediate.Register.t)
-            (C' : Component.id)
-            (s : stack_state)
-            (prefix0 : seq event_inform)
-            (e1 : event_inform)
-            (wf_int_pref' : well_formed_intermediate_prefix
-                              ((prefix0 ++ [:: e1]) ++ [:: ERetInform (cur_comp s) ret_val mem' regs C']))
-            (mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 : Memory.tt)
-            (* (C := cur_comp s : Component.id) *)
-            (vcom : value)
-            (Hcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, 5%Z) = Some vcom)
-            (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1)
-            (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1')
-            (Hmem2 : Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef = Some mem2)
-            (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef = Some mem3)
-            (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef = Some mem4)
-            (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef = Some mem5)
-            (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef = Some mem6)
-            (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef = Some mem7)
-            (s' : stack_state)
-            (stk0 : CS.stack)
-            (arg0 : value)
-            (P0 : Procedure.id)
-            (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset) (Int 0) =
-                     Some
-                       (CS.s_memory
-                          [CState cur_comp s', stk0, mem8, Kstop, expr_of_trace (cur_comp s') P0
-                                                                                (comp_subtrace (cur_comp s') t), arg0]))
-            (Cb : Component.id)
-            (b : Block.id)
-            (H1 : Reachability.Reachable mem' (addr_of_value ret_val) (Cb, b))
-            (wf_regs : postcondition_event_registers (ERetInform (cur_comp s) ret_val mem' regs C') mem8)
-            (Hshared : addr_shared_so_far (Cb, b)
-                                                          (rcons (project_non_inform (prefix0 ++ [:: e1])) (ERet (cur_comp s) ret_val mem' C')))
-            (wf_mem8 : forall C : nat_ordType,
-                component_buffer C ->
-                C = next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
-                postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem8 C)
-            (wf_mem8' : forall C : nat_ordType,
-                component_buffer C ->
-                C <> next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
-                postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem8 C \/
-                postcondition_uninitialized (prefix0 ++ [:: e1]) (ERetInform (cur_comp s) ret_val mem' regs C') mem8 C),
-            Reachability.Reachable mem1 (addr_of_value vcom) (Cb, S b)).
-                {
-                  admit.
-           (* destruct wf_int_pref' as [wf_int_pref' wf_ev_comps']. *)
-           (* inversion wf_int_pref'. *)
-           (* ++ now destruct prefix0. *)
-           (* ++ destruct prefix0 as [|? []]; try discriminate. *)
-           (* ++ rewrite cats1 in H0. apply rcons_inj in H0. inversion H0; subst; clear H0. *)
-           (*    rewrite cats1 in H5. apply rcons_inj in H5. inversion H5; subst; clear H5. *)
-           (*    inversion H3; subst; clear H3. simpl in *. *)
-           (*    destruct ((Machine.Intermediate.Register.get *)
-           (*                 Machine.R_COM *)
-           (*                 (register_file_of_event_inform e1))) *)
-           (*      as [ | *)
-           (*          [[[[] ?] ?] ?] *)
-           (*         | ] eqn:content_R_COM; *)
-           (*      simpl in *; try by rewrite in_fset0 in H. *)
-           (*    rewrite in_fset1 in H. move: H => /eqP [] ? ?; subst. *)
-           (*    specialize (wf_regs Machine.R_COM _ Logic.eq_refl) *)
-           (*      as [v' [v'' [Hcom1 [Hcom2 Hcom3]]]]. *)
-           (*    simpl in *. *)
-           (*    (* assert (mem9 = mem8) by admit. subst mem9. *) (* Equality obtained and subst'd above *) *)
-           (*    assert (v' = vcom). *)
-           (*    { unfold EXTCALL_offset in Hmem1. *)
-           (*      eapply (Memory.load_after_store_eq _ (Permission.data, *)
-           (*                                           C', *)
-           (*                                           Block.local, *)
-           (*                                           5%Z)) in Hmem1'. *)
-           (*      repeat match goal with *)
-           (*             | Hload: Memory.load ?mem' ?ptr' = Some ?v', *)
-           (*               Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ => *)
-           (*               erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload *)
-           (*             end. *)
-           (*      rewrite Hcom1 in Hmem1'. now inversion Hmem1'. } *)
-           (*    subst v'. *)
-           (*    rewrite (Machine.Intermediate.Register.gicom) in Hcom3. *)
-           (*    rewrite Hcom3 in content_R_COM. subst v''. *)
-           (*    rewrite content_R_COM in Hcom2. *)
-           (*    rewrite /all_zeros_shift /uniform_shift in Hcom2. *)
-           (*    destruct vcom; try discriminate. *)
-           (*    destruct t0 as [[[[] ?] ?] ?]; try discriminate. *)
-           (*    simpl in Hcom2. destruct i2; try discriminate. *)
-           (*    simpl in Hcom2. inversion Hcom2; subst. *)
-           (*    simpl in *. *)
-           (*    rewrite ssrnat.subn1 ssrnat.addn0. constructor. *)
-           (*    now rewrite in_fset1. *)
-                }
                 (* clear -H1 wf_int_pref' wf_regs Hmem1 Hmem1' Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hcom Hshared wf_mem8 wf_mem8'. *)
-                eapply LEMMA1; eassumption.
+                     eapply addr_shared_so_far_inv_1;
+                       try eassumption;
+                       reflexivity.
                   -- apply rcons_inj in H.
                      inversion H; subst e t0; clear H.
                      destruct addr' as [Cb' b'].
@@ -4913,7 +4906,9 @@ assert (LEMMA1 :
                           as [Hrenames [addr' [Hshift' Hshared']]].
                         apply reachable_from_previously_shared with addr';
                           first assumption.
-                        eapply LEMMA2; eassumption.
+                        eapply addr_shared_so_far_inv_2;
+                          try eassumption;
+                          reflexivity.
             - admit.
             - easy.
             - rewrite /all_zeros_shift /uniform_shift
