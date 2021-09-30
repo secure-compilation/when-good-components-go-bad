@@ -4363,7 +4363,14 @@ Local Opaque Memory.store.
                                sigma_shifting_lefttoright_addr_bid,
                                rename_addr_option in *.
                                  by eapply Lem.
-                       ** admit. (* Easy *)
+                       ** simpl in HcompMem.
+                          destruct H8 as [src_compMem [Hsrc_compMem Hnextblock]].
+                          assert (next_block mem10 Cb = Some LOCALBUF_blockid).
+                          unfold next_block; rewrite Hsrc_compMem Hnextblock //=.
+                          replace Cb with
+                            (Pointer.component (Permission.data, Cb, S b, offset)) in H8 by reflexivity.
+                          apply load_next_block_None in H8. congruence.
+                          simpl. unfold LOCALBUF_blockid. lia.
               + exists (Cb, S b).
                 split.
                 * rewrite /all_zeros_shift /uniform_shift //=.
