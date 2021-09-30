@@ -6,6 +6,7 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.CompCertExtensions.
 Require Import Common.Traces.
+Require Import Common.RenamingOption.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
@@ -561,6 +562,16 @@ Section Semantics.
     Star sem s t s' ->
     domm (s_memory s') = domm (prog_interface p).
   Admitted.
+
+  (* NOTE: Consider a CSInvariants for the Source *)
+  Definition private_pointers_never_leak_S metadata_size :=
+    forall (s : state) (t : Events.trace Events.event),
+      Star sem (initial_machine_state p) t s ->
+      good_trace_extensional (left_addr_good_for_shifting metadata_size) t /\
+      (forall (mem : eqtype.Equality.sort Memory.Memory.t),
+          s_memory s = mem ->
+          shared_locations_have_only_shared_values mem metadata_size
+      ).
 End Semantics.
 
 End CS.

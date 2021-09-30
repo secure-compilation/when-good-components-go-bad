@@ -2947,6 +2947,10 @@ Local Opaque Memory.store.
                  prove but requires exposing some additional principles in
                  ComponentMemory. *)
 
+    Lemma definability_does_not_leak :
+      CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
+    Admitted.
+
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
@@ -5007,61 +5011,26 @@ assert (LEMMA1 :
               constructor.
             - constructor.
               intros [Cb b] Hshared.
-              simpl.
-              rewrite /right_block_id_good_for_shifting.
-              rewrite /uniform_shift //=.
+              specialize definability_does_not_leak as Hno_leaks.
+              assert (Hstar0_ret:
+                        star CS.kstep (prepare_global_env p)
+                             (CS.initial_machine_state p)
+                             (prefix' ++ [:: ERet C vcom mem1 C'])
+                             cs').
+              {
+                eapply star_trans; try eassumption; last reflexivity.
+                eapply star_trans; try eassumption; last reflexivity.
+                eapply star_trans; try eassumption; reflexivity.
+              }
+              specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra ?].
+              rewrite cats1 in Hcontra.
+              inversion Hcontra; subst t0.
+              apply H0 in Hshared. simpl in Hshared.
               destruct b as [| b']; last reflexivity.
-              destruct wf_cs'.
-              pose proof (wfmem H5) as wfmem_cs'.
-              specialize (wfmem_cs' _ _ Logic.eq_refl)
-                as [wf_regs [wf_nextcomp wf_notnextcomp]].
-              inversion Hshared.
-              + admit.
-              + apply rcons_inj in H7; inversion H7; subst t0 e; clear H7.
-                subst addr.
-                inversion Hshift.
-                inversion H7.
-                * subst prefix' t0 t'.
-                  rewrite <- H12 in H8. inversion H8.
-                  now destruct t0.
-                  now destruct t0.
-                * subst prefix. subst prefix'.
-                  rewrite CS.CS.project_non_inform_append in H12.
-                  destruct e1.
-                  -- simpl in H12.
-                     replace (project_non_inform prefix0 ** [:: ECall i i0 v s0 i1]) with
-                       (project_non_inform prefix0 ++ [:: ECall i i0 v s0 i1]) in H12 by reflexivity.
-                     rewrite cats1 in H12.
-                     apply rcons_inj in H12. inversion H12. subst e tprefix. clear H12.
-                     (*
-  H8 : addr_shared_so_far addr' (project_non_inform prefix_inform)
-  H10 : Reachability.Reachable (mem_of_event (ERet C vcom mem1 C'))
-          (fset1 addr') (Cb, 0) *)
-                     subst t0 t'. simpl in *.
-                     destruct e'; try now inversion H16.
-                     destruct H16 as [? [? ?]]; subst i2 i3 i4. simpl in H18.
-                     subst v0.
-
-                     assert (reach_mem0: Reachability.Reachable mem0 (fset1 addr') (Cb, 0))
-                       by admit.
-                     clear H14 H15 H19 H13 H17.
-                     inversion H20.
-                     specialize (H9 (Cb, 0)).
-                     rewrite //= /right_block_id_good_for_shifting in H9.
-                     rewrite /uniform_shift //= in H9.
-                     apply H9. clear H9.
-                     constructor. simpl in *.
-                     subst t2. rewrite -H21 in H7, H8.
-                     admit.
-                  -- admit.
-                  -- admit.
-                  -- admit.
-                  -- admit.
-                  -- admit.
-                  -- admit.
-                  -- admit.
+              rewrite /uniform_shift
+                      /left_block_id_good_for_shifting in Hshared.
+              assumption.
           }
-
 
         (* NOTE: ... And there is a series of new events to consider. *)
 
