@@ -21,3 +21,6 @@ test_out
 *.out
 *.pdf
 *.synctex.gz
+_opam/
+.vscode/
+.lia.cache
