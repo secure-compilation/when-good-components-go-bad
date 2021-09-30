@@ -10035,10 +10035,10 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                 unfold component_buffer.
                 change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
                 change intf with (Source.prog_interface p).
-                eapply CS.load_component_prog_interface; eauto.
+                eapply CS.load_component_prog_interface; try exact Star0; eauto.
                 - now eapply well_formed_events_well_formed_program; eauto.
                 - now apply closed_program_of_trace.
-                - admit. (* reflexivity. *) (* this broke at some point *)
+                - reflexivity.
               }
               unfold C in Hneq.
               rewrite <- Hcomp1 in Hneq.
@@ -10276,10 +10276,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                             unfold component_buffer.
                             change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
                             change intf with (Source.prog_interface p).
-                            eapply CS.load_component_prog_interface; eauto.
+                            eapply CS.load_component_prog_interface; try exact Star0; eauto.
                             - now eapply well_formed_events_well_formed_program; eauto.
                             - now apply closed_program_of_trace.
-                            - admit.
+                            - reflexivity.
                           }
                           unfold C in HC0neq.
                           rewrite <- Hcomp1 in HC0neq.
@@ -10693,10 +10693,10 @@ Local Opaque Memory.load.
                 unfold component_buffer.
                 change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
                 change intf with (Source.prog_interface p).
-                eapply CS.load_component_prog_interface; eauto.
+                eapply CS.load_component_prog_interface; try exact Star0; eauto.
                 - now eapply well_formed_events_well_formed_program; eauto.
                 - now apply closed_program_of_trace.
-                - admit.
+                - reflexivity.
               }
               apply nesym in Hneq.
               rewrite /C -Hcomp1 in Hneq.
