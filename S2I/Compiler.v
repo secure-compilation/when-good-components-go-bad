@@ -708,14 +708,6 @@ Proof.
     + right. exists t. split. reflexivity. assumption.
 Qed.
 
-Definition shared_locations_have_only_shared_values mem metadata_size :=
-  forall (ptr : Pointer.t)
-         (addr : Component.id * Block.id) (v : value),
-    Memory.Memory.load mem ptr = Some v ->
-    addr = (Pointer.component ptr, Pointer.block ptr) ->
-    left_addr_good_for_shifting metadata_size addr ->
-    left_value_good_for_shifting metadata_size v. 
-  
 Definition private_pointers_never_leak_I p metadata_size :=
   forall (s : I.CS.state) (t : Events.trace Events.event),
     CSInvariants.CSInvariants.is_prefix s p t ->
@@ -725,20 +717,10 @@ Definition private_pointers_never_leak_I p metadata_size :=
         shared_locations_have_only_shared_values mem metadata_size
     ).
 
-
-Definition private_pointers_never_leak_S p metadata_size :=
-  forall (s : S.CS.state) (t : Events.trace Events.event),
-    Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
-    good_trace_extensional (left_addr_good_for_shifting metadata_size) t /\
-    (forall (mem : eqtype.Equality.sort Memory.Memory.t),
-        S.CS.s_memory s = mem ->
-        shared_locations_have_only_shared_values mem metadata_size
-    ).
-
 Local Axiom compiler_preserves_non_leakage_of_private_pointers:
   forall p p_compiled metadata_size,
     Source.closed_program p ->
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
-    private_pointers_never_leak_S p          metadata_size ->
+    S.CS.private_pointers_never_leak_S p          metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size.

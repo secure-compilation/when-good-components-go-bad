@@ -139,7 +139,11 @@ Lemma definability_with_linking:
            s'
       /\
       traces_shift_each_other_option
-        metadata_size all_zeros_shift t' (project_non_inform t).
+        metadata_size all_zeros_shift t' (project_non_inform t) /\
+      metadata_size = uniform_shift 1 /\
+      Source.CS.CS.private_pointers_never_leak_S
+        (Source.program_link p' c')
+        (uniform_shift 1).
 Proof.
   move=> p c t s wf_p wf_c Hlinkable Hclosed Hstar.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -185,8 +189,18 @@ Proof.
     intros ? ? Hsome.
     by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
   }
+  assert (H_is_prefix: exists s : CS.state,
+             CSInvariants.CSInvariants.is_prefix
+               s
+               (Intermediate.program_link p c)
+               (project_non_inform t)).
+  {
+    unfold CSInvariants.CSInvariants.is_prefix.
+    exists s. by eapply I.CS.star_sem_inform_star_sem_non_inform.
+  }
   have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hstar.
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _ wf_t wf_i_t.
+  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
+                       H_is_prefix wf_p_c Hclosed wf_t wf_i_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf bufs t) => Hback.
@@ -194,11 +208,12 @@ Proof.
   { unfold procs, intf.
     by rewrite -Intermediate.wfprog_defined_procedures. }
   specialize (Hback procs domm_procs wf_events (*all_zeros_shift*)) as
-    [s' [t' [const_map [Hstar' Hshift]]]].
+      [s' [t' [const_map [Hstar' [Hshift Hconst_map]]]]].
+  subst const_map.
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
   (* Check project_finpref_behavior (FTerminates m'). *)
-  exists t'. exists s'. exists const_map.
+  exists t'. exists s'. exists (uniform_shift 1).
 
   (*   [t' [const_map [Hback Hshift]]]. *)
   (* assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t)) *)
@@ -242,7 +257,11 @@ Proof.
   rewrite Source.program_unlinkK //; split; first exact: closed_program_of_trace.
   (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
   split; auto.
+  split.
   by apply traces_shift_each_other_option_symmetric.
+  split.
+  reflexivity.
+  eapply Definability.definability_does_not_leak; eassumption.
 Qed.
 
 Print Assumptions definability_with_linking.
