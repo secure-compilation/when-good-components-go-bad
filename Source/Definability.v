@@ -589,6 +589,7 @@ Section Definability.
     match prog_buffers C with
     | Some buf =>
       match nth_error (unfold_buffer buf) i with
+      | Some Undef => error_expr (* Ensures no Undef appears literaly *)
       | Some v => E_val v
       | None => error_expr (* should not happen *)
       end
@@ -795,9 +796,18 @@ Section Definability.
               rewrite /Buffer.well_formed_buffer /buffer_nth eq_buf
                       /unfold_buffer.
               case: buf {eq_buf} => [p | buf] //=.
-              + admit.
-              + move=> /andP [] O_size_buf all_wf.
-                admit.
+              + move=> _.
+                elim: p n => [| p IH' n].
+                * by destruct n.
+                * case n => //=.
+              + move=> /andP [] _ all_wf.
+                elim: buf all_wf n.
+                * destruct n; auto.
+                * move=> v' buf IH' /andP [] [] wf_v' all_wf.
+                  destruct n => //=.
+                  -- simpl. destruct v'; try reflexivity.
+                     by simpl in wf_v'.
+                  -- by rewrite IH'.
           }
           elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
           by case: e=> /=; intros;
@@ -2219,6 +2229,7 @@ Local Opaque Memory.store.
                                                           match
                                                             nth_error buf_left_to_copy i0
                                                           with
+                                                          | Some Undef => error_expr
                                                           | Some v => E_val v
                                                           | None => error_expr
                                                           end
@@ -2437,7 +2448,13 @@ Local Opaque Memory.store.
                   [mem'''' [i' [star_mem'''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
               eexists; eexists.
               split.
-              + take_steps. eauto.
+              + take_steps.
+                eapply star_trans.
+                { destruct v eqn:Hv.
+                  - take_steps. eauto. eapply star_refl.
+                  - take_steps. eauto. eapply star_refl.
+                  - take_steps. eauto. eapply star_refl.
+                }
                 take_steps. rewrite Z.add_0_r. eauto.
                 take_step.
                 replace (iota 1 (size ls)) with (iota (ssrnat.addn 1 0) (size ls)) by reflexivity.
@@ -2456,6 +2473,7 @@ Local Opaque Memory.store.
                                                  (Z.of_nat size_already_done +
                                                  Z.pos (Pos.of_succ_nat x)))))
                                            match nth_error ls x with
+                                           | Some Undef => error_expr
                                            | Some v0 => E_val v0
                                            | None => error_expr
                                            end ::
@@ -2472,6 +2490,7 @@ Local Opaque Memory.store.
                                                               (size_already_done + 1) +
                                                  Z.of_nat x))))
                                             match nth_error ls x with
+                                            | Some Undef => error_expr
                                             | Some v => E_val v
                                             | None => error_expr
                                             end ::
@@ -2491,7 +2510,7 @@ Local Opaque Memory.store.
                     by rewrite Zpos_P_of_succ_nat -Nat2Z.inj_succ
                        -2!Nat2Z.inj_add -Nat.add_assoc.
                 }
-                rewrite Hrewr. eauto.
+                rewrite Hrewr. eauto. eauto.
               + split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
                 * intros. rewrite H1; eauto.
                   erewrite (Memory.load_after_store_neq) with
@@ -2593,7 +2612,7 @@ Local Opaque Memory.store.
             as [mem''' [i' [star_mem''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
           exists mem''', i'.
           split; [| split; [| split; [| split]]].
-          + eapply star_mem'''.
+          + simpl in star_mem'''. eapply star_mem'''.
           + { split; [| split].
               - eassumption.
               - by rewrite H5; [eassumption | congruence].
