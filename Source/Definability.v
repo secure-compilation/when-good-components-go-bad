@@ -8938,7 +8938,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                         ** admit.
+                         ** by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
             }
           + simpl.
             rewrite CS.CS.project_non_inform_append /=.
@@ -9901,7 +9901,7 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                         ** admit.
+                        ** by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
               }
           + simpl.
             rewrite CS.CS.project_non_inform_append /=.
@@ -10528,7 +10528,7 @@ Local Opaque Memory.load.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                      -- admit.
+                      -- by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
               }
           + simpl.
             rewrite CS.CS.project_non_inform_append /=.
@@ -11197,7 +11197,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- by eapply component_memory_after_store_neq; eauto.
-                      -- admit.
+                      -- by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
                   }
               }
           + simpl.
@@ -11788,7 +11788,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 rewrite -Hcomp1. exact Hnext.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                      -- admit.
+                      -- by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right cats1.
             }
           + simpl.
             rewrite -cats2 CS.CS.project_non_inform_append /=.
