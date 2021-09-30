@@ -185,8 +185,18 @@ Proof.
     intros ? ? Hsome.
     by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
   }
+  assert (H_is_prefix: exists s : CS.state,
+             CSInvariants.CSInvariants.is_prefix
+               s
+               (Intermediate.program_link p c)
+               (project_non_inform t)).
+  {
+    unfold CSInvariants.CSInvariants.is_prefix.
+    exists s. by eapply I.CS.star_sem_inform_star_sem_non_inform.
+  }
   have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hstar.
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _ wf_t wf_i_t.
+  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
+                       H_is_prefix wf_p_c Hclosed wf_t wf_i_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf bufs t) => Hback.
