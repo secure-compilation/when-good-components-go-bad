@@ -11165,7 +11165,6 @@ Local Transparent expr_of_const_val loc_of_reg.
 
 Print Assumptions definability_gen_rel_right.
 
-
     Lemma definability :
       forall procs, (* TODO: What to do with procs? *)
         @well_formed_trace T intf procs t ->
@@ -11178,14 +11177,15 @@ Print Assumptions definability_gen_rel_right.
             all_zeros_shift
             const_map
             (project_non_inform t)
-            t'.
+            t' /\
+          const_map = uniform_shift 1.
     Proof.
       move=> procs /andP [] wb_t _ wf_i_t.
       pose proof (@definability_gen_rel_right t [::] wb_t wf_i_t
                                               (Logic.eq_sym (app_nil_r _))).
       destruct H as [cs [s [pref_inform [t' [Hstar [Hproj [Htraces Hwf]]]]]]].
       exists cs. exists t'. exists (uniform_shift 1).
-      split. eauto. eauto.
+      split. eauto. split. eauto. eauto.
     Qed.
 
 End WithTrace.

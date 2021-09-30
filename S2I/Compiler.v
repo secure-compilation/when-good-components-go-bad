@@ -722,5 +722,5 @@ Local Axiom compiler_preserves_non_leakage_of_private_pointers:
     Source.closed_program p ->
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
-    private_pointers_never_leak_S p          metadata_size ->
+    S.CS.private_pointers_never_leak_S p          metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size.

@@ -126,7 +126,7 @@ Section RSC_Section.
       as [P' [Cs [t' [s' [metadata_size
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' Ht_rel_t']]]]]]]]]]]]].
+                                           [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' [Ht_rel_t' [Hconst_map good_P'_Cs]]]]]]]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
@@ -275,7 +275,7 @@ Section RSC_Section.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
 
     assert (t_rel_t': traces_shift_each_other_option
-                        all_zeros_shift metadata_size (project_non_inform t_inform) t').
+                        all_zeros_shift (uniform_shift 1) (project_non_inform t_inform) t').
     { by apply traces_shift_each_other_option_symmetric. }
 
     assert (H_p_Ct_good: forall (ss : CS.state) (tt : Events.trace Events.event),
@@ -310,28 +310,19 @@ Section RSC_Section.
     (** With such an axiom in hand, we can assert the following from its      *)
     (** corresponding source version.                                         *)
 
-    assert (good_P'_Cs: private_pointers_never_leak_S
-                          (Source.program_link P' Cs)
-                          metadata_size
-           ).
-    {
-      admit.
-      (** Should be a lemma from Source/Definability.v *)
-    }
-    
     assert (HP'_compiled_Cs_compiled_good: forall (ss'' : CS.state) tt'',
                CSInvariants.CSInvariants.is_prefix
                  ss''
                  (Intermediate.program_link P'_compiled Cs_compiled) tt'' ->
-               good_trace_extensional (left_addr_good_for_shifting metadata_size) tt''
+               good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) tt''
                /\
                (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
                        (addr : Component.id * Block.id) (v : value),
                    CS.state_mem ss'' = mem ->
                    Memory.Memory.load mem ptr = Some v ->
                    addr = (Pointer.component ptr, Pointer.block ptr) ->
-                   left_addr_good_for_shifting metadata_size addr ->
-                   left_value_good_for_shifting metadata_size v)).
+                   left_addr_good_for_shifting (uniform_shift 1) addr ->
+                   left_value_good_for_shifting (uniform_shift 1) v)).
     {
       assert (P'_Cs_closed: Source.closed_program (Source.program_link P' Cs)).
       {
@@ -393,9 +384,8 @@ Section RSC_Section.
       
       do 5 eexists; split; last split; last split; last split; last split;
         last exact trel_recomb; eauto.
-
-
-  Admitted.
+      destruct HpCs_star as [_ [HpCs_star _]]; eauto.
+Qed.
 
 End RSC_Section.
 
