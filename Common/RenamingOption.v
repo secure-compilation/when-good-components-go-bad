@@ -1860,3 +1860,11 @@ Section BehaviorsRelated.
   Qed.
 *)
 End BehaviorsRelated.
+
+Definition shared_locations_have_only_shared_values mem metadata_size :=
+  forall (ptr : Pointer.t)
+         (addr : Component.id * Block.id) (v : value),
+    Memory.Memory.load mem ptr = Some v ->
+    addr = (Pointer.component ptr, Pointer.block ptr) ->
+    left_addr_good_for_shifting metadata_size addr ->
+    left_value_good_for_shifting metadata_size v.
