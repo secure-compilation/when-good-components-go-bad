@@ -589,6 +589,7 @@ Section Definability.
     match prog_buffers C with
     | Some buf =>
       match nth_error (unfold_buffer buf) i with
+      | Some Undef => error_expr (* Ensures no Undef appears literaly *)
       | Some v => E_val v
       | None => error_expr (* should not happen *)
       end
@@ -795,9 +796,18 @@ Section Definability.
               rewrite /Buffer.well_formed_buffer /buffer_nth eq_buf
                       /unfold_buffer.
               case: buf {eq_buf} => [p | buf] //=.
-              + admit.
-              + move=> /andP [] O_size_buf all_wf.
-                admit.
+              + move=> _.
+                elim: p n => [| p IH' n].
+                * by destruct n.
+                * case n => //=.
+              + move=> /andP [] _ all_wf.
+                elim: buf all_wf n.
+                * destruct n; auto.
+                * move=> v' buf IH' /andP [] [] wf_v' all_wf.
+                  destruct n => //=.
+                  -- simpl. destruct v'; try reflexivity.
+                     by simpl in wf_v'.
+                  -- by rewrite IH'.
           }
           elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
           by case: e=> /=; intros;
@@ -2219,6 +2229,7 @@ Local Opaque Memory.store.
                                                           match
                                                             nth_error buf_left_to_copy i0
                                                           with
+                                                          | Some Undef => error_expr
                                                           | Some v => E_val v
                                                           | None => error_expr
                                                           end
@@ -2437,7 +2448,13 @@ Local Opaque Memory.store.
                   [mem'''' [i' [star_mem'''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
               eexists; eexists.
               split.
-              + take_steps. eauto.
+              + take_steps.
+                eapply star_trans.
+                { destruct v eqn:Hv.
+                  - take_steps. eauto. eapply star_refl.
+                  - take_steps. eauto. eapply star_refl.
+                  - take_steps. eauto. eapply star_refl.
+                }
                 take_steps. rewrite Z.add_0_r. eauto.
                 take_step.
                 replace (iota 1 (size ls)) with (iota (ssrnat.addn 1 0) (size ls)) by reflexivity.
@@ -2456,6 +2473,7 @@ Local Opaque Memory.store.
                                                  (Z.of_nat size_already_done +
                                                  Z.pos (Pos.of_succ_nat x)))))
                                            match nth_error ls x with
+                                           | Some Undef => error_expr
                                            | Some v0 => E_val v0
                                            | None => error_expr
                                            end ::
@@ -2472,6 +2490,7 @@ Local Opaque Memory.store.
                                                               (size_already_done + 1) +
                                                  Z.of_nat x))))
                                             match nth_error ls x with
+                                            | Some Undef => error_expr
                                             | Some v => E_val v
                                             | None => error_expr
                                             end ::
@@ -2491,7 +2510,7 @@ Local Opaque Memory.store.
                     by rewrite Zpos_P_of_succ_nat -Nat2Z.inj_succ
                        -2!Nat2Z.inj_add -Nat.add_assoc.
                 }
-                rewrite Hrewr. eauto.
+                rewrite Hrewr. eauto. eauto.
               + split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
                 * intros. rewrite H1; eauto.
                   erewrite (Memory.load_after_store_neq) with
@@ -2593,7 +2612,7 @@ Local Opaque Memory.store.
             as [mem''' [i' [star_mem''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
           exists mem''', i'.
           split; [| split; [| split; [| split]]].
-          + eapply star_mem'''.
+          + simpl in star_mem'''. eapply star_mem'''.
           + { split; [| split].
               - eassumption.
               - by rewrite H5; [eassumption | congruence].
@@ -6204,7 +6223,8 @@ Local Transparent expr_of_const_val loc_of_reg.
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
                     -- intros b Hshared.
-                       admit.
+                       rewrite -!cats1 in Hshared. simpl in Hshared.
+                       inversion Hshared; now find_nil_rcons.
             }
               }
               {
@@ -6869,7 +6889,18 @@ Local Opaque Memory.store.
                       assert (C0 == cur_comp s = false) as rewr. by apply /eqP.
                       by rewrite rewr.
                     }
+                    rewrite Hprefix01 cats1.
                     eapply wfmem_postcondition_initial_preserved; eauto.
+                    assert (p_gens_t' := p_gens_t).
+                    rewrite Et Hprefix01 cats1 in p_gens_t'.
+                    setoid_rewrite app_assoc in p_gens_t'.
+                    setoid_rewrite cats1 in p_gens_t'.
+                    destruct p_gens_t' as [s' Hstar_prefix].
+                    unfold CSInvariants.CSInvariants.is_prefix in *.
+                    rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                    apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
+                      last by apply CS.CS.singleton_traces_non_inform.
+                    exists s''. exact Hstar_prefix.
               }
             * simpl.
               rewrite CS.CS.project_non_inform_append /=.
@@ -7177,7 +7208,18 @@ Local Opaque Memory.store.
                       assert (C0 == cur_comp s = false) as rewr. by apply /eqP.
                       by rewrite rewr.
                     }
+                    rewrite Hprefix01 cats1.
                     eapply wfmem_postcondition_initial_preserved; eauto.
+                    assert (p_gens_t' := p_gens_t).
+                    rewrite Et Hprefix01 cats1 in p_gens_t'.
+                    setoid_rewrite app_assoc in p_gens_t'.
+                    setoid_rewrite cats1 in p_gens_t'.
+                    destruct p_gens_t' as [s' Hstar_prefix].
+                    unfold CSInvariants.CSInvariants.is_prefix in *.
+                    rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                    apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
+                      last by apply CS.CS.singleton_traces_non_inform.
+                    exists s''. exact Hstar_prefix.
               }
             * simpl.
               rewrite CS.CS.project_non_inform_append /=.
@@ -7479,7 +7521,18 @@ Local Opaque Memory.store.
                       assert (C0 == cur_comp s = false) as rewr. by apply /eqP.
                         by rewrite rewr.
                     }
+                    rewrite Hprefix01 cats1.
                     eapply wfmem_postcondition_initial_preserved; eauto.
+                    assert (p_gens_t' := p_gens_t).
+                    rewrite Et Hprefix01 cats1 in p_gens_t'.
+                    setoid_rewrite app_assoc in p_gens_t'.
+                    setoid_rewrite cats1 in p_gens_t'.
+                    destruct p_gens_t' as [s' Hstar_prefix].
+                    unfold CSInvariants.CSInvariants.is_prefix in *.
+                    rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                    apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
+                      last by apply CS.CS.singleton_traces_non_inform.
+                    exists s''. exact Hstar_prefix.
               }
             * simpl.
               rewrite CS.CS.project_non_inform_append /=.
@@ -7795,7 +7848,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                     as [Hinitflag [Hlocalbuf [Hnextblock Hsnapshot]]].
                   (* [Hinitflag [Hlocalbuf [Cmem [HCmem Hnextblock]]]]]. *)
                   right.
-                  split; [| split].
+                  split; [| split; [| split]].
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
                   * split.
@@ -7803,6 +7856,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last by (rewrite /component_buffer domm_buffers in Hcomp;
                                   move: HCbuf => /dommPn => Hcontra;
                                   rewrite Hcomp in Hcontra).
+                                  Print well_formed_memory_snapshot_uninitialized.
                        eexists. exists buf.
                        split; [| split; [| split]];
                          try reflexivity.
@@ -7834,6 +7888,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
+                  * intros b Hcontra. simpl in Hcontra.
+                    inversion Hcontra. now destruct t1.
+                    now destruct t1.  
             }
               }
               {
@@ -8216,8 +8273,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                            last exact Hmem;
                            last (injection; discriminate).
                          exact Hlocalbuf.
-                      -- destruct Hinitial as [Hprealloc Hnextblock].
-                         split.
+                      -- destruct Hinitial as [[Hprealloc Hnextblock] Hnot_shared].
+                         split; [split |].
                          ** destruct Hprealloc
                              as [Cmem [buf [HCmem [Hbuf [Hnextblock' Hprealloc]]]]].
                             exists Cmem, buf.
@@ -8232,6 +8289,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
+                         ** admit.
             }
           + simpl.
             rewrite CS.CS.project_non_inform_append /=.
@@ -8584,7 +8642,7 @@ Local Transparent binop_of_Ebinop. unfold binop_of_Ebinop. Local Opaque binop_of
                     as [Hinitflag [Hlocalbuf [Hnextblock Hsnapshot]]].
                   (* [Hinitflag [Hlocalbuf [Cmem [HCmem Hnextblock]]]]]. *)
                   right.
-                  split; [| split].
+                  split; [| split; [| split]].
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
                     (* erewrite Memory.load_after_store_neq; (* TODO: Add to tactic *) *)
@@ -8629,6 +8687,9 @@ Local Transparent binop_of_Ebinop. unfold binop_of_Ebinop. Local Opaque binop_of
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
                           rewrite /= HCmem in Hinitflag. discriminate.
+                  * intros b Hshared.
+                    rewrite -!cats1 //= in Hshared.
+                    inversion Hshared; now find_nil_rcons.
             }
               }
               {
@@ -9147,8 +9208,8 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                            last exact Hmem;
                            last (injection; discriminate).
                          exact Hlocalbuf.
-                      -- destruct Hinitial as [Hprealloc Hnextblock].
-                         split.
+                      -- destruct Hinitial as [[Hprealloc Hnextblock] Hnot_shared].
+                         split; [split |].
                          ** destruct Hprealloc
                              as [Cmem [buf [HCmem [Hbuf [Hnextblock' Hprealloc]]]]].
                             exists Cmem, buf.
@@ -9163,6 +9224,7 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
+                         ** admit.
               }
           + simpl.
             rewrite CS.CS.project_non_inform_append /=.
@@ -9299,7 +9361,7 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                 eapply CS.load_component_prog_interface; eauto.
                 - now eapply well_formed_events_well_formed_program; eauto.
                 - now apply closed_program_of_trace.
-                - reflexivity.
+                - admit. (* reflexivity. *) (* this broke at some point *)
               }
               unfold C in Hneq.
               rewrite <- Hcomp1 in Hneq.
@@ -9317,7 +9379,7 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                 eexists. simplify_memory'. exact Hload'.
               * (* Contradiction on uninitialized C0. *)
                 destruct Hinitial0
-                  as [Hinitflag0 [Hlocalbuf0 Hsnapshot0]].
+                  as [Hinitflag0 [Hlocalbuf0 [Hsnapshot0 Hnot_shared]]].
                 destruct Hsnapshot0
                   as [[Cmem0 [buf0 [HCmem0 [Hbuf0 [Hnext0 Hprealloc0]]]]]
                         [Cmem0' [HCmem0' Hblock0']]].
@@ -9525,7 +9587,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             eapply CS.load_component_prog_interface; eauto.
                             - now eapply well_formed_events_well_formed_program; eauto.
                             - now apply closed_program_of_trace.
-                            - reflexivity.
+                            - admit.
                           }
                           unfold C in HC0neq.
                           rewrite <- Hcomp1 in HC0neq.
@@ -9577,7 +9639,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                           * (* Contradiction on uninitialized C0, from which
                                nothing could have been shared. *)
                             destruct Hinitial
-                              as [Hinitflag0 [Hlocalbuf0 Hsnapshot0]].
+                              as [Hinitflag0 [Hlocalbuf0 [Hsnapshot0 Hnot_shared0]]].
                             destruct Hsnapshot0
                               as [[Cmem0 [buf0 [HCmem0 [Hbuf0 [Hnext0 Hprealloc0]]]]]
                                   [Cmem0' [HCmem0' Hblock0']]].
@@ -9742,8 +9804,8 @@ Local Opaque Memory.load.
                               last exact Hmem.
                             exact Hnextblock.
                     * right.
-                      destruct Hinitial as [Hinitflag [Hlocalbuf Hinitial]].
-                      split; [| split].
+                      destruct Hinitial as [Hinitflag [Hlocalbuf [Hinitial Hnot_shared]]].
+                      split; [| split; [| split]].
                       -- erewrite Memory.load_after_store_neq;
                            last exact Hstore';
                            last (injection; now destruct reg1).
@@ -9774,6 +9836,7 @@ Local Opaque Memory.load.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
+                      -- admit.
               }
           + simpl.
             rewrite CS.CS.project_non_inform_append /=.
@@ -9941,7 +10004,7 @@ Local Opaque Memory.load.
                 eapply CS.load_component_prog_interface; eauto.
                 - now eapply well_formed_events_well_formed_program; eauto.
                 - now apply closed_program_of_trace.
-                - reflexivity.
+                - admit.
               }
               apply nesym in Hneq.
               rewrite /C -Hcomp1 in Hneq.
@@ -9962,7 +10025,7 @@ Local Opaque Memory.load.
                    buffer is available, yet we can obtain a successful load
                    outside said buffer. *)
                 destruct Hinitial0
-                  as [Hinitialflag [Hlocalbuf [Hprealloc Hnextblock]]].
+                  as [Hinitialflag [Hlocalbuf [[Hprealloc Hnextblock] Hnot_shared]]].
                 destruct Hprealloc as [Cmem [buf [HCmem [Hbuf [Hnext Hprealloc]]]]].
                 destruct Hnextblock as [mem0C0 [Hmem0C0 Hnext0]].
                 assert (wf_p : Source.well_formed_program p)
@@ -10403,8 +10466,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                                last exact Hmem.
                              exact Hnextblock.
                     * right.
-                      destruct Hinitial as [Hinitflag [Hlocalbuf Hinitial]].
-                      split; [| split].
+                      destruct Hinitial as [Hinitflag [Hlocalbuf [Hinitial Hnot_shared]]].
+                      split; [| split; [| split]].
                       -- erewrite Memory.load_after_store_neq;
                            last exact Hstore';
                            last (injection; discriminate).
@@ -10434,6 +10497,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- by eapply component_memory_after_store_neq; eauto.
+                      -- admit.
                   }
               }
           + simpl.
@@ -10971,8 +11035,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                            apply Hnextblock.
                            exact Hnext'.
                     * right.
-                      destruct Hinitial as [Hinitflag [Hlocalbuf Hinitial]].
-                      split; [| split].
+                      destruct Hinitial as [Hinitflag [Hlocalbuf [Hinitial Hnot_shared]]].
+                      split; [| split; [| split]].
                       -- erewrite Memory.load_after_store_neq;
                            last exact Hstore';
                            last (injection; now destruct reg0).
@@ -11010,6 +11074,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 rewrite -Hcomp1. exact Hnext.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
+                      -- admit.
             }
           + simpl.
             rewrite -cats2 CS.CS.project_non_inform_append /=.
