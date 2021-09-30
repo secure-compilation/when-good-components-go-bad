@@ -133,6 +133,9 @@ Inductive wf_load (pc_comp: Component.id) (t: trace event)
         ~ addr_shared_so_far (Pointer.component ptr, Pointer.block ptr) t ->
         ~ addr_shared_so_far (Pointer.component load_at, Pointer.block load_at) t ->
         Pointer.component ptr = Pointer.component load_at ->
+        (***************
+          ADD Pointer.component ptr = pc_comp?
+         **************)
         (* Memory.load mem load_at = Some (Ptr ptr) -> *)
         wf_load pc_comp t load_at ptr
   | shared_stuff_from_anywhere:
@@ -1226,6 +1229,85 @@ Lemma not_executing_can_not_share s p t e C b:
   C <> cur_comp_of_event e ->
   (forall b', ~ addr_shared_so_far (C, b') t) ->
   ~ addr_shared_so_far (C, b) (rcons t e).
+Proof.
+  intros Hwf Hclosed Hprefix HC Hnot.
+  intros Hshared.
+  CS.unfold_states. unfold is_prefix in *.
+  rewrite -cats1 in Hprefix.  
+  apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
+    last by apply CS.singleton_traces_non_inform.
+  apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
+    last by apply CS.singleton_traces_non_inform.
+  assert (Hprefbefore_e: is_prefix s1' p t).
+  {
+    eapply star_trans; eauto. by rewrite E0_right.
+  }
+  (*assert (Hstar_e: is_prefix s2' p (t ++ [:: e])).
+  {
+    eapply star_right; last reflexivity; last exact Hstep.
+    eapply star_trans; eauto. by rewrite E0_right.
+  }*)
+  specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hprefbefore_e)
+    as [Hwf_mem Hwf_reg].
+  CS.unfold_state s1'. simpl in *.
+  inversion Hstep as [? ? ? ? Hstep']; subst.
+  inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate.
+  match goal with
+    | H: [:: ?x] = [:: ?y] |- _ => inversion H
+    end.
+  subst. clear Hstep'. destruct pc0 as [[[ppc0 cpc0] bpc0] opc0].
+  simpl in *.
+  - inversion Hshared as [ ? ? ? Hreach|]; find_rcons_rcons; simpl in *.
+    destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
+      inversion Hreach as [? Heq|]; subst; simpl in *;
+        try (by eapply Reachable_fset0; eauto);
+        try (rewrite in_fset1 in Heq;
+             move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
+    + specialize (Hwf_reg _ _ eR_COM Logic.eq_refl).
+      inversion Hwf_reg as [| ? ? ? ? Hshr]; subst;
+        first (contradiction);
+        first (by apply Hnot in Hshr).
+    + assert (exists offv off,
+                 Memory.load mem0 (Permission.data, cid, bid, off) =
+                 Some (Ptr (Permission.data, C, b, offv)) 
+             ) as [offv [off Hload]].
+      {
+        unfold Memory.load. simpl. rewrite H1.
+        rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
+      }
+      specialize (Hwf_mem _ _ Hload Logic.eq_refl);
+        inversion Hwf_mem; simpl in *; subst; last contradiction.
+      * specialize (Hwf_reg _ _ eR_COM Logic.eq_refl).
+        inversion Hwf_reg as [| ? ? ? ? Hshr]; subst.
+        (**************************
+        first (contradiction);
+        first (by apply Hnot in Hshr).
+      Search _ cpc0.
+        try by rewrite in_fset0 in Hcontra.
+    Search _ Reachable fset0.
+         *******************************)
 Admitted.
 
+(********************************
+  Search _ CS.sem_non_inform Component.id.
+  assert (Pointer.component pc = next_comp_of_event e).
+  {
+    clear -Hprefix.
+    rewrite -cats1 in Hprefix.
+    apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
+      last by apply CS.singleton_traces_non_inform.
+    apply star_cons_inv in Hstar2 as [s1' [s2' [_ [Hstep Hstar_after]]]];
+      last by apply CS.singleton_traces_non_inform.
+    inversion Hstep as [? ? ? ? Hstep']; subst.
+    inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate.
+    match goal with
+    | H: [:: ?x] = [:: ?y] |- _ => inversion H
+    end.
+    subst.
+    Search _ pc0.
+  }
+  inversion Hshared; find_rcons_rcons.
+  - 
+  - 
+  *************************************)
 End CSInvariants.
