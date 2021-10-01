@@ -282,35 +282,6 @@ initialization_correct_component_memory
      C <> C' -> next_block mem C' = next_block mem' C') ->
     forall C' : Component.id, C <> C' -> mem C' = mem' C'
 
-initialization_correct
-  : forall (C : nat_ordType) (stk : CS.stack) (mem : Memory.t) 
-      (k : cont) (arg : value) (prefix : trace event_inform)
-      (e : event_inform),
-    component_buffer C ->
-    postcondition_steady_state e mem C \/
-    postcondition_uninitialized prefix e mem C ->
-    exists (mem' : Memory.t) (i : Z),
-      star CS.kstep (prepare_global_env p)
-        [CState C, stk, mem, k, init_check C, arg] E0
-        [CState C, stk, mem', k, E_val (Int i), arg] /\
-      postcondition_steady_state e mem' C /\
-      (forall offset : Z,
-       offset <> INITFLAG_offset ->
-       offset <> LOCALBUF_offset ->
-       Memory.load mem (Permission.data, C, Block.local, offset) =
-       Memory.load mem' (Permission.data, C, Block.local, offset)) /\
-      (forall (C' : nat_ordType) (b : Block.id) (offset : Block.offset),
-       C <> C' ->
-       Memory.load mem (Permission.data, C', b, offset) =
-       Memory.load mem' (Permission.data, C', b, offset)) /\
-      (forall C' : nat_ordType,
-       C <> C' -> next_block mem C' = next_block mem' C') /\
-      (forall (C' : nat_ordType) (b : Block.id) (offset : Block.offset),
-       C = C' ->
-       b <> Block.local ->
-       postcondition_steady_state e mem C ->
-       Memory.load mem (Permission.data, C', b, offset) =
-       Memory.load mem' (Permission.data, C', b, offset))
 definability_does_not_leak
   : CS.private_pointers_never_leak_S p (uniform_shift 1)
 
