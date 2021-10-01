@@ -56,35 +56,43 @@ The proof currently relies on the following assumptions:
 
 TODO: Remove statements after explaining the assumptions, regroup as needed.
 
-#### Back-translation ####
+#### Logic axioms ####
 
-Axioms:
-well_formed_events_well_formed_program
-  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
-    all (well_formed_event intf procs) t ->
-    Source.well_formed_program (program_of_trace t)
+```coq
+FunctionalExtensionality.functional_extensionality_dep
+  : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
+    (forall x : A, f x = g x) -> f = g
+Classical_Prop.classic : forall P : Prop, P \/ ~ P
+ClassicalEpsilon.constructive_indefinite_description
+  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
+```
+
+#### Utility libraries ####
+
+```coq
+in_unzip2
+  : forall (X : eqType) (x : X) (xs : NMap X),
+    x \in unzip2 xs -> exists n : nat_ordType, xs n = Some x
+```
+
+#### Memory model ####
+
+```coq
 pointer_of_alloc
   : forall (mem : Memory.t) (cid : Component.id) (sz : nat) 
       (mem' : Memory.t) (ptr' : Pointer.t) (nb : Block.id),
     Memory.alloc mem cid sz = Some (mem', ptr') ->
     next_block mem cid = Some nb -> ptr' = (Permission.data, cid, nb, 0%Z)
-CSInvariants.CSInvariants.not_executing_can_not_share
-  : forall (s : CS.CS.state) (p : Machine.Intermediate.program)
-      (t : seq event) (e : event) (C : Component.id) 
-      (b : Block.id),
-    Machine.Intermediate.well_formed_program p ->
-    Machine.Intermediate.closed_program p ->
-    CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
-    C <> cur_comp_of_event e ->
-    (forall b' : Block.id, ~ addr_shared_so_far (C, b') t) ->
-    ~ addr_shared_so_far (C, b) (rcons t e)
-next_block_prepare_buffers
-  : forall C : nat_ordType,
-    component_buffer C ->
-    next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid
-next_block_initial_memory
-  : forall C : nat_ordType,
-    component_buffer C -> next_block initial_memory C = Some 1
+
+Memory.alloc_after_load
+  : forall (mem : Memory.t) (P : Permission.id) (C : Component.id)
+      (b : Block.id) (o : Block.offset) (v : value) 
+      (size : nat),
+    Memory.load mem (P, C, b, o) = Some v ->
+    exists (mem' : Memory.t) (b' : Block.id),
+      b' <> b /\
+      Memory.alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z))
+
 next_block_alloc_neq
   : forall (m : Memory.t) (C : Component.id) (n : nat) 
       (m' : Memory.t) (b : Pointer.t) (C' : Component.id),
@@ -96,17 +104,42 @@ next_block_alloc
     Memory.alloc m C n = Some (m', b) ->
     next_block m C = Some (Pointer.block b) /\
     next_block m' C = Some (ssrnat.addn (Pointer.block b) 1)
-load_prepare_buffers
-  : forall (C : nat_ordType) (o : nat),
-    component_buffer C ->
-    Memory.load (Source.prepare_buffers p)
-      (Permission.data, C, Block.local, Z.of_nat o) = 
-    nth_error meta_buffer o
+
 load_next_block_None
   : forall (mem : Memory.t) (ptr : Pointer.t) (b : Block.id),
     next_block mem (Pointer.component ptr) = Some b ->
     Pointer.block ptr >= b -> Memory.load mem ptr = None
 ComponentMemory.load_next_block
+
+component_memory_after_store_neq
+  : forall (mem : Memory.t) (ptr : Pointer.t) (v : value) 
+      (mem' : Memory.t) (C : Component.id),
+    Memory.store mem ptr v = Some mem' ->
+    Pointer.component ptr <> C -> mem C = mem' C
+component_memory_after_alloc_neq
+  : forall (mem : Memory.t) (C : Component.id) (sz : nat) 
+      (mem' : Memory.t) (ptr : Pointer.t) (C' : Component.id),
+    Memory.alloc mem C sz = Some (mem', ptr) -> C' <> C -> mem C' = mem' C'
+```
+
+#### Source language ####
+
+```coq
+Source.well_formed_program_unlink
+  : forall (Cs : {fset Component.id}) (p : Source.program),
+    Source.well_formed_program p ->
+    Source.well_formed_program (Source.program_unlink Cs p)
+
+next_block_prepare_buffers
+  : forall C : nat_ordType,
+    component_buffer C ->
+    next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid
+
+CS.eval_kstep_sound
+  : forall (G : global_env) (st : CS.state) (t : trace event)
+      (st' : CS.state),
+    CS.eval_kstep G st = Some (t, st') -> CS.kstep G st t st'
+
 CS.load_data_next_block
   : forall p : Source.program,
     Source.well_formed_program p ->
@@ -139,6 +172,20 @@ CS.load_component_prog_interface
     Star (CS.sem p) s t s' ->
     Memory.load (CS.s_memory s') ptr = Some (Ptr ptr') ->
     Pointer.component ptr' \in domm (Source.prog_interface p)
+
+CS.comes_from_initial_state_mem_domm
+  : forall p : Source.program,
+    Source.well_formed_program p ->
+    Source.closed_program p ->
+    forall (s : CS.state) (t : trace event) (s' : state (CS.sem p)),
+    CS.initial_state p s ->
+    Star (CS.sem p) s t s' ->
+    domm (CS.s_memory s') = domm (Source.prog_interface p)
+```
+
+#### Target language ####
+
+```coq
 CSInvariants.CSInvariants.load_Some_component_buffer
   : forall (p : Machine.Intermediate.program) (s : CS.CS.state)
       (t : seq event) (e : event) (ptr : Pointer.t) 
@@ -148,6 +195,83 @@ CSInvariants.CSInvariants.load_Some_component_buffer
     CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
     Memory.load (mem_of_event e) ptr = Some v ->
     Pointer.component ptr \in domm (Machine.Intermediate.prog_interface p)
+
+CSInvariants.CSInvariants.not_executing_can_not_share
+  : forall (s : CS.CS.state) (p : Machine.Intermediate.program)
+      (t : seq event) (e : event) (C : Component.id) 
+      (b : Block.id),
+    Machine.Intermediate.well_formed_program p ->
+    Machine.Intermediate.closed_program p ->
+    CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
+    C <> cur_comp_of_event e ->
+    (forall b' : Block.id, ~ addr_shared_so_far (C, b') t) ->
+    ~ addr_shared_so_far (C, b) (rcons t e)
+```
+
+(From recombination)
+
+```coq
+CS.genv_procedures_prog_procedures
+  : forall (p : program) (cid : nat_ordType) (proc : option (NMap code)),
+    well_formed_program p ->
+    genv_procedures (globalenv (CS.sem_inform p)) cid = proc <->
+    prog_procedures p cid = proc
+genv_entrypoints_interface_some
+  : forall (p p' : program) (C : Component.id) (P : Procedure.id)
+      (b : Block.id),
+    well_formed_program p ->
+    well_formed_program p' ->
+    prog_interface p = prog_interface p' ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = Some b ->
+    exists b' : Block.id,
+      EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'
+```
+
+(From definability. The first one concludes wf_int_pref, which is stated in definability, but plausibly belongs logically in here)
+
+```coq
+star_well_formed_intermediate_prefix
+  : forall (p : Intermediate.program) (t : trace event_inform)
+      (s : state (I.CS.sem_inform p)),
+    Intermediate.well_formed_program p ->
+    Star (I.CS.sem_inform p) (I.CS.initial_machine_state p) t s ->
+    well_formed_intermediate_prefix (Intermediate.prog_interface p)
+      (Intermediate.prog_buffers p) t
+CS.intermediate_well_formed_events
+  : forall p : Intermediate.program,
+    Intermediate.well_formed_program p ->
+    Intermediate.closed_program p ->
+    forall (st : state (CS.sem_inform p)) (t : trace event_inform)
+      (st' : state (CS.sem_inform p)),
+    Star (CS.sem_inform p) st t st' ->
+    all
+      (well_formed_event (Intermediate.prog_interface p)
+         (Intermediate.prog_procedures p)) t
+```
+
+#### Back-translation ####
+
+Axioms:
+
+```coq
+well_formed_events_well_formed_program
+  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
+    all (well_formed_event intf procs) t ->
+    Source.well_formed_program (program_of_trace t)
+next_block_initial_memory
+  : forall C : nat_ordType,
+    component_buffer C -> next_block initial_memory C = Some 1
+load_prepare_buffers
+  : forall (C : nat_ordType) (o : nat),
+    component_buffer C ->
+    Memory.load (Source.prepare_buffers p)
+      (Permission.data, C, Block.local, Z.of_nat o) = 
+    nth_error meta_buffer o
+```
+
+(This could be considered a memory model lemma, because the only reason it is admitted is due to the module type not exposing its reflection principle)
+
+```coq
 initialization_correct_component_memory
   : forall (C : Component.id) (mem mem' : Memory.t),
     (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
@@ -157,6 +281,7 @@ initialization_correct_component_memory
     (forall C' : Component.id,
      C <> C' -> next_block mem C' = next_block mem' C') ->
     forall C' : Component.id, C <> C' -> mem C' = mem' C'
+
 initialization_correct
   : forall (C : nat_ordType) (stk : CS.stack) (mem : Memory.t) 
       (k : cont) (arg : value) (prefix : trace event_inform)
@@ -186,180 +311,26 @@ initialization_correct
        postcondition_steady_state e mem C ->
        Memory.load mem (Permission.data, C', b, offset) =
        Memory.load mem' (Permission.data, C', b, offset))
-CS.eval_kstep_sound
-  : forall (G : global_env) (st : CS.state) (t : trace event)
-      (st' : CS.state),
-    CS.eval_kstep G st = Some (t, st') -> CS.kstep G st t st'
 definability_does_not_leak
   : CS.private_pointers_never_leak_S p (uniform_shift 1)
-component_memory_after_store_neq
-  : forall (mem : Memory.t) (ptr : Pointer.t) (v : value) 
-      (mem' : Memory.t) (C : Component.id),
-    Memory.store mem ptr v = Some mem' ->
-    Pointer.component ptr <> C -> mem C = mem' C
-component_memory_after_alloc_neq
-  : forall (mem : Memory.t) (C : Component.id) (sz : nat) 
-      (mem' : Memory.t) (ptr : Pointer.t) (C' : Component.id),
-    Memory.alloc mem C sz = Some (mem', ptr) -> C' <> C -> mem C' = mem' C'
-CS.comes_from_initial_state_mem_domm
-  : forall p : Source.program,
-    Source.well_formed_program p ->
-    Source.closed_program p ->
-    forall (s : CS.state) (t : trace event) (s' : state (CS.sem p)),
-    CS.initial_state p s ->
-    Star (CS.sem p) s t s' ->
-    domm (CS.s_memory s') = domm (Source.prog_interface p)
-Memory.alloc_after_load
-  : forall (mem : Memory.t) (P : Permission.id) (C : Component.id)
-      (b : Block.id) (o : Block.offset) (v : value) 
-      (size : nat),
-    Memory.load mem (P, C, b, o) = Some v ->
-    exists (mem' : Memory.t) (b' : Block.id),
-      b' <> b /\
-      Memory.alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z))
+
 addr_shared_so_far_inv_2
   : forall (ret_val : value) (mem' : Memory.tt)
       (regs : Machine.Intermediate.Register.t) (C C' : Component.id)
       (s : stack_state) (prefix0 : seq event_inform)
       (eprev ecur : event_inform) (ecur_noninf : event),
-    project_non_inform [:: ecur] = [:: ecur_noninf] ->
-    well_formed_intermediate_prefix ((prefix0 ++ [:: eprev]) ++ [:: ecur]) ->
-    forall
-      mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 mem9 : Memory.tt,
-    C = cur_comp s ->
-    forall vcom : value,
-    Memory.load mem0 (Permission.data, cur_comp s, Block.local, 5%Z) =
-    Some vcom ->
-    Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset)
-      (Int 1) = Some mem1 ->
-    Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom =
-    Some mem1' ->
-    Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef =
-    Some mem2 ->
-    Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef =
-    Some mem3 ->
-    Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef =
-    Some mem4 ->
-    Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef =
-    Some mem5 ->
-    Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef =
-    Some mem6 ->
-    Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef =
-    Some mem7 ->
-    Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset)
-      (Int 0) = Some mem8 ->
-    forall (Cb : Component.id) (b : Block.id) (addr' : addr_t),
-    addr_shared_so_far (Cb, b)
-      (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf) ->
-    postcondition_event_registers
-      (ERetInform (cur_comp s) ret_val mem' regs C') mem9 ->
-    (forall C0 : nat_ordType,
-     component_buffer C0 ->
-     C0 = next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
-     postcondition_steady_state
-       (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C0) ->
-    (forall C0 : nat_ordType,
-     component_buffer C0 ->
-     C0 <> next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') ->
-     postcondition_steady_state
-       (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C0 \/
-     postcondition_uninitialized (prefix0 ++ [:: eprev]) ecur mem9 C0) ->
+    ... ->
     Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) 
       (fset1 addr') (Cb, S b)
 addr_shared_so_far_inv_1
   : forall (ret_val : value) (mem' : Memory.tt),
-    Machine.Intermediate.Register.t ->
-    forall C C' : Component.id,
-    C <> C' ->
-    forall (prefix0 : seq event_inform) (eprev ecur : event_inform)
-      (ecur_noninf : event),
-    project_non_inform [:: ecur] = [:: ecur_noninf] ->
-    well_formed_intermediate_prefix ((prefix0 ++ [:: eprev]) ++ [:: ecur]) ->
-    forall
-      (mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 : Memory.tt)
-      (vcom : value),
-    Memory.load mem0 (Permission.data, C, Block.local, 5%Z) = Some vcom ->
-    Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset)
-      (Int 1) = Some mem1 ->
-    Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom =
-    Some mem1' ->
-    Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef =
-    Some mem2 ->
-    Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef =
-    Some mem3 ->
-    Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef =
-    Some mem4 ->
-    Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef =
-    Some mem5 ->
-    Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef =
-    Some mem6 ->
-    Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef =
-    Some mem7 ->
-    Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset)
-      (Int 0) = Some mem8 ->
-    forall (Cb : Component.id) (b : Block.id),
-    Reachability.Reachable mem' (addr_of_value ret_val) (Cb, b) ->
-    postcondition_event_registers ecur mem8 ->
-    addr_shared_so_far (Cb, b)
-      (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf) ->
-    (forall C0 : nat_ordType,
-     component_buffer C0 ->
-     C0 = next_comp_of_event ecur -> postcondition_steady_state ecur mem8 C0) ->
-    (forall C0 : nat_ordType,
-     component_buffer C0 ->
-     C0 <> next_comp_of_event ecur ->
-     postcondition_steady_state ecur mem8 C0 \/
-     postcondition_uninitialized (prefix0 ++ [:: eprev]) ecur mem8 C0) ->
-    C = cur_comp_of_event ecur_noninf ->
-    C' = next_comp_of_event ecur ->
-    mem' = mem_of_event_inform ecur ->
-    ret_val = arg_of_event ecur_noninf ->
+    ...
     Reachability.Reachable mem1 (addr_of_value vcom) (Cb, S b)
 addr_shared_so_far_ERet_Hsharedsrc
   : forall (ret_val : value) (mem' : Memory.t)
       (regs : Machine.Intermediate.Register.t) (C' : Component.id)
       (prefix suffix : seq event_inform) (s : stack_state),
-    well_formed_intermediate_prefix
-      (prefix ++ [:: ERetInform (cur_comp s) ret_val mem' regs C']) ->
-    forall (prefix' : trace event) (mem0 : Memory.tt) (mem mem1 : Memory.t),
-    Memory.store mem
-      (Permission.data, cur_comp s, Block.local, EXTCALL_offset) 
-      (Int 1) = Some mem1 ->
-    forall vcom : value,
-    Memory.load mem0
-      (Permission.data, cur_comp s, Block.local, reg_offset E_R_COM) =
-    Some vcom ->
-    forall mem1' : Memory.t,
-    Memory.store mem1 (Permission.data, C', Block.local, reg_offset E_R_COM)
-      vcom = Some mem1' ->
-    forall mem2 : Memory.t,
-    Memory.store mem1' (Permission.data, C', Block.local, reg_offset E_R_ONE)
-      Undef = Some mem2 ->
-    forall mem3 : Memory.t,
-    Memory.store mem2 (Permission.data, C', Block.local, reg_offset E_R_AUX1)
-      Undef = Some mem3 ->
-    forall mem4 : Memory.t,
-    Memory.store mem3 (Permission.data, C', Block.local, reg_offset E_R_AUX2)
-      Undef = Some mem4 ->
-    forall mem5 : Memory.t,
-    Memory.store mem4 (Permission.data, C', Block.local, reg_offset E_R_RA)
-      Undef = Some mem5 ->
-    forall mem6 : Memory.t,
-    Memory.store mem5 (Permission.data, C', Block.local, reg_offset E_R_SP)
-      Undef = Some mem6 ->
-    forall mem7 : Memory.t,
-    Memory.store mem6 (Permission.data, C', Block.local, reg_offset E_R_ARG)
-      Undef = Some mem7 ->
-    forall mem8 : Memory.t,
-    Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset)
-      (Int 0) = Some mem8 ->
-    forall (s' : stack_state) (cs' : CS.state),
-    well_formed_state_r s'
-      (prefix ++ [:: ERetInform (cur_comp s) ret_val mem' regs C']) suffix
-      cs' ->
-    forall (Cb : Component.id) (b : Block.id),
-    addr_shared_so_far (Cb, b)
-      (rcons prefix' (ERet (cur_comp s) vcom mem1 C')) ->
+    ... ->
     exists addr : addr_t,
       sigma_shifting_wrap_bid_in_addr
         (sigma_shifting_lefttoright_addr_bid all_zeros_shift
@@ -374,65 +345,7 @@ addr_shared_so_far_ECall_Hshared_src
   : forall (P' : Procedure.id) (new_arg : value) (mem' : Memory.t)
       (regs : Machine.Intermediate.Register.t) (C' : Component.id)
       (prefix suffix : seq event_inform) (s : stack_state),
-    well_formed_intermediate_prefix
-      (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) ->
-    forall (prefix' : trace event) (stk : CS.stack) 
-      (mem0 : Memory.tt) (arg : value) (P : Procedure.id) 
-      (mem : Memory.t) (vcom : value),
-    Memory.load mem0
-      (Permission.data, cur_comp s, Block.local, reg_offset E_R_COM) =
-    Some vcom ->
-    forall mem1 : Memory.t,
-    Memory.store mem
-      (Permission.data, cur_comp s, Block.local, EXTCALL_offset) 
-      (Int 1) = Some mem1 ->
-    forall mem2 : Memory.t,
-    (forall offset : Z,
-     offset <> INITFLAG_offset ->
-     offset <> LOCALBUF_offset ->
-     Memory.load mem1 (Permission.data, C', Block.local, offset) =
-     Memory.load mem2 (Permission.data, C', Block.local, offset)) ->
-    forall mem3 : Memory.t,
-    Memory.store mem2 (Permission.data, C', Block.local, reg_offset E_R_ONE)
-      Undef = Some mem3 ->
-    forall mem4 : Memory.t,
-    Memory.store mem3 (Permission.data, C', Block.local, reg_offset E_R_AUX1)
-      Undef = Some mem4 ->
-    forall mem5 : Memory.t,
-    Memory.store mem4 (Permission.data, C', Block.local, reg_offset E_R_AUX2)
-      Undef = Some mem5 ->
-    forall mem6 : Memory.t,
-    Memory.store mem5 (Permission.data, C', Block.local, reg_offset E_R_RA)
-      Undef = Some mem6 ->
-    forall mem7 : Memory.t,
-    Memory.store mem6 (Permission.data, C', Block.local, reg_offset E_R_SP)
-      Undef = Some mem7 ->
-    forall mem8 : Memory.t,
-    Memory.store mem7 (Permission.data, C', Block.local, reg_offset E_R_ARG)
-      Undef = Some mem8 ->
-    forall mem9 : Memory.t,
-    Memory.store mem8 (Permission.data, C', Block.local, reg_offset E_R_COM)
-      vcom = Some mem9 ->
-    forall mem10 : Memory.t,
-    Memory.store mem9 (Permission.data, C', Block.local, 1%Z) (Int 0) =
-    Some mem10 ->
-    well_formed_state_r
-      {| cur_comp := C'; callers := cur_comp s :: callers s |}
-      (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C'])
-      suffix
-      [CState C', {|
-                  CS.f_component := cur_comp s;
-                  CS.f_arg := arg;
-                  CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                 (Kseq
-                                    (invalidate_metadata;;
-                                     E_assign EXTCALL (E_val (Int 0));;
-                                     E_call (cur_comp s) P (E_val (Int 0)))
-                                    Kstop) |} :: stk, mem10, Kstop, 
-      expr_of_trace C' P' (comp_subtrace C' t), vcom] ->
-    forall (Cb : Component.id) (b : Block.id),
-    addr_shared_so_far (Cb, b)
-      (rcons prefix' (ECall (cur_comp s) P' vcom mem1 C')) ->
+    ... ->
     exists addr : addr_t,
       sigma_shifting_wrap_bid_in_addr
         (sigma_shifting_lefttoright_addr_bid all_zeros_shift
@@ -450,82 +363,13 @@ addr_shared_so_far_ECall_Hshared_interm
       (regs : Machine.Intermediate.Register.t) (suffix : trace event_inform)
       (arg : value) (stk : seq CS.frame) (mem1 : Memory.tt)
       (mem10 : Memory.t) (vcom : value),
-    well_formed_state_r {| cur_comp := C'; callers := C :: callers s |}
-      (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C'])
-      suffix
-      [CState C', {|
-                  CS.f_component := C;
-                  CS.f_arg := arg;
-                  CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                 (Kseq
-                                    (invalidate_metadata;;
-                                     E_assign EXTCALL (E_val (Int 0));;
-                                     E_call C P (E_val (Int 0))) Kstop) |}
-                  :: stk, mem10, Kstop, expr_of_trace C' P'
-                                          (comp_subtrace C' t), vcom] ->
-    forall (Cb : Component.id) (b : Block.id),
-    addr_shared_so_far (Cb, b)
-      (rcons (project_non_inform prefix)
-         (ECall (cur_comp s) P' new_arg mem' C')) ->
+    ...
     addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C'))
-
-COQC Source/DefinabilityEnd.v
-Axioms:
-Source.well_formed_program_unlink
-  : forall (Cs : {fset Component.id}) (p : Source.program),
-    Source.well_formed_program p ->
-    Source.well_formed_program (Source.program_unlink Cs p)
-star_well_formed_intermediate_prefix
-  : forall (p : Intermediate.program) (t : trace event_inform)
-      (s : state (I.CS.sem_inform p)),
-    Intermediate.well_formed_program p ->
-    Star (I.CS.sem_inform p) (I.CS.initial_machine_state p) t s ->
-    well_formed_intermediate_prefix (Intermediate.prog_interface p)
-      (Intermediate.prog_buffers p) t
-CS.intermediate_well_formed_events
-  : forall p : Intermediate.program,
-    Intermediate.well_formed_program p ->
-    Intermediate.closed_program p ->
-    forall (st : state (CS.sem_inform p)) (t : trace event_inform)
-      (st' : state (CS.sem_inform p)),
-    Star (CS.sem_inform p) st t st' ->
-    all
-      (well_formed_event (Intermediate.prog_interface p)
-         (Intermediate.prog_procedures p)) t
-
-#### Recombination ####
-
-Print Assumptions threeway_multisem_star_program.
-Axioms:
-in_unzip2
-  : forall (X : eqType) (x : X) (xs : NMap X),
-    x \in unzip2 xs -> exists n : nat_ordType, xs n = Some x
-CS.genv_procedures_prog_procedures
-  : forall (p : program) (cid : nat_ordType) (proc : option (NMap code)),
-    well_formed_program p ->
-    genv_procedures (globalenv (CS.sem_inform p)) cid = proc <->
-    prog_procedures p cid = proc
-genv_entrypoints_interface_some
-  : forall (p p' : program) (C : Component.id) (P : Procedure.id)
-      (b : Block.id),
-    well_formed_program p ->
-    well_formed_program p' ->
-    prog_interface p = prog_interface p' ->
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = Some b ->
-    exists b' : Block.id,
-      EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'
-FunctionalExtensionality.functional_extensionality_dep
-  : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
-    (forall x : A, f x = g x) -> f = g
-Classical_Prop.classic : forall P : Prop, P \/ ~ P
-
-Print Assumptions recombination_prefix_rel.
-Axioms:
-ClassicalEpsilon.constructive_indefinite_description
-  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
+```
 
 #### Top level ####
 
+```coq
 well_formed_compilable
   : forall p : Source.program,
     Source.well_formed_program p ->
@@ -590,6 +434,7 @@ backward_simulation_star
     exists (s' : state (S.CS.sem p)) (i : Compiler.index),
       Star (S.CS.sem p) (S.CS.initial_machine_state p) t s' /\
       Compiler.match_states i s' s
+```
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
