@@ -56,7 +56,9 @@ The proof currently relies on the following assumptions:
 
 TODO: Remove statements after explaining the assumptions, regroup as needed.
 
-#### Logic axioms ####
+#### Logical axioms ####
+
+The following standard axioms are used occasionally in our proofs.
 
 ```coq
 FunctionalExtensionality.functional_extensionality_dep
@@ -69,6 +71,9 @@ ClassicalEpsilon.constructive_indefinite_description
 
 #### Utility libraries ####
 
+Our proofs use a simple property which is not currently available in the map
+library that we use.
+
 ```coq
 in_unzip2
   : forall (X : eqType) (x : X) (xs : NMap X),
@@ -76,6 +81,16 @@ in_unzip2
 ```
 
 #### Memory model ####
+
+We have made small extensions to the CompCert memory model. Perhaps the most
+significant is that we expose the strategy used by the allocator to assign new
+block identifiers, as well as expose a bit more information about the shape of
+allocated pointers. This is done in order to reason about memory layouts and
+relate the contents of the memories in a trace and those of its
+back-translation. In addition, for simplicity, some results that apply only to
+individual component memories are lifted to operate on whole memories.
+Completing these proofs simply requires extending module signatures and
+deriving the desired (easy) facts in the enriched setting.
 
 ```coq
 pointer_of_alloc
@@ -98,6 +113,7 @@ next_block_alloc_neq
       (m' : Memory.t) (b : Pointer.t) (C' : Component.id),
     Memory.alloc m C n = Some (m', b) ->
     C' <> C -> next_block m' C' = next_block m C'
+
 next_block_alloc
   : forall (m : Memory.t) (C : Component.id) (n : nat) 
       (m' : Memory.t) (b : Pointer.t),
@@ -109,6 +125,7 @@ load_next_block_None
   : forall (mem : Memory.t) (ptr : Pointer.t) (b : Block.id),
     next_block mem (Pointer.component ptr) = Some b ->
     Pointer.block ptr >= b -> Memory.load mem ptr = None
+
 ComponentMemory.load_next_block
 
 component_memory_after_store_neq
@@ -116,11 +133,25 @@ component_memory_after_store_neq
       (mem' : Memory.t) (C : Component.id),
     Memory.store mem ptr v = Some mem' ->
     Pointer.component ptr <> C -> mem C = mem' C
+
 component_memory_after_alloc_neq
   : forall (mem : Memory.t) (C : Component.id) (sz : nat) 
       (mem' : Memory.t) (ptr : Pointer.t) (C' : Component.id),
     Memory.alloc mem C sz = Some (mem', ptr) -> C' <> C -> mem C' = mem' C'
+
+initialization_correct_component_memory
+  : forall (C : Component.id) (mem mem' : Memory.t),
+    (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
+     C <> C' ->
+     Memory.load mem (Permission.data, C', b, offset) =
+     Memory.load mem' (Permission.data, C', b, offset)) ->
+    (forall C' : Component.id,
+     C <> C' -> next_block mem C' = next_block mem' C') ->
+    forall C' : Component.id, C <> C' -> mem C' = mem' C'
 ```
+
+Despite its name, this last result is, like the others, trivial provided that
+we expose a reasoning principle for equality of component memories.
 
 #### Source language ####
 
@@ -281,16 +312,6 @@ load_prepare_buffers
 (This could be considered a memory model lemma, because the only reason it is admitted is due to the module type not exposing its reflection principle)
 
 ```coq
-initialization_correct_component_memory
-  : forall (C : Component.id) (mem mem' : Memory.t),
-    (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
-     C <> C' ->
-     Memory.load mem (Permission.data, C', b, offset) =
-     Memory.load mem' (Permission.data, C', b, offset)) ->
-    (forall C' : Component.id,
-     C <> C' -> next_block mem C' = next_block mem' C') ->
-    forall C' : Component.id, C <> C' -> mem C' = mem' C'
-
 definability_does_not_leak
   : CS.private_pointers_never_leak_S p (uniform_shift 1)
 
