@@ -849,7 +849,8 @@ Section Definability.
             elim: t Ht => //= e t IH /andP [] wf /IH all_wf.
             case: ifP=> eq //=. apply /andP. split; eauto.
             destruct e; eauto. simpl in *.
-            destruct v as [| [[[[]]]] |]; auto.
+            destruct v as [| [[[[] Cb] b] o] |]; auto.
+            simpl. simpl in wf.
             admit. }
           assert (Ht'': all (fun e => cur_comp_of_event e == C) (comp_subtrace C t)).
           { clear -Ht.
@@ -2224,7 +2225,14 @@ Local Opaque Memory.store.
                         Memory.load mem''' (Permission.data, C', b, offset)) /\
                     (forall C',
                         C <> C' ->
-                        next_block mem C' = next_block mem''' C')).
+                        next_block mem C' = next_block mem''' C')
+                    (* (forall C' b offset, *)
+                    (*     C = C' -> *)
+                    (*     b <> Block.local -> *)
+                    (*     postcondition_steady_state e mem C -> *)
+                    (*     Memory.load mem (Permission.data, C', b, offset) = *)
+                    (*     Memory.load mem''' (Permission.data, C', b, offset)) *)
+               ).
         { rewrite /init_local_buffer_expr.
           rewrite /copy_local_datum_expr /buffer_nth.
           clear buf_size_gt0.
@@ -3001,8 +3009,10 @@ Local Opaque Memory.store.
           Unshelve.
           unfold Block.local; congruence.
           unfold Block.local; congruence.
-        + admit.
-    Admitted.
+        + move=> C' b off C_C' b_not_llocal [] load_initflag'.
+          congruence.
+    Qed.
+
 
     Corollary initialization_correct_component_memory C mem mem':
       (forall C' b offset,
