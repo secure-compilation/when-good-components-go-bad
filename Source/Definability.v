@@ -1972,7 +1972,6 @@ Local Opaque Memory.store.
               rewrite -!cats1 CS.CS.project_non_inform_append Hecur0 E0_right cats1 in Hcontra.
               now apply (Hshared b).
            ++
-
              rewrite -!cats1 CS.CS.project_non_inform_append Hecur1 !cats1 in Hcontra.
              unfold Eapp in Hcontra. setoid_rewrite cats1 in Hcontra.
              rewrite -!cats1 CS.CS.project_non_inform_append Hecur1 !cats1 in is_prefix.
@@ -3925,14 +3924,30 @@ Local Opaque Memory.store.
           + { (** well-formed state *)
               econstructor; try reflexivity; try eassumption.
             { destruct s. rewrite -Hmain. exact wb. }
-            { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C'; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. rewrite -Hmain. split; [| split].
-              (* [easy | easy |]. *)
-              admit.
-              admit.
-              simpl. admit. (* Induction on [callers s] *)
-            }
+            { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+              eexists []; eexists; simpl; split; eauto.
+              split; [| split]; trivial.
+              -- simplify_memory'. rewrite -Hmem2'; last congruence.
+                 simplify_memory. rewrite Hmain in Hload0init; eapply Hload0init.
+              -- eexists arg, P, top, bot.
+                 split; first rewrite Hmain; trivial.
+                 split; first rewrite Hmain in P_exp; trivial.
+                 split; first rewrite Hmain in Htop; trivial.
+                 clear Star0 Star1 Star12.
+                 elim: (callers s) bot Hbot; trivial.
+                 move=> a l IH bot [] H1 H2.
+                 fold well_formed_callers in *.
+                 split.
+                 ++ simplify_memory.
+                    destruct (a == C') eqn:eq;
+                      move: eq => /eqP eq; subst.
+                    simplify_memory.
+                    ** now destruct Postcond1.
+                    ** rewrite -Hmem2'; last congruence.
+                       now simplify_memory.
+                 ++ destruct H2 as [? [? [? [? [? [? [? H2]]]]]]].
+                    eexists; eexists; eexists; eexists.
+                    repeat split; eauto. }
             (* Reestablish memory well-formedness.
                TODO: Refactor, automate. *)
             { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
@@ -4447,6 +4462,57 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                                  :: stk, mem10,
                   Kstop, expr_of_trace C' P' (comp_subtrace C' t), vcom].
 
+          assert (Hstar: star CS.kstep (prepare_global_env p)
+    [CState C, stk, mem, Kstop, E_assign EXTCALL (E_val (Int 1));;
+                                E_assign (loc_of_reg E_R_COM)
+                                  (E_call C' P'
+                                     (E_deref (loc_of_reg E_R_COM)));;
+                                invalidate_metadata;;
+                                E_assign EXTCALL (E_val (Int 0));;
+                                E_call C P (E_val (Int 0)), arg]
+    [:: ECall C P' vcom mem1 C']
+    [CState C', {|
+                CS.f_component := C;
+                CS.f_arg := arg;
+                CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
+                               (Kseq
+                                  (invalidate_metadata;;
+                                   E_assign EXTCALL (E_val (Int 0));;
+                                   E_call C P (E_val (Int 0))) Kstop) |}
+                :: stk, mem10, Kstop, expr_of_trace C' P'
+                                        (comp_subtrace C' t), vcom]).
+          {
+          Local Transparent loc_of_reg.
+            take_steps; eauto.
+            take_steps; simplify_memory.
+            (* do 17 (take_step; eauto). simplify_memory. *)
+
+            eapply star_step. simpl.
+            apply CS.eval_kstep_sound. simpl.
+            rewrite (negbTE C_ne_C').
+            rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+            rewrite <- imported_procedure_iff in Himport.
+            now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+            take_step.
+            eapply star_trans.
+            eapply Star12.
+            (* destruct POSTCOND as [POSTCOND1 [POSTCOND2 POSTCOND3]]. *)
+            take_steps; eauto. simplify_memory_init Hmem2.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps. eauto. eauto.
+            take_steps.
+            eapply star_refl.
+            reflexivity.
+            reflexivity.
+            Local Opaque loc_of_reg.
+
+          }
           assert (wf_cs': well_formed_state_r
                             {| cur_comp := C'; callers := C :: callers s |}
                             (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) suffix
@@ -4469,7 +4535,7 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                  split; trivial.
                  split; trivial.
                  split; trivial.
-                 clear Star0 Star1 Star12.
+                 clear Star0 Star1 Star12 Hstar.
                  elim: (callers s) bot Hbot; trivial.
                  move=> a l IH bot [] H1 H2.
                  fold well_formed_callers in *.
@@ -4742,68 +4808,25 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                                            last (simpl; congruence)).
                                    exact HCmem0.
                                *** exact Hblock0.
-                           +++ intros b Hb.
-                               rewrite -cats1 CS.CS.project_non_inform_append cats1 in Hb.
-                               setoid_rewrite cats1 in Hb.
-                               inversion Hb.
-                               *** admit.
-                               *** apply rcons_inj in H; inversion H; subst t e; clear H.
-                                   subst addr.
-                                   apply (Hnot_shared0 b).
-                               admit.
+                           +++
+                             intros b Hb.
+                             destruct p_gens_t as [s0 Star_s0].
+                             (* unfold CSInvariants.CSInvariants.is_prefix in Star_s0. *)
+                             rewrite CS.CS.project_non_inform_append !cats1 in Star_s0.
+                             setoid_rewrite CS.CS.project_non_inform_append in Star_s0.
+                             setoid_rewrite app_assoc in Star_s0.
+                             apply star_app_inv in Star_s0 as [s0' [star_s0' star_s0]].
+                             simpl in star_s0'. setoid_rewrite cats1 in star_s0'.
+                             eapply CSInvariants.CSInvariants.not_shared_diff_comp_not_shared_call
+                               with (Cb := C0). exact wf_p_interm. exact closed_p_interm.
+                             exact star_s0'.
+                             rewrite -C_next_e1 in HC0_C. unfold C in HC0_C. eauto.
+                             eauto.
+                             rewrite -cats1 CS.CS.project_non_inform_append cats1 in Hb.
+                             setoid_rewrite cats1 in Hb. eauto.
+                             apply CS.CS.singleton_traces_non_inform.
             * right. left. by apply: (closed_intf Himport). }
 
-          assert (Hstar: star CS.kstep (prepare_global_env p)
-    [CState C, stk, mem, Kstop, E_assign EXTCALL (E_val (Int 1));;
-                                E_assign (loc_of_reg E_R_COM)
-                                  (E_call C' P'
-                                     (E_deref (loc_of_reg E_R_COM)));;
-                                invalidate_metadata;;
-                                E_assign EXTCALL (E_val (Int 0));;
-                                E_call C P (E_val (Int 0)), arg]
-    [:: ECall C P' vcom mem1 C']
-    [CState C', {|
-                CS.f_component := C;
-                CS.f_arg := arg;
-                CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                               (Kseq
-                                  (invalidate_metadata;;
-                                   E_assign EXTCALL (E_val (Int 0));;
-                                   E_call C P (E_val (Int 0))) Kstop) |}
-                :: stk, mem10, Kstop, expr_of_trace C' P'
-                                        (comp_subtrace C' t), vcom]).
-          {
-          Local Transparent loc_of_reg.
-            take_steps; eauto.
-            take_steps; simplify_memory.
-            (* do 17 (take_step; eauto). simplify_memory. *)
-
-            eapply star_step. simpl.
-            apply CS.eval_kstep_sound. simpl.
-            rewrite (negbTE C_ne_C').
-            rewrite -> imported_procedure_iff in Himport. rewrite Himport.
-            rewrite <- imported_procedure_iff in Himport.
-            now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
-            take_step.
-            eapply star_trans.
-            eapply Star12.
-            (* destruct POSTCOND as [POSTCOND1 [POSTCOND2 POSTCOND3]]. *)
-            take_steps; eauto. simplify_memory_init Hmem2.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps. eauto. eauto.
-            take_steps.
-            eapply star_refl.
-            reflexivity.
-            reflexivity.
-            Local Opaque loc_of_reg.
-
-          }
           split; last split.
           + eauto.
           + exact wf_cs'.
@@ -4910,7 +4933,13 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                          (** This essentially follows IF we knew that the
                           intermediate trace came from an intermediate execution.
                           Then, we can possibly use a lemma in CSInvariants? *)
-                         admit.
+
+                         unfold component_buffer.
+                         replace intf with (Machine.Intermediate.prog_interface p_interm).
+                         eapply CSInvariants.CSInvariants.load_Some_component_buffer with
+                           (ptr := (Permission.data, Cb, b, offset)).
+                         eauto. eauto.
+                         admit. admit. admit.
                        }
                        specialize (wf_mem10' _ HCb Cb_C) as
                            [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].

@@ -1288,6 +1288,36 @@ Proof.
          *******************************)
 Admitted.
 
+
+Lemma not_shared_diff_comp_not_shared_call:
+  forall p s C Cb C' P b t arg mem,
+    well_formed_program p ->
+    closed_program p ->
+    CSInvariants.CSInvariants.is_prefix s p (rcons t (ECall C P arg mem C')) ->
+    C <> Cb ->
+    (forall b', ~ addr_shared_so_far (Cb, b') t) ->
+    ~ addr_shared_so_far (Cb, b) (rcons t (ECall C P arg mem C')).
+Proof.
+  intros.
+  eapply not_executing_can_not_share; eauto.
+Qed.
+
+Lemma load_Some_component_buffer:
+  forall p s t e ptr v,
+    well_formed_program p ->
+    closed_program p ->
+    CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
+    Memory.load (mem_of_event e) ptr = Some v ->
+    Pointer.component ptr \in domm (prog_interface p).
+  Proof.
+    admit.
+    Admitted.
+
+
+
+
+
+
 (********************************
   Search _ CS.sem_non_inform Component.id.
   assert (Pointer.component pc = next_comp_of_event e).
