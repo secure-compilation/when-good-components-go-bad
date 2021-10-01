@@ -4251,7 +4251,7 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                           injection H1 as ?; subst e0.
                           inversion H2; now destruct t0.
             }
-            { admit. }
+            { right. left. now apply closed_intf in Himport. }
             }
           + inversion Hshift. subst t0 t'.
             inversion H1.
