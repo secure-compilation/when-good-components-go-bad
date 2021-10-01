@@ -447,23 +447,23 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
 
 ### Index of definitions ###
 
-Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
-Data-flow events `e`: inductive `event_inform` in `Common/Definitions.v`
-Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
-Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
-Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
-Memory relation holding only at private locations of the non-executing part `mem_rel_not_exec`: definition `mem_of_part_not_executing_rel_original_and_recombined_at_internal` in `Intermediate/RecombinationRelCommon.v`
-Linking `C ∪ P`: functions `program_link` in `Source/Language.v` and `Intermediate/Language.v`
-Trace relation `~`: definition `traces_shift_each_other_option` in `Common/RenamingOption.v`
-Compilation function `↓`: function `compile_program` in `S2I/Compiler.v`
-Step relation `⇝`: definitions `kstep` in `Source/CS.v`; `step_non_inform` for non-data-flow semantics and `step` for data-flow semantics in `Intermediate/CS.v`
-Reflexive transitive closure `^*`: inductive `star` in `CompCert/Smallstep.v`
-Non-data-flow events `e`: definition `event` in `CompCert/Events.v`
-Source expressions `exp`: definition `expr` in `Source/Language.v`
-Interm instructions `instr`: definition `instr` in `Intermediate/Machine.v`
-Values `v`: definition `value` in `Common/Values.v`
-Removal of all internal data-flow events `remove_df`: function `project_non_inform` in `Common/TracesInform.v`
-Back-translation `mimicking_state` invariant: definition `well_formed_state` in `Source/Definability.v`
-Trace concatenation `++`: function `Eapp` in `CompCert/Events.v`
-Border-state relation `state_rel_border`: definition `mergeable_border_states` in `Intermediate/REcombinationRelCommon.v`
-"Is executing in" relation: `is_program_component` and `is_context_component` in `Intermediate/CS.v`
+- Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
+- Data-flow events `e`: inductive `event_inform` in `Common/Definitions.v`
+- Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
+- Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
+- Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
+- Memory relation holding only at private locations of the non-executing part `mem_rel_not_exec`: definition `mem_of_part_not_executing_rel_original_and_recombined_at_internal` in `Intermediate/RecombinationRelCommon.v`
+- Linking `C ∪ P`: functions `program_link` in `Source/Language.v` and `Intermediate/Language.v`
+- Trace relation `~`: definition `traces_shift_each_other_option` in `Common/RenamingOption.v`
+- Compilation function `↓`: function `compile_program` in `S2I/Compiler.v`
+- Step relation `⇝`: definitions `kstep` in `Source/CS.v`; `step_non_inform` for non-data-flow semantics and `step` for data-flow semantics in `Intermediate/CS.v`
+- Reflexive transitive closure `^*`: inductive `star` in `CompCert/Smallstep.v`
+- Non-data-flow events `e`: definition `event` in `CompCert/Events.v`
+- Source expressions `exp`: definition `expr` in `Source/Language.v`
+- Interm instructions `instr`: definition `instr` in `Intermediate/Machine.v`
+- Values `v`: definition `value` in `Common/Values.v`
+- Removal of all internal data-flow events `remove_df`: function `project_non_inform` in `Common/TracesInform.v`
+- Back-translation `mimicking_state` invariant: definition `well_formed_state` in `Source/Definability.v`
+- Trace concatenation `++`: function `Eapp` in `CompCert/Events.v`
+- Border-state relation `state_rel_border`: definition `mergeable_border_states` in `Intermediate/REcombinationRelCommon.v`
+- "Is executing in" relation: `is_program_component` and `is_context_component` in `Intermediate/CS.v`
