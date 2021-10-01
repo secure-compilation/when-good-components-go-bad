@@ -4933,7 +4933,13 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                          (** This essentially follows IF we knew that the
                           intermediate trace came from an intermediate execution.
                           Then, we can possibly use a lemma in CSInvariants? *)
-                         admit.
+
+                         unfold component_buffer.
+                         replace intf with (Machine.Intermediate.prog_interface p_interm).
+                         eapply CSInvariants.CSInvariants.load_Some_component_buffer with
+                           (ptr := (Permission.data, Cb, b, offset)).
+                         eauto. eauto.
+                         admit. admit. admit.
                        }
                        specialize (wf_mem10' _ HCb Cb_C) as
                            [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].

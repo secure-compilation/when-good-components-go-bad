@@ -1302,6 +1302,21 @@ Proof.
   eapply not_executing_can_not_share; eauto.
 Qed.
 
+Lemma load_Some_component_buffer:
+  forall p s t e ptr v,
+    well_formed_program p ->
+    closed_program p ->
+    CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
+    Memory.load (mem_of_event e) ptr = Some v ->
+    Pointer.component ptr \in domm (prog_interface p).
+  Proof.
+    admit.
+    Admitted.
+
+
+
+
+
 
 (********************************
   Search _ CS.sem_non_inform Component.id.
