@@ -130,6 +130,13 @@ Source.well_formed_program_unlink
     Source.well_formed_program p ->
     Source.well_formed_program (Source.program_unlink Cs p)
 
+Source.linking_well_formedness
+  : forall p1 p2 : Source.program,
+    Source.well_formed_program p1 ->
+    Source.well_formed_program p2 ->
+    linkable (Source.prog_interface p1) (Source.prog_interface p2) ->
+    Source.well_formed_program (Source.program_link p1 p2)
+
 next_block_prepare_buffers
   : forall C : nat_ordType,
     component_buffer C ->
@@ -152,6 +159,7 @@ CS.load_data_next_block
     Memory.load (CS.s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
     exists Cmem : ComponentMemory.t,
       CS.s_memory s' C = Some Cmem /\ b < ComponentMemory.next_block Cmem
+
 CS.load_component_prog_interface_addr
   : forall p : Source.program,
     Source.well_formed_program p ->
@@ -162,6 +170,7 @@ CS.load_component_prog_interface_addr
     Star (CS.sem p) s t s' ->
     Memory.load (CS.s_memory s') ptr = Some v ->
     Pointer.component ptr \in domm (Source.prog_interface p)
+
 CS.load_component_prog_interface
   : forall p : Source.program,
     Source.well_formed_program p ->
@@ -375,9 +384,7 @@ compilation_has_matching_mains
     compile_program p = Some p_compiled -> matching_mains p p_compiled
 ```
 
-*Lemmas regarding linking:* we assume several properties of source and
-target lifting: linking two well-formed source partial programs gives a well-formed
-program (`Source.linking_well_formedness`), and the compiler satisfies
+*Lemmas regarding linking:* we assume that he compiler satisfies
 `separate_compilation`: compilation and linking commute.
 ```coq
 separate_compilation
@@ -389,12 +396,6 @@ separate_compilation
     compile_program c = Some c_comp ->
     compile_program (Source.program_link p c) =
     Some (Intermediate.program_link p_comp c_comp)
-Source.linking_well_formedness
-  : forall p1 p2 : Source.program,
-    Source.well_formed_program p1 ->
-    Source.well_formed_program p2 ->
-    linkable (Source.prog_interface p1) (Source.prog_interface p2) ->
-    Source.well_formed_program (Source.program_link p1 p2)
 ```
 
 *Compiler correctness:* we also assume compiler correctness, under the form of a CompCert-style
