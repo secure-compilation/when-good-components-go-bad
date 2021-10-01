@@ -25,8 +25,6 @@ Lib/Tactics.v
 Lib/Monads.v
 Lib/Extra.v
 
-Extraction/Definitions.v
-
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
@@ -42,21 +40,9 @@ Source/GlobalEnv.v
 Source/CS.v
 Source/Definability.v
 Source/DefinabilityEnd.v
-Source/Examples/Helper.v
-Source/Examples/Identity.v
-Source/Examples/Increment.v
-Source/Examples/DefaultInitBuffer.v
-Source/Examples/NestedCalls.v
-Source/Examples/Factorial.v
 
 S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
-S2I/Examples/Helper.v
-S2I/Examples/Identity.v
-S2I/Examples/Increment.v
-S2I/Examples/DefaultInitBuffer.v
-S2I/Examples/NestedCalls.v
-S2I/Examples/Factorial.v
 
 RSC.v
