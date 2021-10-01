@@ -3925,14 +3925,30 @@ Local Opaque Memory.store.
           + { (** well-formed state *)
               econstructor; try reflexivity; try eassumption.
             { destruct s. rewrite -Hmain. exact wb. }
-            { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C'; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. rewrite -Hmain. split; [| split].
-              (* [easy | easy |]. *)
-              admit.
-              admit.
-              simpl. admit. (* Induction on [callers s] *)
-            }
+            { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+              eexists []; eexists; simpl; split; eauto.
+              split; [| split]; trivial.
+              -- simplify_memory'. rewrite -Hmem2'; last congruence.
+                 simplify_memory. rewrite Hmain in Hload0init; eapply Hload0init.
+              -- eexists arg, P, top, bot.
+                 split; first rewrite Hmain; trivial.
+                 split; first rewrite Hmain in P_exp; trivial.
+                 split; first rewrite Hmain in Htop; trivial.
+                 clear Star0 Star1 Star12.
+                 elim: (callers s) bot Hbot; trivial.
+                 move=> a l IH bot [] H1 H2.
+                 fold well_formed_callers in *.
+                 split.
+                 ++ simplify_memory.
+                    destruct (a == C') eqn:eq;
+                      move: eq => /eqP eq; subst.
+                    simplify_memory.
+                    ** now destruct Postcond1.
+                    ** rewrite -Hmem2'; last congruence.
+                       now simplify_memory.
+                 ++ destruct H2 as [? [? [? [? [? [? [? H2]]]]]]].
+                    eexists; eexists; eexists; eexists.
+                    repeat split; eauto. }
             (* Reestablish memory well-formedness.
                TODO: Refactor, automate. *)
             { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
