@@ -1871,6 +1871,7 @@ Local Opaque Memory.store.
     (* TODO: Move these hypotheses up *)
     Hypothesis wf_p_interm: Machine.Intermediate.well_formed_program p_interm.
     Hypothesis closed_p_interm: Machine.Intermediate.closed_program p_interm.
+    Hypothesis p_interm_intf: Machine.Intermediate.prog_interface p_interm = intf.
 
     (* Cf. event_non_inform_of_nil_or_singleton *)
     Lemma project_non_inform_singleton e:
@@ -2151,7 +2152,13 @@ Local Opaque Memory.store.
               Memory.load mem' (Permission.data, C', b, offset)) /\
           (forall C',
               C <> C' ->
-              next_block mem C' = next_block mem' C').
+              next_block mem C' = next_block mem' C') /\
+          (forall C' b offset,
+              C = C' ->
+              b <> Block.local ->
+              postcondition_steady_state e mem C ->
+              Memory.load mem (Permission.data, C', b, offset) =
+              Memory.load mem' (Permission.data, C', b, offset)).
     Proof.
       move=> C stk mem k arg prefix e C_b.
       case.
@@ -2985,7 +2992,7 @@ Local Opaque Memory.store.
         }
         destruct STAR2 as [mem''' [i [STAR2 [POST [H1 [H2 H3]]]]]].
         eexists; eexists.
-        split; [| split; [| split; [| split]]].
+        split; [| split; [| split; [| split; [| split]]]].
         + eapply star_trans; eauto.
         + assumption.
         + assumption.
@@ -2994,7 +3001,8 @@ Local Opaque Memory.store.
           Unshelve.
           unfold Block.local; congruence.
           unfold Block.local; congruence.
-    Qed.
+        + admit.
+    Admitted.
 
     Corollary initialization_correct_component_memory C mem mem':
       (forall C' b offset,
@@ -3257,7 +3265,7 @@ Local Opaque Memory.store.
                            expr_of_trace Component.main Procedure.main
                                          (comp_subtrace Component.main t)) Kstop)
                     (Int 0) C_b (or_intror Hpost_ini))
-          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 [Hothercomp0 Hotherblock0]]]]]].
+          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 [Hothercomp0 [Hotherblock0 Hsteady_localbuf]]]]]]].
 
         destruct (Memory.store_after_load
                     mem0
@@ -3838,10 +3846,12 @@ Local Opaque Memory.store.
                 inversion H2; destruct t0; discriminate.
           }
 
+          assert (steady_C3'' := steady_C3').
+
           (* assert (steady_C3': postcondition_steady_state e1 mem1 C' \/ postcondition_uninitialized prefix0 e1 mem1 C'). *)
           (* { ... } *)
 
-          eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' Hblock2]]]]]];
+          eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' [Hblock2 Hsteady_localbuf2]]]]]]];
             last exact C'_b.
 
           (* TODO: Temporary of simplify_memory_init only to avoid conflicts. *)
@@ -4420,7 +4430,9 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
               + exact Hnot_shared0.
           }
 
-          eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' Hblock2]]]]]];
+          assert (steady_C3'' := steady_C3').
+
+          eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' [Hblock2 Hsteady_localbuf2]]]]]]];
             last exact C'_b.
 
           Ltac simplify_memory_init H:=
@@ -4868,18 +4880,37 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                      inversion Hshift1; subst addr'.
                      simpl in Hshift3.
                      specialize (Hshift3 _ _ Hload) as [? [? ?]].
-                     eexists; split.
-                     ++ repeat match goal with
-                         | Hload: Memory.load ?mem' ?ptr' = Some ?v',
-                           Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
-                           erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
-                               end.
-                        admit.
+                     destruct steady_C3'' as [Hsteady | Huninit].
+                     {
+                       eexists; split.
+                       ++ repeat match goal with
+                                 | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                                   Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                                   erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                                 end.
+                          
+                          rewrite Hsteady_localbuf2; eauto.
                      ++ destruct x; simpl in *; try by inversion H7; subst v.
                         destruct t0 as [[[[|] ?] ?] ?]; simpl in *.
                         by inversion H7.
                         destruct i0; inversion H7; subst v.
-                        by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                          by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                     }
+                     {
+                       destruct p_gens_t as [? G].
+                       rewrite Et CS.CS.project_non_inform_append in G.
+                       simpl in G. unfold Eapp in G.
+                       replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                       setoid_rewrite app_assoc in G.
+                       apply star_app_inv in G as [? [G _]].
+                       setoid_rewrite cats1 in G.
+                       
+                       eapply CSInvariants.CSInvariants.not_executing_can_not_share in
+                           Hshared; eauto; first contradiction.
+                       + move : C_ne_C' => /eqP => ?. by auto.
+                       + rewrite Hprefix01 cats1. by destruct Huninit as [? [? [? ?]]].
+                       + apply CS.CS.singleton_traces_non_inform.
+                     }
                   -- intros off v Hload; simpl in *.
                      destruct Hshift1 as [addr' [Hshift1 [Hshift2 Hshift3]]];
                        first easy.
@@ -4887,16 +4918,43 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                      rewrite ssrnat.subn1 ssrnat.addn0 in Hshift1.
                      inversion Hshift1; subst addr'.
                      simpl in Hshift2.
-                     assert (Hload': Memory.load mem10 (Permission.data, C', S b, off) = Some v).
-                     { simplify_memory. admit. }
-                     specialize (Hshift2 _ _ Hload') as [? [? ?]].
-                     eexists; split.
-                     ++ eassumption.
-                     ++ destruct v; simpl in *; try by inversion H7; subst x.
-                        destruct t0 as [[[[|] ?] ?] ?]; simpl in *.
-                        by inversion H7.
-                        destruct i0; inversion H7; subst x.
-                        by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                     (* *)
+                       destruct steady_C3'' as [Hsteady | Huninit].
+                     {
+                       repeat match goal with
+                              | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                                       Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                                   erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                                 end.
+                        assert (Hload': Memory.load mem10 (Permission.data, C', S b, off) = Some v).
+                        { simplify_memory.
+                          rewrite -Hsteady_localbuf2; eauto.
+                          simplify_memory.
+                        }
+                        specialize (Hshift2 _ _ Hload') as [v' [G Hv']].
+                        
+                        eexists; split; first eassumption.
+                        destruct v; simpl in *; try by inversion Hv'; subst.
+                        destruct t0 as [[[[|] ?] ?] ?]; simpl in *; first by inversion Hv'.
+                        destruct i0; inversion Hv'; subst.
+                          by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                     }
+                     {
+                       destruct p_gens_t as [? G].
+                       rewrite Et CS.CS.project_non_inform_append in G.
+                       simpl in G. unfold Eapp in G.
+                       replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                       setoid_rewrite app_assoc in G.
+                       apply star_app_inv in G as [? [G _]].
+                       setoid_rewrite cats1 in G.
+                       
+                       eapply CSInvariants.CSInvariants.not_executing_can_not_share in
+                           Hshared; eauto; first contradiction.
+                       + move : C_ne_C' => /eqP => ?. by auto.
+                       + rewrite Hprefix01 cats1. by destruct Huninit as [? [? [? ?]]].
+                       + apply CS.CS.singleton_traces_non_inform.
+                     }
+
                 * (* Prove good_trace something. Get from Hshared that there's a
                    * load and [1 <= b]. Now we can get a contradiction to
                    * [postcondition_uninitialized] *)
@@ -4936,10 +4994,17 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
 
                          unfold component_buffer.
                          replace intf with (Machine.Intermediate.prog_interface p_interm).
+                         destruct p_gens_t as [? G].
+                         rewrite Et CS.CS.project_non_inform_append in G.
+                         simpl in G. unfold Eapp in G.
+                         replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                         setoid_rewrite app_assoc in G.
+                         apply star_app_inv in G as [? [G _]].
+                         setoid_rewrite cats1 in G.
                          eapply CSInvariants.CSInvariants.load_Some_component_buffer with
-                           (ptr := (Permission.data, Cb, b, offset)).
-                         eauto. eauto.
-                         admit. admit. admit.
+                             (ptr := (Permission.data, Cb, b, offset))
+                             (e := (ECall (cur_comp s) P' new_arg mem' C')); eauto.
+                         apply CS.CS.singleton_traces_non_inform.
                        }
                        specialize (wf_mem10' _ HCb Cb_C) as
                            [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
@@ -4981,12 +5046,36 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                         (** Knowing it from Hload should be a source "CSInvariant". *)
 
                        assert (HCb: component_buffer Cb).
-                       {
-                        (** TODO: Add a lemma similar to
-                            CS.load_component_prog_interface, but instead of  *)
-                        (** asserting the loaded value is in intf, assert that the
-                            load_at addr is in the intf. *)
-                         admit.
+                        {
+                         unfold component_buffer.
+                         replace intf with (Machine.Intermediate.prog_interface p_interm).
+
+                         assert (starG : star CS.kstep (prepare_global_env p) (CS.initial_machine_state p)
+                                              (rcons (project_non_inform prefix_inform) (ECall (cur_comp s) P' vcom mem1 C'))
+
+                                              [CState C', {|
+                         CS.f_component := C;
+                         CS.f_arg := arg;
+                         CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
+                                        (Kseq
+                                           (invalidate_metadata;;
+                                            E_assign EXTCALL (E_val (Int 0));;
+                                            E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem10, Kstop, 
+             expr_of_trace C' P' (comp_subtrace C' t), vcom]
+                                ).
+                         {
+                           rewrite -cats1.
+                           eapply star_trans; eauto.
+                           - eapply star_trans; eauto.
+                           - simpl. subst. by unfold C.
+                         }
+                         specialize (@CS.CS.load_component_prog_interface_addr
+                                       _ Hwf_p Hclosed_p _ _ _
+                                       (Permission.data, Cb, S b, offset) v'
+                                       Logic.eq_refl starG
+                                    ) as G'.
+                         simpl in *. rewrite p_interm_intf.
+                         by intuition.
                        }
 
                        specialize (wf_mem10' _ HCb Cb_C) as
@@ -5881,10 +5970,23 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                     ++ simpl in *.
                        assert (HCb: component_buffer Cb).
                        {
-                         (** This essentially follows IF we knew that the 
+                         (** This essentially follows IF we knew that the
                           intermediate trace came from an intermediate execution.
                           Then, we can possibly use a lemma in CSInvariants? *)
-                         admit.
+
+                         unfold component_buffer.
+                         replace intf with (Machine.Intermediate.prog_interface p_interm).
+                         destruct p_gens_t as [? G].
+                         rewrite Et CS.CS.project_non_inform_append in G.
+                         simpl in G. unfold Eapp in G.
+                         replace ((ERet (cur_comp s) ret_val mem' C' :: project_non_inform suffix)) with ([:: ERet (cur_comp s) ret_val mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                         setoid_rewrite app_assoc in G.
+                         apply star_app_inv in G as [? [G _]].
+                         setoid_rewrite cats1 in G.
+                         eapply CSInvariants.CSInvariants.load_Some_component_buffer with
+                             (ptr := (Permission.data, Cb, b, offset))
+                             (e := (ERet (cur_comp s) ret_val mem' C')); eauto.
+                         apply CS.CS.singleton_traces_non_inform.
                        }
                        specialize (wf_mem8' _ HCb Cb_C) as
                            [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
@@ -5929,13 +6031,19 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                         (** Knowing it from Hload should be a source "CSInvariant". *)
 
                        assert (HCb: component_buffer Cb).
-                       {
-                        (** TODO: Add a lemma similar to 
-                            CS.load_component_prog_interface, but instead of  *)
-                        (** asserting the loaded value is in intf, assert that the 
-                            load_at addr is in the intf. *)
-                         admit.
+                        {
+                         unfold component_buffer.
+                         replace intf with (Machine.Intermediate.prog_interface p_interm).
+
+                         specialize (@CS.CS.load_component_prog_interface_addr
+                                       _ Hwf_p Hclosed_p _ _ _
+                                       (Permission.data, Cb, S b, offset) v'
+                                       Logic.eq_refl Star_init_ret
+                                    ) as G'.
+                         simpl in *. rewrite p_interm_intf.
+                         by intuition.
                        }
+
 
                        specialize (wf_mem8' _ HCb Cb_C) as
                            [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
@@ -5956,7 +6064,10 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                                sigma_shifting_lefttoright_addr_bid,
                                rename_addr_option in *.
                                  by eapply Lem.
-                       ** admit. (* Easy *)
+                       ** (** Hshared =/= Hnot_shared*)
+                         rewrite -cats1 CS.CS.project_non_inform_append in Hnot_shared.
+                         setoid_rewrite cats1 in Hnot_shared.
+                         by apply Hnot_shared in Hshared.
               + exists (Cb, S b).
                 split.
                 * rewrite /all_zeros_shift /uniform_shift //=.

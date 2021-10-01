@@ -542,6 +542,13 @@ Section Semantics.
     Pointer.component ptr' \in domm (prog_interface p).
   Admitted.
 
+  Lemma load_component_prog_interface_addr s t s' ptr v :
+    initial_state p s ->
+    Star sem s t s' ->
+    Memory.load (s_memory s') ptr = Some v ->
+    Pointer.component ptr \in domm (prog_interface p).
+  Admitted.
+
   Lemma load_data_next_block s t s' ptr C b o :
     initial_state p s ->
     Star sem s t s' ->
