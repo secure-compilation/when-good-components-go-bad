@@ -28,27 +28,42 @@ Run `make` at the root to build the development.
 
 ### Definitions and theorems ###
 
-At the top level, the development provides high-level proofs with the following
-entry points:
-- `RSC_DC_MD.v`: generic secure compilation proof
-  against the assumptions in `RSC_DC_MD_Sigs.v` (Section 3.5)
-- `RSC_DC_MD_Instance.v`: an instantiation of the assumptions
-  from `RSC_DC_MD_Sigs.v` to our compilation chain  (Section 4.3)
-- `RSC_DC.v`: general proofs about the class of properties preserved
-  by RSC^DC (Appendix A)
-- `RSC_DC_4_compcert.v`: proofs in `RSC_DC.v` adapted to the general CompCert
-  trace model (Appendix A)
+The following list maps the definitions and statements in the paper to their
+mechanized counterparts in Coq.
 
-The correspondences between the main definitions and results in the paper and
-in Coq are as follows.
+- Definition 2.1 (RSP~): see statement of Theorem `RSC` in `RSC.v` for an instance of this definition
 
-Definition 3.2: Robustly Safe Compilation with Dynamic Compromise (RSC^DC)
-- `RSC_DC.RSC_dc` in the simple trace model
-- `RSC_DC_4_compcert.RSC_dc` in the CompCert trace model
+- Lemma 2.2 (back-translation): see statement of Lemma `definability` in `Source/Definability.v` for an instance of this definition
 
-Theorem A.2: RSC^DC characterization via Z_P
-- `RSC_DC.main_thm` in the simple trace model
-- `RSC_DC_4_compcert.main_thm` in the CompCert trace model
+- Assumption 2.3 (FCC): `S2I/Compiler.v`, Lemma `I_simulates_S`
+
+- Lemma 2.4 (recomposition): `Intermediate/RecombinationRel.v`, Theorem `recombination_trace_rel`
+
+- Assumption 2.5 (BCC): `S2I/Compiler.v`, Lemma `S_simulates_I`
+
+- Definition 2.6 (observable events): `CompCert/Events.v`, Inductive type `event`
+
+- Definition 3.2 (data-flow events) `Common/TracesInform.v`, Inductive type `event_inform`
+
+- Lemma 3.4 (enrichment): `Intermediate/CS.v`, Lemma `star_sem_non_inform_star_sem_inform`
+
+- Lemma 3.5 (data-flow back-translation): `Source/Definability.v`, Lemma `definability`
+
+- Definition 3.9 (turn-taking memory relation): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_internal_states`
+
+- Definition 3.11 (relation on interaction traces): `Common/RenamingOption.v`, Inductive proposition `traces_shift_each_other_option`
+
+- Theorem 4.1 (RSP~): Theorem `RSC` in `RSC.v`
+
+- Lemma 5.1 (trace prefix mimicking): `Source/Definability.v`, Lemma `definability_gen_rel_right`
+
+- Definition A.2 (memory relation at observable events): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_border_states`
+
+- Lemma A.3 (strengthening at observable events): `Intermediate/RecombinationRelStrengthening.v`, Theorem `threeway_multisem_event_lockstep_program_step`
+
+- Lemma A.4 (option simulation): `Intermediate/RecombinationRelOptionSim.v`, Lemma `merge_states_silent_star`
+
+- Lemma A.5 (lockstep simulation): `Intermediate/RecombinationRelLockstepSim.v`, Theorem `threeway_multisem_star_E0`
 
 ### Assumptions ###
 
