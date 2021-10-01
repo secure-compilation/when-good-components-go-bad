@@ -58,12 +58,14 @@ TODO: Remove statements after explaining the assumptions, regroup as needed.
 
 #### Logic axioms ####
 
+```coq
 FunctionalExtensionality.functional_extensionality_dep
   : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
     (forall x : A, f x = g x) -> f = g
 Classical_Prop.classic : forall P : Prop, P \/ ~ P
 ClassicalEpsilon.constructive_indefinite_description
   : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
+```
 
 #### Utility libraries ####
 
