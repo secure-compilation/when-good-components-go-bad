@@ -69,12 +69,15 @@ ClassicalEpsilon.constructive_indefinite_description
 
 #### Utility libraries ####
 
+```coq
 in_unzip2
   : forall (X : eqType) (x : X) (xs : NMap X),
     x \in unzip2 xs -> exists n : nat_ordType, xs n = Some x
+```
 
 #### Memory model ####
 
+```coq
 pointer_of_alloc
   : forall (mem : Memory.t) (cid : Component.id) (sz : nat) 
       (mem' : Memory.t) (ptr' : Pointer.t) (nb : Block.id),
@@ -117,9 +120,11 @@ component_memory_after_alloc_neq
   : forall (mem : Memory.t) (C : Component.id) (sz : nat) 
       (mem' : Memory.t) (ptr : Pointer.t) (C' : Component.id),
     Memory.alloc mem C sz = Some (mem', ptr) -> C' <> C -> mem C' = mem' C'
+```
 
 #### Source language ####
 
+```coq
 Source.well_formed_program_unlink
   : forall (Cs : {fset Component.id}) (p : Source.program),
     Source.well_formed_program p ->
@@ -176,9 +181,11 @@ CS.comes_from_initial_state_mem_domm
     CS.initial_state p s ->
     Star (CS.sem p) s t s' ->
     domm (CS.s_memory s') = domm (Source.prog_interface p)
+```
 
 #### Target language ####
 
+```coq
 CSInvariants.CSInvariants.load_Some_component_buffer
   : forall (p : Machine.Intermediate.program) (s : CS.CS.state)
       (t : seq event) (e : event) (ptr : Pointer.t) 
@@ -199,9 +206,11 @@ CSInvariants.CSInvariants.not_executing_can_not_share
     C <> cur_comp_of_event e ->
     (forall b' : Block.id, ~ addr_shared_so_far (C, b') t) ->
     ~ addr_shared_so_far (C, b) (rcons t e)
+```
 
 (From recombination)
 
+```coq
 CS.genv_procedures_prog_procedures
   : forall (p : program) (cid : nat_ordType) (proc : option (NMap code)),
     well_formed_program p ->
@@ -216,9 +225,11 @@ genv_entrypoints_interface_some
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = Some b ->
     exists b' : Block.id,
       EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'
+```
 
 (From definability. The first one concludes wf_int_pref, which is stated in definability, but plausibly belongs logically in here)
 
+```coq
 star_well_formed_intermediate_prefix
   : forall (p : Intermediate.program) (t : trace event_inform)
       (s : state (I.CS.sem_inform p)),
@@ -236,10 +247,13 @@ CS.intermediate_well_formed_events
     all
       (well_formed_event (Intermediate.prog_interface p)
          (Intermediate.prog_procedures p)) t
+```
 
 #### Back-translation ####
 
 Axioms:
+
+```coq
 well_formed_events_well_formed_program
   : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
     all (well_formed_event intf procs) t ->
@@ -253,8 +267,11 @@ load_prepare_buffers
     Memory.load (Source.prepare_buffers p)
       (Permission.data, C, Block.local, Z.of_nat o) = 
     nth_error meta_buffer o
+```
 
 (This could be considered a memory model lemma, because the only reason it is admitted is due to the module type not exposing its reflection principle)
+
+```coq
 initialization_correct_component_memory
   : forall (C : Component.id) (mem mem' : Memory.t),
     (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
@@ -348,9 +365,11 @@ addr_shared_so_far_ECall_Hshared_interm
       (mem10 : Memory.t) (vcom : value),
     ...
     addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C'))
+```
 
 #### Top level ####
 
+```coq
 well_formed_compilable
   : forall p : Source.program,
     Source.well_formed_program p ->
@@ -415,6 +434,7 @@ backward_simulation_star
     exists (s' : state (S.CS.sem p)) (i : Compiler.index),
       Star (S.CS.sem p) (S.CS.initial_machine_state p) t s' /\
       Compiler.match_states i s' s
+```
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
