@@ -230,7 +230,7 @@ Proof.
   }
   have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hstar.
   have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
-                       H_is_prefix wf_p_c Hclosed wf_t wf_i_t.
+                       H_is_prefix wf_p_c Hclosed Logic.eq_refl wf_t wf_i_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf bufs t) => Hback.
@@ -291,7 +291,7 @@ Proof.
   by apply traces_shift_each_other_option_symmetric.
   split.
   reflexivity.
-  eapply Definability.definability_does_not_leak; eassumption.
+  eapply Definability.definability_does_not_leak; try eassumption; reflexivity.
 Qed.
 
 Print Assumptions definability_with_linking.
