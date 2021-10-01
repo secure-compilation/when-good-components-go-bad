@@ -55,7 +55,7 @@ Section RSC_Section.
 
    *)
 
-  Theorem RSC_DC_MD:
+  Theorem RSC:
     forall t s,
       Star (Intermediate.CS.CS.sem_non_inform (Intermediate.program_link p_compiled Ct))
            (Intermediate.CS.CS.initial_machine_state
@@ -386,6 +386,8 @@ Section RSC_Section.
         last exact trel_recomb; eauto.
       destruct HpCs_star as [_ [HpCs_star _]]; eauto.
 Qed.
+
+Print Assumptions RSC.
 
 End RSC_Section.
 
