@@ -340,44 +340,24 @@ addr_shared_so_far_ECall_Hshared_interm
 
 #### Top level ####
 
+We assume a certain number of top-level properties of our compilation chain.
+These properties are mostly glue lemmas that help us make the different parts of
+the proof fit together.
+
+All of these results are standard compiler results that, after careful
+inspection, we expect to hold for our compiler. For this reason, proving those
+was not a focus of this work.
+
+*Lemmas regarding compilation and well-formedness conditions*: we assume that
+every well-formed source program can be compiled (`well_formed_compilable`),
+and that compiling preserves certain well-formedness conditions 
+(`Compiler.compilation_preserves_well_formedness`,
+` compilation_preserves_main`, `compilation_has_matching_mains`).
 ```coq
 well_formed_compilable
   : forall p : Source.program,
     Source.well_formed_program p ->
     exists pc : Intermediate.program, compile_program p = Some pc
-separate_compilation
-  : forall (p c : Source.program) (p_comp c_comp : Intermediate.program),
-    Source.well_formed_program p ->
-    Source.well_formed_program c ->
-    linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_comp ->
-    compile_program c = Some c_comp ->
-    compile_program (Source.program_link p c) =
-    Some (Intermediate.program_link p_comp c_comp)
-Compiler.order : Compiler.index -> Compiler.index -> Prop
-Compiler.match_states
-  : forall (p : Source.program) (tp : Intermediate.program),
-    Compiler.index ->
-    state (S.CS.sem p) -> state (I.CS.sem_non_inform tp) -> Prop
-Source.linking_well_formedness
-  : forall p1 p2 : Source.program,
-    Source.well_formed_program p1 ->
-    Source.well_formed_program p2 ->
-    linkable (Source.prog_interface p1) (Source.prog_interface p2) ->
-    Source.well_formed_program (Source.program_link p1 p2)
-Compiler.index : Type
-Compiler.fsim_record
-  : forall (p : Source.program) (tp : Intermediate.program),
-    fsim_properties Events.event (S.CS.sem p) (I.CS.sem_non_inform tp)
-      Compiler.index Compiler.order Compiler.match_states
-Compiler.compiler_preserves_non_leakage_of_private_pointers
-  : forall (p : Source.program) (p_compiled : Intermediate.program)
-      (metadata_size : Component.id -> nat),
-    Source.closed_program p ->
-    Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
-    S.CS.private_pointers_never_leak_S p metadata_size ->
-    private_pointers_never_leak_I p_compiled metadata_size
 Compiler.compilation_preserves_well_formedness
   : forall (p : Source.program) (p_compiled : Intermediate.program),
     Source.well_formed_program p ->
@@ -393,6 +373,48 @@ compilation_has_matching_mains
   : forall (p : Source.program) (p_compiled : Intermediate.program),
     Source.well_formed_program p ->
     compile_program p = Some p_compiled -> matching_mains p p_compiled
+```
+
+*Lemmas regarding linking:* we assume several properties of source and
+target lifting: linking two well-formed source partial programs gives a well-formed
+program (`Source.linking_well_formedness`), and the compiler satisfies
+`separate_compilation`: compilation and linking commute.
+```coq
+separate_compilation
+  : forall (p c : Source.program) (p_comp c_comp : Intermediate.program),
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_comp ->
+    compile_program c = Some c_comp ->
+    compile_program (Source.program_link p c) =
+    Some (Intermediate.program_link p_comp c_comp)
+Source.linking_well_formedness
+  : forall p1 p2 : Source.program,
+    Source.well_formed_program p1 ->
+    Source.well_formed_program p2 ->
+    linkable (Source.prog_interface p1) (Source.prog_interface p2) ->
+    Source.well_formed_program (Source.program_link p1 p2)
+```
+
+*Compiler correctness:* we also assume compiler correctness, under the form of a CompCert-style
+forward simulation `Compiler.fsim_record`. We also assume the existence
+of a backward simulation `backward_simulation_star`.
+Finally, we assume `Compiler.compiler_preserves_non_leakage_of_private_pointers`,
+that states that our compiler preserves the privacy of the local buffer.
+Such a result could likely be proved by stating fine grained simulation invariants
+in the compiler correctness proof.
+```
+Compiler.order : Compiler.index -> Compiler.index -> Prop
+Compiler.match_states
+  : forall (p : Source.program) (tp : Intermediate.program),
+    Compiler.index ->
+    state (S.CS.sem p) -> state (I.CS.sem_non_inform tp) -> Prop
+Compiler.index : Type
+Compiler.fsim_record
+  : forall (p : Source.program) (tp : Intermediate.program),
+    fsim_properties Events.event (S.CS.sem p) (I.CS.sem_non_inform tp)
+      Compiler.index Compiler.order Compiler.match_states
 backward_simulation_star
   : forall (p : Source.program) (p_compiled : Intermediate.program)
       (t : Events.trace Events.event)
@@ -405,6 +427,14 @@ backward_simulation_star
     exists (s' : state (S.CS.sem p)) (i : Compiler.index),
       Star (S.CS.sem p) (S.CS.initial_machine_state p) t s' /\
       Compiler.match_states i s' s
+Compiler.compiler_preserves_non_leakage_of_private_pointers
+  : forall (p : Source.program) (p_compiled : Intermediate.program)
+      (metadata_size : Component.id -> nat),
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    S.CS.private_pointers_never_leak_S p metadata_size ->
+    private_pointers_never_leak_I p_compiled metadata_size
 ```
 
 ### License ###
