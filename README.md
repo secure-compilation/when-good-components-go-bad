@@ -478,7 +478,7 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
 ### Index of definitions ###
 
 - Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
-- Data-flow events `e`: inductive `event_inform` in `Common/Definitions.v`
+- Data-flow events `E`: inductive `event_inform` in `Common/Definitions.v`
 - Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
 - Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
 - Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
