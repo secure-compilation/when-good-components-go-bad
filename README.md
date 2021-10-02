@@ -33,8 +33,6 @@ mechanized counterparts in Coq.
 
 - Definition 2.1 (RSP~): see statement of Theorem `RSC` in `RSC.v` for an instance of this definition
 
-- Lemma 2.2 (back-translation): see statement of Lemma `definability` in `Source/Definability.v` for an instance of this definition
-
 - Assumption 2.3 (FCC): `S2I/Compiler.v`, Lemma `I_simulates_S`
 
 - Lemma 2.4 (recomposition): `Intermediate/RecombinationRel.v`, Theorem `recombination_trace_rel`
