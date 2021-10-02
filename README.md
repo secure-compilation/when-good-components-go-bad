@@ -483,6 +483,8 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
 - Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
 - Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
 - Memory relation holding only at private locations of the non-executing part `mem_rel_not_exec`: definition `mem_of_part_not_executing_rel_original_and_recombined_at_internal` in `Intermediate/RecombinationRelCommon.v`
+- Function `shared`: inductive `addr_shared_so_far` in `Common/RenamingOption.v`
+- Function `private`: negation of the inductive `addr_shared_so_far` in `Common/RenamingOption.v`
 - Linking `C ∪ P`: functions `program_link` in `Source/Language.v` and `Intermediate/Language.v`
 - Trace relation `~`: definition `traces_shift_each_other_option` in `Common/RenamingOption.v`
 - Compilation function `↓`: function `compile_program` in `S2I/Compiler.v`
