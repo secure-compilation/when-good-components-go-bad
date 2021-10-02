@@ -49,7 +49,7 @@ mechanized counterparts in Coq.
 
 - Definition 3.9 (turn-taking memory relation): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_internal_states`
 
-- Definition 3.11 (relation on interaction traces): `Common/RenamingOption.v`, Inductive proposition `traces_shift_each_other_option`
+- Definition 3.10 (relation on interaction traces): `Common/RenamingOption.v`, Inductive proposition `traces_shift_each_other_option`
 
 - Theorem 4.1 (RSP~): Theorem `RSC` in `RSC.v`
 
