@@ -1063,37 +1063,6 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
-    (* TODO: Relocate to Memory *)
-    Definition next_block (mem: Memory.t) (C : Component.id) : option Block.id :=
-      match mem C with
-      | Some Cmem => Some (ComponentMemory.next_block Cmem)
-      | None => None
-      end.
-
-    Lemma next_block_store_stable mem ptr v mem' C:
-      Memory.store mem ptr v = Some mem' ->
-      next_block mem' C = next_block mem C.
-    Proof.
-Local Transparent Memory.store.
-      unfold Memory.store.
-Local Opaque Memory.store.
-      unfold next_block.
-      destruct ptr as [[[[] C'] b] o];
-        first discriminate.
-      simpl.
-      destruct (mem C') as [memC |] eqn:HmemC;
-        last discriminate.
-      destruct (ComponentMemory.store memC b o v) as [memC' |] eqn:Hstore;
-        last discriminate.
-      intros H. injection H as ?; subst mem'.
-      rewrite setmE.
-      destruct (C == C') eqn:Heq; rewrite Heq;
-        last reflexivity.
-      move: Heq => /eqP => ?; subst C'.
-      apply ComponentMemory.next_block_store_stable in Hstore.
-      now rewrite -Hstore HmemC.
-    Qed.
-
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
     Definition well_formed_memory_snapshot_steadystate_shift
@@ -1106,8 +1075,8 @@ Local Opaque Memory.store.
     Definition well_formed_memory_snapshot_steadystate_block
                (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
       forall next,
-        next_block mem_snapshot C = Some next ->
-        next_block mem C = Some (S next).
+        Memory.next_block mem_snapshot C = Some next ->
+        Memory.next_block mem C = Some (S next).
 
     Record well_formed_memory_snapshot_steadystate
            (mem_snapshot mem : Memory.t) (C: Component.id) : Prop := {
@@ -1117,9 +1086,9 @@ Local Opaque Memory.store.
         well_formed_memory_snapshot_steadystate_block mem_snapshot mem C
     }.
 
+    (* NOTE: Memory.next_block can simplify parts of this *)
     Definition well_formed_memory_snapshot_uninitialized
                (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
-      
       (exists compMem buf,
         mem_snapshot C = Some compMem /\
         prog_buffers C = Some buf /\
@@ -1131,7 +1100,6 @@ Local Opaque Memory.store.
           mem C = Some src_compMem /\
           ComponentMemory.next_block src_compMem = LOCALBUF_blockid
       ).
-    
 
     (* JT: NOTE: The reason this lemma should hold is that the store is to the
        local block [Block.local], which should always be *private memory* (from
@@ -1191,7 +1159,7 @@ Local Opaque Memory.store.
     Proof.
       move=> WFNB STORE b NEXT.
       specialize (WFNB b NEXT).
-      unfold next_block in *.
+      unfold Memory.next_block in *.
       rewrite -WFNB.
 Local Transparent Memory.store.
       unfold Memory.store in STORE.
@@ -1573,7 +1541,7 @@ Local Opaque Memory.store.
               Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
               Some Undef
               /\
-              next_block mem C = Some LOCALBUF_blockid
+              Memory.next_block mem C = Some LOCALBUF_blockid
               /\
               well_formed_memory_snapshot_uninitialized initial_memory mem C))
             /\
@@ -1809,40 +1777,6 @@ Local Opaque Memory.store.
       injection. apply reg_offset0.
     Qed.
 
-    (* TODO: Move to Memory, add more informative lemma on alloc pointers. *)
-    Lemma offset_of_alloc_offset mem cid sz mem' ptr':
-      Memory.alloc mem cid sz = Some (mem', ptr') ->
-      Pointer.offset ptr' = 0%Z.
-    Admitted.
-
-    (* ... Like this one. *)
-    Lemma pointer_of_alloc mem cid sz mem' ptr' nb:
-      Memory.alloc mem cid sz = Some (mem', ptr') ->
-      next_block mem cid = Some nb ->
-      ptr' = (Permission.data, cid, nb, 0%Z).
-    Admitted.
-
-    (* (This is just here to ease things, maybe temporarily...) *)
-    Lemma alloc_next_block mem cid sz mem' ptr':
-      Memory.alloc mem cid sz = Some (mem', ptr') ->
-    exists nb,
-      next_block mem cid = Some nb.
-    Admitted.
-
-    (* TODO: Lift to Memory. *)
-    Lemma next_block_alloc m C n m' b:
-      Memory.alloc m C n = Some (m', b) ->
-      next_block m C = Some (Pointer.block b) /\
-      next_block m' C = Some (ssrnat.addn (Pointer.block b) 1).
-    Admitted.
-
-    (* TODO: Lift to Memory. *)
-    Lemma next_block_alloc_neq m C n m' b C' :
-      Memory.alloc m C n = Some (m', b) ->
-      C' <> C ->
-      next_block m' C' = next_block m C'.
-    Admitted.
-
     Lemma shift_S_Some C b :
       sigma_shifting_wrap_bid_in_addr
         (sigma_shifting_lefttoright_addr_bid (uniform_shift 1) all_zeros_shift)
@@ -1947,7 +1881,7 @@ Local Opaque Memory.store.
                  --- rewrite <- mem0_mem''; by auto.
                  --- assumption.
            ++ intros b Hnextb.
-              unfold next_block.
+              unfold Memory.next_block.
               rewrite -(mem0_mem''_asmp _ Hnext).
               apply Hnextblock.
               rewrite Hmem'2.
@@ -2003,11 +1937,12 @@ Local Opaque Memory.store.
       reflexivity.
     Qed.
 
+    (* TODO: Move to language *)
     Lemma next_block_prepare_buffers C :
       component_buffer C ->
-      next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
+      Memory.next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
     Proof.
-      rewrite /component_buffer /next_block /Source.prepare_buffers => C_b.
+      rewrite /component_buffer /Memory.next_block /Source.prepare_buffers => C_b.
       rewrite mapmE /omap /obind /oapp.
       destruct (Source.prog_buffers p C) as [buf |] eqn:Hbuf.
       - rewrite ComponentMemory.nextblock_prealloc.
@@ -2020,9 +1955,9 @@ Local Opaque Memory.store.
 
     Lemma next_block_initial_memory C :
       component_buffer C ->
-      next_block initial_memory C = Some 1.
+      Memory.next_block initial_memory C = Some 1.
     Proof.
-      rewrite /component_buffer /next_block /initial_memory => C_b.
+      rewrite /component_buffer /Memory.next_block /initial_memory => C_b.
       rewrite mkfmapfE C_b.
       rewrite ComponentMemory.nextblock_prealloc.
       destruct (prog_buffers C) as [buf |] eqn:Hbuf.
@@ -2060,12 +1995,6 @@ Local Opaque Memory.store.
       - lia.
     Qed.
 
-    Lemma load_next_block_None mem ptr b :
-      next_block mem (Pointer.component ptr) = Some b ->
-      Pointer.block ptr >= b ->
-      Memory.load mem ptr = None.
-    Admitted.
-
     Lemma load_postcondition_steady_state C prefix e mem b o v :
       postcondition_steady_state e mem C \/ postcondition_uninitialized prefix e mem C ->
       Memory.load mem (Permission.data, C, S b, o) = Some v ->
@@ -2078,12 +2007,12 @@ Local Opaque Memory.store.
           as [Hinitflag [Hlocalbuf [[Hprealloc
                                        [Cmem [HCmem Hblock]]]
                                       Hnot_shared]]].
-        assert (Hnextblock : next_block mem C = Some LOCALBUF_blockid)
-          by (by rewrite /next_block HCmem Hblock).
-        erewrite load_next_block_None in Hload.
+        assert (Hnextblock : Memory.next_block mem C = Some LOCALBUF_blockid)
+          by (by rewrite /Memory.next_block HCmem Hblock).
+        erewrite Memory.load_next_block_None in Hload.
         + discriminate.
         + by apply Hnextblock.
-        + rewrite /= /LOCALBUF_blockid. lia.
+        + rewrite /= /LOCALBUF_blockid. apply /ssrnat.leP. lia.
     Qed.
 
     Ltac ucongruence := autounfold with definabilitydb; congruence.
@@ -2184,7 +2113,7 @@ Local Opaque Memory.store.
               Memory.load mem' (Permission.data, C', b, offset)) /\
           (forall C',
               C <> C' ->
-              next_block mem C' = next_block mem' C') /\
+              Memory.next_block mem C' = Memory.next_block mem' C') /\
           (forall C' b offset,
               C = C' ->
               b <> Block.local ->
@@ -2256,7 +2185,7 @@ Local Opaque Memory.store.
                         Memory.load mem''' (Permission.data, C', b, offset)) /\
                     (forall C',
                         C <> C' ->
-                        next_block mem C' = next_block mem''' C')
+                        Memory.next_block mem C' = Memory.next_block mem''' C')
                     (* (forall C' b offset, *)
                     (*     C = C' -> *)
                     (*     b <> Block.local -> *)
@@ -2356,7 +2285,7 @@ Local Opaque Memory.store.
                          b <> S (Block.local) ->
                          Memory.load mem''' (Permission.data, C, b, o) =
                          Memory.load mem''  (Permission.data, C, b, o)) /\
-                     (forall C', next_block mem''' C' = next_block mem'' C') /\
+                     (forall C', Memory.next_block mem''' C' = Memory.next_block mem'' C') /\
                      ((* size buf_left_to_copy = 0 -> *)
                       Memory.load mem'''
                                   (Permission.data, C, Block.local, INITFLAG_offset)
@@ -2403,7 +2332,7 @@ Local Opaque Memory.store.
                     (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
                     (ptr' := (Permission.data, C, b, o)); eauto.
                   congruence.
-                * intros. by eapply next_block_store_stable; eauto.
+                * intros. by eapply Memory.next_block_store_stable; eauto.
                 * by simplify_memory.
                 (* * exists 1%Z. *)
                 (*   by simplify_memory. *)
@@ -2633,7 +2562,7 @@ Local Opaque Memory.store.
                     (ptr' := (Permission.data, C, b, o)); eauto.
                   unfold LOCALBUF_blockid, Block.local in *; congruence.
                 * intros. rewrite H3; eauto.
-                  by eapply next_block_store_stable; eauto.
+                  by eapply Memory.next_block_store_stable; eauto.
                 * by [].
                 * intros.
                   rewrite H5.
@@ -2844,13 +2773,13 @@ Local Opaque Memory.store.
                       { destruct b'; auto.
                         destruct postcond_mem
                           as [[[compMem [buff [memC [Hbuff [Hnext Hprea]]]]] _] _].
-                        pose proof (load_next_block_None) as H.
-                        unfold next_block in H.
+                        pose proof (Memory.load_next_block_None) as H.
+                        unfold Memory.next_block in H.
                         specialize (H (mem_of_event_inform e)
                                       (Permission.data, C, S b', off)). simpl in H.
                         rewrite memC in H.
                         specialize (H _ Logic.eq_refl).
-                        rewrite H in Hload. congruence. rewrite Hnext. lia. }
+                        rewrite H in Hload. congruence. rewrite Hnext. apply /ssrnat.leP. lia. }
                       subst b'.
                       assert (off_0: (0 <=? off)%Z).
                       { clear -Hload.
@@ -3005,11 +2934,11 @@ Local Opaque Memory.store.
                    destruct postcond_mem
                      as [[[compMem' [buff [memC' [Hbuff [nextBlock prea]]]]]
                            [compMem [memC compMem_next_block]]] _].
-                   unfold next_block in Hb.
+                   unfold Memory.next_block in Hb.
                    rewrite memC' in Hb. inversion Hb; subst; clear Hb.
                    simpl. rewrite nextBlock.
-                   rewrite (next_block_store_stable _ mem'_mem'').
-                   pose proof (next_block_alloc mem_mem') as [X1 X2].
+                   rewrite (Memory.next_block_store_stable _ _ _ _ _ mem'_mem'').
+                   pose proof (Memory.next_block_alloc _ _ _ _ _ mem_mem') as [X1 X2].
                    rewrite X2. simpl in *. eauto.
             }
           + intros. rewrite H5.
@@ -3025,8 +2954,8 @@ Local Opaque Memory.store.
             simpl; unfold Block.local, LOCALBUF_blockid; congruence.
             congruence. congruence.
           + intros. rewrite H3.
-            rewrite (next_block_store_stable _ mem'_mem'').
-            rewrite (next_block_alloc_neq mem_mem').
+            rewrite (Memory.next_block_store_stable _ _ _ _ _ mem'_mem'').
+            rewrite (Memory.next_block_alloc_neq _ _ _ _ _ _ mem_mem').
             reflexivity. congruence.
         }
         destruct STAR2 as [mem''' [i [STAR2 [POST [H1 [H2 H3]]]]]].
@@ -3044,7 +2973,6 @@ Local Opaque Memory.store.
           congruence.
     Qed.
 
-
     Corollary initialization_correct_component_memory C mem mem':
       (forall C' b offset,
           C <> C' ->
@@ -3052,7 +2980,7 @@ Local Opaque Memory.store.
           Memory.load mem' (Permission.data, C', b, offset)) ->
       (forall C',
           C <> C' ->
-          next_block mem C' = next_block mem' C') ->
+          Memory.next_block mem C' = Memory.next_block mem' C') ->
       forall C', C <> C' -> mem C' = mem' C'.
     Proof.
       clear.
@@ -3834,7 +3762,7 @@ Local Opaque Memory.store.
                                by simplify_memory.
                      --- intros b Hnext.
                          repeat
-                           (erewrite next_block_store_stable;
+                           (erewrite Memory.next_block_store_stable;
                             last eassumption).
                          rewrite (next_block_initial_memory C_b) in Hnext.
                          injection Hnext as ?; subst b.
@@ -3853,7 +3781,7 @@ Local Opaque Memory.store.
                          rewrite -Hothercomp0; try congruence.
                          by rewrite load_prepare_buffers.
                      --- repeat
-                           (erewrite next_block_store_stable;
+                           (erewrite Memory.next_block_store_stable;
                             last eassumption).
                          rewrite -Hotherblock0; last congruence.
                          now rewrite next_block_prepare_buffers.
@@ -3875,7 +3803,7 @@ Local Opaque Memory.store.
                                  repeat
                                    (erewrite <- component_memory_after_store_neq in HCmem;
                                     [| eassumption | simpl; congruence]).
-                                 unfold next_block in Hotherblock0.
+                                 unfold Memory.next_block in Hotherblock0.
                                  specialize (Hotherblock0 _ (nesym Heq)).
                                  rewrite HCmem in Hotherblock0.
                                  rewrite /Source.prepare_buffers
@@ -4165,14 +4093,14 @@ Local Opaque Memory.store.
             - destruct Hprealloc0 as [[Cmem0 [buf [HCmmem0 [Hbuf [Hnext0 Hprealloc]]]]] _].
               destruct (mem1 C') as [mem1C' |] eqn:Hmem1C'.
               + eexists. split; first reflexivity.
-                assert (Hnext1 : next_block mem1 C' = Some LOCALBUF_blockid). {
-                  erewrite <- next_block_store_stable in Hblock0;
+                assert (Hnext1 : Memory.next_block mem1 C' = Some LOCALBUF_blockid). {
+                  erewrite <- Memory.next_block_store_stable in Hblock0;
                     last eassumption.
-                  erewrite <- next_block_store_stable in Hblock0;
+                  erewrite <- Memory.next_block_store_stable in Hblock0;
                     last eassumption.
                   exact Hblock0.
                 }
-                rewrite /next_block Hmem1C' in Hnext1.
+                rewrite /Memory.next_block Hmem1C' in Hnext1.
                 now injection Hnext1.
               + erewrite <- component_memory_after_store_neq in Hmem1C';
                   [| eassumption | simpl; congruence].
@@ -4461,10 +4389,10 @@ Local Opaque Memory.store.
                     (* inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |]; *)
                     (*   subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6; *)
                     (*   subst eregs. *)
-                    repeat (erewrite next_block_store_stable;
+                    repeat (erewrite Memory.next_block_store_stable;
                             last eassumption).
                     rewrite /component_buffer in C'_b.
-                    rewrite /next_block mkfmapfE C'_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C'_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers C') as [buf |] eqn:Hbuf;
@@ -4475,7 +4403,7 @@ Local Opaque Memory.store.
                     destruct Hsteady1 as [Hshift1 Hblock1].
                     erewrite Hblock1; first reflexivity.
                     rewrite /e /=
-                            /next_block /initial_memory mkfmapfE
+                            /Memory.next_block /initial_memory mkfmapfE
                             C'_b
                             ComponentMemory.nextblock_prealloc
                             Hbuf.
@@ -4536,10 +4464,10 @@ Local Opaque Memory.store.
                         -- eassumption.
                     - intros b Hnext.
                       repeat
-                        (erewrite next_block_store_stable; last eassumption).
+                        (erewrite Memory.next_block_store_stable; last eassumption).
                       rewrite -Hblock2; last assumption.
                       repeat
-                        (erewrite next_block_store_stable; last eassumption).
+                        (erewrite Memory.next_block_store_stable; last eassumption).
                       rewrite /e /= -Hmain in Hnext.
                       rewrite -Hmain.
                       exact (Hblock0 _ Hnext).
@@ -4606,7 +4534,7 @@ Local Opaque Memory.store.
                                  [| eassumption | intro Hcontra; subst C''; contradiction])).
 
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -4748,8 +4676,8 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                   -- by simplify_memory.
                   -- eassumption.
               + intros b Hnext.
-                erewrite next_block_store_stable; last eassumption.
-                erewrite next_block_store_stable; last eassumption.
+                erewrite Memory.next_block_store_stable; last eassumption.
+                erewrite Memory.next_block_store_stable; last eassumption.
                 exact (Hblock0 _ Hnext).
             - right.
               destruct Hinitial0 as [Hinitflag0 [Hlocalbuf0 [Hprealloc0 Hnot_shared0]]].
@@ -5025,7 +4953,7 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                            by simplify_memory.
                     ** simpl. intros b Hnextblock.
                        subst mem'.
-                       repeat (erewrite next_block_store_stable;
+                       repeat (erewrite Memory.next_block_store_stable;
                                last eassumption).
                        exact (Hnextblock2 _ Hnextblock).
                  ++ simpl. intros C0 C0_b HC0_C'.
@@ -5076,10 +5004,10 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                        +++ simpl. intros b Hblock.
                            subst mem'.
                            apply Hblock0 in Hblock.
-                           repeat (erewrite next_block_store_stable;
+                           repeat (erewrite Memory.next_block_store_stable;
                                    last eassumption).
                            erewrite <- Hblock2; last congruence.
-                           repeat (erewrite next_block_store_stable;
+                           repeat (erewrite Memory.next_block_store_stable;
                                    last eassumption).
                            exact Hblock.
                     ** simpl.
@@ -5129,10 +5057,10 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                            +++ simpl. intros b Hblock.
                                subst mem'.
                                apply Hblock0 in Hblock.
-                               repeat (erewrite next_block_store_stable;
+                               repeat (erewrite Memory.next_block_store_stable;
                                        last eassumption).
                                erewrite <- Hblock2; last congruence.
-                               repeat (erewrite next_block_store_stable;
+                               repeat (erewrite Memory.next_block_store_stable;
                                        last eassumption).
                                exact Hblock.
                        --- right.
@@ -5444,12 +5372,12 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                                  by eapply Lem.
                        ** simpl in HcompMem.
                           destruct H8 as [src_compMem [Hsrc_compMem Hnextblock]].
-                          assert (next_block mem10 Cb = Some LOCALBUF_blockid).
-                          unfold next_block; rewrite Hsrc_compMem Hnextblock //=.
+                          assert (Memory.next_block mem10 Cb = Some LOCALBUF_blockid).
+                          unfold Memory.next_block; rewrite Hsrc_compMem Hnextblock //=.
                           replace Cb with
                             (Pointer.component (Permission.data, Cb, S b, offset)) in H8 by reflexivity.
-                          apply load_next_block_None in H8. congruence.
-                          simpl. unfold LOCALBUF_blockid. lia.
+                          apply Memory.load_next_block_None in H8. congruence.
+                          simpl. unfold LOCALBUF_blockid. apply /ssrnat.leP. lia.
               + exists (Cb, S b).
                 split.
                 * rewrite /all_zeros_shift /uniform_shift //=.
@@ -5901,7 +5829,7 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
               specialize (Hshift2 _ _ Hload) as [v [? ?]].
               by exists v; split; simplify_memory.
     * move=> b Hb //=.
-      do 10 (erewrite next_block_store_stable; eauto).
+      do 10 (erewrite Memory.next_block_store_stable; eauto).
       specialize (Hnotnextcomp C' C'_b C'_next_e1).
       destruct Hnotnextcomp as [[? [? ?]] | [? [? ?]]]; last congruence.
       destruct H1 as [Hshift0 Hblock0].
@@ -5963,7 +5891,7 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                  specialize (Hshift2 _ _ Hload) as [v [? ?]].
                  by exists v; split; simplify_memory.
        - move=> b Hb //=.
-         do 10 (erewrite next_block_store_stable; eauto).
+         do 10 (erewrite Memory.next_block_store_stable; eauto).
          destruct Hsteady' as [Hshift0 Hblock0].
          destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
          inversion wf_int_pref'.
@@ -6025,7 +5953,7 @@ Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Mem
                       *** simplify_memory'. eauto.
                       *** eauto.
             ** intros b Hnextb.
-              unfold next_block.
+              unfold Memory.next_block.
                assert (asmp: mem0 C0 = mem8 C0).
                {
                  Local Transparent Memory.store.
@@ -6849,10 +6777,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last (injection; discriminate).
                        simpl in *.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        simpl.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
@@ -6861,10 +6789,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- simpl. intros off v' Hload.
                        pose proof next_block_initial_memory C_b as Hnext0.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        specialize (Hrename' _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''. split.
@@ -6879,12 +6807,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                     inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
                       subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
                       subst eregs.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
                     rewrite /component_buffer in C_b.
-                    rewrite /next_block mkfmapfE C_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
@@ -6941,7 +6869,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 (erewrite <- component_memory_after_alloc_neq;
                                  [| eassumption | intro Hcontra; subst C'; contradiction])).
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -7173,10 +7101,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last (injection; discriminate).
                        simpl in *.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        simpl.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
@@ -7185,10 +7113,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- simpl. intros off v' Hload.
                        pose proof next_block_initial_memory C_b as Hnext0.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        specialize (Hrename' _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''. split.
@@ -7203,12 +7131,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                     inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
                       subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
                       subst eregs.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
                     rewrite /component_buffer in C_b.
-                    rewrite /next_block mkfmapfE C_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
@@ -7265,7 +7193,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 (erewrite <- component_memory_after_alloc_neq;
                                  [| eassumption | intro Hcontra; subst C'; contradiction])).
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -7495,10 +7423,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last (injection; discriminate).
                        simpl in *.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        simpl.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
@@ -7507,10 +7435,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- simpl. intros off v' Hload.
                        pose proof next_block_initial_memory C_b as Hnext0.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        specialize (Hrename' _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''. split.
@@ -7525,12 +7453,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                     inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
                       subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
                       subst eregs.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
                     rewrite /component_buffer in C_b.
-                    rewrite /next_block mkfmapfE C_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
@@ -7587,7 +7515,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 (erewrite <- component_memory_after_alloc_neq;
                                  [| eassumption | intro Hcontra; subst C'; contradiction])).
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -7806,10 +7734,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last (injection; discriminate).
                        simpl in *.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        simpl.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
@@ -7818,10 +7746,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- simpl. intros off v' Hload.
                        pose proof next_block_initial_memory C_b as Hnext0.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        specialize (Hrename' _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''. split.
@@ -7836,12 +7764,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                     inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
                       subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
                       subst eregs.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
                     rewrite /component_buffer in C_b.
-                    rewrite /next_block mkfmapfE C_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
@@ -7893,7 +7821,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 (erewrite <- component_memory_after_alloc_neq;
                                  [| eassumption | intro Hcontra; subst C'; contradiction])).
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -8216,9 +8144,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                     * intros next Hnext.
                       rewrite Hmem' in Hnext.
                       specialize (Hnextblock next Hnext).
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hstore'.
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
                   + assert (mem0_mem''_asmp: forall C,
@@ -8553,9 +8481,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                     * intros next Hnext.
                       rewrite Hmem' in Hnext.
                       specialize (Hnextblock next Hnext).
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hstore'.
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
                   + assert (mem0_mem''_asmp: forall C,
@@ -8888,9 +8816,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                     * intros next Hnext.
                       rewrite Hmem' in Hnext.
                       specialize (Hnextblock next Hnext).
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hstore'.
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
                   + assert (mem0_mem''_asmp: forall C,
@@ -9221,9 +9149,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                     * intros next Hnext.
                       rewrite Hmem' in Hnext.
                       specialize (Hnextblock next Hnext).
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hstore'.
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
                   + assert (mem0_mem''_asmp: forall C,
@@ -9546,10 +9474,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last (injection; discriminate).
                        simpl in *.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        simpl.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
@@ -9558,10 +9486,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- simpl. intros off v' Hload.
                        pose proof next_block_initial_memory C_b as Hnext0.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        specialize (Hrename' _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''. split.
@@ -9576,12 +9504,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                     inversion Hstep as [| | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6| | | |];
                       subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
                       subst eregs.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
                     rewrite /component_buffer in C_b.
-                    rewrite /next_block mkfmapfE C_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
@@ -9634,7 +9562,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                 (erewrite <- component_memory_after_alloc_neq;
                                  [| eassumption | intro Hcontra; subst C'; contradiction])).
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -9961,9 +9889,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                     * intros next Hnext.
                       rewrite Hmem' in Hnext.
                       specialize (Hnextblock next Hnext).
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hstore'.
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
                   + intros C' Hcomp Hnext.
@@ -10017,9 +9945,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                             intros next Hnext'.
                             rewrite Hmem' in Hnext'.
                             specialize (Hnextblock next Hnext').
-                            erewrite next_block_store_stable;
+                            erewrite Memory.next_block_store_stable;
                               last exact Hstore'.
-                            erewrite next_block_store_stable;
+                            erewrite Memory.next_block_store_stable;
                               last exact Hmem.
                             exact Hnextblock.
                     * right.
@@ -10367,10 +10295,10 @@ Local Transparent binop_of_Ebinop. unfold binop_of_Ebinop. Local Opaque binop_of
                          last (injection; discriminate).
                        simpl in *.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        simpl.
                        specialize (Hrename _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
@@ -10379,10 +10307,10 @@ Local Transparent binop_of_Ebinop. unfold binop_of_Ebinop. Local Opaque binop_of
                     -- simpl. intros off v' Hload.
                        pose proof next_block_initial_memory C_b as Hnext0.
                        destruct b' as [| b''];
-                         last (erewrite load_next_block_None in Hload;
+                         last (erewrite Memory.load_next_block_None in Hload;
                                [ discriminate
                                | eassumption
-                               | rewrite /LOCALBUF_blockid /=; lia]).
+                               | rewrite /LOCALBUF_blockid /=; apply /ssrnat.leP; lia]).
                        specialize (Hrename' _ _ Hload)
                          as [v'' [Hload'' Hrename'']].
                        exists v''. split.
@@ -10398,12 +10326,12 @@ Local Transparent binop_of_Ebinop. unfold binop_of_Ebinop. Local Opaque binop_of
                       subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
                       subst eregs.
                     subst er1 er2 er3 eregs_.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last eassumption.
                     rewrite /component_buffer in C_b.
-                    rewrite /next_block mkfmapfE C_b in Hnext'.
+                    rewrite /Memory.next_block mkfmapfE C_b in Hnext'.
                     injection Hnext' as Hnext'.
                     rewrite ComponentMemory.nextblock_prealloc in Hnext'.
                     destruct (prog_buffers (cur_comp s)) as [buf |] eqn:Hbuf;
@@ -10461,7 +10389,7 @@ Local Transparent binop_of_Ebinop. unfold binop_of_Ebinop. Local Opaque binop_of
                                 (erewrite <- component_memory_after_alloc_neq;
                                  [| eassumption | intro Hcontra; subst C'; contradiction])).
                              exact HCmem.
-                          ** rewrite /next_block HCmem in Hnextblock.
+                          ** rewrite /Memory.next_block HCmem in Hnextblock.
                              now injection Hnextblock.
                        ++
 Local Transparent Memory.load. unfold Memory.load in Hinitflag. Local Opaque Memory.load.
@@ -10925,9 +10853,9 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                     * intros next Hnext.
                       rewrite Hmem' in Hnext.
                       specialize (Hnextblock next Hnext).
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hstore'.
-                      erewrite next_block_store_stable;
+                      erewrite Memory.next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
                 + intros C' Hcomp Hnext.
@@ -10980,9 +10908,9 @@ Ltac t_postcondition_event_registers_code_pointer_Cb
                          intros next Hnext'.
                          rewrite Hmem' in Hnext'.
                          specialize (Hnextblock next Hnext').
-                         erewrite next_block_store_stable;
+                         erewrite Memory.next_block_store_stable;
                            last exact Hstore'.
-                         erewrite next_block_store_stable;
+                         erewrite Memory.next_block_store_stable;
                            last exact Hmem.
                          exact Hnextblock.
                   * right.
@@ -11551,9 +11479,9 @@ Local Opaque Memory.load.
                   * intros next Hnext.
                     rewrite Hmem' in Hnext.
                     specialize (Hnextblock next Hnext).
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last exact Hstore'.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last exact Hmem.
                     exact Hnextblock.
                   + intros C' Hcomp Hnext.
@@ -11607,9 +11535,9 @@ Local Opaque Memory.load.
                             intros next Hnext'.
                             rewrite Hmem' in Hnext'.
                             specialize (Hnextblock next Hnext').
-                            erewrite next_block_store_stable;
+                            erewrite Memory.next_block_store_stable;
                               last exact Hstore'.
-                            erewrite next_block_store_stable;
+                            erewrite Memory.next_block_store_stable;
                               last exact Hmem.
                             exact Hnextblock.
                     * right.
@@ -12094,13 +12022,13 @@ Local Transparent expr_of_const_val loc_of_reg.
                              exact Hload''.
                           ** exact Hrename''.
                   * intros next Hnext.
-                    erewrite next_block_store_stable in Hnext;
+                    erewrite Memory.next_block_store_stable in Hnext;
                       last exact Hstore.
                     (* rewrite Hmem' in Hnext. *)
                     specialize (Hnextblock next Hnext).
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last exact Hstore'.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last exact Hmem.
                     exact Hnextblock.
                 + intros C' Hcomp Hnext.
@@ -12203,12 +12131,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                                  +++ congruence.
                          ++ (* Same sub-proof on next block as above! *)
                              intros next Hnext'.
-                             erewrite next_block_store_stable in Hnext';
+                             erewrite Memory.next_block_store_stable in Hnext';
                                last exact Hstore.
                              specialize (Hnextblock next Hnext').
-                             erewrite next_block_store_stable;
+                             erewrite Memory.next_block_store_stable;
                                last exact Hstore'.
-                             erewrite next_block_store_stable;
+                             erewrite Memory.next_block_store_stable;
                                last exact Hmem.
                              exact Hnextblock.
                   }
@@ -12274,12 +12202,12 @@ Local Transparent expr_of_const_val loc_of_reg.
                                --- congruence.
                          ++ (* Same sub-proof on next block as above! *)
                              intros next Hnext'.
-                             erewrite next_block_store_stable in Hnext';
+                             erewrite Memory.next_block_store_stable in Hnext';
                                last exact Hstore.
                              specialize (Hnextblock next Hnext').
-                             erewrite next_block_store_stable;
+                             erewrite Memory.next_block_store_stable;
                                last exact Hstore'.
-                             erewrite next_block_store_stable;
+                             erewrite Memory.next_block_store_stable;
                                last exact Hmem.
                              exact Hnextblock.
                     * right.
@@ -12412,17 +12340,17 @@ Local Transparent expr_of_const_val loc_of_reg.
           rewrite Hcomp1 in Hshift1.
           rewrite Hreg1mem0 in Hshift1.
           injection Hshift1 as ?; subst v1.
-          destruct (next_block_alloc Halloc') as [Hnexte1 Hnexts0].
+          destruct (Memory.next_block_alloc _ _ _ _ _ Halloc') as [Hnexte1 Hnexts0].
           destruct ptr as [[[pptr Cptr] bptr] optr].
-          injection (pointer_of_alloc Halloc' Hnexte1) as ? ? ?; subst pptr Cptr optr.
+          injection (Memory.pointer_of_alloc _ _ _ _ _ _ Halloc' Hnexte1) as ? ? ?; subst pptr Cptr optr.
           (* NOTE: In previous cases, we got to the store by a different route. *)
           destruct (Memory.alloc_after_load _ _ _ _ _ _ (Z.to_nat n1) Hreg0mem)
             as [mem' [bnew [Hb' Halloc]]].
           (* Some more work on this second alloc... *)
-          destruct (next_block_alloc Halloc) as [Hnextmem Hnextmem'].
+          destruct (Memory.next_block_alloc _ _ _ _ _ Halloc) as [Hnextmem Hnextmem'].
           simpl in Hnextmem, Hnextmem'.
           specialize (Hblock1 _ Hnexte1).
-          rewrite <- (next_block_store_stable _ Hmem) in Hblock1.
+          rewrite <- (Memory.next_block_store_stable _ _ _ _ _ Hmem) in Hblock1.
           rewrite Hblock1 in Hnextmem.
           injection Hnextmem as ?; subst bnew.
           unfold postcondition_event_registers in Hregs1.
@@ -12781,7 +12709,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                   * intros next Hnext.
                     rewrite Hnexts0 in Hnext.
                     injection Hnext as ?; subst next.
-                    erewrite next_block_store_stable;
+                    erewrite Memory.next_block_store_stable;
                       last exact Hstore'.
                     exact Hnextmem'.
                   + intros C' Hcomp Hnext.
@@ -12855,13 +12783,13 @@ Local Transparent expr_of_const_val loc_of_reg.
                                --- exact Hrename'.
                          ++ (* Here the second proof on next block differs! *)
                            intros next Hnext'.
-                           erewrite next_block_store_stable;
+                           erewrite Memory.next_block_store_stable;
                              last exact Hstore'.
                            rewrite Hcomp1 in Hnext.
-                           rewrite (next_block_alloc_neq Halloc Hnext).
-                           erewrite next_block_store_stable;
+                           rewrite (Memory.next_block_alloc_neq _ _ _ _ _ _ Halloc Hnext).
+                           erewrite Memory.next_block_store_stable;
                              last exact Hmem.
-                           erewrite next_block_alloc_neq in Hnext';
+                           erewrite Memory.next_block_alloc_neq in Hnext';
                              [| exact Halloc' | exact Hnext].
                            apply Hnextblock.
                            exact Hnext'.

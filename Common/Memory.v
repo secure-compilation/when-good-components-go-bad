@@ -989,6 +989,12 @@ Module Memory.
     | None => None
     end.
 
+  Definition next_block (mem: t) (C : Component.id) : option Block.id :=
+    match mem C with
+    | Some Cmem => Some (ComponentMemory.next_block Cmem)
+    | None => None
+    end.
+
   Lemma load_after_store mem ptr v mem' ptr' :
     store mem  ptr v = Some mem' ->
     load mem' ptr' =
@@ -1264,6 +1270,68 @@ Module Memory.
       first reflexivity.
     apply /dommP. exists Cmem. assumption.
   Qed.
+
+  Lemma next_block_store_stable mem ptr v mem' C:
+    store mem ptr v = Some mem' ->
+    next_block mem' C = next_block mem C.
+  Proof.
+    unfold store.
+    unfold next_block.
+    destruct ptr as [[[[] C'] b] o];
+      first discriminate.
+    simpl.
+    destruct (mem C') as [memC |] eqn:HmemC;
+      last discriminate.
+    destruct (ComponentMemory.store memC b o v) as [memC' |] eqn:Hstore;
+      last discriminate.
+    intros H. injection H as ?; subst mem'.
+    rewrite setmE.
+    destruct (C == C') eqn:Heq; rewrite Heq;
+      last reflexivity.
+    move: Heq => /eqP => ?; subst C'.
+    apply ComponentMemory.next_block_store_stable in Hstore.
+    now rewrite -Hstore HmemC.
+  Qed.
+
+  (* TODO: Add more informative lemma on alloc pointers. *)
+  Lemma offset_of_alloc_offset mem cid sz mem' ptr':
+    alloc mem cid sz = Some (mem', ptr') ->
+    Pointer.offset ptr' = 0%Z.
+  Admitted.
+
+  (* ... Like this one. *)
+  Lemma pointer_of_alloc mem cid sz mem' ptr' nb:
+    alloc mem cid sz = Some (mem', ptr') ->
+    next_block mem cid = Some nb ->
+    ptr' = (Permission.data, cid, nb, 0%Z).
+  Admitted.
+
+  (* (This is just here to ease things, maybe temporarily...) *)
+  Lemma alloc_next_block mem cid sz mem' ptr':
+    alloc mem cid sz = Some (mem', ptr') ->
+    exists nb,
+      next_block mem cid = Some nb.
+  Admitted.
+
+  (* NOTE: Use standard arithmetic in conclusion? *)
+  Lemma next_block_alloc m C n m' b:
+    alloc m C n = Some (m', b) ->
+    next_block m C = Some (Pointer.block b) /\
+    next_block m' C = Some (ssrnat.addn (Pointer.block b) 1).
+  Admitted.
+
+  Lemma next_block_alloc_neq m C n m' b C' :
+    alloc m C n = Some (m', b) ->
+    C' <> C ->
+    next_block m' C' = next_block m C'.
+  Admitted.
+
+  Lemma load_next_block_None mem ptr b :
+    next_block mem (Pointer.component ptr) = Some b ->
+    Pointer.block ptr >= b ->
+    load mem ptr = None.
+  Admitted.
+
 End Memory.
 
 Set Implicit Arguments.
