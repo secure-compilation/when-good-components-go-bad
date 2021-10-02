@@ -2006,12 +2006,31 @@ Local Opaque Memory.store.
     Lemma next_block_prepare_buffers C :
       component_buffer C ->
       next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
-    Admitted.
+    Proof.
+      rewrite /component_buffer /next_block /Source.prepare_buffers => C_b.
+      rewrite mapmE /omap /obind /oapp.
+      destruct (Source.prog_buffers p C) as [buf |] eqn:Hbuf.
+      - rewrite ComponentMemory.nextblock_prealloc.
+        now rewrite domm_set domm0 fsetU0.
+      - rewrite /p /program_of_trace /= in Hbuf.
+        rewrite mapmE /omap /obind /oapp in Hbuf.
+        move: C_b => /dommP => [[CI H_CI]].
+        now rewrite H_CI in Hbuf.
+    Qed.
 
     Lemma next_block_initial_memory C :
       component_buffer C ->
       next_block initial_memory C = Some 1.
-    Admitted.
+    Proof.
+      rewrite /component_buffer /next_block /initial_memory => C_b.
+      rewrite mkfmapfE C_b.
+      rewrite ComponentMemory.nextblock_prealloc.
+      destruct (prog_buffers C) as [buf |] eqn:Hbuf.
+      - now rewrite domm_set domm0 fsetU0.
+      - rewrite domm_buffers in C_b.
+        move: Hbuf => /dommPn.
+        now rewrite C_b.
+    Qed.
 
     (* TODO: Inline idiomatic proof of this. *)
     Remark next_block_prepare_buffers_aux :
@@ -2027,7 +2046,19 @@ Local Opaque Memory.store.
       (* (0 <= o)%Z -> *)
       (* Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, o) = nth_error meta_buffer (Z.to_nat o). *)
       Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, Z.of_nat o) = nth_error meta_buffer o.
-    Admitted.
+    Proof.
+      rewrite /component_buffer => /dommP [CI Hint].
+      rewrite /Memory.load /=
+              /Source.prepare_buffers /p /program_of_trace /=
+              mapmE /omap /obind /oapp
+              mapmE /omap /obind /oapp
+              Hint
+              ComponentMemory.load_prealloc /=
+              /meta_buffer.
+      destruct (Z.leb_spec0 0%Z (Z.of_nat o)).
+      - by rewrite Nat2Z.id.
+      - lia.
+    Qed.
 
     Lemma load_next_block_None mem ptr b :
       next_block mem (Pointer.component ptr) = Some b ->

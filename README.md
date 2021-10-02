@@ -244,17 +244,6 @@ CS.comes_from_initial_state_mem_domm
     domm (CS.s_memory s') = domm (Source.prog_interface p)
 ```
 
-This assumption, although used in the context of program back-translation, is
-simply a trivial consequence of the structure of source programs and their
-initialization.
-
-```coq
-next_block_prepare_buffers
-  : forall C : nat_ordType,
-    component_buffer C ->
-    next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid
-```
-
 #### Target language ####
 
 Like the source language, the specification of well-formed target programs is
@@ -328,25 +317,10 @@ CSInvariants.CSInvariants.not_executing_can_not_share
 #### Back-translation ####
 
 The proof of back-translation currently relies on a small number of reasonable
-assumptions. A couple of them are trivial facts about the initial program state.
-
-```coq
-next_block_initial_memory
-  : forall C : nat_ordType,
-    component_buffer C -> next_block initial_memory C = Some 1
-
-load_prepare_buffers
-  : forall (C : nat_ordType) (o : nat),
-    component_buffer C ->
-    Memory.load (Source.prepare_buffers p)
-      (Permission.data, C, Block.local, Z.of_nat o) = 
-    nth_error meta_buffer o
-```
-
-The well-formedness of the back-translated program holds by construction. Like
-similar proofs that talk more generally about all source and target language
-programs, a few simple adaptations are needed to accommodate the strengthened
-notion of program well-formedness.
+assumptions. The well-formedness of the back-translated program holds by
+construction. Like similar proofs that talk more generally about all source and
+target language programs, a few simple adaptations are needed to accommodate the
+strengthened notion of program well-formedness.
 
 ```coq
 well_formed_events_well_formed_program
