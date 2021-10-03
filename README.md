@@ -477,6 +477,8 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
 
 ### Index of definitions ###
 
+The source language `SafeP` corresponds to `Source` in the code. The target language `Mach` corresponds to `Interm` in the code.
+
 - Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
 - Data-flow events `E`: inductive `event_inform` in `Common/Definitions.v`
 - Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
