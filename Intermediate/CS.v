@@ -1829,14 +1829,14 @@ Proof.
     try reflexivity. (* Most operations do not modify the memory. *)
   - (* Preservation by Memory.store. *)
     match goal with
-    | Hstore : Memory.store _ ?PTR (Register.get ?REG ?REGS) = _ |- _ =>
+    | Hstore : Memory.store _ ?PTR ?V = _ |- _ =>
       unfold Memory.store in Hstore;
         destruct (Permission.eqb (Pointer.permission PTR) Permission.data) eqn:Hperm;
         [| discriminate];
         destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
         [| discriminate];
         destruct (ComponentMemory.store
-                    memC (Pointer.block PTR) (Pointer.offset PTR) (Register.get REG REGS))
+                    memC (Pointer.block PTR) (Pointer.offset PTR) V)
           as [memC' |] eqn:Hcase2;
         [| discriminate];
         inversion Hstore as [Hsetm];

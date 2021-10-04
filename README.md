@@ -203,15 +203,6 @@ CS.load_component_prog_interface
     Star (CS.sem p) s t s' ->
     Memory.load (CS.s_memory s') ptr = Some (Ptr ptr') ->
     Pointer.component ptr' \in domm (Source.prog_interface p)
-
-CS.comes_from_initial_state_mem_domm
-  : forall p : Source.program,
-    Source.well_formed_program p ->
-    Source.closed_program p ->
-    forall (s : CS.state) (t : trace event) (s' : state (CS.sem p)),
-    CS.initial_state p s ->
-    Star (CS.sem p) s t s' ->
-    domm (CS.s_memory s') = domm (Source.prog_interface p)
 ```
 
 #### Target language ####
