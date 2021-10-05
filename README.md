@@ -1,6 +1,6 @@
 # SecurePtrs #
 
-This repository contains the Coq development of the paper:
+This branch contains the Coq development of the paper:
 - **[SecurePtrs: Proving Secure Compilation Using
      Data-Flow Back-Translation nd Turn-Taking Simulation](https://arxiv.org/abs/2110.01439)**.
    Akram El-Korashy, Roberto Blanco, Jérémy Thibault,
