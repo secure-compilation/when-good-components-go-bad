@@ -3440,7 +3440,9 @@ Section Definability.
         Star (CS.sem p) (CS.initial_machine_state p) prefix' cs /\
         project_non_inform prefix_inform = prefix' /\
         traces_shift_each_other_option all_zeros_shift (uniform_shift 1) (project_non_inform prefix) prefix' /\
-        well_formed_state_r s prefix suffix cs.
+        well_formed_state_r s prefix suffix cs /\
+        (* good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) prefix' /\ *)
+        shared_locations_have_only_shared_values (CS.s_memory cs) (uniform_shift 1).
     Proof.
       have Eintf : genv_interface (prepare_global_env p) = intf by [].
       have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p
@@ -3612,7 +3614,7 @@ Section Definability.
                          (Int 0%Z)).
 
         exists (StackState Component.main []), E0, E0.
-        split; [| split; [| split]].
+        split; [| split; [| split; [| split]]].
         + rewrite /CS.initial_machine_state /Source.prog_main
                   find_procedures_of_trace_main.
           take_step.
@@ -3848,6 +3850,10 @@ Section Definability.
                                  now rewrite Hdomm0.
             -- by move=> [].
           * unfold valid_procedure. now auto.
+        + simpl. intros ptr [cid bid] v Hload Heq Hshift.
+          injection Heq as ? ?; subst cid bid.
+          destruct v as [| [[[[|] C] b] o] |]; try reflexivity.
+          admit.
       - (* Inductive step. *)
         rewrite -catA => Et.
         assert (wf_int_pref' : well_formed_intermediate_prefix (prefix ++ [:: e])).
@@ -3857,14 +3863,14 @@ Section Definability.
         assert (wf_int_pref'' : well_formed_intermediate_prefix prefix).
         { eapply well_formed_intermediate_prefix_inv. eauto. }
         specialize (IH (e :: suffix) Et) as
-            [cs [s [prefix_inform [prefix' [Star0 [Hproj [Hshift Hwf_cs]]]]]]].
+            [cs [s [prefix_inform [prefix' [Star0 [Hproj [Hshift [Hwf_cs Hleak0]]]]]]]].
         (* NOTE: const_map is too weak now! *)
 
-        move: Hwf_cs Star0.
+        move: Hwf_cs Star0 Hleak0.
         (* case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp. *)
         case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] /andP [[]] /eqP wf_C_orig wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
 
-        move=> Star0.
+        move=> Star0 Hleak0.
 
         have C_b := valid_procedure_has_block P_exp.
         have C_local := wfmem_counter _ C_b.
@@ -3937,6 +3943,20 @@ Section Definability.
           rewrite Hmem' in Hmem''.
           congruence. }
 
+        assert (Hleak1 : shared_locations_have_only_shared_values mem' (uniform_shift 1)).
+        { intros ptr [cid bid] v Hload Heq Hgood.
+          injection Heq as ? ?; subst cid bid.
+          destruct (Pointer.eqP ptr (Permission.data, C, Block.local, 0%Z)) as [| Hneq].
+          - subst ptr.
+            erewrite Memory.load_after_store_eq in Hload;
+              last eassumption.
+            injection Hload as ?; subst v.
+              reflexivity.
+          - erewrite Memory.load_after_store_neq in Hload;
+              last eassumption;
+              last now apply nesym.
+            exact (Hleak0 _ _ _ Hload Logic.eq_refl Hgood). }
+
         (* TODO: Probably split into a separate lemma (after it is in better
          shape). *)
         assert (Star2 : exists e' s' cs',
@@ -3948,7 +3968,8 @@ Section Definability.
                      (* metadata_size_lhs *)
                      (* const_map *)
                      (project_non_inform (prefix ++ [e]))
-                     (prefix' ++ event_non_inform_of [e'])
+                     (prefix' ++ event_non_inform_of [e']) /\
+                   shared_locations_have_only_shared_values (CS.s_memory cs') (uniform_shift 1)
                (* match_events e e' *) (* <- Lift to noninformative traces relating only zero/singleton traces *)
                (* event_renames_event_at_shared_addr  *)
                (* /\ e ~ e' *)
@@ -3957,8 +3978,8 @@ Section Definability.
         {
 
           clear (* Star1 *) (*wf_mem*) C_local (*Hmem'*).
-          revert mem' Star1  (*wf_mem'*) Hmem'. rename mem into mem0.
-          intros mem Star1 (*wf_mem'*) Hmem.
+          revert mem' Star1 (*wf_mem'*) Hmem' Hleak1. rename mem into mem0.
+          intros mem Star1 (*wf_mem'*) Hmem Hleak1.
           (* Case analysis on observable events, which in this rich setting
            extend to calls and returns and various memory accesses and related
            manipulations, of which only calls and returns are observable at
@@ -4115,7 +4136,7 @@ Section Definability.
               exists (StackState C' (Component.main :: callers s)).
               eexists.
 
-              split; last split.
+              split; last split; last split.
               + Local Transparent loc_of_reg.
                 take_steps;
                   first (rewrite Hmain; exact Hmem1).
@@ -4550,6 +4571,9 @@ Section Definability.
                         injection H2 as ?; subst e0.
                         inversion H4; now destruct t0.
                 * now destruct tprefix.
+              + simpl. intros ptr [cid bid] v Hload Heq Hgood.
+                injection Heq as ? ?; subst cid bid.
+                admit.
             }
 
             (** Non-empty trace prefix case **)
@@ -5053,7 +5077,7 @@ Section Definability.
                                apply CS.CS.singleton_traces_non_inform.
               * right. left. by apply: (closed_intf Himport). }
 
-            split; last split.
+            split; last split; last split.
             + eauto.
             + exact wf_cs'.
             + { rewrite CS.CS.project_non_inform_append. simpl.
@@ -5449,6 +5473,7 @@ Section Definability.
                           /left_block_id_good_for_shifting in Hshared.
                   assumption.
               }
+            + simpl. admit.
           (* END CASE: CALL *)
 
           (* CASE: [ERet], [ERetInform] *)
@@ -6061,7 +6086,7 @@ Section Definability.
 
             destruct Star_ret as [s' [cs' [Star_ret [mem_cs' wf_cs']]]].
             exists (ERetInform C vcom mem1 regs C').
-            eexists. eexists. split; last split.
+            eexists. eexists. split; last split; last split.
             eapply star_trans; eauto.
             eauto.
             {
@@ -6433,6 +6458,7 @@ Section Definability.
                         /left_block_id_good_for_shifting in Hshared.
                 assumption.
             }
+            + admit.
 
           (* NOTE: ... And there is a series of new events to consider. *)
 
@@ -6495,7 +6521,7 @@ Section Definability.
                 eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
 
               + (* EConst-Int *)
-                split; [| split].
+                split; [| split; [| split]].
                 { (** star steps *)
                   Local Transparent expr_of_const_val loc_of_reg.
                   take_steps;
@@ -6819,13 +6845,26 @@ Section Definability.
                     + rewrite -lastI in H0. discriminate.
                     + destruct tprefix; discriminate.
                 }
+                {
+                  simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+                  injection Heq as ? ?; subst cid bid.
+                  destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                  - subst ptr.
+                    erewrite Memory.load_after_store_eq in Hload;
+                      last eassumption.
+                    injection Hload as ?; subst v'.
+                    reflexivity.
+                  - erewrite Memory.load_after_store_neq in Hload;
+                      [| eassumption | eassumption].
+                    exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
+                }
               + (* EConst-Ptr *)
                 destruct ptr as [[[[] ptrC] ptrb] ptro].
                 * inversion wf_e as [Hptr].
                   destruct (procs (cur_comp s)) as [Cprocs |] eqn:Hprocs; last discriminate.
                   move: Hptr => /andP [] => /eqP => Hcomp Hblock.
                   subst ptrC.
-                  split; [| split].
+                  split; [| split; [| split]].
                   { (** star steps *)
                     Local Transparent expr_of_const_val loc_of_reg.
                     take_steps.
@@ -7143,10 +7182,23 @@ Section Definability.
                       + rewrite -lastI in H0. discriminate.
                       + destruct tprefix; discriminate.
                   }
+                  {
+                    simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+                    injection Heq as ? ?; subst cid bid.
+                    destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                    - subst ptr.
+                      erewrite Memory.load_after_store_eq in Hload;
+                        last eassumption.
+                      injection Hload as ?; subst v'.
+                      reflexivity.
+                    - erewrite Memory.load_after_store_neq in Hload;
+                        [| eassumption | eassumption].
+                      exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
+                  }
                 * inversion wf_e as [Hptr].
                   move: Hptr => /andP [] => /eqP => Hcomp => /eqP => Hblock.
                   subst ptrC ptrb.
-                  split; [| split].
+                  split; [| split; [| split]].
                   { (** star steps *)
                     Local Transparent expr_of_const_val loc_of_reg.
                     take_steps;
@@ -7465,8 +7517,23 @@ Section Definability.
                       + rewrite -lastI in H0. discriminate.
                       + destruct tprefix; discriminate.
                   }
+                  {
+                    (* NOTE: Can be refactored, identical in all three sub-cases. *)
+                    simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+                    injection Heq as ? ?; subst cid bid.
+                    (* NOTE: [ptr] as second argument for easier application of [neq] lemma. *)
+                    destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                    - subst ptr.
+                      erewrite Memory.load_after_store_eq in Hload;
+                        last eassumption.
+                      injection Hload as ?; subst v'.
+                      reflexivity.
+                    - erewrite Memory.load_after_store_neq in Hload;
+                        [| eassumption | eassumption].
+                      exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
+                  }
               + (* EConst-Undef *)
-                split; [| split].
+                split; [| split; [| split]].
                 { (** star steps *)
                   Local Transparent expr_of_const_val loc_of_reg.
                   take_steps;
@@ -7771,6 +7838,19 @@ Section Definability.
                     + rewrite -lastI in H0. discriminate.
                     + destruct tprefix; discriminate.
                 }
+                {
+                  simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+                  injection Heq as ? ?; subst cid bid.
+                  destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                  - subst ptr.
+                    erewrite Memory.load_after_store_eq in Hload;
+                      last eassumption.
+                    injection Hload as ?; subst v'.
+                    reflexivity.
+                  - erewrite Memory.load_after_store_neq in Hload;
+                      [| eassumption | eassumption].
+                    exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
+                }
             }
             (* Const does not modify the (shared) memory, therefore these two
              should be identical. *)
@@ -7818,7 +7898,7 @@ Section Definability.
               pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [mem'' Hstore'].
               eexists. (* NOTE: Moved from above! *)
               (* Continue. *)
-              split; [| split].
+              split; [| split; [| split]].
               * (* Evaluate steps of back-translated event first. *)
                 Local Transparent expr_of_const_val loc_of_reg.
                 take_steps.
@@ -8129,6 +8209,17 @@ Section Definability.
                 rewrite CS.CS.project_non_inform_append /=.
                 rewrite -> !cats0.
                 by inversion Hshift; eauto.
+              * simpl. intros ptr [cid bid] v' Hload' Heq Hgood.
+                  injection Heq as ? ?; subst cid bid.
+                  destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                  -- subst ptr.
+                     erewrite Memory.load_after_store_eq in Hload';
+                       last eassumption.
+                     injection Hload' as ?; subst v'.
+                     reflexivity.
+                  -- erewrite Memory.load_after_store_neq in Hload';
+                       [| eassumption | eassumption].
+                     exact (Hleak1 _ _ _ Hload' Logic.eq_refl Hgood).
 
             + (* EConst-Ptr *)
               destruct ptr as [[[ptrp ptrC] ptrb] ptro].
@@ -8150,7 +8241,7 @@ Section Definability.
                 (* Continue. *)
                 (* exists (StackState C (callers s)). *)
                 eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-                split; [| split].
+                split; [| split; [| split]].
                 * (* Evaluate steps of back-translated event first. *)
                   Local Transparent expr_of_const_val loc_of_reg.
                   take_steps.
@@ -8471,13 +8562,24 @@ Section Definability.
                   rewrite CS.CS.project_non_inform_append /=.
                   rewrite -> !cats0.
                   by inversion Hshift; eauto.
+                * simpl. intros ptr [cid bid] v' Hload' Heq Hgood.
+                  injection Heq as ? ?; subst cid bid.
+                  destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                  -- subst ptr.
+                     erewrite Memory.load_after_store_eq in Hload';
+                       last eassumption.
+                     injection Hload' as ?; subst v'.
+                     reflexivity.
+                  -- erewrite Memory.load_after_store_neq in Hload';
+                       [| eassumption | eassumption].
+                     exact (Hleak1 _ _ _ Hload' Logic.eq_refl Hgood).
               }
               set (saved := (eval_binop Add (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)) (Int ptro))).
               pose proof proj1 (Memory.store_some_load_some _ _ (*Ptr ptr*) saved) Hload as [mem'' Hstore'].
               (* Continue. *)
               (* exists (StackState C (callers s)). *)
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-              split; [| split].
+              split; [| split; [| split]].
               * (* Evaluate steps of back-translated event first. *)
                 Local Transparent expr_of_const_val loc_of_reg.
                 take_steps.
@@ -8806,12 +8908,23 @@ Section Definability.
                 rewrite CS.CS.project_non_inform_append /=.
                 rewrite -> !cats0.
                 by inversion Hshift; eauto.
+              * simpl. intros ptr [cid bid] v' Hload' Heq Hgood.
+                injection Heq as ? ?; subst cid bid.
+                destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                -- subst ptr.
+                   erewrite Memory.load_after_store_eq in Hload';
+                     last eassumption.
+                   injection Hload' as ?; subst v'.
+                   reflexivity.
+                -- erewrite Memory.load_after_store_neq in Hload';
+                     [| eassumption | eassumption].
+                   exact (Hleak1 _ _ _ Hload' Logic.eq_refl Hgood).
 
             + (* EConst-Undef *)
               (* Continue. *)
               pose proof proj1 (Memory.store_some_load_some _ _ Undef) Hload as [mem'' Hstore'].
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-              split; [| split].
+              split; [| split; [| split]].
               * (* Evaluate steps of back-translated event first. *)
                 Local Transparent expr_of_const_val loc_of_reg.
                 take_steps.
@@ -9134,6 +9247,17 @@ Section Definability.
                 rewrite CS.CS.project_non_inform_append /=.
                 rewrite -> !cats0.
                 by inversion Hshift; eauto.
+              * simpl. intros ptr [cid bid] v' Hload' Heq Hgood.
+                injection Heq as ? ?; subst cid bid.
+                destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset v) ptr) as [| Hneq].
+                -- subst ptr.
+                   erewrite Memory.load_after_store_eq in Hload';
+                     last eassumption.
+                   injection Hload' as ?; subst v'.
+                   reflexivity.
+                -- erewrite Memory.load_after_store_neq in Hload';
+                      [| eassumption | eassumption].
+                   exact (Hleak1 _ _ _ Hload' Logic.eq_refl Hgood).
 
           - (* EMov *)
             (* Gather a few recurrent assumptions at the top. *)
@@ -9176,7 +9300,7 @@ Section Definability.
               exists (EMov Component.main src dst s0 t0).
               exists (StackState Component.main (callers s)).
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-              split; [| split].
+              split; [| split; [| split]].
               { (** star steps *)
                 Local Transparent expr_of_const_val loc_of_reg.
                 take_steps;
@@ -9512,6 +9636,20 @@ Section Definability.
                   + rewrite -lastI in H0. discriminate.
                   + destruct tprefix; discriminate.
               }
+              {
+                simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+                injection Heq as ? ?; subst cid bid.
+                destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset dst) ptr) as [| Hneq].
+                - subst ptr.
+                  erewrite Memory.load_after_store_eq in Hload;
+                    last eassumption.
+                  injection Hload as ?; subst v'.
+                  unfold saved.
+                  exact (Hleak0 _ _ _ Hloadmem0_vsrc Logic.eq_refl Hgood).
+                - erewrite Memory.load_after_store_neq in Hload;
+                    [| eassumption | eassumption].
+                  exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
+              }
             }
 
             (*destruct (well_formed_memory_store_reg_offset v (Int 42) C_b wf_mem) as [mem' Hstore].*) (* Mostly pollution? *)
@@ -9567,7 +9705,7 @@ Section Definability.
             (* Continue. *)
             exists (StackState C (callers s)).
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-            split; [| split].
+            split; [| split; [| split]].
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -9920,6 +10058,19 @@ Section Definability.
               rewrite CS.CS.project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
+            + (* NOTE: This is again identical to the empty subtrace case. *)
+              simpl. intros ptr [cid bid] v' Hload' Heq Hgood.
+              injection Heq as ? ?; subst cid bid.
+              destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset dst) ptr) as [| Hneq].
+              -- subst ptr.
+                 erewrite Memory.load_after_store_eq in Hload';
+                   last eassumption.
+                 injection Hload' as ?; subst v'.
+                 unfold saved.
+                 exact (Hleak0 _ _ _ Hloadmem0_vsrc Logic.eq_refl Hgood).
+              -- erewrite Memory.load_after_store_neq in Hload';
+                   [| eassumption | eassumption].
+                 exact (Hleak1 _ _ _ Hload' Logic.eq_refl Hgood).
 
           - (* EBinop *)
             (* Gather a few recurrent assumptions at the top. *)
@@ -9964,7 +10115,7 @@ Section Definability.
               exists (EBinop Component.main op reg0 reg1 reg2 s0 eregs).
               exists (StackState Component.main (callers s)).
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-              split; [| split].
+              split; [| split; [| split]].
               { (** star steps *)
                 Local Transparent expr_of_const_val loc_of_reg.
                 take_steps;
@@ -10339,6 +10490,23 @@ Section Definability.
                   + rewrite -lastI in H0. discriminate.
                   + destruct tprefix; discriminate.
               }
+              {
+                simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+                injection Heq as ? ?; subst cid bid.
+                destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset reg2) ptr) as [| Hneq].
+                - subst ptr.
+                  erewrite Memory.load_after_store_eq in Hload;
+                    last eassumption.
+                  injection Hload as ?; subst v'.
+                  unfold saved.
+                  pose proof Hleak0 _ _ _ Hreg0mem0 Logic.eq_refl Hgood as Hgood0.
+                  (* pose proof Hleak0 _ _ _ Hreg1mem0 Logic.eq_refl Hgood as Hgood1. *)
+                  (* NOTE: Easy lemma about goodness over binops. *)
+                  destruct v0 as [| [[[[|] ?] ?] ?] |]; by inversion Hgood0.
+                - erewrite Memory.load_after_store_neq in Hload;
+                    [| eassumption | eassumption].
+                  exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
+              }
             }
             (* destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore]. (* TODO: Consider actual utility of this. *) *)
             (* Const does not modify the (shared) memory, therefore these two
@@ -10386,7 +10554,7 @@ Section Definability.
             (* Continue. *)
             exists (StackState C (callers s)).
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-            split; [| split].
+            split; [| split; [| split]].
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -10884,6 +11052,22 @@ Section Definability.
               rewrite CS.CS.project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
+            + (* NOTE: Same as empty prefix case. *)
+              simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+              injection Heq as ? ?; subst cid bid.
+              destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset reg2) ptr) as [| Hneq].
+              * subst ptr.
+                erewrite Memory.load_after_store_eq in Hload;
+                  last eassumption.
+                injection Hload as ?; subst v'.
+                (* unfold saved. *)
+                pose proof Hleak0 _ _ _ Hreg0mem0 Logic.eq_refl Hgood as Hgood0.
+                (* pose proof Hleak0 _ _ _ Hreg1mem0 Logic.eq_refl Hgood as Hgood1. *)
+                (* NOTE: Easy lemma about goodness over binops. *)
+                destruct v0 as [| [[[[|] ?] ?] ?] |]; by inversion Hgood0.
+              * erewrite Memory.load_after_store_neq in Hload;
+                  [| eassumption | eassumption].
+                exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
 
           - (* ELoad *)
             (* Gather a few recurrent assumptions at the top. *)
@@ -11052,7 +11236,7 @@ Section Definability.
             (* Continue. *)
             exists (StackState C (callers s)).
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-            split; [| split].
+            split; [| split; [| split]].
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -11511,6 +11695,19 @@ Section Definability.
               rewrite CS.CS.project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
+            + simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+              injection Heq as ? ?; subst cid bid.
+              destruct (Pointer.eqP (Permission.data, cur_comp s, Block.local, reg_offset reg1) ptr) as [| Hneq].
+              * subst ptr.
+                erewrite Memory.load_after_store_eq in Hload;
+                  last eassumption.
+                injection Hload as ?; subst v'.
+                (* left_block_id_good_for_shifting (uniform_shift 1 C0) (S b0'). *)
+                apply (Hleak1 _ _ _ Hptr0mem Logic.eq_refl).
+                now apply ssrnat.ltn0Sn.
+              * erewrite Memory.load_after_store_neq in Hload;
+                  [| eassumption | eassumption].
+                exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
 
           - (* EStore *)
             rename e into reg0. rename e0 into reg1.
@@ -11718,7 +11915,7 @@ Section Definability.
 
             exists (StackState C (callers s)).
             eexists.
-            split; [| split].
+            split; [| split; [| split]].
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -12181,6 +12378,19 @@ Section Definability.
               rewrite CS.CS.project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
+            + simpl. intros ptr [cid bid] v' Hload Heq Hgood.
+              injection Heq as ? ?; subst cid bid.
+              destruct (Pointer.eqP (Permission.data, C0, S b0', o0) ptr) as [| Hneq].
+              * subst ptr.
+                erewrite Memory.load_after_store_eq in Hload;
+                  last eassumption.
+                injection Hload as ?; subst v'.
+                destruct v1 as [| [[[[|] C1] b1] o1] |]; try reflexivity.
+                destruct b1 as [| b1']; first discriminate.
+                reflexivity.
+              * erewrite Memory.load_after_store_neq in Hload;
+                  [| eassumption | eassumption].
+                exact (Hleak1 _ _ _ Hload Logic.eq_refl Hgood).
 
           - (* EAlloc *)
             (* Gather a few recurrent assumptions at the top. *)
@@ -12301,7 +12511,7 @@ Section Definability.
             (* Continue. *)
             exists (StackState C (callers s)).
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-            split; [| split].
+            split; [| split; [| split]].
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -12771,22 +12981,25 @@ Section Definability.
               rewrite -cats2 CS.CS.project_non_inform_append /=.
               rewrite -> !cats0, <- Hprefix01.
               by inversion Hshift; eauto.
+            + admit.
         }
 
-        destruct Star2 as (e' & s' & cs' & Star2 & wf_cs' & Hshift').
+        destruct Star2 as (e' & s' & cs' & Star2 & wf_cs' & Hshift' & Hleak').
         (* TODO: The statement needs to be extended to relate e and e'! *)
         (* NOTE: Now, case analysis on the event needs to take place early. *)
         exists cs', s',
         (prefix_inform ++ [:: e']), (prefix' ++ project_non_inform [:: e']).
-        split; [| split; [| split]].
+        split; [| split; [| split; [| split]]].
         + eapply (star_trans Star0); simpl; eauto.
           eapply (star_trans Star1); simpl; now eauto.
         + by rewrite -Hproj CS.CS.project_non_inform_append.
         + constructor.
           exact Hshift'.
         + assumption.
+        + assumption.
           Unshelve. all:  (unfold Block.local; congruence ).
-    Qed.
+    (* Qed. *)
+    Admitted.
 
     Print Assumptions definability_gen_rel_right.
 
@@ -12808,7 +13021,7 @@ Section Definability.
       move=> procs /andP [] wb_t _ wf_i_t.
       pose proof (@definability_gen_rel_right t [::] wb_t wf_i_t
                                               (Logic.eq_sym (app_nil_r _))).
-      destruct H as [cs [s [pref_inform [t' [Hstar [Hproj [Htraces Hwf]]]]]]].
+      destruct H as [cs [s [pref_inform [t' [Hstar [Hproj [Htraces [Hwf Hleak]]]]]]]].
       exists cs. exists t'. exists (uniform_shift 1).
       split. eauto. split. eauto. eauto.
     Qed.
