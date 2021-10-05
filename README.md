@@ -1,8 +1,11 @@
 # SecurePtrs #
 
-This repository contains the Coq development of the paper: **SecurePtrs: Proving
-Secure Compilation Using Data-Flow Back-Translation and Turn-Taking
-Simulation**.
+This repository contains the Coq development of the paper:
+- **[SecurePtrs: Proving Secure Compilation Using
+     Data-Flow Back-Translation nd Turn-Taking Simulation](https://arxiv.org/abs/2110.01439)**.
+   Akram El-Korashy, Roberto Blanco, Jérémy Thibault,
+   Adrien Durier, Deepak Garg, and Catalin Hritcu.
+   arXiv:2110.01439. October 2021.
 
 ### Prerequisites ###
 
@@ -66,8 +69,6 @@ mechanized counterparts in Coq.
 ### Assumptions ###
 
 The proof currently relies on the following assumptions:
-
-TODO: Remove statements after explaining the assumptions, regroup as needed.
 
 #### Logical axioms ####
 
