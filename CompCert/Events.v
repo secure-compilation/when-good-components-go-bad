@@ -25,7 +25,7 @@ Inductive event :=
 (*| ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event*)
 .
-                                                    
+
 Inductive match_event : event -> event -> Prop :=
 | match_events_call: forall C P arg mem C',
     match_event (ECall C P arg mem C')

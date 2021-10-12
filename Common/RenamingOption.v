@@ -673,37 +673,10 @@ Section SigmaShiftingBlockIdsOptionProperties.
       
 End SigmaShiftingBlockIdsOptionProperties.
 
-Definition addr_t : Type := (Component.id * Block.id).
 (* It seems only Block.id will need to be renamed.
      However, to compute a renaming, we have to know which "component memory" we are
      considering. To know the component memory, we need the Component.id.
 *)
-
-(* TODO: Relocate. *)
-Definition addr_eqb (a1 a2 : addr_t) : bool :=
-  (fst a1 =? fst a2) && (snd a1 =? snd a2).
-
-Lemma addr_eqP : Equality.axiom addr_eqb.
-Proof.
-  intros [C1 b1] [C2 b2].
-  unfold addr_eqb.
-  Check ssrnat.eqnP.
-  destruct (C1 =? C2) eqn:Hcase1; rewrite Hcase1;
-    destruct (b1 =? b2) eqn:Hcase2; rewrite Hcase2;
-    constructor;
-    (* False cases *)
-    try (injection as ? ?; subst;
-         try rewrite Nat.eqb_refl in Hcase1;
-         try rewrite Nat.eqb_refl in Hcase2;
-         discriminate).
-  (* True case *)
-  move: Hcase1 => /eqP ->.
-  move: Hcase2 => /eqP ->.
-  reflexivity.
-Qed.
-
-Definition addr_eqMixin: Equality.mixin_of addr_t := EqMixin addr_eqP.
-Canonical addr_eqType := Eval hnf in EqType addr_t addr_eqMixin.
 
 Definition mem_of_event (e: event) : Memory.t :=
   match e with
@@ -716,6 +689,7 @@ Definition arg_of_event (e: event) : value :=
   | ECall _ _ v _ _ => v
   | ERet _ v _ _ => v
   end.
+
 
 (* RB: NOTE: [DynShare] Using a set instead of an option type for easier
    integration with reachability predicates later. *)

@@ -12,6 +12,32 @@ Module Block.
   Definition local : id := 0.
 End Block.
 
+Definition addr_t : Type := (Component.id * Block.id).
+
+Definition addr_eqb (a1 a2 : addr_t) : bool :=
+  (fst a1 =? fst a2) && (snd a1 =? snd a2).
+
+Lemma addr_eqP : Equality.axiom addr_eqb.
+Proof.
+  intros [C1 b1] [C2 b2].
+  unfold addr_eqb.
+  destruct (C1 =? C2) eqn:Hcase1; rewrite Hcase1;
+    destruct (b1 =? b2) eqn:Hcase2; rewrite Hcase2;
+    constructor;
+    (* False cases *)
+    try (injection as ? ?; subst;
+         try rewrite Nat.eqb_refl in Hcase1;
+         try rewrite Nat.eqb_refl in Hcase2;
+         discriminate).
+  (* True case *)
+  move: Hcase1 => /eqP ->.
+  move: Hcase2 => /eqP ->.
+  reflexivity.
+Qed.
+
+Definition addr_eqMixin: Equality.mixin_of addr_t := EqMixin addr_eqP.
+Canonical addr_eqType := Eval hnf in EqType addr_t addr_eqMixin.
+
 Module Permission.
   Variant id :=
   | code
