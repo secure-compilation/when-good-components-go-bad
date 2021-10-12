@@ -24,7 +24,7 @@ Require Import Lib.Extra.
 Require Import Lib.Monads.
 
 From mathcomp Require Import ssreflect eqtype ssrfun seq.
-From mathcomp Require ssrbool.
+From mathcomp Require ssrbool ssrnat.
 From extructures Require Import fmap fset.
 
 Set Bullet Behavior "Strict Subproofs".
@@ -191,9 +191,24 @@ Definition wf_reg_wrt_t_pc (reg: Register.t) (t: trace event)
     Pointer.permission ptr = Permission.data ->
     wf_ptr_wrt_cid_t pc_comp t ptr.
 
+Definition reach_from_reg_wf_wrt_t_pc (reg: Register.t) (t: trace event)
+           (mem: Memory.t) (pc_comp: Component.id) :=
+  forall r ptr ptr_c ptr_b v_c v_b,
+    Register.get r reg = Ptr ptr ->
+    Pointer.permission ptr = Permission.data ->
+    Pointer.component ptr = ptr_c ->
+    Pointer.block ptr = ptr_b ->
+    Reachable mem (fset1 (ptr_c, ptr_b)) (v_c, v_b) ->
+    (forall v_o, wf_ptr_wrt_cid_t pc_comp t (Permission.data, v_c, v_b, v_o)).
+
 Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
   wf_mem_wrt_t_pc (CS.state_mem s) t (Pointer.component (CS.state_pc s)) /\
-  wf_reg_wrt_t_pc (CS.state_regs s) t (Pointer.component (CS.state_pc s)).
+  wf_reg_wrt_t_pc (CS.state_regs s) t (Pointer.component (CS.state_pc s))
+  (************************
+/\
+  reach_from_reg_wf_wrt_t_pc (CS.state_regs s) t (CS.state_mem s) (Pointer.component (CS.state_pc s)) 
+**************************************)
+.
 
 (* TODO: Move to Pointer module. *)
 Remark pointer_proj ptr :
@@ -294,17 +309,21 @@ Proof.
       apply/dommP. by eauto.
     }
     rewrite Hmain.
-    split; simpl.
+    split; (*last split;*) simpl.
     + apply initial_wf_mem; auto.
       
     + (* All registers are uninitialized. *)
       intros reg ptr Hget.
       destruct reg; discriminate.
+    (********************
+    + intros reg ptr ? Hget.
+      destruct reg; discriminate.
+     ***************************)
   - (* Inductive step. *)
     specialize (IHstar Logic.eq_refl Logic.eq_refl).
-    split.
+    split (*; last split*).
     + (* Memory. *)
-      destruct IHstar as [Hmem1 Hregs1].
+      destruct IHstar as [Hmem1 (*[Hregs1 _Hreach1]*) Hregs1].
       inversion Hstep12 as [? ? ? ? Hstep12']; subst.
       inversion Hstep12'; subst; simpl in *;
         (* A few useful simplifications. *)
@@ -511,7 +530,7 @@ Proof.
 
 
     + (* Registers. *)
-      destruct IHstar as [Hmem1 Hregs1].
+      destruct IHstar as [Hmem1 (*[Hregs1 _Hreach1]*) Hregs1].
       inversion Hstep12 as [? ? ? ? Hstep12']; subst.
       inversion Hstep12'; subst; simpl in *;
         (* A few useful simplifications. *)
@@ -722,6 +741,108 @@ Proof.
         rewrite Eapp_rcons.
         apply reachable_from_args_is_shared. simpl.
         apply Reachable_refl. apply /fset1P. reflexivity.
+     (** +  Reachable from registers *)
+      (********************************************
+      destruct IHstar as [Hmem1 [Hregs1 _Hreach1]].
+      inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+      inversion Hstep12'; subst; simpl in *;
+        (* A few useful simplifications. *)
+        try rewrite E0_right;
+        try rewrite Pointer.inc_preserves_component;
+        (* A few goals follow directly from the IH. *)
+        try assumption.
+      * (* IConst *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12'. (* Do we need anything in here? *)
+        destruct (Register.eqP reg r) as [Heq | Hneq].
+        -- (* If we read the register we just wrote, we get the exact immediate
+              value, here assumed to be a pointer. *)
+           subst r. rewrite Register.gss in Hget.
+           destruct v as [n | ptr']; first discriminate.
+           injection Hget as Hget; subst ptr'.
+           match goal with
+           | H: executing _ _ _ |- _ =>
+             destruct H as [procs [proc [Hprocs [Hproc [Hoff [Hperm Hnth]]]]]] end.
+           assert (Hwf_instr: well_formed_instruction
+                          p (Pointer.component pc) (Pointer.block pc)
+                          (IConst (IPtr ptr) reg)).
+           {
+             eapply wfprog_well_formed_instructions; eauto.
+             - rewrite <- CS.genv_procedures_prog_procedures; auto.
+             - eapply nth_error_In; eauto.
+           }
+           (* Thanks to [well_formed_instruction], we know that pointer
+              constants may only refer to their own component. *)
+           destruct ptr as [[[P C] b] o].
+           assert (C = Pointer.component pc).
+           {
+             inversion Hwf_instr. by simpl in *.
+           }
+           subst C. intros; simpl in *; subst.
+           now apply wf_ptr_own.
+        -- (* For any other register, this follows directly from the IH. *)
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
+      * (* IMov *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct (Register.eqP reg rdest) as [Heq | Hneq].
+        -- (* The new value comes from r1, which follows from the IH. *)
+           subst rdest. rewrite Register.gss in Hget.
+           exact (Hregs1 _ _ Hget).
+        -- (* The new value comes from reg, which follows from the IH. *)
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
+      * (* IBinOp *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct (Register.eqP reg r3) as [Heq | Hneq].
+        -- (* If we read the register we just wrote, we get the result of the
+              operation, which we then case analyze. *)
+           subst r3. rewrite Register.gss in Hget.
+           unfold result, eval_binop in Hget.
+           destruct op;
+             destruct (Register.get r1 regs) eqn:Hget1;
+             destruct (Register.get r2 regs) eqn:Hget2;
+             (* Most cases are nonsensical; a handful remain. *)
+             inversion Hget; subst.
+           (* Whenever there is a pointer and an integer, the result follows
+              from the IH on the pointer, albeit with a bit of work to account
+              for the integer offsets. *)
+           ++ assert (Hr2 := Hregs1 _ _ Hget2).
+              intros G.
+              erewrite <- Pointer.add_preserves_permission in Hr2.
+              specialize (Hr2 G).
+              inversion Hr2; subst. (* By the corresponding [constructor]. *)
+              ** now apply wf_ptr_own.
+              ** now apply wf_ptr_shared.
+           ++ assert (Hr1 := Hregs1 _ _ Hget1).
+              intros G.
+              erewrite <- Pointer.add_preserves_permission in Hr1.
+              specialize (Hr1 G).
+              inversion Hr1; subst; (* Can be picked automatically. *)
+                now constructor.
+           ++ assert (Hr1 := Hregs1 _ _ Hget1).
+              intros G.
+              erewrite <- Pointer.add_preserves_permission in Hr1.
+              specialize (Hr1 G).
+              inversion Hr1; subst;
+                now constructor.
+           (* The remaining cases are contradictions requiring some additional
+              but trivial analysis. *)
+           ++ destruct t as [[[P1 C1] b1] o1];
+                destruct t0 as [[[P2 C2] b2] o2];
+                destruct (Permission.eqb P1 P2);
+                destruct (C1 =? C2);
+                destruct (b1 =? b2);
+                discriminate.
+           ++ destruct (Pointer.leq t t0);
+                discriminate.
+        -- (* For any other register, this follows directly from the IH. *)
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
+Admitted.
+       ******************************)
 Qed.
 
 Lemma wf_state_wf_reg s regs pc pc_comp t:
@@ -731,7 +852,7 @@ Lemma wf_state_wf_reg s regs pc pc_comp t:
   Pointer.component pc = pc_comp ->
   wf_reg_wrt_t_pc regs t pc_comp.
 Proof.
-    unfold wf_state_t; intros [? ?] H1 H2 H3. rewrite <- H3, <- H2, <- H1. auto.
+    unfold wf_state_t; intros [? (*[? ?]*)?] _H1 _H2 _H3. rewrite <- _H3, <- _H2, <- _H1. auto.
 Qed.
 
 Lemma wf_state_wf_mem s mem pc pc_comp t:
@@ -741,7 +862,7 @@ Lemma wf_state_wf_mem s mem pc pc_comp t:
   Pointer.component pc = pc_comp ->
   wf_mem_wrt_t_pc mem t pc_comp.
 Proof.
-    unfold wf_state_t; intros [? ?] H1 H2 H3. rewrite <- H3, <- H2, <- H1. auto.
+    unfold wf_state_t; intros [? (*[? ?]*)?] _H1 _H2 _H3. rewrite <- _H3, <- _H2, <- _H1. auto.
 Qed.
 
 Lemma wf_reg_wf_ptr_wrt_cid_t reg t pc_comp r ptr:
@@ -1222,72 +1343,533 @@ Proof.
         exact Permission.data. (* FIXME: New subgoal after changing permission equality, suspect. *)
 Qed.
 
-Lemma not_executing_can_not_share s p t e C b:
+Lemma no_step_can_write_non_shared_content p:
   well_formed_program p ->
   closed_program p ->
-  is_prefix s p (rcons t e) ->
-  C <> cur_comp_of_event e ->
-  (forall b', ~ addr_shared_so_far (C, b') t) ->
-  ~ addr_shared_so_far (C, b) (rcons t e).
+  forall s t t_inform s',
+  is_prefix s p t ->
+  CS.step (prepare_global_env p) s t_inform s' ->
+  (
+    (
+      forall ptr vptr,
+        Memory.load (CS.state_mem s') ptr = Some (Ptr vptr) ->
+        Memory.load (CS.state_mem s) ptr <> Some (Ptr vptr) ->
+        (
+          forall c b,
+            Pointer.permission vptr = Permission.data ->
+            c = Pointer.component vptr ->
+            b = Pointer.block vptr ->
+            (
+              c = Pointer.component (CS.state_pc s) \/
+              addr_shared_so_far (c, b) t
+            )
+        )
+    )
+    /\
+    (
+      forall r vptr,
+        Register.get r (CS.state_regs s') = Ptr vptr ->
+        Register.get r (CS.state_regs s) <> Ptr vptr ->
+        (
+          forall c b,
+            Pointer.permission vptr = Permission.data ->
+            c = Pointer.component vptr ->
+            b = Pointer.block vptr ->
+            (
+              c = Pointer.component (CS.state_pc s) \/
+              addr_shared_so_far (c, b) t
+            )
+        )
+    )
+  ).
 Proof.
-  intros Hwf Hclosed Hprefix HC Hnot.
-  intros Hshared.
-  CS.unfold_states. unfold is_prefix in *.
-  rewrite -cats1 in Hprefix.  
-  apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
-    last by apply CS.singleton_traces_non_inform.
-  apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
-    last by apply CS.singleton_traces_non_inform.
-  assert (Hprefbefore_e: is_prefix s1' p t).
+  intros Hwf Hclosed ? ? ? ? Hpref Hstep.
+  assert (Hpref': is_prefix s' p (t ++ project_non_inform t_inform)).
   {
-    eapply star_trans; eauto. by rewrite E0_right.
+    eapply star_trans; last eauto.
+    - exact Hpref.
+    - econstructor.
+      + by apply CS.step_inform_step_non_inform; eassumption.
+      + by econstructor.
+      + by rewrite E0_right. 
   }
-  (*assert (Hstar_e: is_prefix s2' p (t ++ [:: e])).
-  {
-    eapply star_right; last reflexivity; last exact Hstep.
-    eapply star_trans; eauto. by rewrite E0_right.
-  }*)
-  specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hprefbefore_e)
-    as [Hwf_mem Hwf_reg].
-  CS.unfold_state s1'. simpl in *.
-  inversion Hstep as [? ? ? ? Hstep']; subst.
-  inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate.
-  match goal with
-    | H: [:: ?x] = [:: ?y] |- _ => inversion H
-    end.
-  subst. clear Hstep'. destruct pc0 as [[[ppc0 cpc0] bpc0] opc0].
-  simpl in *.
-  - inversion Hshared as [ ? ? ? Hreach|]; find_rcons_rcons; simpl in *.
-    destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
-      inversion Hreach as [? Heq|]; subst; simpl in *;
+  specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hpref')
+    as [Hmem' (*[Hregs' _]*)Hregs'].
+  specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hpref)
+    as [Hmem (*[Hregs _]*)Hregs].
+
+  inversion Hstep; simpl in *; subst.
+  - split; intros ? ? Hnew Hnotold ? ? ? ? ?; subst; try congruence.
+  - split; intros ? ? Hnew Hnotold ? ? ? ? ?; subst; try congruence.
+  - split; intros loc ? Hnew Hnotold ? ? ? ? ?; subst; try congruence.
+    destruct (loc == r) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gss in Hnew.
+      specialize (CS.IConst_possible_values _ Hwf _ _ _ H)
+        as [[? ?]| [? [? [? [? [? [? [? ?]]]]]]]];
+        subst; simpl in *; first congruence.
+      inversion Hnew; subst. simpl. by left.
+    + rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    destruct (loc == rdest) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gss in Hnew.
+      specialize (Hregs _ _ Hnew Hperm)
+        as [|]; subst; [by left|by right].
+    + rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    destruct (loc == r3) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gss in Hnew. unfold result in *.
+      destruct vptr as [[[vperm vc] vb] voff]. simpl in *. subst.
+      specialize (eval_binop_ptr _ _ _ _ Hnew)
+        as [? [? [Hor [? [? ?]]]]]; simpl in *; subst.
+      symmetry in H0.
+      destruct Hor as [[Hgetptr _]|[Hgetptr _]];
+        specialize (Hregs _ _ Hgetptr H0) as [|]; subst;
+          try (by left); try by right.
+    + rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    simpl in *. apply find_label_in_component_1 in H0.
+    destruct (loc == r) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gss in Hnew. left. congruence.
+    + rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    destruct (loc == r2) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gss in Hnew. subst. simpl in *.
+      assert (Hpermptr: Pointer.permission ptr = Permission.data).
+      { by apply Memory.load_some_permission in H1. }
+      specialize (Hregs _ _ H0 Hpermptr).
+      specialize (Hmem _ _ H1 Hperm).
+      inversion Hmem; subst; simpl in *.
+      * inversion Hregs; simpl in *; subst; simpl in *; subst;
+          first (left; congruence); first (congruence).
+      * by right.
+      * by left.
+    + rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    destruct (Pointer.eq loc ptr) eqn:eloc;
+      move : eloc => /Pointer.eqP => eloc; subst.
+    + apply Memory.load_after_store_eq in H1.
+      rewrite H1 in Hnew. injection Hnew => Hrewr.
+      specialize (Hregs _ _ Hrewr Hperm)
+        as [|]; subst; [by left|by right].
+    + eapply Memory.load_after_store_neq with (ptr' := loc) in H1; auto.
+      congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    simpl in *. apply find_label_in_component_1 in H0.
+    destruct (loc == R_RA) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gss in Hnew. left. inversion Hnew.
+      by rewrite Pointer.inc_preserves_component.
+    + rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    + destruct (addr_eqb 
+                  (Pointer.component ptr, Pointer.block ptr)
+                  (Pointer.component loc, Pointer.block loc)) eqn:eloc;
+        move : eloc => /addr_eqP => eloc; subst.
+      * symmetry in eloc.
+        specialize (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 eloc).
+        intros ?.
+        destruct (Permission.eqb (Pointer.permission loc)
+                                 Permission.data); try congruence.
+        destruct (Pointer.offset loc <? Z.of_nat (Z.to_nat size))%Z;
+          last congruence.
+        destruct (0 <=? Pointer.offset loc)%Z; congruence.
+      * erewrite Memory.load_after_alloc in Hnew; eauto.
+        congruence.
+    + destruct (loc == rptr) eqn:eloc;
+        move : eloc => /eqP => eloc; subst.
+      * rewrite Register.gss in Hnew. subst. simpl in *.
+        inversion Hnew. subst.
+        by apply Memory.component_of_alloc_ptr in H2; left.
+      * rewrite Register.gso in Hnew; auto. congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    simpl in *.
+    destruct (loc == R_COM) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gicom in Hnew. congruence.
+    + rewrite Register.gio in Hnew; congruence.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst;
+      try congruence.
+    simpl in *.
+    destruct (loc == R_COM) eqn:eloc; move : eloc => /eqP => eloc; subst.
+    + rewrite Register.gicom in Hnew. congruence.
+    + rewrite Register.gio in Hnew; congruence.
+Qed.    
+
+Lemma no_silent_star_can_write_non_shared_content p:
+  well_formed_program p ->
+  closed_program p ->
+  forall s t s',
+  is_prefix s p t ->
+  star CS.step (prepare_global_env p) s E0 s' ->
+  (
+    (
+      forall ptr vptr,
+        Memory.load (CS.state_mem s') ptr = Some (Ptr vptr) ->
+        Memory.load (CS.state_mem s) ptr <> Some (Ptr vptr) ->
+        (
+          forall c b,
+            Pointer.permission vptr = Permission.data ->
+            c = Pointer.component vptr ->
+            b = Pointer.block vptr ->
+            (
+              c = Pointer.component (CS.state_pc s) \/
+              addr_shared_so_far (c, b) t
+            )
+        )
+    )
+    /\
+    (
+      forall r vptr,
+        Register.get r (CS.state_regs s') = Ptr vptr ->
+        Register.get r (CS.state_regs s) <> Ptr vptr ->
+        (
+          forall c b,
+            Pointer.permission vptr = Permission.data ->
+            c = Pointer.component vptr ->
+            b = Pointer.block vptr ->
+            (
+              c = Pointer.component (CS.state_pc s) \/
+              addr_shared_so_far (c, b) t
+            )
+        )
+    )
+  ).
+Proof.
+  intros Hwf Hclosed ? ? ? Hpref Hstar.
+  remember E0 as t_inform.
+  revert Heqt_inform.
+  induction Hstar; intros HE0; subst.
+  - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst; congruence.
+  - assert (t1 = E0 /\ t2 = E0) as [? ?]; subst.
+    { by now (destruct t1; destruct t2). }
+    assert (HinstIH: is_prefix s2 p t).
+    { apply star_iff_starR.
+      econstructor;
+        first (by apply star_iff_starR; eauto);
+        first (by eapply CS.step_inform_step_non_inform; eassumption);
+        first (by rewrite E0_right).
+    }
+    specialize (IHHstar HinstIH Logic.eq_refl) as [s3s2mem s3s2reg].
+    specialize (no_step_can_write_non_shared_content
+                  _ Hwf Hclosed _ _ _ _ Hpref H)
+      as [s2s1mem s2s1reg]; eauto.
+    assert (Hrewr: Pointer.component (CS.state_pc s1) =
+                   Pointer.component (CS.state_pc s2)).
+    { eapply CS.silent_step_preserves_component; eauto. }
+    split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst.
+    + specialize (s3s2mem _ _ Hnew).
+      destruct (Memory.load (CS.state_mem s2) loc == Some (Ptr vptr))
+               eqn:eloc_s2; move : eloc_s2 => /eqP => eloc_s2.
+      * specialize (s2s1mem _ _ eloc_s2 Hnotold).
+        eapply s2s1mem; by eauto.
+      * specialize (s3s2mem eloc_s2). rewrite Hrewr. by eauto.
+    + specialize (s3s2reg _ _ Hnew).
+      destruct (Register.get loc (CS.state_regs s2) == Ptr vptr)
+               eqn:eloc_s2; move : eloc_s2 => /eqP => eloc_s2.
+      * specialize (s2s1reg _ _ eloc_s2 Hnotold).
+        eapply s2s1reg; by eauto.
+      * specialize (s3s2reg eloc_s2). rewrite Hrewr. by eauto.
+Qed.                                                        
+
+Lemma not_executing_can_not_share_ p:
+  well_formed_program p ->
+  closed_program p ->
+  forall t C s e b,
+    (forall b', ~ addr_shared_so_far (C, b') t) ->
+    is_prefix s p (rcons t e) ->
+    C <> cur_comp_of_event e ->
+    ~ addr_shared_so_far (C, b) (rcons t e).
+Proof.
+  intros Hwf Hclosed t ? ? ? ? Csharednothing Hpref Cnotexec Cshared.
+  inversion Cshared as [ ? ? ? Hreach | ? ? ? ? Hprevshared Hreach];
+    find_rcons_rcons.
+  - inversion Hreach; subst.
+    
+
+
+  (**************************************************************
+  induction t as [| t' e'] using last_ind;
+  intros C s e b Hnot Hprefix HC Hshared;
+    CS.unfold_states; unfold is_prefix in *;
+      rewrite -cats1 in Hprefix.
+  - (** base case *)
+    inversion Hshared as [ ? ? ? Hreach | ? ? ? ? Hprevshared Hreach];
+      subst.
+    + rewrite -cats1 in H0. destruct t.
+      2: {
+        simpl in H0. inversion H0. rewrite cats1 in H2.
+        by find_nil_rcons.
+      }
+      rewrite -H0 in Hprefix. simpl in H0.
+      inversion H0; subst; clear H0.
+      rename Hprefix into Hprefix_.
+      assert (Hprefix: Star (CS.sem_non_inform p)
+                            (CS.initial_machine_state p)
+                            ([::] ++ [:: e]) (gps, mem, regs, pc)).
+      { by auto. }
+      clear Hprefix_.
+      apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
+        last by apply CS.singleton_traces_non_inform.
+      apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
+        last by apply CS.singleton_traces_non_inform.
+
+      assert (Hprefbefore_e: is_prefix s1' p E0).
+      {
+        eapply star_trans; eauto. 
+      }
+      assert (Hstar_e: is_prefix s2' p (E0 ++ [:: e])).
+      {
+        eapply star_right; last reflexivity; last exact Hstep.
+        eapply star_trans with (s2 := s); eauto. 
+      }
+      
+      specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hprefbefore_e)
+        as [Hwf_mem_before [Hwf_reg_before Hwf_reach_before]].
+      specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hstar_e)
+        as [Hwf_mem [Hwf_reg Hwf_reach]].
+      CS.unfold_state s1'. CS.unfold_state s2'. simpl in *.
+
+      inversion Hstep as [? ? ? ? Hstep']; subst.
+      inversion Hstep'; subst; try discriminate; simpl in *;
+        destruct e; try discriminate;
+          match goal with
+          | H: [:: ?x] = [:: ?y] |- _ => inversion H
+          end;
+          subst; clear Hstep'; destruct pc0 as [[[ppc0 cpc0] bpc0] opc0];
+            simpl in *.
+
+       {
+        (** ICall *)
+        destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
+          inversion Hreach as [? Heq|]; subst; simpl in *;
+            try (by eapply Reachable_fset0; eauto);
+            try (rewrite in_fset1 in Heq;
+                 move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
+        * (*assert (Hget: Register.get R_COM (Register.invalidate regs0) =
+                      Ptr (Permission.data, cRCOM, bRCOM, oRCOM)).
+        { rewrite Register.gi. by simpl. }*)
+          (*specialize (Hwf_reg _ _ Hget Logic.eq_refl).*)
+          specialize (Hwf_reg_before _ _ eR_COM Logic.eq_refl).
+          inversion Hwf_reg_before as [ | ? ? ? ? Hshr]; subst;
+            first (contradiction);
+            first (by apply Hnot in Hshr).
+        * assert (exists offv off,
+                     Memory.load mem1 (Permission.data, cid, bid, off) =
+                     Some (Ptr (Permission.data, C, b, offv)) 
+                 ) as [offv [off Hload]].
+          {
+            unfold Memory.load. simpl. rewrite H1.
+            rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
+          }
+          specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
+            inversion Hwf_mem_before
+            as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
+            simpl in *; subst;
+              last contradiction;
+              last by (apply Hnot in Hcontra).
+          -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
+               inversion Hwf_mem
+               as [? ? Hnotshr1_rcons Hnotshr2_rcons
+                  | ? ? Hcontra
+                  | ? ? Hnotshr1_rcons];
+               simpl in *; subst.
+             ++ contradiction. 
+             ++ specialize (Hwf_reach_before
+                              _ _ _ _ _ _ eR_COM
+                              Logic.eq_refl Logic.eq_refl Logic.eq_refl
+                              Hreach (** or H0 *) offv).
+                  by inversion Hwf_reach_before; auto.
+             ++ contradiction.
+       }
+
+
+
+       {
+        (** IReturn --- exact proof script as ICall *)
+        destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
+          inversion Hreach as [? Heq|]; subst; simpl in *;
+            try (by eapply Reachable_fset0; eauto);
+            try (rewrite in_fset1 in Heq;
+                 move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
+        * (*assert (Hget: Register.get R_COM (Register.invalidate regs0) =
+                      Ptr (Permission.data, cRCOM, bRCOM, oRCOM)).
+        { rewrite Register.gi. by simpl. }*)
+          (*specialize (Hwf_reg _ _ Hget Logic.eq_refl).*)
+          specialize (Hwf_reg_before _ _ eR_COM Logic.eq_refl).
+          inversion Hwf_reg_before as [ | ? ? ? ? Hshr]; subst;
+            first (contradiction);
+            first (by apply Hnot in Hshr).
+        * assert (exists offv off,
+                     Memory.load mem1 (Permission.data, cid, bid, off) =
+                     Some (Ptr (Permission.data, C, b, offv)) 
+                 ) as [offv [off Hload]].
+          {
+            unfold Memory.load. simpl. rewrite H1.
+            rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
+          }
+          specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
+            inversion Hwf_mem_before
+            as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
+            simpl in *; subst;
+              last contradiction;
+              last by (apply Hnot in Hcontra).
+          -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
+               inversion Hwf_mem
+               as [? ? Hnotshr1_rcons Hnotshr2_rcons
+                  | ? ? Hcontra
+                  | ? ? Hnotshr1_rcons];
+               simpl in *; subst.
+             ++ contradiction. 
+             ++ specialize (Hwf_reach_before
+                              _ _ _ _ _ _ eR_COM
+                              Logic.eq_refl Logic.eq_refl Logic.eq_refl
+                              Hreach (** or H0 *) offv).
+                  by inversion Hwf_reach_before; auto.
+             ++ contradiction.
+       }
+
+       
+      
+      +  rewrite -cats1 in H0. destruct t.
+      2: {
+        simpl in H0. inversion H0. rewrite cats1 in H2.
+        by find_nil_rcons.
+      }
+      by inversion Hprevshared; find_nil_rcons.
+
+
+  - (** Inductive case *)
+    apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
+      last by apply CS.singleton_traces_non_inform.
+    apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
+      last by apply CS.singleton_traces_non_inform.
+    assert (Hprefbefore_e: is_prefix s1' p (rcons t' e')).
+    {
+      eapply star_trans; eauto. by rewrite E0_right.
+    }
+    assert (Hstar_e: is_prefix s2' p ((rcons t' e') ++ [:: e])).
+    {
+      eapply star_right; last reflexivity; last exact Hstep.
+      eapply star_trans with (s2 := s); eauto. by rewrite E0_right.
+    }
+  
+    specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hprefbefore_e)
+      as [Hwf_mem_before [Hwf_reg_before Hwf_reach_before]].
+    specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hstar_e)
+      as [Hwf_mem [Hwf_reg Hwf_reach]].
+    CS.unfold_state s1'. CS.unfold_state s2'. simpl in *.
+    inversion Hstep as [? ? ? ? Hstep']; subst.
+    inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate;
+      match goal with
+      | H: [:: ?x] = [:: ?y] |- _ => inversion H
+      end;
+      subst; clear Hstep'; destruct pc0 as [[[ppc0 cpc0] bpc0] opc0];
+        simpl in *.
+  { (** ICall *)
+    inversion Hshared as [ ? ? ? Hreach| ? ? ? ? Hprevshared Hreach];
+      find_rcons_rcons; simpl in *.
+    + destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
+        inversion Hreach as [? Heq|]; subst; simpl in *;
+          try (by eapply Reachable_fset0; eauto);
+          try (rewrite in_fset1 in Heq;
+               move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
+      * (*assert (Hget: Register.get R_COM (Register.invalidate regs0) =
+                      Ptr (Permission.data, cRCOM, bRCOM, oRCOM)).
+        { rewrite Register.gi. by simpl. }*)
+        (*specialize (Hwf_reg _ _ Hget Logic.eq_refl).*)
+        specialize (Hwf_reg_before _ _ eR_COM Logic.eq_refl).
+        inversion Hwf_reg_before as [ | ? ? ? ? Hshr]; subst;
+          first (contradiction);
+          first (by apply Hnot in Hshr).
+      * assert (exists offv off,
+                   Memory.load mem1 (Permission.data, cid, bid, off) =
+                   Some (Ptr (Permission.data, C, b, offv)) 
+               ) as [offv [off Hload]].
+        {
+          unfold Memory.load. simpl. rewrite H1.
+          rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
+        }
+        specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
+          inversion Hwf_mem_before
+          as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
+          simpl in *; subst;
+            last contradiction;
+            last by (apply Hnot in Hcontra).
+        -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
+             inversion Hwf_mem
+             as [? ? Hnotshr1_rcons Hnotshr2_rcons
+                | ? ? Hcontra
+                | ? ? Hnotshr1_rcons];
+             simpl in *; subst.
+           ++ by rewrite cats1 in Hnotshr1_rcons.
+           ++ specialize (Hwf_reach_before
+                            _ _ _ _ _ _ eR_COM
+                            Logic.eq_refl Logic.eq_refl Logic.eq_refl
+                            Hreach (** or H0 *) offv).
+              by inversion Hwf_reach_before; auto.
+           ++ by rewrite cats1 in Hnotshr1_rcons.
+    + inversion Hreach as [? Heq|]; subst; simpl in *;
         try (by eapply Reachable_fset0; eauto);
         try (rewrite in_fset1 in Heq;
-             move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
-    + specialize (Hwf_reg _ _ eR_COM Logic.eq_refl).
-      inversion Hwf_reg as [| ? ? ? ? Hshr]; subst;
-        first (contradiction);
-        first (by apply Hnot in Hshr).
-    + assert (exists offv off,
-                 Memory.load mem0 (Permission.data, cid, bid, off) =
-                 Some (Ptr (Permission.data, C, b, offv)) 
-             ) as [offv [off Hload]].
-      {
-        unfold Memory.load. simpl. rewrite H1.
-        rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
-      }
-      specialize (Hwf_mem _ _ Hload Logic.eq_refl);
-        inversion Hwf_mem; simpl in *; subst; last contradiction.
-      * specialize (Hwf_reg _ _ eR_COM Logic.eq_refl).
-        inversion Hwf_reg as [| ? ? ? ? Hshr]; subst.
-        (**************************
-        first (contradiction);
-        first (by apply Hnot in Hshr).
-      Search _ cpc0.
-        try by rewrite in_fset0 in Hcontra.
-    Search _ Reachable fset0.
-         *******************************)
-Admitted.
+             move : Heq => /eqP => Heq; inversion Heq; subst).
+      * by apply Hnot in Hprevshared. 
+      * assert (exists offv off,
+                   Memory.load mem1 (Permission.data, cid, bid, off) =
+                   Some (Ptr (Permission.data, C, b, offv)) 
+               ) as [offv [off Hload]].
+        {
+          unfold Memory.load. simpl. rewrite H1.
+          rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
+        }
+        specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
+          inversion Hwf_mem_before
+          as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
+          simpl in *; subst;
+            last contradiction;
+            last by (apply Hnot in Hcontra).
+        -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
+             inversion Hwf_mem
+             as [? ? Hnotshr1_rcons Hnotshr2_rcons
+                | ? ? Hcontra
+                | ? ? Hnotshr1_rcons];
+             simpl in *; subst.
+           ++ by rewrite cats1 in Hnotshr1_rcons.
+           ++ specialize (IHt cid
+                              (gps0, mem1, regs0,
+                               (ppc0, cpc0, bpc0, opc0))
+                              e'
+                         ).
+              inversion Hprevshared as
+                  [ ? ? ? Hreach_prev
+                  | ? ? ? ? Hprevshared_prev Hreach_prev];
+                find_rcons_rcons; simpl in *.
+              ** destruct e' as [|]; simpl in *; subst.
+                 admit. admit.
+              ** 
+              (* Here, need an induction hypothesis about t *)
+             specialize (Hwf_reach_before
+                            _ _ _ _ _ _ eR_COM
+                            Logic.eq_refl Logic.eq_refl Logic.eq_refl
+                            Hreach (** or H0 *) offv).
+              by inversion Hwf_reach_before; auto.
+           ++ by rewrite cats1 in Hnotshr1_rcons.
+*****************************************************************)
 
+Admitted.
 
 Lemma not_shared_diff_comp_not_shared_call:
   forall p s C Cb C' P b t arg mem,
@@ -1299,7 +1881,7 @@ Lemma not_shared_diff_comp_not_shared_call:
     ~ addr_shared_so_far (Cb, b) (rcons t (ECall C P arg mem C')).
 Proof.
   intros.
-  eapply not_executing_can_not_share; eauto.
+  eapply not_executing_can_not_share_; eauto.
 Qed.
 
 Lemma load_Some_component_buffer:
@@ -1340,4 +1922,13 @@ Lemma load_Some_component_buffer:
   - 
   - 
   *************************************)
+  Lemma not_executing_can_not_share s p t e C b:
+    well_formed_program p ->
+    closed_program p ->
+    is_prefix s p (rcons t e) ->
+    C <> cur_comp_of_event e ->
+    (forall b', ~ addr_shared_so_far (C, b') t) ->
+    ~ addr_shared_so_far (C, b) (rcons t e).
+  Proof. intros. by eapply not_executing_can_not_share_; eauto. Qed.
+  
 End CSInvariants.
