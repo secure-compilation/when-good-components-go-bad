@@ -2047,6 +2047,26 @@ Proof.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 
+Lemma epsilon_star_non_inform_preserves_component p s1 s2:
+  Star (CS.sem_non_inform p) s1 E0 s2 ->
+  Pointer.component (CS.state_pc s1) = Pointer.component (CS.state_pc s2).
+Proof.
+  intros Hstar.
+  remember E0 as t.
+  induction Hstar.
+  - reflexivity.
+  - subst; assert (t1 = E0) by now induction t1.
+    assert (t2 = E0) by now induction t1. subst.
+    inversion H as [? t ? ? Hstep]; subst.
+    inversion Hstep; subst; unfold_state s3; simpl in *;
+      rewrite <- IHHstar; auto;
+      try (now rewrite Pointer.inc_preserves_component).
+    + erewrite find_label_in_component_1; by eauto.
+    + erewrite find_label_in_procedure_1; by eauto.
+    + discriminate.
+    + discriminate.
+Qed.
+
 Lemma epsilon_star_non_inform_preserves_program_component p c s1 s2 :
   CS.is_program_component s1 (prog_interface c) ->
   Star (CS.sem_non_inform (program_link p c)) s1 E0 s2 ->
