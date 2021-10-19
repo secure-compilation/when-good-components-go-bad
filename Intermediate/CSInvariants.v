@@ -1514,7 +1514,7 @@ Lemma no_silent_star_can_write_non_shared_content p:
   closed_program p ->
   forall s t s',
   is_prefix s p t ->
-  star CS.step (prepare_global_env p) s E0 s' ->
+  star CS.step_non_inform (prepare_global_env p) s E0 s' ->
   (
     (
       forall ptr vptr,
@@ -1556,20 +1556,25 @@ Proof.
   - split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst; congruence.
   - assert (t1 = E0 /\ t2 = E0) as [? ?]; subst.
     { by now (destruct t1; destruct t2). }
+
     assert (HinstIH: is_prefix s2 p t).
-    { apply star_iff_starR.
+    {
+      apply star_iff_starR.
       econstructor;
         first (by apply star_iff_starR; eauto);
-        first (by eapply CS.step_inform_step_non_inform; eassumption);
+        first (eassumption);
         first (by rewrite E0_right).
     }
     specialize (IHHstar HinstIH Logic.eq_refl) as [s3s2mem s3s2reg].
+    specialize (CS.step_non_inform_step_inform _ _ _ _ H)
+      as [? [Hinform HE0_]].
+    
     specialize (no_step_can_write_non_shared_content
-                  _ Hwf Hclosed _ _ _ _ Hpref H)
+                  _ Hwf Hclosed _ _ _ _ Hpref Hinform)
       as [s2s1mem s2s1reg]; eauto.
     assert (Hrewr: Pointer.component (CS.state_pc s1) =
                    Pointer.component (CS.state_pc s2)).
-    { eapply CS.silent_step_preserves_component; eauto. }
+    { eapply CS.silent_step_non_inform_preserves_component; eauto. }
     split; intros loc ? Hnew Hnotold ? ? Hperm ? ?; subst.
     + specialize (s3s2mem _ _ Hnew).
       destruct (Memory.load (CS.state_mem s2) loc == Some (Ptr vptr))
@@ -1585,6 +1590,92 @@ Proof.
       * specialize (s3s2reg eloc_s2). rewrite Hrewr. by eauto.
 Qed.                                                        
 
+Lemma no_silent_star_can_reach_non_shared_content p:
+  well_formed_program p ->
+  closed_program p ->
+  forall s t s',
+  is_prefix s p t ->
+  star CS.step_non_inform (prepare_global_env p) s E0 s' ->
+  forall cstart' bstart',
+    (
+      cstart' = Pointer.component (CS.state_pc s') \/
+      exists r ostart', Register.get r (CS.state_regs s') =
+                   Ptr (Permission.data, cstart', bstart', ostart')
+    )
+    ->
+    forall cb,
+      Reachable (CS.state_mem s') (fset1 (cstart', bstart')) cb ->
+      (
+        (
+          exists cstart bstart,
+            (
+              cstart = Pointer.component (CS.state_pc s) \/
+              exists r ostart, Register.get r (CS.state_regs s) =
+                          Ptr (Permission.data, cstart, bstart, ostart)
+            )
+            /\
+            Reachable (CS.state_mem s) (fset1 (cstart, bstart)) cb
+        )
+        \/
+        cb.1 = Pointer.component (CS.state_pc s)
+        \/
+        addr_shared_so_far cb t
+      ).
+Proof.
+  intros Hwf Hclosed ? ? ? Hpref Hstar ? ? Hcbstart' ? Hreach.
+  specialize (no_silent_star_can_write_non_shared_content
+                _ Hwf Hclosed _ _ _ Hpref Hstar) as [ss'mem ss'regs].
+  specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hpref) as [Hwfmem Hwfregs].
+  remember (fset1 (cstart', bstart')) as start. revert Heqstart.
+  induction Hreach; intros Heqstart; subst.
+  - rewrite in_fset1 in H. move : H => /eqP => H; subst.
+    destruct Hcbstart' as [G|[r [off Hget]]]; subst; [left; eexists; exists bstart'|].
+    + split; [|eapply Reachable_refl; by rewrite in_fset1].
+      left. symmetry.
+        by eapply CS.epsilon_star_non_inform_preserves_component
+          with (p := p); eauto.
+    + destruct (Register.get r (CS.state_regs s) ==
+                Ptr (Permission.data, cstart', bstart', off)) eqn:eget_s;
+        move: eget_s => /eqP => eget_s.
+      * left. exists cstart', bstart'.
+        split; [|eapply Reachable_refl; by rewrite in_fset1].
+        right. by eauto.
+      * specialize (ss'regs _ _ Hget eget_s _ _ Logic.eq_refl Logic.eq_refl
+                            Logic.eq_refl) as [G|G]; by intuition.
+  - destruct b' as [cidl bidl].
+    assert (exists ol optr,
+               Memory.load (CS.state_mem s')
+                           (Permission.data, cid, bid, optr) =
+               Some (Ptr (Permission.data, cidl, bidl, ol))
+           ) as [ol [optr Hload]].
+    {
+      unfold Memory.load. simpl. rewrite H.
+      apply ComponentMemory.load_block_load.
+        by apply (@In_in (prod_ordType nat_ordType nat_ordType)).
+    }
+    destruct (Memory.load (CS.state_mem s)
+                          (Permission.data, cid, bid, optr) == 
+              Some (Ptr (Permission.data, cidl, bidl, ol))
+             ) eqn:wasLoadable; move : wasLoadable => /eqP => wasLoadable.
+    + specialize (IHHreach Logic.eq_refl) as
+          [ [cstart [bstart [Hcbstart Hreachcidbid]]] | [Hcid|Hshared]].
+      * left. exists cstart, bstart. split; first assumption.
+        unfold Memory.load in wasLoadable.
+        simpl in *.
+        destruct (CS.state_mem s cid) as [cMem|] eqn:ecMem; last discriminate.
+        eapply Reachable_step.
+        -- exact Hreachcidbid.
+        -- eassumption.
+        -- apply In_in, ComponentMemory.load_block_load. by eauto.
+      * specialize (Hwfmem _ _ wasLoadable Logic.eq_refl) as Hwfload.
+        inversion Hwfload as [| |]; simpl in *; subst; by intuition.
+      * specialize (Hwfmem _ _ wasLoadable Logic.eq_refl) as Hwfload.
+        inversion Hwfload as [| |]; simpl in *; subst; by intuition.
+    + specialize (ss'mem _ _ Hload wasLoadable _ _
+                           Logic.eq_refl Logic.eq_refl Logic.eq_refl)
+        as [G1|G2]; by auto.
+Qed.
+
 Lemma not_executing_can_not_share_ p:
   well_formed_program p ->
   closed_program p ->
@@ -1595,12 +1686,113 @@ Lemma not_executing_can_not_share_ p:
     ~ addr_shared_so_far (C, b) (rcons t e).
 Proof.
   intros Hwf Hclosed t ? ? ? ? Csharednothing Hpref Cnotexec Cshared.
+  rewrite -cats1 in Hpref.
+  apply star_app_inv in Hpref as [s' [Hstar1 Hstar2]];
+    last by apply CS.singleton_traces_non_inform.
+  apply star_cons_inv in Hstar2
+    as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
+    last by apply CS.singleton_traces_non_inform.
+
+  assert (Hstar_e: is_prefix s2' p (t ++ [:: e])).
+  {
+    eapply star_right; last reflexivity; last exact Hstep.
+    eapply star_trans with (s2 := s'); eauto. by rewrite E0_right. 
+  }
+
+  assert (mem_of_event e = CS.state_mem s1' /\
+          arg_of_event e = Register.get R_COM (CS.state_regs s1') /\
+          cur_comp_of_event e = Pointer.component (CS.state_pc s1'))
+    as [Hrewr1 [Hrewr2 Hrewr3]].
+  {
+    inversion Hstep; subst.
+    inversion H; subst; simpl in *; try discriminate;
+      inversion H0; by subst.
+  }
+
+  rewrite Hrewr3 in Cnotexec.
+  assert (s's1'pc: Pointer.component (CS.state_pc s') =
+                   Pointer.component (CS.state_pc s1')).
+  {
+    eapply CS.epsilon_star_non_inform_preserves_component; eauto.
+  }
+  
+  specialize (no_silent_star_can_write_non_shared_content
+                _ Hwf Hclosed _ _ _ Hstar1 Hstar_before
+             ) as [s's1'mem s's1'regs].
+  specialize (no_silent_star_can_reach_non_shared_content
+                _ Hwf Hclosed _ _ _ Hstar1 Hstar_before) as Hno_new_reach.
+  specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hstar1)
+    as [Hwfmem_s' Hwfregs_s'].
   inversion Cshared as [ ? ? ? Hreach | ? ? ? ? Hprevshared Hreach];
-    find_rcons_rcons.
-  - inversion Hreach; subst.
-    
-
-
+    find_rcons_rcons; rewrite Hrewr1 in Hreach.
+  - destruct (Register.get R_COM (CS.state_regs s1'))
+        as [| [[[[] cstart'] bstart'] off] |] eqn:eR_COM;
+      simpl in *; rewrite Hrewr2 in Hreach; simpl in *;
+        try by apply Reachable_fset0 in Hreach.
+    specialize (s's1'regs _ _ eR_COM).
+    specialize (Hno_new_reach cstart' bstart').
+    epose proof (Hno_new_reach _ _ Hreach) as [| [|]].
+    + destruct H as [cstart [bstart [Hcbstart Hreachs']]].
+      destruct Hcbstart as [|]; simpl in *; subst.
+      * inversion Hreachs'; subst.
+        -- rewrite in_fset1 in H. move : H => /eqP => H; inversion H; subst.
+           congruence.
+        -- assert (exists ol optr,
+                      Memory.load (CS.state_mem s')
+                                  (Permission.data, cid, bid, optr) =
+                      Some (Ptr (Permission.data, C, b, ol))
+                  ) as [ol [optr Hload]].
+           {
+             unfold Memory.load. simpl. rewrite H0.
+             apply ComponentMemory.load_block_load.
+               by apply (@In_in (prod_ordType nat_ordType nat_ordType)).
+           }
+           specialize (Hwfmem_s' _ _ Hload Logic.eq_refl).
+           inversion Hwfmem_s' as [| |]; simpl in *; subst; try by intuition.
+           ++ (** Need a lemma to somehow 
+                  derive a contradiction from Hreachs', H2, and Cnotexec.. *)
+             (** This lemma is ideally a trichotomy similar to wf_load. *)
+             admit.
+           ++ eapply Csharednothing; eauto.
+      * inversion Hreachs'; subst.
+        -- rewrite in_fset1 in H0. move : H0 => /eqP => H0; inversion H0; subst.
+           destruct H as [r [ostart Hget]].
+           specialize (Hwfregs_s'  _ _ Hget Logic.eq_refl).
+           inversion Hwfregs_s'; subst; simpl in *; first by intuition.
+             by apply Csharednothing in H1.
+        -- assert (exists ol optr,
+                      Memory.load (CS.state_mem s')
+                                  (Permission.data, cid, bid, optr) =
+                      Some (Ptr (Permission.data, C, b, ol))
+                  ) as [ol [optr Hload]].
+           {
+             unfold Memory.load. simpl. rewrite H1.
+             apply ComponentMemory.load_block_load.
+               by apply (@In_in (prod_ordType nat_ordType nat_ordType)).
+           }
+           specialize (Hwfmem_s' _ _ Hload Logic.eq_refl).
+           inversion Hwfmem_s' as [| |]; simpl in *; subst; try by intuition.
+           ++ (** Need a lemma to somehow 
+                  derive a contradiction from Hreachs', H2, and Cnotexec.. *)
+             (** This lemma is ideally a trichotomy similar to wf_load. *)
+             admit.
+           ++ eapply Csharednothing; eauto.
+    + simpl in *. congruence.
+    + by apply Csharednothing in H.
+  - (** Distinguish two cases of addr'.1: 
+        case addr'.1 == C => contradiction to Csharednothing
+        case addr'.1 != C => contradiction to the reachability trichotomy.
+     *)
+    destruct addr' as [addr'c addr'b].
+    destruct (addr'c =? C) eqn:eaddr'c.
+    + apply beq_nat_true in eaddr'c. subst.
+        by apply Csharednothing in Hprevshared.
+    + apply beq_nat_false in eaddr'c.
+      (** contradiction to the reachability trichotomy. *)
+      admit.
+      Unshelve. by eauto.
+Admitted.
+      
   (**************************************************************
   induction t as [| t' e'] using last_ind;
   intros C s e b Hnot Hprefix HC Hshared;
@@ -1869,7 +2061,6 @@ Proof.
            ++ by rewrite cats1 in Hnotshr1_rcons.
 *****************************************************************)
 
-Admitted.
 
 Lemma not_shared_diff_comp_not_shared_call:
   forall p s C Cb C' P b t arg mem,
