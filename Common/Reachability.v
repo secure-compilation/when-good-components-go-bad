@@ -1,3 +1,4 @@
+Require Import Coq.Logic.Classical_Prop.
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -592,6 +593,79 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
   Proof.
     intros Hreach. induction Hreach; auto.
   Qed.
+
+  Lemma Reachable_Memory_store mem mem' ptr v start_set reached:
+    Memory.store mem ptr v = Some mem' ->
+    Reachable mem' start_set reached ->
+    (
+      Reachable mem start_set reached
+      \/
+      exists cptr bptr optr cv bv ov,
+        v = Ptr (Permission.data, cv, bv, ov)
+        /\
+        ptr = (Permission.data, cptr, bptr, optr)
+        /\
+        Reachable mem start_set (cptr, bptr)
+        /\
+        Reachable mem (fset1 (cv, bv)) reached
+    ).
+  Proof.
+    intros Hstore Hreachmem'.
+    destruct (classic (Reachable mem start_set reached)) as [G|Hnotreach];
+      [by left|].
+    induction Hreachmem'.
+    - exfalso. apply Hnotreach. by constructor.
+    - destruct b' as [creached breached].
+      assert (exists optr oload,
+                 Memory.load
+                   mem'
+                   (Permission.data, cid, bid, oload)
+                 = Some (Ptr (Permission.data, creached, breached, optr))
+             ) as [optr_ [oload Hload]].
+      {
+        unfold Memory.load. simpl. rewrite H.
+        rewrite -ComponentMemory.load_block_load. by apply In_in in H0.
+      }
+      erewrite (Memory.load_after_store _ _ _ _ _ Hstore) in Hload.
+      destruct (Pointer.eq (Permission.data, cid, bid, oload) ptr) eqn:eptr;
+        move : eptr => /Pointer.eqP => eptr.
+      + inversion Hload; subst. clear Hload.
+        destruct (classic (Reachable mem start_set (cid, bid)))
+          as [Hreachmem|IHinst].
+        * right. do 6 eexists.
+          split; [reflexivity|
+                  split; [reflexivity|
+                          split; [exact Hreachmem|
+                                  apply Reachable_refl; by rewrite in_fset1
+                 ]]].
+        * specialize (IHHreachmem' IHinst)
+            as [|[cptr [bptr [optr [cv [bv [ov [eq1 [eq2 [reach1 reach2]]]]]]]]]].
+          -- by intuition.
+          -- inversion eq1. inversion eq2. subst. by intuition.
+      + destruct (classic (Reachable mem start_set (cid, bid)))
+          as [Hreachmem|IHinst].
+        * left.
+          unfold Memory.load in Hload. simpl in *.
+          destruct (mem cid) as [compMem_|] eqn:emem; last discriminate.
+          eapply Reachable_step; [exact Hreachmem | exact emem | apply In_in].
+          rewrite ComponentMemory.load_block_load. eauto.
+        * specialize (IHHreachmem' IHinst)
+            as [|[cptr [bptr [optr [cv [bv [ov [eq1 [eq2 [reach1 reach2]]]]]]]]]].
+          -- by intuition.
+          -- subst. right.
+             unfold Memory.load in Hload. simpl in *.
+             destruct (mem cid) as [compMem_|] eqn:emem; last discriminate.
+             do 6 eexists.
+             split; [reflexivity|
+                     split; [reflexivity|
+                             split; [exact reach1|
+                                     eapply Reachable_step;
+                                     [exact reach2| exact emem | apply In_in]
+                    ]]].
+             rewrite ComponentMemory.load_block_load. eauto.
+  Qed.
+
+
 
   Lemma Reachable_dfs_path m bs cid bid:
     Reachable m bs (cid, bid) <->
