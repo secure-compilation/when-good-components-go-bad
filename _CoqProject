@@ -1,29 +1,31 @@
 
 -R . RobustImp
 
-RSC_DC.v
-RSC_DC_4_compcert.v
+Lib/Extra.v
 
-Common/Definitions.v
-Common/Values.v
 Common/Maps.v
+Common/Definitions.v
 Common/Util.v
-Common/Memory.v
+Common/Values.v
 Common/Linking.v
-Common/Blame.v
-Common/CompCertExtensions.v
-Common/Either.v
-Common/CoqMaps.v
-Common/Traces.v
+Common/Memory.v
+
+Lib/Tactics.v
+Lib/Monads.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
 CompCert/Smallstep.v
 CompCert/Events.v
 
-Lib/Tactics.v
-Lib/Monads.v
-Lib/Extra.v
+Common/Blame.v
+Common/CompCertExtensions.v
+Common/Either.v
+Common/CoqMaps.v
+Common/Traces.v
+
+RSC_DC.v
+RSC_DC_4_compcert.v
 
 Extraction/Definitions.v
 
@@ -31,6 +33,13 @@ Source/Language.v
 Source/GlobalEnv.v
 Source/CS.v
 Source/Blame.v
+
+Intermediate/GlobalEnv.v
+Intermediate/Machine.v
+Intermediate/CS.v
+
+S2I/Definitions.v
+
 Source/Definability.v
 Source/Examples/Helper.v
 Source/Examples/Empty.v
@@ -41,7 +50,6 @@ Source/Examples/DefaultInitBuffer.v
 Source/Examples/NestedCalls.v
 Source/Examples/Factorial.v
 
-S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Examples/Helper.v
@@ -53,25 +61,22 @@ S2I/Examples/DefaultInitBuffer.v
 S2I/Examples/NestedCalls.v
 S2I/Examples/Factorial.v
 
-Intermediate/Machine.v
-Intermediate/GlobalEnv.v
-Intermediate/CS.v
 Intermediate/Recombination.v
 
 RSC_DC_MD_Sigs.v
 RSC_DC_MD_Instance.v
 RSC_DC_MD.v
 
-TargetSFI/StateMonad.v
 TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
-TargetSFI/CS.v
 TargetSFI/ExecutionError.v
+TargetSFI/StateMonad.v
+TargetSFI/CS.v
 
-I2SFI/CompStateMonad.v
 I2SFI/AbstractMachine.v
-I2SFI/Compiler.v
 I2SFI/CompilerError.v
+I2SFI/CompStateMonad.v
+I2SFI/Compiler.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
@@ -84,13 +89,38 @@ MicroPolicies/Printer.v
 
 I2MP/Tmp.v
 I2MP/Linearize.v
-I2MP/Encode.v
+# I2MP/Encode.v -- compilation error
+#   Jeremy: As far as I understand it, we shouldn't worry about the I2MP/Encode.v file
+#   that doesn't compile, because this is the level below the one we were interested in.
+# I2MP/MPRecombination.v  -- not yet working
 
-MicroPolicies/Examples/Helper.v
-MicroPolicies/Examples/Empty.v
-MicroPolicies/Examples/Identity.v
-MicroPolicies/Examples/Assign.v
-MicroPolicies/Examples/Increment.v
-MicroPolicies/Examples/DefaultInitBuffer.v
-MicroPolicies/Examples/NestedCalls.v
-MicroPolicies/Examples/Factorial.v
+MicroPolicies/Transitional.v
+
+# MicroPolicies/Examples/Helper.v -- missing file, used by the files below though
+# MicroPolicies/Examples/Empty.v
+# MicroPolicies/Examples/Identity.v
+# MicroPolicies/Examples/Assign.v
+# MicroPolicies/Examples/Increment.v
+# MicroPolicies/Examples/DefaultInitBuffer.v
+# MicroPolicies/Examples/NestedCalls.v
+# MicroPolicies/Examples/Factorial.v
+
+I2MP/Examples/Helper.v
+I2MP/Examples/Assign.v
+I2MP/Examples/Empty.v
+I2MP/Examples/Increment.v
+I2MP/Examples/DefaultInitBuffer.v
+I2MP/Examples/Factorial.v
+I2MP/Examples/Identity.v
+I2MP/Examples/NestedCalls.v
+
+Tagging/Tags.v
+Tagging/Memory.v
+Tagging/Examples/Assign.v
+Tagging/Examples/DefaultInitBuffer.v
+Tagging/Examples/Empty.v
+Tagging/Examples/Factorial.v
+Tagging/Examples/Helper.v
+Tagging/Examples/Identity.v
+Tagging/Examples/Increment.v
+Tagging/Examples/NestedCalls.v
