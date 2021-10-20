@@ -1676,6 +1676,344 @@ Proof.
         as [G1|G2]; by auto.
 Qed.
 
+Inductive wf_reach (pc_comp: Component.id) (t: trace event) :
+  {fset node_t} -> node_t -> Prop
+  :=
+  | shared_reachable:           
+      forall load_at reached,
+        addr_shared_so_far reached t ->
+        wf_reach pc_comp t load_at reached
+  | private_reachable_and_exists_private:
+      forall load_at reached,
+        ~addr_shared_so_far reached t ->
+        (
+          exists priv,
+            priv \in load_at /\
+            ~addr_shared_so_far priv t /\
+            priv.1 = reached.1
+        )
+        ->
+        wf_reach pc_comp t load_at reached
+  | current_pc_reachable_and_exists_shared:
+      forall load_at reached,
+        reached.1 = pc_comp ->
+        (
+          exists shared,
+            shared \in load_at /\
+            addr_shared_so_far shared t
+        )
+        ->
+        wf_reach pc_comp t load_at reached
+  | current_pc_reachable_and_exists_current_pc:
+      forall load_at reached,
+        reached.1 = pc_comp ->
+        (
+          exists cur,
+            cur \in load_at /\
+            cur.1 = pc_comp
+        )
+        ->
+        wf_reach pc_comp t load_at reached.
+
+
+Lemma initial_wf_reach p :
+  closed_program p ->
+  well_formed_program p ->
+  prog_main p ->
+  forall (reached : node_t) (start_set : {fset node_t}),
+    Reachable (CS.state_mem (CS.initial_machine_state p)) start_set reached
+    ->
+    wf_reach Component.main E0 start_set reached.
+Proof.
+  intros Hclosed Hwf Hmain.
+  assert (Hnothing_shared: forall a, ~addr_shared_so_far a E0).
+  { unfold E0. intros ? contra. by inversion contra; find_nil_rcons. }
+  intros ? ? Hreach.
+  induction Hreach; subst.
+  - apply private_reachable_and_exists_private.
+    + apply Hnothing_shared.
+    + eexists; eauto.
+  - specialize (initial_wf_mem _ Hclosed Hwf Hmain) as Hwf_mem.
+    destruct b' as [creached breached].
+    assert (exists optr oload,
+               Memory.load
+                 (CS.state_mem (CS.initial_machine_state p))
+                 (Permission.data, cid, bid, oload)
+               = Some (Ptr (Permission.data, creached, breached, optr))
+           ) as [optr [oload Hload]].
+    {
+      unfold Memory.load. simpl. rewrite H.
+      rewrite -ComponentMemory.load_block_load. by apply In_in in H0.
+    }
+    unfold CS.initial_machine_state in Hload.
+    rewrite Hmain in Hload. simpl in *.
+    specialize (Hwf_mem _ _ Hload Logic.eq_refl).
+    inversion Hwf_mem; subst; simpl in *; subst; try by intuition.
+    + inversion IHHreach; subst; simpl in *; subst; try by intuition.
+      * apply private_reachable_and_exists_private; eauto.
+      * destruct H4 as [? [? contra]]. by apply Hnothing_shared in contra.
+      * apply current_pc_reachable_and_exists_current_pc; eauto.
+    + by apply Hnothing_shared in H1.
+    + by apply Hnothing_shared in H3.
+Qed.
+  
+
+Lemma is_prefix_wf_reach s p t :
+    closed_program p ->
+    well_formed_program p ->
+    is_prefix s p t ->
+    forall reached start_set,
+      Reachable (CS.state_mem s) start_set reached ->
+      wf_reach (Pointer.component (CS.state_pc s)) t start_set reached.
+Proof.
+  unfold is_prefix. simpl.
+  intros Hclosed Hwf Hstar.
+  remember (prepare_global_env p) as G eqn:HG.
+  remember (CS.initial_machine_state p) as s0 eqn:Hs0.
+  revert HG Hs0.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros; subst.
+  - (* Base case. *)
+    unfold CS.initial_machine_state. simpl.
+    assert (Hmain : prog_main p).
+    {
+      rewrite <- wfprog_main_component; auto.
+      specialize (cprog_main_existence Hclosed) as [? [? [Hprogproc ?]]].
+      rewrite wfprog_defined_procedures; auto.
+      apply/dommP. by eauto.
+    }
+    rewrite Hmain. simpl.
+    by eapply initial_wf_reach; eauto. 
+  - (* Inductive step. *)
+    assert (wf_state_t s1 t1) as [Hwf_mem1 Hwf_regs1].
+    {
+      eapply is_prefix_wf_state_t; eauto.
+      by apply star_iff_starR in Hstar01.
+    }
+    assert (wf_state_t s2 (t1 ** t2)) as [Hwf_mem2 Hwf_regs2].
+    {
+      eapply is_prefix_wf_state_t; eauto.
+      apply star_iff_starR. eapply starR_step; eauto.
+    }
+    specialize (IHstar Logic.eq_refl Logic.eq_refl).
+    rename H into Hreach.
+    inversion Hreach; subst.
+    + destruct (classic (addr_shared_so_far reached (t1 ** t2)))
+        as [Hshrb|Hnotshrb].
+      * apply shared_reachable; auto.
+      * apply private_reachable_and_exists_private; by eauto.
+    + inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+      inversion Hstep12'; subst; simpl in *;
+        (* A few useful simplifications. *)
+        (try rewrite E0_right);
+        (try rewrite Pointer.inc_preserves_component);
+        (try rewrite <- (find_label_in_component_1 _ _ _ _ H3));
+        (try rewrite -> H5);
+        (try rewrite <- (find_label_in_procedure_1 _ _ _ _ H5));
+        (* Many goals follow directly from the IH now. *)
+        try by (eapply IHstar; eapply Reachable_step; eauto).
+      * (* Store *)
+        specialize (Reachable_Memory_store _ _ _ _ _ _ H4 Hreach)
+          as [|[cptr [bptr [optr [cv [bv [ov [eq1 [eq2 [reach1 reach2]]]]]]]]]].
+        -- by apply IHstar; auto.
+        -- assert (wf_reach (Pointer.component pc) t1 start_set (cptr, bptr))
+            as wf1.
+           { by apply IHstar. }
+           assert (wf_reach (Pointer.component pc) t1 (fset1 (cv, bv)) reached)
+             as wf2.
+           { by apply IHstar. }
+           inversion wf2; clear wf2; subst; simpl in *; subst.
+           ++ by apply shared_reachable.
+           ++ destruct reached as [creached breached].
+              destruct H6 as [[? ?] [Hin [Hnotshr Heq]]]. simpl in *.
+              rewrite in_fset1 in Hin. move : Hin => /eqP => Hin.
+              inversion Hin. subst. clear Hin.
+              (** Probably need to instantiate Hwf_regs1 to get just 1 case. *)
+              specialize (Hwf_regs1 _ _ eq1 Logic.eq_refl) as Hr2.
+              inversion Hr2 as [|contra]; subst; [|by intuition].
+              inversion wf1; clear wf1; subst; simpl in *; subst;
+                admit.
+              (** Possibly need to weaken wf_reach a bit.  *)
+              (** Instead of "\in load_at", use "Reachable" from "load_at"? *)
+              (** This change will affect the use of wf_reach in the proof  *)
+              (** of lemma not_executing_can_not_share_. *)
+
+       (************************************************             
+        intros addr_load val_load Hload Hperm.
+        clear Hstar01 Hstep12 Hstep12' H.
+        destruct (Pointer.eqP ptr addr_load) as [Heq | Hneq].
+        -- (* We load from the address we just stored to. The information can
+              only come from the registers and not from the memory. *)
+           subst addr_load.
+           rewrite (Memory.load_after_store_eq _ _ _ _ H1) in Hload.
+           injection Hload as Hload.
+           destruct ptr as [[[Pptr Cptr] bptr] optr].
+           destruct val_load as [[[Pval Cval] bval] oval].
+           specialize (Memory.store_some_permission _ _ _ _ H1) as Hperm2.
+           simpl in *; subst.
+           assert (Hr1 := Hregs1 _ _ H0 Logic.eq_refl).
+           assert (Hr2 := Hregs1 _ _ Hload Logic.eq_refl).
+           inversion Hr2 as [|]; subst.
+           ++ specialize (classic (addr_shared_so_far (Pointer.component pc, bval) t1))
+               as [Hshr | Hnotshr].
+              ** apply shared_stuff_from_anywhere; assumption.
+              ** (** private_stuff *)
+                inversion Hr1 as [|]; subst.
+                ---
+                  (** private stuff of current pc from ... *)
+                  specialize (classic
+                                (addr_shared_so_far (Pointer.component pc, bptr) t1))
+                    as [Hfromshr | Hfromprivate].
+                  +++ apply private_stuff_of_current_pc_from_shared_addr; auto.
+                  +++ apply private_stuff_from_corresp_private_addr; auto.
+                ---
+                  (** shared addr *)
+                  apply private_stuff_of_current_pc_from_shared_addr; auto.
+           ++ (** shared stuff *)
+             apply shared_stuff_from_anywhere; assumption.
+        -- (* For any other address, this follows directly from the IH. *)
+           rewrite -> (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
+           exact (Hmem1 _ _ Hload Hperm).
+      * (* IAlloc *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        destruct
+          (addr_eqP (Pointer.component addr_load, Pointer.block addr_load)
+                    (Pointer.component ptr,       Pointer.block ptr))
+          as [Heq | Hneq].
+        -- (* If we read from the newly allocated block, the load cannot find
+             any pointers and we conclude by contradiction. *)
+           rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
+           destruct (Permission.eqb (Pointer.permission addr_load) Permission.data);
+             last discriminate.
+           destruct ((Pointer.offset addr_load <? Z.of_nat (Z.to_nat size))%Z);
+             last discriminate.
+           destruct ((0 <=? Pointer.offset addr_load)%Z);
+             discriminate.
+        -- (* If we read from elsewhere, the result follows from the IH. *)
+           (* TODO: Rename lemma (add [_neq]).*)
+           rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Hneq) in Hload.
+           exact (Hmem1 _ _ Hload).
+      * (* ICall *)
+        intros addr_load val_load Hload Hperm.
+        specialize (Hmem1 _ _ Hload Hperm).
+        destruct val_load as  [[[vperm vcid] vbid] voff].
+        destruct addr_load as  [[[aperm acid] abid] aoff].
+        specialize (Memory.load_some_permission _ _ _ Hload) as Hperm2.
+        simpl in *; subst.
+        clear Hstep12' Hstar01 Hstep12.
+        specialize (classic (addr_shared_so_far
+                               (vcid, vbid)
+                               (t1 ** [:: ECall
+                                          (Pointer.component pc)
+                                          P (Register.get R_COM regs) mem C']
+                               )
+                            )
+                   ) as [Hshr | Hnotshr].
+        -- (** shared stuff *)
+          apply shared_stuff_from_anywhere; auto.
+        -- (** private stuff *)
+          destruct (vcid =? C') eqn:eacid.
+          ++
+            (** private stuff of current pc from ...*)
+            assert (vcid = C'). by apply beq_nat_true. subst.
+            specialize (classic (addr_shared_so_far
+                                   (acid, abid)
+                                   (t1 ** [:: ECall
+                                              (Pointer.component pc)
+                                              P (Register.get R_COM regs) mem C']
+                                   )
+                                )
+                       ) as [Hshraddr | Hnotshraddr].
+            ** apply private_stuff_of_current_pc_from_shared_addr; auto.
+            ** apply private_stuff_from_corresp_private_addr; auto. simpl.
+               inversion Hmem1 as [| |]; simpl in *; subst; auto.
+               --- exfalso. apply Hnotshr. rewrite Eapp_rcons.
+                   eapply reachable_from_previously_shared; eauto. simpl.
+                   constructor. by rewrite in_fset1.
+               --- exfalso. apply Hnotshraddr. rewrite Eapp_rcons.
+                   eapply reachable_from_previously_shared; eauto. simpl.
+                   constructor. by rewrite in_fset1.
+          ++ (** private stuff NOT of current pc *)
+            apply private_stuff_from_corresp_private_addr; simpl in *; auto; subst.
+            ** intros Hshraddr.
+               apply Hnotshr. rewrite Eapp_rcons. rewrite Eapp_rcons in Hshraddr.
+               eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+            ** inversion Hmem1 as [| |]; simpl in *; subst; auto.
+               --- exfalso. apply Hnotshr. rewrite Eapp_rcons.
+                   eapply reachable_from_previously_shared; eauto. simpl.
+                   constructor. by rewrite in_fset1.
+               --- exfalso. apply Hnotshr.
+                   rewrite Eapp_rcons.
+                   eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+                   +++
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+                   +++ eassumption.
+          
+      * (* IReturn *)
+                intros addr_load val_load Hload Hperm.
+        specialize (Hmem1 _ _ Hload Hperm).
+        destruct val_load as  [[[vperm vcid] vbid] voff].
+        destruct addr_load as  [[[aperm acid] abid] aoff].
+        specialize (Memory.load_some_permission _ _ _ Hload) as Hperm2.
+        simpl in *; subst.
+        clear Hstep12' Hstar01 Hstep12.
+        specialize (classic (addr_shared_so_far
+                               (vcid, vbid)
+                               (t1 ** [:: ERet
+                                          (Pointer.component pc)
+                                          (Register.get R_COM regs)
+                                          mem (Pointer.component pc')]
+                               )
+                            )
+                   ) as [Hshr | Hnotshr].
+        -- (** shared stuff *)
+          apply shared_stuff_from_anywhere; auto.
+        -- (** private stuff *)
+          destruct (vcid =? Pointer.component pc') eqn:eacid.
+          ++
+            (** private stuff of current pc from ...*)
+            assert (vcid = Pointer.component pc'). by apply beq_nat_true. subst.
+            specialize (classic (addr_shared_so_far
+                                   (acid, abid)
+                                   (t1 ** [:: ERet
+                                          (Pointer.component pc)
+                                          (Register.get R_COM regs)
+                                          mem (Pointer.component pc')]
+                                   )
+                                )
+                       ) as [Hshraddr | Hnotshraddr].
+            ** apply private_stuff_of_current_pc_from_shared_addr; auto.
+            ** apply private_stuff_from_corresp_private_addr; auto. simpl.
+               inversion Hmem1 as [| |]; simpl in *; subst; auto.
+               --- exfalso. apply Hnotshr. rewrite Eapp_rcons.
+                   eapply reachable_from_previously_shared; eauto. simpl.
+                   constructor. by rewrite in_fset1.
+               --- exfalso. apply Hnotshraddr. rewrite Eapp_rcons.
+                   eapply reachable_from_previously_shared; eauto. simpl.
+                   constructor. by rewrite in_fset1.
+          ++ (** private stuff NOT of current pc *)
+            apply private_stuff_from_corresp_private_addr; simpl in *; auto; subst.
+            ** intros Hshraddr.
+               apply Hnotshr. rewrite Eapp_rcons. rewrite Eapp_rcons in Hshraddr.
+               eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+            ** inversion Hmem1 as [| |]; simpl in *; subst; auto.
+               --- exfalso. apply Hnotshr. rewrite Eapp_rcons.
+                   eapply reachable_from_previously_shared; eauto. simpl.
+                   constructor. by rewrite in_fset1.
+               --- exfalso. apply Hnotshr.
+                   rewrite Eapp_rcons.
+                   eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+                   +++
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+                   +++ eassumption.
+
+  ********************************)
+Admitted.    
+
 Lemma not_executing_can_not_share_ p:
   well_formed_program p ->
   closed_program p ->
@@ -1723,6 +2061,13 @@ Proof.
                 _ Hwf Hclosed _ _ _ Hstar1 Hstar_before) as Hno_new_reach.
   specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hstar1)
     as [Hwfmem_s' Hwfregs_s'].
+  specialize (is_prefix_wf_reach  _ _ _ Hclosed Hwf Hstar1) as Hwfreach_s'.
+  assert (star_s1': Star (CS.sem_non_inform p)
+                         (CS.initial_machine_state p) t s1').
+  {
+    eapply star_trans with (s2 := s'); eauto. by rewrite E0_right.
+  }
+  specialize (is_prefix_wf_reach  _ _ _ Hclosed Hwf star_s1') as Hwfreach_s1'.
   inversion Cshared as [ ? ? ? Hreach | ? ? ? ? Hprevshared Hreach];
     find_rcons_rcons; rewrite Hrewr1 in Hreach.
   - destruct (Register.get R_COM (CS.state_regs s1'))
@@ -1749,10 +2094,15 @@ Proof.
            }
            specialize (Hwfmem_s' _ _ Hload Logic.eq_refl).
            inversion Hwfmem_s' as [| |]; simpl in *; subst; try by intuition.
-           ++ (** Need a lemma to somehow 
-                  derive a contradiction from Hreachs', H2, and Cnotexec.. *)
+           ++ (** Derive a contradiction from Hreachs', H2, and Cnotexec.. *)
              (** This lemma is ideally a trichotomy similar to wf_load. *)
-             admit.
+             specialize (Hwfreach_s' _ _ Hreachs').
+             inversion Hwfreach_s' as [| | |];
+               simpl in *; subst; try by intuition.
+             (** one case remains. *)
+             destruct H5 as [priv [Hin [Hnotshr Heq]]].
+             rewrite in_fset1 in Hin. move: Hin => /eqP => Hin. subst.
+             simpl in *. congruence.
            ++ eapply Csharednothing; eauto.
       * inversion Hreachs'; subst.
         -- rewrite in_fset1 in H0. move : H0 => /eqP => H0; inversion H0; subst.
@@ -1770,296 +2120,56 @@ Proof.
              apply ComponentMemory.load_block_load.
                by apply (@In_in (prod_ordType nat_ordType nat_ordType)).
            }
-           specialize (Hwfmem_s' _ _ Hload Logic.eq_refl).
-           inversion Hwfmem_s' as [| |]; simpl in *; subst; try by intuition.
+           destruct H as [r [ostart Hget]].
+           specialize (Hwfregs_s'  _ _ Hget Logic.eq_refl).
+           inversion Hwfregs_s'; subst; simpl in *.
+           ++ specialize (Hwfmem_s' _ _ Hload Logic.eq_refl).
+              inversion Hwfmem_s' as [| |]; simpl in *; subst; try by intuition.
+              ** (** Need a lemma to somehow 
+                  derive a contradiction from Hreachs', H, and Cnotexec.. *)
+                (** This lemma is ideally a trichotomy similar to wf_load. *)
+                specialize (Hwfreach_s' _ _ Hreachs').
+                inversion Hwfreach_s' as [| | |];
+                  simpl in *; subst; try by intuition.
+                (** one case remains. *)
+                destruct H5 as [priv [Hin [Hnotshr Heq]]].
+                rewrite in_fset1 in Hin. move: Hin => /eqP => Hin. subst.
+                simpl in *. congruence.
+              ** eapply Csharednothing; eauto.
            ++ (** Need a lemma to somehow 
-                  derive a contradiction from Hreachs', H2, and Cnotexec.. *)
-             (** This lemma is ideally a trichotomy similar to wf_load. *)
-             admit.
-           ++ eapply Csharednothing; eauto.
+                  derive a contradiction from Hreachs', and H3, which tell
+                  us that either ~Cnotexec or ~Csharednothing. *)
+              (** This lemma is ideally a trichotomy similar to wf_load. *)
+             specialize (Hwfreach_s' _ _ Hreachs').
+             inversion Hwfreach_s' as [| | |];
+               simpl in *; subst; try by intuition.
+             (** two cases remain. *)
+             ** by apply Csharednothing in H.
+             ** destruct H4 as [priv [Hin [Hnotshr Heq]]].
+                rewrite in_fset1 in Hin. move: Hin => /eqP => Hin. subst.
+                simpl in *. congruence.
+           
     + simpl in *. congruence.
     + by apply Csharednothing in H.
   - (** Distinguish two cases of addr'.1: 
         case addr'.1 == C => contradiction to Csharednothing
-        case addr'.1 != C => contradiction to the reachability trichotomy.
+        case addr'.1 != C => contradiction to the reachability 4-chotomy.
      *)
     destruct addr' as [addr'c addr'b].
     destruct (addr'c =? C) eqn:eaddr'c.
     + apply beq_nat_true in eaddr'c. subst.
         by apply Csharednothing in Hprevshared.
     + apply beq_nat_false in eaddr'c.
-      (** contradiction to the reachability trichotomy. *)
-      admit.
+      specialize (Hwfreach_s1' _ _ Hreach).
+      inversion Hwfreach_s1' as [| | |];
+        simpl in *; subst; try by intuition.
+      * by apply Csharednothing in H.
+      * destruct H0 as [priv [Hin [Hnotshr Heq]]].
+        rewrite in_fset1 in Hin. move: Hin => /eqP => Hin. subst.
+        simpl in *. congruence.
       Unshelve. by eauto.
-Admitted.
+Qed.
       
-  (**************************************************************
-  induction t as [| t' e'] using last_ind;
-  intros C s e b Hnot Hprefix HC Hshared;
-    CS.unfold_states; unfold is_prefix in *;
-      rewrite -cats1 in Hprefix.
-  - (** base case *)
-    inversion Hshared as [ ? ? ? Hreach | ? ? ? ? Hprevshared Hreach];
-      subst.
-    + rewrite -cats1 in H0. destruct t.
-      2: {
-        simpl in H0. inversion H0. rewrite cats1 in H2.
-        by find_nil_rcons.
-      }
-      rewrite -H0 in Hprefix. simpl in H0.
-      inversion H0; subst; clear H0.
-      rename Hprefix into Hprefix_.
-      assert (Hprefix: Star (CS.sem_non_inform p)
-                            (CS.initial_machine_state p)
-                            ([::] ++ [:: e]) (gps, mem, regs, pc)).
-      { by auto. }
-      clear Hprefix_.
-      apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
-        last by apply CS.singleton_traces_non_inform.
-      apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
-        last by apply CS.singleton_traces_non_inform.
-
-      assert (Hprefbefore_e: is_prefix s1' p E0).
-      {
-        eapply star_trans; eauto. 
-      }
-      assert (Hstar_e: is_prefix s2' p (E0 ++ [:: e])).
-      {
-        eapply star_right; last reflexivity; last exact Hstep.
-        eapply star_trans with (s2 := s); eauto. 
-      }
-      
-      specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hprefbefore_e)
-        as [Hwf_mem_before [Hwf_reg_before Hwf_reach_before]].
-      specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hstar_e)
-        as [Hwf_mem [Hwf_reg Hwf_reach]].
-      CS.unfold_state s1'. CS.unfold_state s2'. simpl in *.
-
-      inversion Hstep as [? ? ? ? Hstep']; subst.
-      inversion Hstep'; subst; try discriminate; simpl in *;
-        destruct e; try discriminate;
-          match goal with
-          | H: [:: ?x] = [:: ?y] |- _ => inversion H
-          end;
-          subst; clear Hstep'; destruct pc0 as [[[ppc0 cpc0] bpc0] opc0];
-            simpl in *.
-
-       {
-        (** ICall *)
-        destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
-          inversion Hreach as [? Heq|]; subst; simpl in *;
-            try (by eapply Reachable_fset0; eauto);
-            try (rewrite in_fset1 in Heq;
-                 move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
-        * (*assert (Hget: Register.get R_COM (Register.invalidate regs0) =
-                      Ptr (Permission.data, cRCOM, bRCOM, oRCOM)).
-        { rewrite Register.gi. by simpl. }*)
-          (*specialize (Hwf_reg _ _ Hget Logic.eq_refl).*)
-          specialize (Hwf_reg_before _ _ eR_COM Logic.eq_refl).
-          inversion Hwf_reg_before as [ | ? ? ? ? Hshr]; subst;
-            first (contradiction);
-            first (by apply Hnot in Hshr).
-        * assert (exists offv off,
-                     Memory.load mem1 (Permission.data, cid, bid, off) =
-                     Some (Ptr (Permission.data, C, b, offv)) 
-                 ) as [offv [off Hload]].
-          {
-            unfold Memory.load. simpl. rewrite H1.
-            rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
-          }
-          specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
-            inversion Hwf_mem_before
-            as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
-            simpl in *; subst;
-              last contradiction;
-              last by (apply Hnot in Hcontra).
-          -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
-               inversion Hwf_mem
-               as [? ? Hnotshr1_rcons Hnotshr2_rcons
-                  | ? ? Hcontra
-                  | ? ? Hnotshr1_rcons];
-               simpl in *; subst.
-             ++ contradiction. 
-             ++ specialize (Hwf_reach_before
-                              _ _ _ _ _ _ eR_COM
-                              Logic.eq_refl Logic.eq_refl Logic.eq_refl
-                              Hreach (** or H0 *) offv).
-                  by inversion Hwf_reach_before; auto.
-             ++ contradiction.
-       }
-
-
-
-       {
-        (** IReturn --- exact proof script as ICall *)
-        destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
-          inversion Hreach as [? Heq|]; subst; simpl in *;
-            try (by eapply Reachable_fset0; eauto);
-            try (rewrite in_fset1 in Heq;
-                 move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
-        * (*assert (Hget: Register.get R_COM (Register.invalidate regs0) =
-                      Ptr (Permission.data, cRCOM, bRCOM, oRCOM)).
-        { rewrite Register.gi. by simpl. }*)
-          (*specialize (Hwf_reg _ _ Hget Logic.eq_refl).*)
-          specialize (Hwf_reg_before _ _ eR_COM Logic.eq_refl).
-          inversion Hwf_reg_before as [ | ? ? ? ? Hshr]; subst;
-            first (contradiction);
-            first (by apply Hnot in Hshr).
-        * assert (exists offv off,
-                     Memory.load mem1 (Permission.data, cid, bid, off) =
-                     Some (Ptr (Permission.data, C, b, offv)) 
-                 ) as [offv [off Hload]].
-          {
-            unfold Memory.load. simpl. rewrite H1.
-            rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
-          }
-          specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
-            inversion Hwf_mem_before
-            as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
-            simpl in *; subst;
-              last contradiction;
-              last by (apply Hnot in Hcontra).
-          -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
-               inversion Hwf_mem
-               as [? ? Hnotshr1_rcons Hnotshr2_rcons
-                  | ? ? Hcontra
-                  | ? ? Hnotshr1_rcons];
-               simpl in *; subst.
-             ++ contradiction. 
-             ++ specialize (Hwf_reach_before
-                              _ _ _ _ _ _ eR_COM
-                              Logic.eq_refl Logic.eq_refl Logic.eq_refl
-                              Hreach (** or H0 *) offv).
-                  by inversion Hwf_reach_before; auto.
-             ++ contradiction.
-       }
-
-       
-      
-      +  rewrite -cats1 in H0. destruct t.
-      2: {
-        simpl in H0. inversion H0. rewrite cats1 in H2.
-        by find_nil_rcons.
-      }
-      by inversion Hprevshared; find_nil_rcons.
-
-
-  - (** Inductive case *)
-    apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
-      last by apply CS.singleton_traces_non_inform.
-    apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
-      last by apply CS.singleton_traces_non_inform.
-    assert (Hprefbefore_e: is_prefix s1' p (rcons t' e')).
-    {
-      eapply star_trans; eauto. by rewrite E0_right.
-    }
-    assert (Hstar_e: is_prefix s2' p ((rcons t' e') ++ [:: e])).
-    {
-      eapply star_right; last reflexivity; last exact Hstep.
-      eapply star_trans with (s2 := s); eauto. by rewrite E0_right.
-    }
-  
-    specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hprefbefore_e)
-      as [Hwf_mem_before [Hwf_reg_before Hwf_reach_before]].
-    specialize (is_prefix_wf_state_t _ _ _ Hclosed Hwf Hstar_e)
-      as [Hwf_mem [Hwf_reg Hwf_reach]].
-    CS.unfold_state s1'. CS.unfold_state s2'. simpl in *.
-    inversion Hstep as [? ? ? ? Hstep']; subst.
-    inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate;
-      match goal with
-      | H: [:: ?x] = [:: ?y] |- _ => inversion H
-      end;
-      subst; clear Hstep'; destruct pc0 as [[[ppc0 cpc0] bpc0] opc0];
-        simpl in *.
-  { (** ICall *)
-    inversion Hshared as [ ? ? ? Hreach| ? ? ? ? Hprevshared Hreach];
-      find_rcons_rcons; simpl in *.
-    + destruct (Register.get R_COM regs0) as [| [[[[] cRCOM] bRCOM] oRCOM] |] eqn:eR_COM;
-        inversion Hreach as [? Heq|]; subst; simpl in *;
-          try (by eapply Reachable_fset0; eauto);
-          try (rewrite in_fset1 in Heq;
-               move : Heq => /eqP => Heq; inversion Heq; subst; clear Heq).
-      * (*assert (Hget: Register.get R_COM (Register.invalidate regs0) =
-                      Ptr (Permission.data, cRCOM, bRCOM, oRCOM)).
-        { rewrite Register.gi. by simpl. }*)
-        (*specialize (Hwf_reg _ _ Hget Logic.eq_refl).*)
-        specialize (Hwf_reg_before _ _ eR_COM Logic.eq_refl).
-        inversion Hwf_reg_before as [ | ? ? ? ? Hshr]; subst;
-          first (contradiction);
-          first (by apply Hnot in Hshr).
-      * assert (exists offv off,
-                   Memory.load mem1 (Permission.data, cid, bid, off) =
-                   Some (Ptr (Permission.data, C, b, offv)) 
-               ) as [offv [off Hload]].
-        {
-          unfold Memory.load. simpl. rewrite H1.
-          rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
-        }
-        specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
-          inversion Hwf_mem_before
-          as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
-          simpl in *; subst;
-            last contradiction;
-            last by (apply Hnot in Hcontra).
-        -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
-             inversion Hwf_mem
-             as [? ? Hnotshr1_rcons Hnotshr2_rcons
-                | ? ? Hcontra
-                | ? ? Hnotshr1_rcons];
-             simpl in *; subst.
-           ++ by rewrite cats1 in Hnotshr1_rcons.
-           ++ specialize (Hwf_reach_before
-                            _ _ _ _ _ _ eR_COM
-                            Logic.eq_refl Logic.eq_refl Logic.eq_refl
-                            Hreach (** or H0 *) offv).
-              by inversion Hwf_reach_before; auto.
-           ++ by rewrite cats1 in Hnotshr1_rcons.
-    + inversion Hreach as [? Heq|]; subst; simpl in *;
-        try (by eapply Reachable_fset0; eauto);
-        try (rewrite in_fset1 in Heq;
-             move : Heq => /eqP => Heq; inversion Heq; subst).
-      * by apply Hnot in Hprevshared. 
-      * assert (exists offv off,
-                   Memory.load mem1 (Permission.data, cid, bid, off) =
-                   Some (Ptr (Permission.data, C, b, offv)) 
-               ) as [offv [off Hload]].
-        {
-          unfold Memory.load. simpl. rewrite H1.
-          rewrite -ComponentMemory.load_block_load. by apply In_in in H2.
-        }
-        specialize (Hwf_mem_before _ _ Hload Logic.eq_refl);
-          inversion Hwf_mem_before
-          as [? ? Hnotshr1 Hnotshr2 | ? ? Hcontra |];
-          simpl in *; subst;
-            last contradiction;
-            last by (apply Hnot in Hcontra).
-        -- specialize (Hwf_mem _ _ Hload Logic.eq_refl);
-             inversion Hwf_mem
-             as [? ? Hnotshr1_rcons Hnotshr2_rcons
-                | ? ? Hcontra
-                | ? ? Hnotshr1_rcons];
-             simpl in *; subst.
-           ++ by rewrite cats1 in Hnotshr1_rcons.
-           ++ specialize (IHt cid
-                              (gps0, mem1, regs0,
-                               (ppc0, cpc0, bpc0, opc0))
-                              e'
-                         ).
-              inversion Hprevshared as
-                  [ ? ? ? Hreach_prev
-                  | ? ? ? ? Hprevshared_prev Hreach_prev];
-                find_rcons_rcons; simpl in *.
-              ** destruct e' as [|]; simpl in *; subst.
-                 admit. admit.
-              ** 
-              (* Here, need an induction hypothesis about t *)
-             specialize (Hwf_reach_before
-                            _ _ _ _ _ _ eR_COM
-                            Logic.eq_refl Logic.eq_refl Logic.eq_refl
-                            Hreach (** or H0 *) offv).
-              by inversion Hwf_reach_before; auto.
-           ++ by rewrite cats1 in Hnotshr1_rcons.
-*****************************************************************)
 
 
 Lemma not_shared_diff_comp_not_shared_call:
