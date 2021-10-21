@@ -709,6 +709,20 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
         * apply In_in. rewrite ComponentMemory.load_block_load; by eauto.
   Qed.
 
+  Lemma Reachable_exists_one_start mem start_set reached:
+    Reachable mem start_set reached ->
+    exists start,
+      start \in start_set /\ Reachable mem (fset1 start) reached.
+  Proof.
+    intros Hreach.
+    induction Hreach.
+    - exists b. split; [assumption|apply Reachable_refl; by rewrite in_fset1].
+    - destruct IHHreach as [start [Hstart Hreach1]].
+      exists start. split; [assumption|eapply Reachable_transitive; eauto].
+      eapply Reachable_step; eauto.
+      eapply Reachable_refl; by rewrite in_fset1.
+  Qed.
+
   Lemma Reachable_dfs_path m bs cid bid:
     Reachable m bs (cid, bid) <->
     (exists b n_f,
