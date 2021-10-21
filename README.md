@@ -301,16 +301,6 @@ CSInvariants.CSInvariants.load_Some_component_buffer
     Memory.load (mem_of_event e) ptr = Some v ->
     Pointer.component ptr \in domm (Machine.Intermediate.prog_interface p)
 
-CSInvariants.CSInvariants.not_executing_can_not_share
-  : forall (s : CS.CS.state) (p : Machine.Intermediate.program)
-      (t : seq event) (e : event) (C : Component.id) 
-      (b : Block.id),
-    Machine.Intermediate.well_formed_program p ->
-    Machine.Intermediate.closed_program p ->
-    CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
-    C <> cur_comp_of_event e ->
-    (forall b' : Block.id, ~ addr_shared_so_far (C, b') t) ->
-    ~ addr_shared_so_far (C, b) (rcons t e)
 ```
 
 #### Back-translation ####
