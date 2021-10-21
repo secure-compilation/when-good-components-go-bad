@@ -665,7 +665,49 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
              rewrite ComponentMemory.load_block_load. eauto.
   Qed.
 
-
+  Lemma Reachable_Memory_alloc mem mem' c sz ptr start_set reached:
+    Memory.alloc mem c sz = Some (mem', ptr) ->
+    Reachable mem' start_set reached ->
+    Reachable mem start_set reached.
+  Proof.
+    intros Halloc Hreachmem'.
+    destruct (classic (Reachable mem start_set reached)) as [G|Hnotreach];
+      [easy|].
+    induction Hreachmem'.
+    - exfalso. apply Hnotreach. by constructor.
+    - destruct b' as [creached breached].
+      assert (exists optr oload,
+                 Memory.load
+                   mem'
+                   (Permission.data, cid, bid, oload)
+                 = Some (Ptr (Permission.data, creached, breached, optr))
+             ) as [optr_ [oload Hload]].
+      {
+        unfold Memory.load. simpl. rewrite H.
+        rewrite -ComponentMemory.load_block_load. by apply In_in in H0.
+      }
+      destruct ((cid, bid) == (Pointer.component ptr, Pointer.block ptr))
+      eqn:eptr; move : eptr => /eqP => eptr.
+      + inversion eptr. subst. clear eptr.
+        specialize (Memory.load_after_alloc_eq
+                      _ _ _ _ _
+                      (Permission.data, Pointer.component ptr,
+                       Pointer.block ptr, oload) Halloc Logic.eq_refl)
+          as Hrewr.
+        simpl in *. rewrite Hrewr in Hload.
+        destruct ((oload <? Z.of_nat sz)%Z); last discriminate.
+        destruct ((0 <=? oload)%Z); last discriminate.
+        discriminate.
+      + erewrite (Memory.load_after_alloc _ _ _ _ _ _ Halloc) in Hload;
+          last (simpl; congruence).
+        unfold Memory.load in Hload. simpl in *.
+        destruct (mem cid) as [cMem|] eqn:ecMem ; last discriminate.
+        eapply Reachable_step.
+        * destruct (classic (Reachable mem start_set (cid, bid))) as [G|contra];
+            [eassumption|by apply IHHreachmem' in contra].
+        * eassumption.
+        * apply In_in. rewrite ComponentMemory.load_block_load; by eauto.
+  Qed.
 
   Lemma Reachable_dfs_path m bs cid bid:
     Reachable m bs (cid, bid) <->
