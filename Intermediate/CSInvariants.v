@@ -721,33 +721,43 @@ Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
   closed_program p ->
   is_prefix s p t ->
   CS.state_mem s = mem ->
-  cid \in domm (prog_interface p) ->
+  cid \in domm (prog_interface p) <->
   exists compMem, mem cid = Some compMem.
 Proof.
   unfold is_prefix. simpl.
-  intros Hwf Hclosed Hstar Hmem Hdomm.
-  apply /dommP.
+  intros Hwf Hclosed Hstar Hmem.
   remember (CS.initial_machine_state p) as s0 eqn:Hs0.
   remember (prepare_global_env p) as G eqn:HG.
-  revert mem Hs0 HG Hwf Hclosed Hmem Hdomm.
+  revert mem Hs0 HG Hwf Hclosed Hmem.
   apply star_iff_starR in Hstar.
   induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
-    intros mem Hs0 HG Hwf Hclosed Hmem Hdomm; subst.
+    intros mem Hs0 HG Hwf Hclosed Hmem; subst.
   - unfold CS.initial_machine_state. simpl.
     destruct (prog_main p) as [main |] eqn:Hmain.
     + simpl.
-      rewrite domm_map (domm_prepare_procedures_initial_memory_aux p).
-      assumption.
+      split; intros Hdomm; [apply /dommP|move : Hdomm => /dommP => Hdomm].
+      * rewrite domm_map (domm_prepare_procedures_initial_memory_aux p).
+        assumption.
+      * by rewrite domm_map (domm_prepare_procedures_initial_memory_aux p)
+          in Hdomm. 
     + destruct (cprog_main_existence Hclosed) as [_ [Hcontra _]].
       rewrite Hmain in Hcontra. discriminate.
   - specialize
-      (IHstar _ Logic.eq_refl Logic.eq_refl Hwf Hclosed Logic.eq_refl Hdomm)
+      (IHstar _ Logic.eq_refl Logic.eq_refl Hwf Hclosed Logic.eq_refl)
       as Hmem.
     inversion Hstep12 as [? ? ? ? Hstep12']; subst.
     inversion Hstep12'; subst;
-      try assumption.
-    + simpl. erewrite <- Memory.domm_store; eassumption.
-    + simpl. erewrite <- Memory.domm_alloc; eassumption.
+      try (assumption); simpl in *.
+    + split; intros Hdomm; [apply /dommP|move : Hdomm => /dommP => Hdomm].
+      * erewrite <- Memory.domm_store; last eassumption.
+        apply/dommP; by eapply Hmem.
+      * erewrite <- Memory.domm_store in Hdomm; last eassumption.
+        move : Hdomm => /dommP => Hdomm. by eapply Hmem in Hdomm.
+    + split; intros Hdomm; [apply /dommP|move : Hdomm => /dommP => Hdomm].
+      * erewrite <- Memory.domm_alloc; last eassumption.
+        apply/dommP; by eapply Hmem.
+      * erewrite <- Memory.domm_alloc in Hdomm; last eassumption.
+        move : Hdomm => /dommP => Hdomm. by eapply Hmem in Hdomm.
 Qed.
 
 Lemma mem_comp_some_link_in_left_or_in_right s p c t mem compMem cid:
@@ -2009,36 +2019,39 @@ Lemma load_Some_component_buffer:
     Memory.load (mem_of_event e) ptr = Some v ->
     Pointer.component ptr \in domm (prog_interface p).
   Proof.
-    admit.
-    Admitted.
-
-
-
-
-
-
-(********************************
-  Search _ CS.sem_non_inform Component.id.
-  assert (Pointer.component pc = next_comp_of_event e).
-  {
-    clear -Hprefix.
-    rewrite -cats1 in Hprefix.
-    apply star_app_inv in Hprefix as [s [Hstar1 Hstar2]];
+    intros ? ? ? ? ? ? Hwf Hclosed Hpref Hload.
+    rewrite -cats1 in Hpref.
+    apply star_app_inv in Hpref as [s1 [Hstar1 Hstar2]];
       last by apply CS.singleton_traces_non_inform.
-    apply star_cons_inv in Hstar2 as [s1' [s2' [_ [Hstep Hstar_after]]]];
+    apply star_cons_inv in Hstar2 as [s1' [s2' [Hstar_before [Hstep Hstar_after]]]];
       last by apply CS.singleton_traces_non_inform.
-    inversion Hstep as [? ? ? ? Hstep']; subst.
-    inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate.
-    match goal with
-    | H: [:: ?x] = [:: ?y] |- _ => inversion H
-    end.
-    subst.
-    Search _ pc0.
-  }
-  inversion Hshared; find_rcons_rcons.
-  - 
-  - 
-  *************************************)
+    assert (Hrewr: CS.state_mem s2' = mem_of_event e).
+    {
+      inversion Hstep as [? ? ? ? Hstep']; subst.
+      inversion Hstep'; subst; try discriminate; simpl in *; destruct e; try discriminate; try by inversion H.
+    }
+    rewrite -Hrewr in Hload.
+    unfold Memory.load in Hload.
+    destruct (Permission.eqb (Pointer.permission ptr) Permission.data);
+      last discriminate.
+    destruct (CS.state_mem s2' (Pointer.component ptr)) eqn:emem;
+      last discriminate.
+    assert (Hprefs2': Star (CS.sem_non_inform p) (CS.initial_machine_state p)
+                           (t ++ [::e]) s2').
+    {
+      eapply star_trans; eauto.
+      eapply star_trans; eauto.
+      - eapply star_step; eauto. constructor.
+      - easy.
+    }
+    assert (Hin: Pointer.component ptr \in domm (CS.state_mem s2')).
+    { by apply/dommP; eauto. }
+    specialize (mem_comp_in_domm_prog_interface_some
+                  _ _ _ _ (Pointer.component ptr)
+                  Hwf Hclosed Hprefs2' Logic.eq_refl) as G.
+      by apply G; eauto.
+  Qed.
+    
   Lemma not_executing_can_not_share s p t e C b:
     well_formed_program p ->
     closed_program p ->

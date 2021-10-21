@@ -291,16 +291,6 @@ CS.intermediate_well_formed_events
       (well_formed_event (Intermediate.prog_interface p)
          (Intermediate.prog_procedures p)) t
 
-CSInvariants.CSInvariants.load_Some_component_buffer
-  : forall (p : Machine.Intermediate.program) (s : CS.CS.state)
-      (t : seq event) (e : event) (ptr : Pointer.t) 
-      (v : value),
-    Machine.Intermediate.well_formed_program p ->
-    Machine.Intermediate.closed_program p ->
-    CSInvariants.CSInvariants.is_prefix s p (rcons t e) ->
-    Memory.load (mem_of_event e) ptr = Some v ->
-    Pointer.component ptr \in domm (Machine.Intermediate.prog_interface p)
-
 ```
 
 #### Back-translation ####
