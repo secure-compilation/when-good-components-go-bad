@@ -106,11 +106,14 @@ Qed.
 Lemma star_well_formed_intermediate_prefix:
   forall p t s,
     Intermediate.well_formed_program p ->
+    Intermediate.closed_program p ->
     Star (I.CS.sem_inform p) (I.CS.initial_machine_state p) t s ->
     well_formed_intermediate_prefix (Intermediate.prog_interface p)
                                     (Intermediate.prog_buffers p) t.
 Proof.
-  intros p t s wfp Hstar.
+  intros p t s wfp closed Hstar.
+  assert (Hmain: Intermediate.prog_main p).
+  { destruct closed. by destruct cprog_main_existence as [? [G _]]. }
   remember (CS.initial_machine_state p) as s0 eqn:Hs0.
   revert Hs0.
   apply star_iff_starR in Hstar.
@@ -133,8 +136,15 @@ Proof.
                       | None => emptym
                       end) (domm (Intermediate.prog_interface p)))).
       {
+        apply star_iff_starR in Hstar01.
+        apply I.CS.epsilon_star_preserves_memory in Hstar01.
+        simpl in *. subst. unfold CS.initial_machine_state. rewrite Hmain. simpl.
+        unfold Intermediate.prepare_procedures_initial_memory,
+        Intermediate.prepare_procedures_initial_memory_aux.
+        
+        (** Not sure about this one. *)
         admit.
-        (** Should follow from Hstar01. *)
+        
       }
       subst.
       destruct e; inversion Hstep12; subst; simpl in *.
@@ -228,7 +238,7 @@ Proof.
     unfold CSInvariants.CSInvariants.is_prefix.
     exists s. by eapply I.CS.star_sem_inform_star_sem_non_inform.
   }
-  have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hstar.
+  have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hclosed Hstar.
   have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
                        H_is_prefix wf_p_c Hclosed Logic.eq_refl wf_t wf_i_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
