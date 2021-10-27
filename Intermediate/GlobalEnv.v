@@ -179,10 +179,7 @@ Proof.
     by rewrite Hcase.
 Qed.
 
-(* RB: NOTE: Add program well-formedness if needed. *)
-Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
-  (* Pointer.component pc \in domm (prog_interface p) -> *)
-  (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
+Lemma genv_entrypoints_interface_some p p' C P b :
   well_formed_program p ->
   well_formed_program p' ->
   prog_interface p = prog_interface p' ->
@@ -238,17 +235,16 @@ Proof.
     apply /dommP.
     (* Continue to case analyze both machines in sync. *)
     unfold reserve_component_blocks. unfold reserve_component_blocks in Hdomm.
+    
 
-    (** TODO: FIXME: This proof broke because of the change of the type of *)
-    (** prog_buffers. After the change, we now restrict each component to  *)
-    (** own just one static buffer.                                        *)
-
-    (** We made some changes to the script above and to the theorem statement. *)
-
-    (**************************************************************************
-    destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs) (length procs))
+    remember (setm (T:=nat_ordType) emptym Block.local bufs) as bufs_one.
+    remember (setm (T:=nat_ordType) emptym Block.local bufs') as bufs'_one.
+    
+    destruct (ComponentMemoryExtra.reserve_blocks
+                (ComponentMemory.prealloc bufs_one) (length procs))
       as [Cmem bs] eqn:Hblocks.
-    destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs') (length procs'))
+    destruct (ComponentMemoryExtra.reserve_blocks
+                (ComponentMemory.prealloc bufs'_one) (length procs'))
       as [Cmem' bs'] eqn:Hblocks'.
     rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
     rewrite <- Hiface.
@@ -449,8 +445,6 @@ Proof.
         now rewrite domm0.
   - now rewrite HC.
   Qed.
-*************************************************************************)
-Admitted.
 
 (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
    operating on an explicit program link, one then being the exact symmetric of

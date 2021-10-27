@@ -256,15 +256,6 @@ CS.genv_procedures_prog_procedures
     genv_procedures (globalenv (CS.sem_inform p)) cid = proc <->
     prog_procedures p cid = proc
 
-genv_entrypoints_interface_some
-  : forall (p p' : program) (C : Component.id) (P : Procedure.id)
-      (b : Block.id),
-    well_formed_program p ->
-    well_formed_program p' ->
-    prog_interface p = prog_interface p' ->
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = Some b ->
-    exists b' : Block.id,
-      EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'
 ```
 
 And similarly as well, the proofs use some previously unstated invariants of
