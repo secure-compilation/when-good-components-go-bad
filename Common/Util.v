@@ -1,6 +1,6 @@
 Require Import Common.Definitions.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool seq.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -15,6 +15,20 @@ Proof.
   rewrite filtermE.
   unfold obind, oapp.
   destruct (m k); auto.
+Qed.
+
+Lemma mapm_mkfmapf {S S': Type} {T: ordType} (fim : S -> S') (f : T -> S) d:
+  mapm fim (mkfmapf f d) = mkfmapf (fim \o f) d.
+Proof.
+  rewrite <- eq_fmap.
+  intros x. rewrite mapmE. unfold omap, obind, oapp.
+  destruct (mkfmapf f d x) as [y|] eqn:e; rewrite mkfmapfE; rewrite mkfmapfE in e.
+  - assert (H: x \in d).
+    { by destruct (x \in d). }
+    rewrite H. rewrite H in e. by inversion e.
+  - assert (H: x \in d = false).
+    { by destruct (x \in d). }
+    rewrite H. rewrite H in e. by inversion e.
 Qed.
 
 Module Util.
