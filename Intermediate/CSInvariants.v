@@ -485,13 +485,20 @@ Proof.
            match goal with
            | H: executing _ _ _ |- _ =>
              destruct H as [procs [proc [Hprocs [Hproc [Hoff [Hperm Hnth]]]]]] end.
+           specialize (CS.genv_procedures_prog_procedures
+                             _ (Pointer.component pc) proc Hwf) as Hif.
+             assert (exists (procs' : NMap code) (bid' : nat_ordType),
+                        prog_procedures p (Pointer.component pc) = Some procs'
+                        /\ procs' bid' = Some proc
+                    ) as [? [bid [? ?]]].
+             { by apply Hif; eauto. }
            assert (Hwf_instr: well_formed_instruction
-                          p (Pointer.component pc) (Pointer.block pc)
+                          p (Pointer.component pc) bid
                           (IConst (IPtr ptr) reg)).
            {
+             
              eapply wfprog_well_formed_instructions; eauto.
-             - rewrite <- CS.genv_procedures_prog_procedures; auto.
-             - eapply nth_error_In; eauto.
+             eapply nth_error_In; eauto.
            }
            (* Thanks to [well_formed_instruction], we know that pointer
               constants may only refer to their own component. *)

@@ -2353,6 +2353,7 @@ Section ProgramLink.
 End ProgramLink.
 
 
+(************************************************************
 Lemma genv_procedures_prog_procedures_in p cid fid instlst :
   well_formed_program p ->
   (omap (fun m => getm m fid)
@@ -2398,8 +2399,16 @@ Proof.
       as [compMem bs] eqn:rsvblk.
     split; intros H.
     + rewrite rsvblk in H.
-      simpl in H. rewrite <- H.
-      rewrite mkfmapE. destruct n. simpl.
+      simpl in H. rewrite <- H.      
+      inversion H as [H1]. apply mkfmap_Some in H1.
+      specialize (in_zip1 H1) as Hin1.
+      specialize (in_zip2 H1) as Hin2.
+      Search ComponentMemoryExtra.reserve_blocks.
+      apply in_unzip2 in Hin2 as [].
+      Search seq.unzip2.
+      apply 
+      Search in_mem seq.zip.
+      destruct n. simpl.
       (* Search _ bs. *)
       (** Is there really any relationship between bs and the domain of the NMap n? *)
       admit.
@@ -2413,7 +2422,88 @@ Proof.
   - split; by intros.
 
 Admitted.
+******************************************************************)
 
+Lemma genv_procedures_prog_procedures p cid proc:
+  well_formed_program p ->
+  (
+    exists procs bid,
+      (genv_procedures (globalenv (sem_inform p))) cid = Some procs
+      /\ procs bid = Some proc
+  )
+  ->
+  (
+    exists procs' bid', 
+      (prog_procedures p) cid = Some procs' /\ procs' bid' = Some proc
+  ).
+Proof.
+  intros Hwfp.
+  pose (domm_domm := wfprog_defined_procedures Hwfp).
+  pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
+  unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
+  destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
+    simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
+      unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
+        (* rewrite contra in e1; *)
+        try discriminate; auto; clear e1;
+          unfold reserve_component_blocks; intros [procs [bid H]].
+  - assert (etmp : is_true (cid \in domm (prog_interface p))).
+    { erewrite domm_domm; rewrite e; auto. }
+    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
+    destruct ((prog_interface p) cid) eqn:e1;
+      try (destruct e0 as [x H0];
+           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
+           discriminate).
+    destruct (ComponentMemoryExtra.reserve_blocks
+                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
+                   match prog_buffers p cid with
+                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
+                   | None => emptym
+                   end
+                )
+         (length (elementsm (odflt emptym (Some n)))))
+             as [compMem bs] eqn:rsvblk.
+    rewrite rsvblk in H.
+    destruct H as [H1 H2].
+    apply ComponentMemoryExtra.reserve_blocks_length in rsvblk.
+    exists n. inversion H1. subst. apply mkfmap_Some in H2.
+    specialize (in_zip2 H2) as H2_2.
+    unfold elementsm in *. apply in_unzip2 in H2_2 as [? ?]. by eauto.
+Qed.
+
+(****************************************************************
+- assert (etmp : is_true (cid \in domm (prog_interface p))).
+    { erewrite domm_domm; rewrite e; auto. }
+    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
+    destruct ((prog_interface p) cid) eqn:e1;
+      try (destruct e0 as [x H0];
+           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
+           discriminate).
+    destruct (ComponentMemoryExtra.reserve_blocks
+                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
+                   match prog_buffers p cid with
+                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
+                   | None => emptym
+                   end
+                )
+         (length (elementsm (odflt emptym (Some n)))))
+             as [compMem bs] eqn:rsvblk.
+    rewrite rsvblk.
+    destruct H as [H1 H2].
+    apply ComponentMemoryExtra.reserve_blocks_length in rsvblk.
+    Search wfprog_well_formed_instructions.
+    exists n. inversion H1. subst. apply mkfmap_Some in H2.
+    specialize (in_zip2 H2) as H2_2.
+    unfold elementsm in *. apply in_unzip2 in H2_2 as [? ?]. by eauto. 
+  
+***************************************************************************)
+
+
+
+    
+
+
+(*******************************************************************
 Lemma genv_procedures_prog_procedures p cid proc :
   well_formed_program p ->
   (genv_procedures (globalenv (sem_inform p))) cid = proc <-> (prog_procedures p) cid = proc.
@@ -2461,6 +2551,8 @@ Proof.
       try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
 
 Admitted.
+************************************************************************)
+
 
 (*******************************************************************
 Lemma are_all_ptrs_in_reachable_star_step p st t st' :
