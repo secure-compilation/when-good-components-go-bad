@@ -1,4 +1,4 @@
-
+-arg "-w -parsing -exclude-dir _opam"
 -R . RobustImp
 
 RSC_DC.v
