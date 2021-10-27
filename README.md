@@ -245,20 +245,7 @@ CS.comes_from_initial_state_mem_domm
 
 #### Target language ####
 
-Like the source language, the specification of well-formed target programs is
-extended and a couple of properties of global execution environments need to be
-extended to this new setting:
-
-```coq
-CS.genv_procedures_prog_procedures
-  : forall (p : program) (cid : nat_ordType) (proc : option (NMap code)),
-    well_formed_program p ->
-    genv_procedures (globalenv (CS.sem_inform p)) cid = proc <->
-    prog_procedures p cid = proc
-
-```
-
-And similarly as well, the proofs use some previously unstated invariants of
+Similarly to the source language, the proofs use some previously unstated invariants of
 target program executions, to be proved by the same standard techniques as their
 source counterparts.
 
