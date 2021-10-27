@@ -124,7 +124,7 @@ Proof.
     destruct t2; first by rewrite E0_right; apply IHstar.
     destruct t2; simpl in *; last lia.
     setoid_rewrite cats1.
-    destruct t1; simpl.
+    destruct t1 using last_ind; simpl.
     + constructor; constructor.
       CS.unfold_states.
       assert (mem0 =

@@ -783,11 +783,11 @@ Definition reserve_component_blocks p C Cmem procs_code
         else None
       | None => None (* this case shouldn't happen for well formed p *)
       end in
-  let (Cmem', bs) := ComponentMemoryExtra.reserve_blocks Cmem (length procs_code) in
+  let (_, bs) := ComponentMemoryExtra.reserve_blocks Cmem (length procs_code) in
   let (procs, code) := (unzip1 procs_code, unzip2 procs_code) in
   let Cprocs := mkfmap (zip bs code) in
   let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
-  (Cmem', Cprocs, Centrypoints).
+  (Cmem, Cprocs, Centrypoints).
 
 Section Zip.
   Lemma in_zip1 {X Y : eqType} (x : X) (y : Y) xs ys :
@@ -1525,22 +1525,10 @@ Local Opaque Memory.load.
   rewrite (wfprog_defined_buffers Hwf) in Hdomm.
   move: Hdomm => /dommP => [[buf Hbuf]].
   rewrite Hbuf in Hcase. simpl in Hcase.
-  assert (Hload' :
-            ComponentMemory.load
-              (ComponentMemory.prealloc
-                 (*Cbufs*)
-                 (setm emptym Block.local buf)
-              )
-              b
-              o = Some v).
-  {
-    (* by corresponding memory lemma *)
-    eapply ComponentMemoryExtra.load_before_reserve_blocks.
-    by erewrite Hcase.
-  }
-  rewrite ComponentMemory.load_prealloc in Hload'.
+  rewrite ComponentMemory.load_prealloc in Hload.
   destruct (0 <=? o)%Z eqn:Hoff;
     [| discriminate].
+  rewrite Hbuf in Hload.
   destruct ((*Cbufs b*) setm emptym Block.local buf b) as [buf_descr |] eqn:Hb;
     [| discriminate].
   simpl. exists (*Cbufs,*) buf_descr.
@@ -1550,10 +1538,10 @@ Local Opaque Memory.load.
   unfold Buffer.nth_error.
   destruct o as [| op | on].
   - destruct buf_descr as [n | vs].
-    + rewrite ltb_0_Z_nat in Hload'. assumption.
+    + rewrite ltb_0_Z_nat in Hload. assumption.
     + assumption.
   - destruct buf_descr as [n | vs].
-    + rewrite ltb_Z_nat in Hload'. assumption.
+    + rewrite ltb_Z_nat in Hload. assumption.
     + assumption.
   - discriminate.
 Qed.
