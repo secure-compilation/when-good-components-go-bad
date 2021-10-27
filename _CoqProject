@@ -84,7 +84,6 @@ MicroPolicies/Printer.v
 
 I2MP/Tmp.v
 I2MP/Linearize.v
-I2MP/Encode.v
 
 Tagging/Tags.v
 Tagging/Memory.v
@@ -96,6 +95,8 @@ Tagging/Examples/Helper.v
 Tagging/Examples/Identity.v
 Tagging/Examples/Increment.v
 Tagging/Examples/NestedCalls.v
+
+I2MP/Encode.v
 
 MicroPolicies/Examples/Helper.v
 MicroPolicies/Examples/Empty.v
