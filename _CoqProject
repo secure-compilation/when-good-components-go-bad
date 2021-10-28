@@ -114,6 +114,9 @@ MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 Tagging/Tags.v   # not currently used
 Tagging/Memory.v # not currently used
 
+Tagging/Language.v
+Tagging/LinearizeCompartments.v
+
 Tagging/Examples/Assign.v
 Tagging/Examples/DefaultInitBuffer.v
 Tagging/Examples/Empty.v
