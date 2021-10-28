@@ -1,4 +1,4 @@
-
+-arg "-w -parsing -exclude-dir _opam"
 -R . RobustImp
 
 RSC_DC.v
@@ -84,6 +84,18 @@ MicroPolicies/Printer.v
 
 I2MP/Tmp.v
 I2MP/Linearize.v
+
+Tagging/Tags.v
+Tagging/Memory.v
+Tagging/Examples/Assign.v
+Tagging/Examples/DefaultInitBuffer.v
+Tagging/Examples/Empty.v
+Tagging/Examples/Factorial.v
+Tagging/Examples/Helper.v
+Tagging/Examples/Identity.v
+Tagging/Examples/Increment.v
+Tagging/Examples/NestedCalls.v
+
 I2MP/Encode.v
 
 MicroPolicies/Examples/Helper.v
