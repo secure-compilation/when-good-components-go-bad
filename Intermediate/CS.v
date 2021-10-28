@@ -1966,8 +1966,13 @@ Proof.
 Qed.
 
 Lemma silent_step_preserves_memory G s s':
-CS.step G s E0 s' ->
+  CS.step G s E0 s' ->
   state_mem s = state_mem s'.
+Proof. intros Hstep. by inversion Hstep; subst; simpl. Qed.
+
+Lemma silent_step_preserves_registers G s s':
+  CS.step G s E0 s' ->
+  state_regs s = state_regs s'.
 Proof. intros Hstep. by inversion Hstep; subst; simpl. Qed.
 
 Lemma epsilon_star_preserves_memory p s1 s2 :
@@ -1978,6 +1983,17 @@ Proof.
   assert (t1 = E0) by now induction t1. subst.
   assert (t2 = E0) by now induction t2. subst.
   apply silent_step_preserves_memory in H. specialize (IHHstar Logic.eq_refl).
+  congruence.
+Qed.
+
+Lemma epsilon_star_preserves_registers p s1 s2:
+  Star (CS.sem_inform p) s1 E0 s2 ->
+  CS.state_regs s1 = CS.state_regs s2.
+Proof.
+  intros Hstar. remember E0 as t. induction Hstar; auto; subst.
+  assert (t1 = E0) by now induction t1. subst.
+  assert (t2 = E0) by now induction t2. subst.
+  apply silent_step_preserves_registers in H. specialize (IHHstar Logic.eq_refl).
   congruence.
 Qed.
 
