@@ -619,25 +619,6 @@ Definition final_state (G: global_env) (s: state) : Prop :=
   let '(gsp, mem, regs, pc) := s in
   executing G pc IHalt.
 
-Definition reg_to_Ereg r :=
-  match r with
-  | R_ONE => E_R_ONE
-  | R_COM => E_R_COM
-  | R_AUX1 => E_R_AUX1
-  | R_AUX2 => E_R_AUX2
-  | R_RA => E_R_RA
-  | R_SP => E_R_SP
-  | R_ARG => E_R_ARG
-  end.
-
-Definition binop_to_Ebinop op :=
-  match op with
-  | Add => E_Add
-  | Minus => E_Minus
-  | Mul => E_Mul
-  | Eq => E_Eq
-  | Leq => E_Leq
-  end.
 (* relational specification *)
 
 (* RB: TODO: [DynShare] Do we need mappings like [imm_to_val] and [reg_to_Ereg],
@@ -1700,26 +1681,6 @@ Section SemanticsNonInform.
   Qed.
 
 Import ssreflect eqtype.
-
-Lemma project_non_inform_append t1 t2:
-  project_non_inform (t1 ** t2) = project_non_inform t1 ** project_non_inform t2.
-Proof.
-  induction t1, t2.
-  - auto.
-  - auto.
-  - simpl.
-    match goal with
-    | IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH
-    end.
-    simpl. rewrite !E0_right. reflexivity.
-  - simpl (project_non_inform (?a :: t1)).
-    destruct a;
-      simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
-      match goal with
-      | IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH
-      end;
-      reflexivity.
-Qed.
 
 (* RB: TODO: Rename these two functions to make the difference between them
    clear, at the moment it is rather confusing. This equivalence is of use

@@ -84,6 +84,34 @@ Definition Ebinop_to_binop op :=
   | E_Leq => Leq
   end.
 
+Lemma Eregister_eq_dec :
+  forall r1 r2 : Eregister, Decidable.decidable (r1 = r2).
+Proof.
+  intros [] [];
+    try (left; reflexivity);
+    right; intro Hcontra; now inversion Hcontra.
+Qed.
+
+Remark Ereg_to_reg_to_Ereg r : Ereg_to_reg (reg_to_Ereg r) = r.
+Proof.
+  now destruct r.
+Qed.
+
+Remark reg_to_Ereg_to_reg r : reg_to_Ereg (Ereg_to_reg r) = r.
+Proof.
+  now destruct r.
+Qed.
+
+Remark Ebinop_to_binop_to_Ebinop op : Ebinop_to_binop (binop_to_Ebinop op) = op.
+Proof.
+  now destruct op.
+Qed.
+
+Remark binop_to_Ebinop_to_binop op : binop_to_Ebinop (Ebinop_to_binop op) = op.
+Proof.
+  now destruct op.
+Qed.
+
 
 Inductive event_inform :=
 | ECallInform :
@@ -198,6 +226,28 @@ Fixpoint project_non_inform t_inform :=
     | _ => project_non_inform es
     end
   end.
+
+
+Lemma project_non_inform_append t1 t2:
+  project_non_inform (t1 ** t2) = project_non_inform t1 ** project_non_inform t2.
+Proof.
+  induction t1, t2.
+  - auto.
+  - auto.
+  - simpl.
+    match goal with
+    | IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH
+    end.
+    simpl. rewrite !E0_right. reflexivity.
+  - simpl (project_non_inform (?a :: t1)).
+    destruct a;
+      simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
+      match goal with
+      | IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH
+      end;
+      reflexivity.
+Qed.
+
 
 Definition project_finpref_behavior m :=
   match m with

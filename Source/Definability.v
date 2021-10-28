@@ -1469,7 +1469,7 @@ Section Definability.
     Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
       let regs := register_file_of_event_inform e in
       forall reg n,
-        reg_offset (CS.CS.reg_to_Ereg reg) = n ->
+        reg_offset (reg_to_Ereg reg) = n ->
         exists v v',
           Memory.load mem (Permission.data, next_comp_of_event e, Block.local, n) = Some v  /\
           shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
@@ -1479,7 +1479,7 @@ Section Definability.
     Definition postcondition_event_registers_ini (C: Component.id) (mem: Memory.t): Prop :=
       (forall (R: Machine.register) (n: Z),
           R <> Machine.R_COM ->
-          reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
+          reg_offset (reg_to_Ereg R) = n ->
           Memory.load mem (Permission.data, C, Block.local, n) = Some Undef)
       /\
       Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some (Int 0).
@@ -1748,26 +1748,6 @@ Section Definability.
 
        In any case, well-bracketedness is important for the proof *)
 
-    (* TODO: Relocate *)
-    Lemma Eregister_eq_dec :
-      forall r1 r2 : Eregister, Decidable.decidable (r1 = r2).
-    Proof.
-      intros [] [];
-        try (left; reflexivity);
-        right; intro Hcontra; now inversion Hcontra.
-    Qed.
-
-    (* TODO: Relocate *)
-    Remark Ereg_to_reg_to_Ereg r : Ereg_to_reg (CS.CS.reg_to_Ereg r) = r.
-    Proof.
-      now destruct r.
-    Qed.
-
-    (* TODO: Relocate *)
-    Remark reg_to_Ereg_to_reg r : CS.CS.reg_to_Ereg (Ereg_to_reg r) = r.
-    Proof.
-      now destruct r.
-    Qed.
 
     (* TODO: Relocate *)
     Remark cats2 {A} s (e1 e2 : A) :
@@ -1962,12 +1942,12 @@ Section Definability.
            destruct (project_non_inform_singleton ecur) as [Hecur0 | [ecur' Hecur1]].
            ++ rewrite -Hcomp2 in Hnext.
               clear -Hcontra Hshared Hnext Hecur0.
-              rewrite -!cats1 CS.CS.project_non_inform_append Hecur0 E0_right cats1 in Hcontra.
+              rewrite -!cats1 project_non_inform_append Hecur0 E0_right cats1 in Hcontra.
               now apply (Hshared b).
            ++
-              rewrite -!cats1 CS.CS.project_non_inform_append Hecur1 !cats1 in Hcontra.
+              rewrite -!cats1 project_non_inform_append Hecur1 !cats1 in Hcontra.
               unfold Eapp in Hcontra. setoid_rewrite cats1 in Hcontra.
-              rewrite -!cats1 CS.CS.project_non_inform_append Hecur1 !cats1 in is_prefix.
+              rewrite -!cats1 project_non_inform_append Hecur1 !cats1 in is_prefix.
               unfold Eapp in is_prefix. setoid_rewrite cats1 in is_prefix.
               rewrite -Hcomp2 in Hnext.
               assert (Hcomp_ecur : cur_comp_of_event ecur = cur_comp_of_event ecur'). {
@@ -5107,8 +5087,8 @@ Section Definability.
                                intros b Hb.
                                destruct p_gens_t as [s0 Star_s0].
                                (* unfold CSInvariants.CSInvariants.is_prefix in Star_s0. *)
-                               rewrite CS.CS.project_non_inform_append !cats1 in Star_s0.
-                               setoid_rewrite CS.CS.project_non_inform_append in Star_s0.
+                               rewrite project_non_inform_append !cats1 in Star_s0.
+                               setoid_rewrite project_non_inform_append in Star_s0.
                                setoid_rewrite app_assoc in Star_s0.
                                apply star_app_inv in Star_s0 as [s0' [star_s0' star_s0]].
                                simpl in star_s0'. setoid_rewrite cats1 in star_s0'.
@@ -5117,7 +5097,7 @@ Section Definability.
                                exact star_s0'.
                                rewrite -C_next_e1 in HC0_C. unfold C in HC0_C. eauto.
                                eauto.
-                               rewrite -cats1 CS.CS.project_non_inform_append cats1 in Hb.
+                               rewrite -cats1 project_non_inform_append cats1 in Hb.
                                setoid_rewrite cats1 in Hb. eauto.
                                apply CS.CS.singleton_traces_non_inform.
               * right. left. by apply: (closed_intf Himport). }
@@ -5125,7 +5105,7 @@ Section Definability.
             split; last split.
             + eauto.
             + exact wf_cs'.
-            + { rewrite CS.CS.project_non_inform_append. simpl.
+            + { rewrite project_non_inform_append. simpl.
                 replace (project_non_inform prefix ** [:: ECall (cur_comp s) P' new_arg mem' C'])
                   with (project_non_inform prefix ++ [:: ECall (cur_comp s) P' new_arg mem' C']); last by reflexivity.
                 rewrite 2!cats1.
@@ -5181,7 +5161,7 @@ Section Definability.
                          }
                          {
                            destruct p_gens_t as [? G].
-                           rewrite Et CS.CS.project_non_inform_append in G.
+                           rewrite Et project_non_inform_append in G.
                            simpl in G. unfold Eapp in G.
                            replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
                            setoid_rewrite app_assoc in G.
@@ -5224,7 +5204,7 @@ Section Definability.
                          }
                          {
                            destruct p_gens_t as [? G].
-                           rewrite Et CS.CS.project_non_inform_append in G.
+                           rewrite Et project_non_inform_append in G.
                            simpl in G. unfold Eapp in G.
                            replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
                            setoid_rewrite app_assoc in G.
@@ -5268,7 +5248,7 @@ Section Definability.
                               unfold component_buffer.
                               replace intf with (Machine.Intermediate.prog_interface p_interm).
                               destruct p_gens_t as [? G].
-                              rewrite Et CS.CS.project_non_inform_append in G.
+                              rewrite Et project_non_inform_append in G.
                               simpl in G. unfold Eapp in G.
                               replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
                               setoid_rewrite app_assoc in G.
@@ -5305,7 +5285,7 @@ Section Definability.
                                (** shared an address and that this address also was *)
                                (** loaded from memory (Hload). *)
                                specialize (Hnot_shared b).
-                               rewrite -!cats1 CS.CS.project_non_inform_append /= in Hnot_shared.
+                               rewrite -!cats1 project_non_inform_append /= in Hnot_shared.
                                setoid_rewrite cats1 in Hnot_shared.
                                apply Hnot_shared in Hshared.
                                contradiction.
@@ -6092,7 +6072,7 @@ Section Definability.
                                                            by rewrite <- asmp.
                                                  ++
                                                     destruct p_gens_t as [? G].
-                                                    rewrite Et CS.CS.project_non_inform_append in G.
+                                                    rewrite Et project_non_inform_append in G.
                                                     simpl in G. unfold Eapp in G.
                                                     replace ((ERet C ret_val mem' C' :: project_non_inform suffix)) with ([:: ERet C ret_val mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
                                                     setoid_rewrite app_assoc in G.
@@ -6107,11 +6087,11 @@ Section Definability.
                                                     simpl in *.
                                                     subst prefix. rewrite -cats1 in Hnot_shared.
                                                     specialize (Hlemma C0_C Hnot_shared).
-                                                    rewrite -!cats1 CS.CS.project_non_inform_append in Hlemma.
+                                                    rewrite -!cats1 project_non_inform_append in Hlemma.
                                                     unfold Eapp in Hlemma. setoid_rewrite cats1 in Hlemma.
 
-                                                    setoid_rewrite <- CS.CS.project_non_inform_append in Hlemma.
-                                                    rewrite -!cats1 CS.CS.project_non_inform_append in Hshared.
+                                                    setoid_rewrite <- project_non_inform_append in Hlemma.
+                                                    rewrite -!cats1 project_non_inform_append in Hshared.
                                                     setoid_rewrite cats1 in Hshared.
                                                     contradiction.
 
@@ -6134,7 +6114,7 @@ Section Definability.
             eapply star_trans; eauto.
             eauto.
             {
-              rewrite CS.CS.project_non_inform_append. simpl.
+              rewrite project_non_inform_append. simpl.
               replace (project_non_inform prefix ** [:: ERet (cur_comp s) ret_val mem' C'])
                 with (project_non_inform prefix ++ [:: ERet (cur_comp s) ret_val mem' C']); last by reflexivity.
               rewrite 2!cats1.
@@ -6253,7 +6233,7 @@ Section Definability.
                             unfold component_buffer.
                             replace intf with (Machine.Intermediate.prog_interface p_interm).
                             destruct p_gens_t as [? G].
-                            rewrite Et CS.CS.project_non_inform_append in G.
+                            rewrite Et project_non_inform_append in G.
                             simpl in G. unfold Eapp in G.
                             replace ((ERet (cur_comp s) ret_val mem' C' :: project_non_inform suffix)) with ([:: ERet (cur_comp s) ret_val mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
                             setoid_rewrite app_assoc in G.
@@ -6291,7 +6271,7 @@ Section Definability.
                              (** shared an address and that this address also was *)
                              (** loaded from memory (Hload). *)
                              specialize (Hnot_shared b).
-                             rewrite -!cats1 CS.CS.project_non_inform_append /= in Hnot_shared.
+                             rewrite -!cats1 project_non_inform_append /= in Hnot_shared.
                              setoid_rewrite cats1 in Hnot_shared.
                              apply Hnot_shared in Hshared.
                              contradiction.
@@ -6341,7 +6321,7 @@ Section Definability.
                                  rename_addr_option in *.
                                  by eapply Lem.
                           ** (** Hshared =/= Hnot_shared*)
-                             rewrite -cats1 CS.CS.project_non_inform_append in Hnot_shared.
+                             rewrite -cats1 project_non_inform_append in Hnot_shared.
                              setoid_rewrite cats1 in Hnot_shared.
                              by apply Hnot_shared in Hshared.
                 + exists (Cb, S b).
@@ -6703,14 +6683,11 @@ Section Definability.
                           as [v_reg_reg [Hload0reg Hv_reg_reg]].
                           eexists. eexists.
                           split; [| split].
-                          * subst off. simplify_memory'.
-                            erewrite Memory.load_after_store_neq;
-                              last exact Hstore2;
-                              last (injection;
-                                    move=> /reg_offset_inj => ?; subst v;
-                                                              contradiction). (* TODO: Add to tactic *)
-                            simplify_memory'.
-                            exact Hload0reg.
+                          * subst off. simplify_memory.
+                            -- injection. by destruct reg.
+                            -- injection.
+                               move=> /reg_offset_inj => ?; subst v;
+                                                              contradiction.
                           * destruct Hv_reg_reg as [|]; subst v_reg_reg;
                               reflexivity.
                           * rename t0 into eregs.
@@ -7026,14 +7003,11 @@ Section Definability.
                             as [v_reg_reg [Hload0reg Hv_reg_reg]].
                             eexists. eexists.
                             split; [| split].
-                            * subst off. simplify_memory'.
-                              erewrite Memory.load_after_store_neq;
-                                last exact Hstore2;
-                                last (injection;
-                                      move=> /reg_offset_inj => ?; subst v;
-                                                                contradiction). (* TODO: Add to tactic *)
-                              simplify_memory'.
-                              exact Hload0reg.
+                            * subst off. simplify_memory.
+                              -- injection. by destruct reg.
+                              -- injection.
+                                 move=> /reg_offset_inj => ?; subst v;
+                                                             contradiction.
                             * destruct Hv_reg_reg as [|]; subst v_reg_reg;
                                 reflexivity.
                             * rename t0 into eregs.
@@ -7348,14 +7322,12 @@ Section Definability.
                             as [v_reg_reg [Hload0reg Hv_reg_reg]].
                             eexists. eexists.
                             split; [| split].
-                            * subst off. simplify_memory'.
-                              erewrite Memory.load_after_store_neq;
-                                last exact Hstore2;
-                                last (injection;
-                                      move=> /reg_offset_inj => ?; subst v;
-                                                                contradiction). (* TODO: Add to tactic *)
-                              simplify_memory'.
-                              exact Hload0reg.
+                            * subst off. simplify_memory.
+                              -- injection. by destruct reg.
+                              -- injection.
+                                 move=> /reg_offset_inj => ?; subst v;
+                                                             contradiction.
+
                             * destruct Hv_reg_reg as [|]; subst v_reg_reg;
                                 reflexivity.
                             * rename t0 into eregs.
@@ -7659,14 +7631,12 @@ Section Definability.
                           as [v_reg_reg [Hload0reg Hv_reg_reg]].
                           eexists. eexists.
                           split; [| split].
-                          * subst off. simplify_memory'.
-                            erewrite Memory.load_after_store_neq;
-                              last exact Hstore2;
-                              last (injection;
-                                    move=> /reg_offset_inj => ?; subst v;
-                                                              contradiction). (* TODO: Add to tactic *)
-                            simplify_memory'.
-                            exact Hload0reg.
+                          * subst off. simplify_memory.
+                            -- injection. by destruct reg.
+                            -- injection.
+                               move=> /reg_offset_inj => ?; subst v;
+                                                           contradiction.
+
                           * destruct Hv_reg_reg as [|]; subst v_reg_reg;
                               reflexivity.
                           * rename t0 into eregs.
@@ -8031,7 +8001,7 @@ Section Definability.
                         unfold postcondition_event_registers in Hpostreg.
                         destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
                         * subst off.
-                          assert (v0 = CS.CS.reg_to_Ereg n)
+                          assert (v0 = reg_to_Ereg n)
                             by (now apply reg_offset_inj in Heq).
                           subst v0.
                           (* assert (v = Int n0). { *)
@@ -8057,7 +8027,7 @@ Section Definability.
                                 rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
                                 reflexivity.
                         * setoid_rewrite Hcomp1 in Hpostreg.
-                          destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                          destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                             as [v' Hload'].
                           rewrite Hoffset in Hload'.
                           destruct (Hpostreg n _ Logic.eq_refl)
@@ -8189,13 +8159,13 @@ Section Definability.
                       setoid_rewrite cats1 in p_gens_t'.
                       destruct p_gens_t' as [s' Hstar_prefix].
                       unfold CSInvariants.CSInvariants.is_prefix in *.
-                      rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                      rewrite project_non_inform_append in Hstar_prefix.
                       apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                         last by apply CS.CS.singleton_traces_non_inform.
                       exists s''. exact Hstar_prefix.
                 }
               * simpl.
-                rewrite CS.CS.project_non_inform_append /=.
+                rewrite project_non_inform_append /=.
                 rewrite -> !cats0.
                 by inversion Hshift; eauto.
 
@@ -8355,7 +8325,7 @@ Section Definability.
                           (* unfold postcondition_event_registers in Hpostreg. *)
                           destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
                           * subst off.
-                            assert (v0 = CS.CS.reg_to_Ereg n)
+                            assert (v0 = reg_to_Ereg n)
                               by (now apply reg_offset_inj in Heq).
                             subst v0.
                             (* assert (v = saved). { *)
@@ -8392,7 +8362,7 @@ Section Definability.
                                   reflexivity.
 
                           * (* setoid_rewrite Hcomp1 in Hpostreg. *)
-                            destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                            destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                               as [v' Hload'].
                             rewrite Hoffset in Hload'.
                             specialize (Hpostreg n _ Logic.eq_refl)
@@ -8531,13 +8501,13 @@ Section Definability.
                         setoid_rewrite cats1 in p_gens_t'.
                         destruct p_gens_t' as [s' Hstar_prefix].
                         unfold CSInvariants.CSInvariants.is_prefix in *.
-                        rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                        rewrite project_non_inform_append in Hstar_prefix.
                         apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                           last by apply CS.CS.singleton_traces_non_inform.
                         exists s''. exact Hstar_prefix.
                   }
                 * simpl.
-                  rewrite CS.CS.project_non_inform_append /=.
+                  rewrite project_non_inform_append /=.
                   rewrite -> !cats0.
                   by inversion Hshift; eauto.
               }
@@ -8692,7 +8662,7 @@ Section Definability.
                         (* unfold postcondition_event_registers in Hpostreg. *)
                         destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
                         * subst off.
-                          assert (v0 = CS.CS.reg_to_Ereg n)
+                          assert (v0 = reg_to_Ereg n)
                             by (now apply reg_offset_inj in Heq).
                           subst v0.
                           (* assert (v = saved). { *)
@@ -8728,7 +8698,7 @@ Section Definability.
                                 reflexivity.
 
                         * (* setoid_rewrite Hcomp1 in Hpostreg. *)
-                          destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                          destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                             as [v' Hload'].
                           rewrite Hoffset in Hload'.
                           specialize (Hpostreg n _ Logic.eq_refl)
@@ -8866,13 +8836,13 @@ Section Definability.
                       setoid_rewrite cats1 in p_gens_t'.
                       destruct p_gens_t' as [s' Hstar_prefix].
                       unfold CSInvariants.CSInvariants.is_prefix in *.
-                      rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                      rewrite project_non_inform_append in Hstar_prefix.
                       apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                         last by apply CS.CS.singleton_traces_non_inform.
                       exists s''. exact Hstar_prefix.
                 }
               * simpl.
-                rewrite CS.CS.project_non_inform_append /=.
+                rewrite project_non_inform_append /=.
                 rewrite -> !cats0.
                 by inversion Hshift; eauto.
 
@@ -9025,7 +8995,7 @@ Section Definability.
                         unfold postcondition_event_registers in Hpostreg.
                         destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
                         * subst off.
-                          assert (v0 = CS.CS.reg_to_Ereg n)
+                          assert (v0 = reg_to_Ereg n)
                             by (now apply reg_offset_inj in Heq).
                           subst v0.
                           (* assert (v = Undef). { *)
@@ -9053,12 +9023,12 @@ Section Definability.
                                 rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
                                 reflexivity.
                         * setoid_rewrite Hcomp1 in Hpostreg.
-                          destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                          destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                             as [v' Hload'].
                           rewrite Hoffset in Hload'.
                           (* assert (v = v'). { *)
                           (*   assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
-                          (*     subst off. now destruct (CS.CS.reg_to_Ereg n). *)
+                          (*     subst off. now destruct (reg_to_Ereg n). *)
                           (*   } *)
                           (*   setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
                           (*   assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
@@ -9194,13 +9164,13 @@ Section Definability.
                       setoid_rewrite cats1 in p_gens_t'.
                       destruct p_gens_t' as [s' Hstar_prefix].
                       unfold CSInvariants.CSInvariants.is_prefix in *.
-                      rewrite CS.CS.project_non_inform_append in Hstar_prefix.
+                      rewrite project_non_inform_append in Hstar_prefix.
                       apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                         last by apply CS.CS.singleton_traces_non_inform.
                       exists s''. exact Hstar_prefix.
                 }
               * simpl.
-                rewrite CS.CS.project_non_inform_append /=.
+                rewrite project_non_inform_append /=.
                 rewrite -> !cats0.
                 by inversion Hshift; eauto.
 
@@ -9398,14 +9368,11 @@ Section Definability.
                         as [v_reg_reg [Hload0reg Hv_reg_reg]].
                         eexists. eexists.
                         split; [| split].
-                        * subst off. simplify_memory'.
-                          erewrite Memory.load_after_store_neq;
-                            last exact Hstore';
-                            last (injection;
-                                  move=> /reg_offset_inj => ?; subst dst;
-                                                            contradiction). (* TODO: Add to tactic *)
-                          simplify_memory'.
-                          exact Hload0reg.
+                        * subst off. simplify_memory.
+                          -- injection. by destruct reg.
+                          -- injection.
+                             move=> /reg_offset_inj => ?; subst dst;
+                                                         contradiction.
                         * destruct Hv_reg_reg as [|]; subst v_reg_reg;
                             reflexivity.
                         * rename t0 into eregs.
@@ -9779,7 +9746,7 @@ Section Definability.
                     unfold postcondition_event_registers in Hpostreg.
                     destruct (Z.eqb_spec (reg_offset dst) off) as [Heq | Hneq].
                     * subst off.
-                      assert (dst = CS.CS.reg_to_Ereg n)
+                      assert (dst = reg_to_Ereg n)
                         by (now apply reg_offset_inj in Heq).
                       subst dst.
                       destruct (Hpostreg (Ereg_to_reg src) _ Logic.eq_refl)
@@ -9806,7 +9773,7 @@ Section Definability.
                             rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
                             exact Hgetv''.
                     * setoid_rewrite Hcomp1 in Hpostreg.
-                      destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                      destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                         as [v' Hload'].
                       rewrite Hoffset in Hload'.
                       destruct (Hpostreg n _ Hoffset)
@@ -9983,10 +9950,10 @@ Section Definability.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                         ** by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
+                         ** by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
               }
             + simpl.
-              rewrite CS.CS.project_non_inform_append /=.
+              rewrite project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
 
@@ -10218,14 +10185,12 @@ Section Definability.
                           as [v_reg_reg [Hload0reg Hv_reg_reg]].
                         eexists. eexists.
                         split; [| split].
-                        * subst off. simplify_memory'.
-                          erewrite Memory.load_after_store_neq;
-                            last exact Hstore';
-                            last (injection;
-                                  move=> /reg_offset_inj => ?; subst reg2;
-                                                            contradiction). (* TODO: Add to tactic *)
-                          simplify_memory'.
-                          exact Hload0reg.
+                        * subst off. simplify_memory.
+                          -- injection. by destruct reg.
+                          -- injection.
+                             move=> /reg_offset_inj => ?; subst reg2;
+                                                         contradiction.
+
                         * destruct Hv_reg_reg as [|]; subst v_reg_reg;
                             reflexivity.
                         * (* rename t0 into eregs. *)
@@ -10595,7 +10560,7 @@ Section Definability.
                     unfold postcondition_event_registers in Hregs.
                     destruct (Z.eqb_spec (reg_offset reg2) off) as [Heq | Hneq].
                     * subst off.
-                      assert (reg2 = CS.CS.reg_to_Ereg n)
+                      assert (reg2 = reg_to_Ereg n)
                         by (now apply reg_offset_inj in Heq).
                       subst reg2.
 
@@ -10767,7 +10732,7 @@ Section Definability.
                              Hstore' prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0' vs1' HeqC Heqb Heqo.
 
                     * setoid_rewrite Hcomp1 in Hregs.
-                      destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                      destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                         as [v' Hload'].
                       rewrite Hoffset in Hload'.
                       destruct (Hregs n _ Logic.eq_refl) as [v [v'' [Hload [Hshift' Hget']]]].
@@ -10947,10 +10912,10 @@ Section Definability.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                         ** by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
+                         ** by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
               }
             + simpl.
-              rewrite CS.CS.project_non_inform_append /=.
+              rewrite project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
 
@@ -11268,7 +11233,7 @@ Section Definability.
                     unfold postcondition_event_registers in Hregs.
                     destruct (Z.eqb_spec (reg_offset reg1) off) as [Heq | Hneq].
                     - subst off.
-                      assert (reg1 = CS.CS.reg_to_Ereg n)
+                      assert (reg1 = reg_to_Ereg n)
                         by (now apply reg_offset_inj in Heq).
                       subst reg1.
                       (* assert (v = vptr0). { *)
@@ -11394,7 +11359,7 @@ Section Definability.
                           rewrite Hblock0' in Hptr0mem0.
                           discriminate.
                     - setoid_rewrite Hcomp1 in Hregs.
-                      destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                      destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                         as [v' Hload'].
                       rewrite Hoffset in Hload'.
                       destruct (Hregs n _ Logic.eq_refl) as [v [v'' [Hload [Hshift' Hget']]]].
@@ -11574,10 +11539,10 @@ Section Definability.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                      -- by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
+                      -- by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
               }
             + simpl.
-              rewrite CS.CS.project_non_inform_append /=.
+              rewrite project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
 
@@ -12243,11 +12208,11 @@ Section Definability.
                               --- eapply component_memory_after_store_neq; eauto.
                                   intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                               --- by eapply component_memory_after_store_neq; eauto.
-                        -- by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right Hprefix01 cats1.
+                        -- by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
                     }
               }
             + simpl.
-              rewrite CS.CS.project_non_inform_append /=.
+              rewrite project_non_inform_append /=.
               rewrite -> !cats0.
               by inversion Hshift; eauto.
 
@@ -12535,7 +12500,7 @@ Section Definability.
                     unfold postcondition_event_registers in Hpostregs.
                     destruct (Z.eqb_spec (reg_offset reg0) off) as [Heq | Hneq].
                     - subst off.
-                      assert (reg0 = CS.CS.reg_to_Ereg n)
+                      assert (reg0 = reg_to_Ereg n)
                         by (now apply reg_offset_inj in Heq).
                       subst reg0.
                       (* assert (v = vptr0). { *)
@@ -12581,7 +12546,7 @@ Section Definability.
                         reflexivity.
 
                     - setoid_rewrite Hcomp1 in Hregs1.
-                      destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
+                      destruct (wfmem_meta wf_mem (reg_to_Ereg n) C_b)
                         as [v' Hload'].
                       rewrite Hoffset in Hload'.
                       destruct (Hregs1 n _ Logic.eq_refl) as [v [v'' [Hload [Hshift' Hget']]]].
@@ -12834,10 +12799,10 @@ Section Definability.
                                 rewrite -Hcomp1. exact Hnext.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
-                      -- by rewrite -cats1 CS.CS.project_non_inform_append /= E0_right cats1.
+                      -- by rewrite -cats1 project_non_inform_append /= E0_right cats1.
               }
             + simpl.
-              rewrite -cats2 CS.CS.project_non_inform_append /=.
+              rewrite -cats2 project_non_inform_append /=.
               rewrite -> !cats0, <- Hprefix01.
               by inversion Hshift; eauto.
         }
@@ -12850,7 +12815,7 @@ Section Definability.
         split; [| split; [| split]].
         + eapply (star_trans Star0); simpl; eauto.
           eapply (star_trans Star1); simpl; now eauto.
-        + by rewrite -Hproj CS.CS.project_non_inform_append.
+        + by rewrite -Hproj project_non_inform_append.
         + constructor.
           exact Hshift'.
         + assumption.
