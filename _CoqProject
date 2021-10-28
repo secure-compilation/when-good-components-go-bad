@@ -82,11 +82,38 @@ MicroPolicies/LRC.v
 MicroPolicies/Instance.v
 MicroPolicies/Printer.v
 
+# MicroPolicies/Examples/Helper.v -- was missing before causing big dependency issues, since used by the files below
+# - Jeremy copied in a version, but it's still incomplete, so the files below don't compile:
+#    "the reference compile_and_run was not found in the current environment"
+# MicroPolicies/Examples/Empty.v
+# MicroPolicies/Examples/Identity.v
+# MicroPolicies/Examples/Assign.v
+# MicroPolicies/Examples/Increment.v
+# MicroPolicies/Examples/DefaultInitBuffer.v
+# MicroPolicies/Examples/NestedCalls.v
+# MicroPolicies/Examples/Factorial.v
+
 I2MP/Tmp.v
 I2MP/Linearize.v
+# I2MP/Encode.v -- compilation error
+#   Jeremy: As far as I understand it, we shouldn't worry about the I2MP/Encode.v file
+#   that doesn't compile, because this is the level below the one we were interested in.
+# I2MP/MPRecombination.v  -- not yet working
 
-Tagging/Tags.v
-Tagging/Memory.v
+I2MP/Examples/Helper.v
+I2MP/Examples/Assign.v
+I2MP/Examples/Empty.v
+I2MP/Examples/Increment.v
+I2MP/Examples/DefaultInitBuffer.v
+I2MP/Examples/Factorial.v
+I2MP/Examples/Identity.v
+I2MP/Examples/NestedCalls.v
+
+MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
+
+Tagging/Tags.v   # not currently used
+Tagging/Memory.v # not currently used
+
 Tagging/Examples/Assign.v
 Tagging/Examples/DefaultInitBuffer.v
 Tagging/Examples/Empty.v
@@ -95,14 +122,3 @@ Tagging/Examples/Helper.v
 Tagging/Examples/Identity.v
 Tagging/Examples/Increment.v
 Tagging/Examples/NestedCalls.v
-
-I2MP/Encode.v
-
-MicroPolicies/Examples/Helper.v
-MicroPolicies/Examples/Empty.v
-MicroPolicies/Examples/Identity.v
-MicroPolicies/Examples/Assign.v
-MicroPolicies/Examples/Increment.v
-MicroPolicies/Examples/DefaultInitBuffer.v
-MicroPolicies/Examples/NestedCalls.v
-MicroPolicies/Examples/Factorial.v
