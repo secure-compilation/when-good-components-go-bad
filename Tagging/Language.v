@@ -24,9 +24,6 @@ Require Import Lib.Extra.
 Require Import Lib.Monads.
 Import MonadNotations.
 Open Scope monad_scope.
-(* Import Intermediate.
-
-Require Import Source.Language. *)
 
 Definition proc_label : Set := Component.id * Procedure.id.
 
@@ -187,6 +184,7 @@ todo? (in order to reduce UB), allow TrJalNat to different components *)
 
 Open Scope monad_scope.
 (* remove locality of labels LATER *)
+
 
 Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
   let '(mem, regs, pc, pct) := s in
@@ -466,6 +464,40 @@ Definition run_transitional fuel p :=
       execN fuel (prog_code p) (mem,regs, pc, Level 0)
     | None => inr 5
 end.
+
+
+
+
+
+
+
+
+Section Semantics.
+  Variable p: program.
+
+Inductive step (cde : code) (s: stackless) ( t :trace) ( s' : stackless) : Prop :=  By_def.
+
+(*  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis complete_program:
+    closed_program p. *)
+
+  Definition sem :=
+    @Semantics_gen stackless code step (fun _ => True) (fun _ => True) (prog_code p).
+End Semantics.
+(* 
+Check Semantics_gen.
+
+
+Print RobustImp.CompCert.Smallstep.initial_state.
+Locate prepare_global_env.
+  Let G := prepare_global_env p.
+
+  Definition sem :=
+    @Semantics_gen state global_env step (initial_state p) (final_state G) G.
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
 
 
 (* temporarily removed

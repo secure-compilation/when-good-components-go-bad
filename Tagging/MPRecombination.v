@@ -9,13 +9,17 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
-Require Import Transitional.
 Require Import Recombination.
+Require Import Tagging.Language.
+Require Import Tagging.Tags.
+Require Import Tagging.Memory.
+Require Import Tagging.LinearizeCompartments.
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype.
+From extructures Require Import fmap.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -23,11 +27,17 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Import Transitional.
+Import Tagging.Language.
 
+
+Require Import Lib.Extra.
+Require Import Lib.Monads.
+Import MonadNotations.
+Open Scope monad_scope.
+
+
+(* old stuff, to remove *)
 Section BlockInterfaces.
-
-Print FSet.
 
 Definition block_interface:= list Component.id.
 Variable b : block_interface.
@@ -40,6 +50,124 @@ end.
 
 End BlockInterfaces.
 
+
+Section Interfaces.
+
+Fixpoint compare_lists l l' := match l, l' with
+ | [], [] => true
+ | x :: xs, y :: ys => if Nat.eqb x y then compare_lists xs ys else false
+ | _, _ => false
+end.
+
+Definition has_procedure (cd : code) (c : Component.id) (p : Procedure.id) (allowed : seq Component.id ) :=
+  do ptr <- find_plabel_in_code cd c p;
+  do C_code <- cd (Pointer.block ptr);
+  do (i,ti) <- nth_error C_code (Z.to_nat (Pointer.offset ptr));
+  match ti with
+    | None => None
+    | Some (pid,allowed') => if Nat.eqb p pid && compare_lists allowed allowed' then ret ptr else None
+  end.
+
+
+Definition allowed_call (c c' : Component.id) (p : Procedure.id) (I : Program.interface)  :=
+      Option.default false (do i <- getm I c ;
+                            do i' <- getm I c' ;
+                            Some ((p \in Component.export i) && ((c, p) \in Component.import i'))).
+
+Definition list_allowed (c : Component.id)(p : Procedure.id) (I: Program.interface) :=
+ filter (fun c' => allowed_call c c' p I) (extructures.fmap.domm I).
+
+Definition has_procedure_allowed (cd : code) (c : Component.id) (p : Procedure.id) (I : Program.interface) := 
+ has_procedure cd c p (list_allowed c p I).
+
+Definition has_comp_interface (cd : code) (c : Component.id) (I : Program.interface) := 
+  let fix aux l := match l with
+    | [] => ret true
+    | p :: ps => do _ <- has_procedure_allowed cd c p I; aux ps
+  end in
+  match I c with
+    | None => None
+    | Some Ip => aux (Component.export Ip)
+  end.
+
+Definition has_interface (cd : code) (I : Program.interface) :=
+ let fix aux l := match l with
+    | [] => ret true
+    | c :: cs => do _ <- has_comp_interface cd c I; aux cs
+   end in aux (extructures.fmap.domm I).
+
+Definition well_formed_program (p : program) :=
+  has_interface (prog_code p) (prog_interface p) = Some true.
+
+Notation closed_interface := RobustImp.Common.Linking.closed_interface.
+Notation linkable := RobustImp.Common.Linking.linkable.
+Notation mergeable_interfaces := RobustImp.Common.Linking.mergeable_interfaces.
+
+End Interfaces.
+
+
+Section Linking.
+
+Definition program_link (p1 p2 : program) := 
+  {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
+     prog_code := unionm (prog_code p1) (prog_code p2);
+     prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
+     prog_main := prog_main p1 || prog_main p2 |}.
+
+Record closed_program (p: program) := {
+  (* the interface must be closed (and consequently sound) *)
+  cprog_closed_interface:
+    closed_interface (prog_interface p);
+  (* the main procedure must exist *)
+  cprog_main_existence:
+    exists ptr pid C_code i ti ls,
+      prog_main p /\
+      find_plabel_in_code (prog_code p) Component.main pid = Some ptr 
+      /\ (prog_code p) (Pointer.block ptr) = Some C_code
+      /\ nth_error C_code (Z.to_nat (Pointer.offset ptr)) = Some (i,ti)
+      /\ ti = Some (pid, ls)
+      /\ In 0 ls
+}.
+
+End Linking.
+
+Section Recombination.
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem0   := sem prog.
+  Let sem'  := sem prog'.
+  Let sem'' := sem prog''.
+
+  (* RB: NOTE: Possible improvements:
+      - Try to refactor case analysis in proof.
+      - Try to derive well-formedness, etc., from semantics.
+     This result is currently doing the legwork of going from a simulation on
+     stars to one on program behaviors without direct mediation from the CompCert
+     framework. *)
+  Theorem recombination_prefix m :
+    does_prefix sem0   m ->
+    does_prefix sem'' m ->
+    does_prefix sem'  m.
+Admitted.
 
 
 (* State merging functions. *)

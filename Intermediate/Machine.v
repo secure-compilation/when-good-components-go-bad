@@ -405,6 +405,7 @@ Definition alloc_static_buffers p comps :=
   mkfmapf (fun C =>
     ComponentMemory.prealloc (odflt emptym (prog_buffers p C))) comps.
 
+
 Definition prepare_initial_memory (p: program) : Memory.t :=
   alloc_static_buffers p (domm (prog_interface p)).
 
