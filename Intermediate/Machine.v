@@ -894,6 +894,14 @@ Proof.
   now eauto.
 Qed.
 
+Lemma reserve_component_blocks_1_1 p C mem (Cprocs : NMap code):
+  (reserve_component_blocks p C mem Cprocs).1.1 = mem.
+Proof.
+  unfold reserve_component_blocks.
+  by destruct (ComponentMemoryExtra.reserve_blocks mem (length Cprocs))
+    as [Cmem bs] eqn:HCmem.
+Qed.
+
 (* In the foreseen, controlled use of this function, we always go on the Some
    branch. For each component C, we read its (initial) memory and use it to
    construct the initial state of C, recursing after we update its maps. Given
