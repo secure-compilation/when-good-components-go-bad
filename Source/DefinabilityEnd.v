@@ -101,6 +101,7 @@ Proof.
   now destruct m.
 Qed.
 
+  
 (* RB: Relocate? As the S2I require above seems to indicate, this is not where
    this result belongs. *)
 Lemma star_well_formed_intermediate_prefix:
@@ -141,17 +142,88 @@ Proof.
         simpl in *. subst. unfold CS.initial_machine_state. rewrite Hmain. simpl.
         unfold Intermediate.prepare_procedures_initial_memory,
         Intermediate.prepare_procedures_initial_memory_aux.
-        
-        (** Not sure about this one. *)
-        admit.
-        
+        rewrite mapm_mkfmapf.
+        apply eq_fmap.
+        assert (Hassert:
+                  mkfmapf ((fun x : ComponentMemory.t * NMap code * NMap Block.id =>
+                              x.1.1) \o
+                                     (fun C : nat_ordType =>
+                                        Intermediate.reserve_component_blocks
+                                          p C
+                                          (ComponentMemory.prealloc
+                                             match Intermediate.prog_buffers p C with
+                                             | Some buf => [fmap (Block.local, buf)]
+                                             | None => emptym
+                                             end)
+                                          (elementsm
+                                             (odflt
+                                                emptym
+                                                (Intermediate.prog_procedures p C))))
+                          ) =1
+                 mkfmapf (fun C : nat =>
+                            ComponentMemory.prealloc
+                              match Intermediate.prog_buffers p C with
+                              | Some buf => setm emptym Block.local buf
+                              | None => emptym
+                              end)
+               ).
+        {
+          apply eq_mkfmapf.
+          match goal with |- ?x =1 ?y => assert (Hrewr: x = y) end.
+          {
+            apply FunctionalExtensionality.functional_extensionality_dep.
+            intros C. simpl.
+            unfold odflt, oapp.
+            destruct (Intermediate.prog_procedures p C) eqn:eprog_proc; simpl; auto.
+            by rewrite Intermediate.reserve_component_blocks_1_1.
+          }
+          by rewrite Hrewr.
+        }
+        by rewrite Hassert.
+      }
+      assert (regs0 = Intermediate.Register.init).
+      {
+        apply star_iff_starR in Hstar01.
+        apply I.CS.epsilon_star_preserves_registers in Hstar01.
+        simpl in *. subst. unfold CS.initial_machine_state. by rewrite Hmain.
       }
       subst.
-      destruct e; inversion Hstep12; subst; simpl in *.
-      (***********************
-      * constructor; auto.
-        rewrite Intermediate.Register.gss.
-       ***********************)
+      destruct e; inversion Hstep12; subst; simpl in *;
+        remember (mkfmapf
+                    (fun C : nat_ordType =>
+                       ComponentMemory.prealloc
+                         match Intermediate.prog_buffers p C with
+                         | Some buf => [fmap (Block.local, buf)]
+                         | None => emptym
+                         end) (domm (Intermediate.prog_interface p))) as init_mem;
+        rewrite -Heqinit_mem.
+      * apply step_ECallInform; auto.
+        (** See the discussion here: https://secure-compilation.zulipchat.com/#narrow/stream/215770-capabilities/topic/Expect.20R_COM.20to.20contain.200.3F *)
+        admit. admit.
+      * apply step_ERetInform; auto.
+        admit. admit.
+      * apply step_EConst; auto.
+        rewrite Ereg_to_reg_to_Ereg.
+        admit.
+      * apply step_EConst; auto.
+        rewrite Ereg_to_reg_to_Ereg.
+        admit.
+      * apply step_EConst; auto. simpl.
+        admit.
+      * apply step_EMov; auto.
+        rewrite !Ereg_to_reg_to_Ereg.
+        admit.
+      * eapply step_EBinop; auto. unfold result.
+        rewrite !Ereg_to_reg_to_Ereg !Ebinop_to_binop_to_Ebinop.
+        admit.
+      * subst. eapply step_ELoad; eauto; rewrite !Ereg_to_reg_to_Ereg.
+        admit. admit.
+      * (*subst. eapply step_EStore; eauto; rewrite !Ereg_to_reg_to_Ereg.*)
+        admit.
+      * (*subst. eapply step_EAlloc; eauto; rewrite !Ereg_to_reg_to_Ereg.*)
+        admit.
+    + constructor; first (constructor; auto).
+        
 Admitted.
 
 Lemma definability_with_linking:
