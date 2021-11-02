@@ -188,6 +188,13 @@ Proof.
         simpl in *. subst. unfold CS.initial_machine_state. by rewrite Hmain.
       }
       subst.
+      assert (Hreginit:
+                Intermediate.Register.set R_COM (Int 0) Intermediate.Register.init =
+                Intermediate.Register.init
+             ).
+      {
+        unfold Intermediate.Register.set, Intermediate.Register.init. by rewrite setmI. 
+      }
       destruct e; inversion Hstep12; subst; simpl in *;
         remember (mkfmapf
                     (fun C : nat_ordType =>
@@ -198,30 +205,23 @@ Proof.
                          end) (domm (Intermediate.prog_interface p))) as init_mem;
         rewrite -Heqinit_mem.
       * apply step_ECallInform; auto.
-        (** See the discussion here: https://secure-compilation.zulipchat.com/#narrow/stream/215770-capabilities/topic/Expect.20R_COM.20to.20contain.200.3F *)
-        admit. admit.
       * apply step_ERetInform; auto.
-        admit. admit.
       * apply step_EConst; auto.
-        rewrite Ereg_to_reg_to_Ereg.
-        admit.
+        by rewrite Ereg_to_reg_to_Ereg Hreginit.
       * apply step_EConst; auto.
-        rewrite Ereg_to_reg_to_Ereg.
-        admit.
+        by rewrite Ereg_to_reg_to_Ereg Hreginit.
       * apply step_EConst; auto. simpl.
-        admit.
+        by rewrite Hreginit.
       * apply step_EMov; auto.
-        rewrite !Ereg_to_reg_to_Ereg.
-        admit.
+        by rewrite !Ereg_to_reg_to_Ereg Hreginit.
       * eapply step_EBinop; auto. unfold result.
-        rewrite !Ereg_to_reg_to_Ereg !Ebinop_to_binop_to_Ebinop.
-        admit.
-      * subst. eapply step_ELoad; eauto; rewrite !Ereg_to_reg_to_Ereg.
-        admit. admit.
-      * (*subst. eapply step_EStore; eauto; rewrite !Ereg_to_reg_to_Ereg.*)
-        admit.
-      * (*subst. eapply step_EAlloc; eauto; rewrite !Ereg_to_reg_to_Ereg.*)
-        admit.
+        by rewrite !Ereg_to_reg_to_Ereg !Ebinop_to_binop_to_Ebinop Hreginit.
+      * subst. eapply step_ELoad; eauto; by rewrite !Ereg_to_reg_to_Ereg Hreginit.
+      * subst. rewrite Hreginit.
+        eapply step_EStore; eauto;
+          erewrite !Ereg_to_reg_to_Ereg; eassumption.
+      * subst. eapply step_EAlloc; eauto; by rewrite !Ereg_to_reg_to_Ereg Hreginit.
+
     + constructor; first (constructor; auto).
         
 Admitted.

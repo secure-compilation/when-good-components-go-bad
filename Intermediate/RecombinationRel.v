@@ -617,12 +617,8 @@ Section ThreewayMultisem4.
           intros reg. left.
           unfold Register.get.
           destruct (Register.to_nat reg \in domm Register.init) eqn:regdomm.
-          -- assert (Register.init (Register.to_nat reg) = Some Undef)
-              as Hreginit_undef.
-             {
-               by apply Register.reg_in_domm_init_Undef.
-             }
-             rewrite Hreginit_undef. by simpl.
+          -- rewrite (Register.reg_in_domm_init_Undef regdomm).
+             by destruct reg.
           -- assert (Register.init (Register.to_nat reg) = None) as Hreginit_none.
              {
                rewrite mem_domm in regdomm.
@@ -1026,12 +1022,8 @@ Section ThreewayMultisem4.
           intros reg. left.
           unfold Register.get.
           destruct (Register.to_nat reg \in domm Register.init) eqn:regdomm.
-          -- assert (Register.init (Register.to_nat reg) = Some Undef)
-              as Hreginit_undef.
-             {
-               by apply Register.reg_in_domm_init_Undef.
-             }
-             rewrite Hreginit_undef. by simpl.
+          -- rewrite (Register.reg_in_domm_init_Undef regdomm).
+             by destruct reg.
           -- assert (Register.init (Register.to_nat reg) = None) as Hreginit_none.
              {
                rewrite mem_domm in regdomm.

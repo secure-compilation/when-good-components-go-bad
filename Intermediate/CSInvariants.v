@@ -867,12 +867,12 @@ Proof.
       destruct (prog_main prog) eqn:Hcase.
       * unfold Register.get in Hget.
         rewrite Register.reg_in_domm_init_Undef in Hget;
-          first discriminate.
-        (* TODO: Lemma for sub-proof below? *)
-        unfold Register.init.
-        repeat rewrite domm_set.
-        repeat rewrite in_fsetU1.
-        now destruct reg.
+          last (
+              unfold Register.init;
+              repeat rewrite domm_set;
+              repeat rewrite in_fsetU1;
+              now destruct reg).
+        by destruct reg.
       * discriminate.
   - (* Inductive step. *)
     specialize (IHstar Logic.eq_refl Logic.eq_refl) as [IHload IHget].

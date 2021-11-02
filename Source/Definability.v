@@ -6710,9 +6710,8 @@ Section Definability.
                                 rewrite Machine.Intermediate.Register.gso;
                                   last exact Hreg.
                                 rewrite /Machine.Intermediate.Register.get
-                                        Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                  first reflexivity.
-                                apply /dommP. exists Undef. now destruct reg.
+                                        Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg).
+                                by destruct reg.
                             }
                             { destruct prefint as [| ? []]; discriminate. }
                       }
@@ -7030,9 +7029,8 @@ Section Definability.
                                   rewrite Machine.Intermediate.Register.gso;
                                     last exact Hreg.
                                   rewrite /Machine.Intermediate.Register.get
-                                          Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                    first reflexivity.
-                                  apply /dommP. exists Undef. now destruct reg.
+                                        Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg).
+                                    by destruct reg.
                               }
                               { destruct prefint as [| ? []]; discriminate. }
                         }
@@ -7350,9 +7348,8 @@ Section Definability.
                                   rewrite Machine.Intermediate.Register.gso;
                                     last exact Hreg.
                                   rewrite /Machine.Intermediate.Register.get
-                                          Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                    first reflexivity.
-                                  apply /dommP. exists Undef. now destruct reg.
+                                          Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg).
+                                    by destruct reg.
                               }
                               { destruct prefint as [| ? []]; discriminate. }
                         }
@@ -7659,9 +7656,8 @@ Section Definability.
                                 rewrite Machine.Intermediate.Register.gso;
                                   last exact Hreg.
                                 rewrite /Machine.Intermediate.Register.get
-                                        Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                  first reflexivity.
-                                apply /dommP. exists Undef. now destruct reg.
+                                        Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg).
+                                  by destruct reg.
                             }
                             { destruct prefint as [| ? []]; discriminate. }
                       }
@@ -9359,9 +9355,8 @@ Section Definability.
                               rewrite Machine.Intermediate.Register.gso;
                                 last exact Hreg'.
                               rewrite /Machine.Intermediate.Register.get
-                                      Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                first reflexivity.
-                              apply /dommP. exists Undef. now destruct src.
+                                      Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct src).
+                                by destruct src.
                           }
                           { destruct prefint as [| ? []]; discriminate. }
                       - destruct (postcondition_event_registers_load (reg_to_Ereg reg) Hregs)
@@ -9396,9 +9391,8 @@ Section Definability.
                               rewrite Machine.Intermediate.Register.gso;
                                 last exact Hreg.
                               rewrite /Machine.Intermediate.Register.get
-                                      Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                first reflexivity.
-                              apply /dommP. exists Undef. now destruct reg.
+                                      Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg).
+                                by destruct reg.
                           }
                           { destruct prefint as [| ? []]; discriminate. }
                     }
@@ -10153,9 +10147,8 @@ Section Definability.
                               rewrite Machine.Intermediate.Register.gso;
                                 last exact Hreg'.
                               rewrite /Machine.Intermediate.Register.get
-                                      Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                first reflexivity.
-                              apply /dommP. exists Undef. now destruct reg0.
+                                      Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg0).
+                                by destruct reg0.
                           }
                           assert (Hv1 : Machine.Intermediate.Register.get
                                           (Ereg_to_reg reg1)
@@ -10175,9 +10168,8 @@ Section Definability.
                               rewrite Machine.Intermediate.Register.gso;
                                 last exact Hreg'.
                               rewrite /Machine.Intermediate.Register.get
-                                      Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                                first reflexivity.
-                              apply /dommP. exists Undef. now destruct reg1.
+                                      Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg1).
+                                by destruct reg1.
                           }
                           subst v0 v1.
                           reflexivity.
@@ -10216,9 +10208,8 @@ Section Definability.
                              rewrite Machine.Intermediate.Register.gso;
                                last exact Hreg.
                              rewrite /Machine.Intermediate.Register.get
-                                     Machine.Intermediate.Register.reg_in_domm_init_Undef;
-                               first reflexivity.
-                             apply /dommP. exists Undef. now destruct reg.
+                                     Machine.Intermediate.Register.reg_in_domm_init_Undef; last (apply /dommP; exists Undef; now destruct reg).
+                               by destruct reg.
                     }
                     + intros C' _ ?; subst C'. simpl. (* lookup *)
                       (* This is directly needed for the second sub-goal, but also
@@ -10942,11 +10933,10 @@ Section Definability.
                 discriminate.
               - rewrite Machine.Intermediate.Register.gso in H5;
                   last exact Hneq.
-                rewrite / Machine.Intermediate.Register.get
-                        Machine.Intermediate.Register.reg_in_domm_init_Undef
-                  in H5;
-                  first discriminate.
-                apply /dommP. exists Undef. now destruct reg0.
+                rewrite /Machine.Intermediate.Register.get
+                        Machine.Intermediate.Register.reg_in_domm_init_Undef in H5;
+                  last (apply /dommP; exists Undef; now destruct reg0).
+                  by destruct reg0.
             }
             (* destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore]. (* TODO: Consider actual utility of this. *) *)
             (* Const does not modify the (shared) memory, therefore these two
@@ -11570,11 +11560,9 @@ Section Definability.
                 discriminate.
               - rewrite Machine.Intermediate.Register.gso in H4;
                   last exact Hneq.
-                rewrite / Machine.Intermediate.Register.get
-                        Machine.Intermediate.Register.reg_in_domm_init_Undef
-                  in H4;
-                  first discriminate.
-                apply /dommP. exists Undef. now destruct reg0.
+                rewrite /Machine.Intermediate.Register.get
+                        Machine.Intermediate.Register.reg_in_domm_init_Undef in H4; last (apply /dommP; exists Undef; now destruct reg0).
+                  by destruct reg0.
             }
             (* Relate memories before and after store. *)
             assert (exists ptr,
@@ -12242,11 +12230,10 @@ Section Definability.
                 lia.
               - rewrite Machine.Intermediate.Register.gso in H6;
                   last exact Hneq.
-                rewrite / Machine.Intermediate.Register.get
-                        Machine.Intermediate.Register.reg_in_domm_init_Undef
-                  in H6;
-                  first discriminate.
-                apply /dommP. exists Undef. now destruct reg1.
+                rewrite /Machine.Intermediate.Register.get
+                        Machine.Intermediate.Register.reg_in_domm_init_Undef in H6;
+                  last (apply /dommP; exists Undef; now destruct reg1).
+                  by destruct reg1.
             }
             (* Extract known memory facts. *)
             assert (exists size ptr,

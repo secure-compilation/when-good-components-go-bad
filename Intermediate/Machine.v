@@ -6,7 +6,7 @@ Require Import Common.Memory.
 Require Import Lib.Monads.
 Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 From extructures Require Import fmap.
 
 Set Implicit Arguments.
@@ -235,7 +235,7 @@ Module Register.
 
   Definition init :=
     mkfmap [(to_nat R_ONE, Undef);
-            (to_nat R_COM, Undef);
+            (to_nat R_COM, Int 0);
             (to_nat R_AUX1, Undef);
             (to_nat R_AUX2, Undef);
             (to_nat R_RA, Undef);
@@ -270,19 +270,6 @@ Module Register.
     congruence.
   Qed.
 
-  Lemma reg_in_domm_init_Undef r:
-    r \in domm init ->
-    init r = Some Undef.
-  Proof.
-    unfold init. intros regdomm.
-    rewrite !domm_set in regdomm.
-    simpl in *.
-    repeat match goal with
-    | N : nat |- _ => destruct N as [| N]; first by simpl
-    end.
-    by rewrite !in_fsetU1 domm0 in regdomm.
-  Qed.
-
   Definition eqb (r1 r2 : register) : bool :=
     match r1, r2 with
     | R_ONE, R_ONE
@@ -302,6 +289,20 @@ Module Register.
 
   Definition eqMixin: Equality.mixin_of register := EqMixin eqP.
   Canonical eqType := Eval hnf in EqType register eqMixin.
+  
+  Lemma reg_in_domm_init_Undef r:
+    r \in domm init ->
+    init r = (if r == to_nat R_COM then Some (Int 0) else Some Undef).
+  Proof.
+    unfold init. intros regdomm.
+    rewrite !domm_set in regdomm.
+    simpl in *.
+    destruct (r == 1);
+    repeat match goal with
+    | N : nat |- _ => destruct N as [| N]; first by simpl
+    end;
+    by rewrite !in_fsetU1 domm0 in regdomm.
+  Qed.
 
   Lemma to_nat_inv r1 r2 :
     to_nat r1 = to_nat r2 ->
@@ -1448,37 +1449,6 @@ Proof.
   rewrite <- prepare_procedures_procs_after_linking; try assumption.
   rewrite <- prepare_procedures_entrypoints_after_linking; try assumption.
   reflexivity.
-Qed.
-
-(* TODO: Find homes for these remarks. *)
-Remark ltb_0_Z_nat n : (0 <? Z.of_nat n)%Z = (0 <? n).
-Proof.
-  now destruct n.
-Qed.
-
-Remark lt_Z_nat p n : (Z.pos p < Z.of_nat n)%Z <-> (Pos.to_nat p < n).
-Proof.
-  split; intros H.
-  - apply Z2Nat.inj_lt in H.
-    + rewrite Z2Nat.inj_pos in H.
-      rewrite Nat2Z.id in H.
-      assumption.
-    + by apply Zle_0_pos.
-    + by apply Zle_0_nat.
-  - apply Nat2Z.inj_lt in H.
-    rewrite positive_nat_Z in H.
-    assumption.
-Qed.
-
-Remark ltb_Z_nat p n : (Z.pos p <? Z.of_nat n)%Z = (Pos.to_nat p <? n).
-Proof.
-  destruct (Z.pos p <? Z.of_nat n)%Z eqn:H.
-  - move: H => /Z.ltb_spec0 => H.
-    apply lt_Z_nat in H.
-    by move: H => /Nat.ltb_spec0.
-  - move: H => /Z.ltb_spec0 => H.
-    move: (iffLRn (lt_Z_nat _ _) H) => /Nat.ltb_spec0.
-    intros H'. by apply negb_true_iff in H'.
 Qed.
 
 (* Remark le_0_Zneg n : ~ (0 <= Z.neg n)%Z. *)

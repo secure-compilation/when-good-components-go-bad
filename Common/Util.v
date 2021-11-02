@@ -6,6 +6,37 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Remark ltb_0_Z_nat n : (0 <? Z.of_nat n)%Z = (0 <? n).
+Proof.
+  now destruct n.
+Qed.
+
+Remark lt_Z_nat p n : (Z.pos p < Z.of_nat n)%Z <-> (Pos.to_nat p < n).
+Proof.
+  split; intros H.
+  - apply Z2Nat.inj_lt in H.
+    + rewrite Z2Nat.inj_pos in H.
+      rewrite Nat2Z.id in H.
+      assumption.
+    + by apply Zle_0_pos.
+    + by apply Zle_0_nat.
+  - apply Nat2Z.inj_lt in H.
+    rewrite positive_nat_Z in H.
+    assumption.
+Qed.
+
+Remark ltb_Z_nat p n : (Z.pos p <? Z.of_nat n)%Z = (Pos.to_nat p <? n).
+Proof.
+  destruct (Z.pos p <? Z.of_nat n)%Z eqn:H.
+  - move: H => /Z.ltb_spec0 => H.
+    apply lt_Z_nat in H.
+    by move: H => /Nat.ltb_spec0.
+  - move: H => /Z.ltb_spec0 => H.
+    move: (iffLRn (lt_Z_nat _ _) H) => /Nat.ltb_spec0.
+    intros H'. by apply negb_true_iff in H'.
+Qed.
+
+
 Lemma filterm_identity (T: ordType) (S: Type):
   forall (m: {fmap T -> S}),
     filterm (fun _ _ => true) m = m.
