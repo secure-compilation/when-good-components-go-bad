@@ -6,12 +6,12 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Remark ltb_0_Z_nat n : (0 <? Z.of_nat n)%Z = (0 <? n).
+Lemma ltb_0_Z_nat n : (0 <? Z.of_nat n)%Z = (0 <? n).
 Proof.
   now destruct n.
 Qed.
 
-Remark lt_Z_nat p n : (Z.pos p < Z.of_nat n)%Z <-> (Pos.to_nat p < n).
+Lemma lt_Z_nat p n : (Z.pos p < Z.of_nat n)%Z <-> (Pos.to_nat p < n).
 Proof.
   split; intros H.
   - apply Z2Nat.inj_lt in H.
@@ -25,7 +25,7 @@ Proof.
     assumption.
 Qed.
 
-Remark ltb_Z_nat p n : (Z.pos p <? Z.of_nat n)%Z = (Pos.to_nat p <? n).
+Lemma ltb_Z_nat p n : (Z.pos p <? Z.of_nat n)%Z = (Pos.to_nat p <? n).
 Proof.
   destruct (Z.pos p <? Z.of_nat n)%Z eqn:H.
   - move: H => /Z.ltb_spec0 => H.
@@ -71,12 +71,32 @@ End Util.
 
 Section Domm.
 
-Remark notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
+Lemma notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
   Cid \notin domm iface -> Cid \in domm iface = false.
 Proof.
   intros Cid iface Hnotin.
   destruct (Cid \in domm iface) eqn:Heq;
     easy.
 Qed.
+
+Lemma cats2 {A} s (e1 e2 : A) :
+  (s ++ [:: e1]) ++ [:: e2] = rcons (rcons s e1) e2.
+Proof.
+  do 2 rewrite cats1. reflexivity.
+Qed.
+
+Lemma cats2_inv {A} s s' (e1 e1' e2 e2' : A) :
+  (s ++ [:: e1]) ++ [:: e2] = rcons (rcons s' e1') e2' ->
+  s = s' /\ e1 = e1' /\ e2 = e2'.
+Proof.
+  intro H.
+  rewrite cats2 in H.
+  apply rcons_inj in H.
+  injection H as H ?.
+  apply rcons_inj in H.
+  injection H as H ?.
+  auto.
+Qed.
+
 
 End Domm.

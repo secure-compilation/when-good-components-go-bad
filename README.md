@@ -250,13 +250,6 @@ target program executions, to be proved by the same standard techniques as their
 source counterparts.
 
 ```coq
-star_well_formed_intermediate_prefix
-  : forall (p : Intermediate.program) (t : trace event_inform)
-      (s : state (I.CS.sem_inform p)),
-    Intermediate.well_formed_program p ->
-    Star (I.CS.sem_inform p) (I.CS.initial_machine_state p) t s ->
-    well_formed_intermediate_prefix (Intermediate.prog_interface p)
-      (Intermediate.prog_buffers p) t
 
 CS.intermediate_well_formed_events
   : forall p : Intermediate.program,

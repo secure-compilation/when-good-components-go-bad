@@ -1383,10 +1383,10 @@ Section Definability.
     Inductive trace_event_components : trace event_inform -> Prop :=
     | evcomps_nil : trace_event_components E0
     | evcomps_event e : trace_event_components [e]
-    | evcomps_cons e1 e2 t :
+    | evcomps_rcons e1 e2 t :
       next_comp_of_event e1 = cur_comp_of_event e2 ->
-      trace_event_components (e2 :: t) ->
-      trace_event_components (e1 :: e2 :: t).
+      trace_event_components (rcons t e1) ->
+      trace_event_components (rcons (rcons t e1) e2).
 
     Record well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
       {
@@ -1398,35 +1398,40 @@ Section Definability.
       trace_event_components (t1 ++ t2) ->
       trace_event_components t1.
     Proof.
-      induction t1 as [| e t1 IHt1].
-      - by constructor.
-      - simpl. intros H.
-        inversion H; subst.
-        + destruct t1; last discriminate.
-          destruct t2; last discriminate.
-          by constructor.
-        + rewrite H1 in H3. specialize (IHt1 H3).
-          destruct t1 as [| e' t1]; first by constructor.
-          constructor.
-          * inversion H; subst.
-            assumption.
-          * exact IHt1.
+      induction t2 as [| t2 e IHt2] using last_ind; intros H.
+      - by setoid_rewrite app_nil_r in H.
+      - setoid_rewrite <- cats1 in H. setoid_rewrite app_assoc in H.
+        setoid_rewrite cats1 in H. apply IHt2.
+        inversion H; [unfold E0 in *; find_nil_rcons | |].
+        + remember ((t1 ++ t2)%list) as t12.
+          assert (t12 = nil).
+          {
+            destruct t12; auto. rewrite rcons_cons in H1.
+            inversion H1. by find_nil_rcons.
+          }
+          subst. rewrite H0 in H1. simpl in *.
+          apply app_eq_nil in H0 as [G G']; subst. by constructor.
+        + find_rcons_rcons.
+          by setoid_rewrite <- H4.
     Qed.
 
     Lemma trace_event_components_app_r t1 t2:
       trace_event_components (t1 ++ t2) ->
       trace_event_components t2.
     Proof.
-      induction t1 as [| e t1 IHt1];
-        simpl; intros H.
-      - assumption.
-      - apply IHt1.
-        destruct t1 as [| e' t1].
-        + inversion H; subst.
-          * by constructor.
-          * assumption.
-        + inversion H; subst.
-          assumption.
+      induction t2 as [| t2 e IHt2] using last_ind; intros H.
+      - by constructor.
+      - destruct t2 using last_ind; simpl.
+        + by constructor.
+        + clear IHt0. inversion H; unfold E0 in *.
+          * symmetry in H1. apply app_eq_nil in H1 as [? ?]. by rewrite H1; constructor.
+          * rewrite -rcons_cat in H1.
+            setoid_rewrite <- app_nil_l in H1 at 1. setoid_rewrite cats1 in H1.
+            find_rcons_rcons.
+            symmetry in H2. apply app_eq_nil in H2 as [? ?]. by find_nil_rcons.
+          * rewrite -rcons_cat in H0. find_rcons_rcons.
+            rewrite -rcons_cat in H4. find_rcons_rcons.
+            constructor; auto. apply IHt2; by rewrite -rcons_cat.
     Qed.
 
     Lemma well_formed_intermediate_prefix_inv:
@@ -1454,12 +1459,7 @@ Section Definability.
             -- eauto.
         + destruct IH' as [_ IH'].
           rewrite -cats1 in IH'.
-          destruct prefix as [| e1 prefix]; first by constructor.
-          destruct prefix as [| e2 prefix]; first by constructor.
-          inversion IH'; subst.
-          constructor.
-          * assumption.
-          * eapply trace_event_components_app_l. eassumption.
+          by eapply trace_event_components_app_l; eauto.
     Qed.
 
     (* AEK: Now not sure whether this definition should be called a postcondition.   *)
@@ -1749,28 +1749,6 @@ Section Definability.
        In any case, well-bracketedness is important for the proof *)
 
 
-    (* TODO: Relocate *)
-    Remark cats2 {A} s (e1 e2 : A) :
-      (s ++ [:: e1]) ++ [:: e2] = rcons (rcons s e1) e2.
-    Proof.
-      do 2 rewrite cats1. reflexivity.
-    Qed.
-
-    (* TODO: Relocate *)
-    Remark cats2_inv {A} s s' (e1 e1' e2 e2' : A) :
-      (s ++ [:: e1]) ++ [:: e2] = rcons (rcons s' e1') e2' ->
-      s = s' /\ e1 = e1' /\ e2 = e2'.
-    Proof.
-      intro H.
-      rewrite cats2 in H.
-      apply rcons_inj in H.
-      injection H as H ?.
-      apply rcons_inj in H.
-      injection H as H ?.
-      auto.
-    Qed.
-
-    (* TODO: Relocate *)
     Remark reg_offset0 r : reg_offset r <> 0%Z.
     Proof.
       destruct r; discriminate.
@@ -4613,7 +4591,12 @@ Section Definability.
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. auto. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t0.
+              by rewrite H0.
+            }
             specialize (Hextcall_C C C_b C_next_e1).
             assert (C'_next_e1: C' <> next_comp_of_event e1)
               by (rewrite -C_next_e1 /C; move: C_ne_C' => /eqP; congruence).
@@ -5523,7 +5506,13 @@ Section Definability.
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. auto. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t0.
+              by rewrite H0.
+            }
+
             specialize (Hextcall_C C C_b C_next_e1).
             assert (C'_next_e1: C' <> next_comp_of_event e1)
               by (rewrite -C_next_e1 /C; move: wf_e => /eqP; congruence).
@@ -7834,12 +7823,21 @@ Section Definability.
                 reflexivity. }
             (* NOTE: Much of this can be done up front if we case analyze the
              trace prefix at the top *)
-            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
-              destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            assert (C_next_e1: C = next_comp_of_event e1).
+            { destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. assumption. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t1.
+              by rewrite H0.
+            }
+
+            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+            { by auto. }
+            clear C_next_e1.
             (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
             (* Case analysis on concrete constant expression; all cases are
              similar.
@@ -9558,13 +9556,25 @@ Section Definability.
               - apply rcons_inj in H. inversion H; subst; clear H.
                 apply rcons_inj in H3. inversion H3; subst; clear H3.
                 inversion H1; subst; clear H1.
-                reflexivity. }
-            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+                reflexivity.
+            }
+
+            assert (C_next_e1: C = next_comp_of_event e1).
+            {
               destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. assumption. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t1.
+              by rewrite H0.
+            }
+
+            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+            { by auto. }
+            clear C_next_e1.
             (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
             exists (EMov C src dst s0 t0).
             (* NOTE: Can we make this initial part more like the other cases? *)
@@ -10378,13 +10388,24 @@ Section Definability.
               - apply rcons_inj in H. inversion H; subst; clear H.
                 apply rcons_inj in H3. inversion H3; subst; clear H3.
                 inversion H1; subst; clear H1.
-                reflexivity. }
-            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+                reflexivity.
+            }
+            assert (C_next_e1: C = next_comp_of_event e1).
+            {
               destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. assumption. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t0.
+                by rewrite H0.
+            }
+
+            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+            { by auto. }
+            clear C_next_e1.
             (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
             exists (EBinop C op reg0 reg1 reg2 s0 eregs).
             (* Case analysis on concrete constant expression; all cases are
@@ -10951,13 +10972,24 @@ Section Definability.
               - apply rcons_inj in H. inversion H; subst; clear H.
                 apply rcons_inj in H3. inversion H3; subst; clear H3.
                 inversion H1; subst; clear H1.
-                reflexivity. }
-            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+                reflexivity.
+            }
+            assert (C_next_e1: C = next_comp_of_event e1).
+            {
               destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. assumption. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t0.
+              by rewrite H0.
+            }
+
+            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+            { by auto. }
+            clear C_next_e1.
             (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
             exists (ELoad C reg0 reg1 s0 eregs).
             destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
@@ -11578,13 +11610,24 @@ Section Definability.
               - apply rcons_inj in H. inversion H; subst; clear H.
                 apply rcons_inj in H3. inversion H3; subst; clear H3.
                 inversion H1; subst; clear H1.
-                now eauto. }
-            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+                now eauto.
+            }
+            assert (C_next_e1: C = next_comp_of_event e1).
+            {
               destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. assumption. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t0.
+              by rewrite H0.
+            }
+
+            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+            { by auto. }
+            clear C_next_e1.
             (* NOTE: Instantiations are irrelevant! *)
             exists (EStore C reg0 reg1 s0 eregs).
             destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
@@ -12251,13 +12294,24 @@ Section Definability.
               - apply rcons_inj in H. inversion H; subst; clear H.
                 apply rcons_inj in H3. inversion H3; subst; clear H3.
                 inversion H1; subst; clear H1.
-                now eauto. }
-            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+                now eauto.
+            }
+            assert (C_next_e1: C = next_comp_of_event e1).
+            {
               destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
               rewrite Hprefix01 in wf_ev_comps'.
               setoid_rewrite <- app_assoc in wf_ev_comps'.
               apply trace_event_components_app_r in wf_ev_comps'.
-              inversion wf_ev_comps'. assumption. }
+              setoid_rewrite cats1 in wf_ev_comps'.
+              inversion wf_ev_comps'. rewrite lastI in H.
+              apply rcons_inj in H. inversion H. subst e2. clear H.
+              rewrite -cats1 in H3. apply elt_eq_unit in H3 as [? [? _]]. subst e0 t0.
+              by rewrite H0.
+            }
+
+            assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+            { by auto. }
+            clear C_next_e1.
             (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
             exists (EAlloc C reg0 reg1 s0 eregs).
             (* TODO: Clean assumptions, refactor. *)

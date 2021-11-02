@@ -125,7 +125,7 @@ Proof.
     destruct t2; first by rewrite E0_right; apply IHstar.
     destruct t2; simpl in *; last lia.
     setoid_rewrite cats1.
-    destruct t1 using last_ind; simpl.
+    destruct t1 as [|t1 et1] using last_ind; simpl.
     + constructor; constructor.
       CS.unfold_states.
       assert (mem0 =
@@ -222,9 +222,34 @@ Proof.
           erewrite !Ereg_to_reg_to_Ereg; eassumption.
       * subst. eapply step_EAlloc; eauto; by rewrite !Ereg_to_reg_to_Ereg Hreginit.
 
-    + constructor; first (constructor; auto).
-        
-Admitted.
+    + clear IHt1. specialize (IHstar Logic.eq_refl). inversion IHstar as [? ?].
+      constructor; first (constructor; auto).
+      CS.unfold_states.
+      assert (Hrewr1: mem_of_event_inform et1 = mem0).
+      {
+        by specialize (I.CS.starR_memory_of_event_inform _ _ _ _ _ Hstar01).
+      }
+      assert (Hrewr2: register_file_of_event_inform et1 = regs0).
+      {
+        by specialize (I.CS.starR_register_file_of_event_inform _ _ _ _ _ Hstar01).
+      }
+      rewrite Hrewr1 Hrewr2.
+      * destruct e; inversion Hstep12; subst; simpl in *.
+        -- apply step_ECallInform; auto.
+        -- apply step_ERetInform; auto.
+        -- apply step_EConst; auto. by rewrite Ereg_to_reg_to_Ereg.
+        -- apply step_EConst; auto. by rewrite Ereg_to_reg_to_Ereg.
+        -- apply step_EConst; auto.
+        -- apply step_EMov; auto. by rewrite !Ereg_to_reg_to_Ereg.
+        -- eapply step_EBinop; auto. unfold result.
+             by rewrite !Ereg_to_reg_to_Ereg !Ebinop_to_binop_to_Ebinop.
+        -- subst. eapply step_ELoad; eauto; by rewrite !Ereg_to_reg_to_Ereg.
+        -- subst. eapply step_EStore; eauto; erewrite !Ereg_to_reg_to_Ereg; eassumption.
+        -- subst. eapply step_EAlloc; eauto; by rewrite !Ereg_to_reg_to_Ereg.
+      * constructor; auto.
+        by eapply I.CS.next_comp_of_event_cur_comp_of_event; eauto.
+Qed.
+
 
 Lemma definability_with_linking:
   forall p c t s,

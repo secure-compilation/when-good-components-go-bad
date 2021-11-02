@@ -1958,6 +1958,50 @@ Proof.
   congruence.
 Qed.
 
+Lemma starR_memory_of_event_inform p s t1 e1 s1: 
+  starR step (GlobalEnv.prepare_global_env p) s (seq.rcons t1 e1) s1 ->
+  mem_of_event_inform e1 = state_mem s1.
+Proof.
+  rewrite -seq.cats1. intros Hstar. apply star_iff_starR in Hstar.
+  specialize (star_app_inv (singleton_traces_inform p) _ _ Hstar)
+    as [? [_ Hstar2]].
+  remember [e1] as t. revert Heqt.
+  induction Hstar2; subst; intros Hrewr; first discriminate.
+  destruct t0 as [|e0 t0]; destruct t2 as [|e2 t2]; simpl in *; try discriminate.
+  + destruct t2; try discriminate. inversion Hrewr; subst. by intuition.
+  + destruct t0; try discriminate; simpl in *. inversion Hrewr; subst. clear Hrewr.
+    assert (Hrewr: mem_of_event_inform e1 = state_mem s2).
+    {
+      unfold_states. by inversion H.
+    }
+    rewrite Hrewr. eapply epsilon_star_preserves_memory. apply Hstar2.
+  + unfold Eapp in *. rewrite app_comm_cons in Hrewr.
+    apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
+Qed.
+
+
+Lemma starR_register_file_of_event_inform p s t1 e1 s1: 
+  starR step (GlobalEnv.prepare_global_env p) s (seq.rcons t1 e1) s1 ->
+  register_file_of_event_inform e1 = state_regs s1.
+Proof.
+  rewrite -seq.cats1. intros Hstar. apply star_iff_starR in Hstar.
+  specialize (star_app_inv (singleton_traces_inform p) _ _ Hstar)
+    as [? [_ Hstar2]].
+  remember [e1] as t. revert Heqt.
+  induction Hstar2; subst; intros Hrewr; first discriminate.
+  destruct t0 as [|e0 t0]; destruct t2 as [|e2 t2]; simpl in *; try discriminate.
+  + destruct t2; try discriminate. inversion Hrewr; subst. by intuition.
+  + destruct t0; try discriminate; simpl in *. inversion Hrewr; subst. clear Hrewr.
+    assert (Hrewr: register_file_of_event_inform e1 = state_regs s2).
+    {
+      unfold_states. by inversion H.
+    }
+    rewrite Hrewr. eapply epsilon_star_preserves_registers. apply Hstar2.
+  + unfold Eapp in *. rewrite app_comm_cons in Hrewr.
+    apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
+Qed.
+
+
 Lemma silent_step_preserves_component G s s' :
   CS.step G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
@@ -2060,6 +2104,22 @@ Proof.
     + discriminate.
 Qed.
 
+Lemma epsilon_star_inform_preserves_component p s1 s2:
+  Star (CS.sem_inform p) s1 E0 s2 ->
+  Pointer.component (CS.state_pc s1) = Pointer.component (CS.state_pc s2).
+Proof.
+  intros Hstar.
+  remember E0 as t.
+  induction Hstar; auto.
+  subst; assert (t1 = E0) by now induction t1.
+  assert (t2 = E0) by now induction t1. subst.
+  inversion H; subst; unfold_state s3; simpl in *;
+    rewrite <- IHHstar; auto;
+      try (now rewrite Pointer.inc_preserves_component).
+  erewrite find_label_in_procedure_1; by eauto.
+Qed.
+  
+
 Lemma epsilon_star_non_inform_preserves_program_component p c s1 s2 :
   CS.is_program_component s1 (prog_interface c) ->
   Star (CS.sem_non_inform (program_link p c)) s1 E0 s2 ->
@@ -2084,6 +2144,38 @@ Proof.
     + discriminate.
 Qed.
 
+Lemma next_comp_of_event_cur_comp_of_event p s t1 e1 s1 e s2:
+  starR step (GlobalEnv.prepare_global_env p) s (seq.rcons t1 e1) s1 ->
+  step (GlobalEnv.prepare_global_env p) s1 [e] s2 ->
+  next_comp_of_event e1 = cur_comp_of_event e.
+Proof.
+  intros Hstar01 Hstep.
+  rewrite -seq.cats1 in Hstar01. apply star_iff_starR in Hstar01.
+  specialize (star_app_inv (singleton_traces_inform p) _ _ Hstar01)
+    as [? [_ Hstar2]].
+  remember [e1] as t. revert Heqt.
+  induction Hstar2; subst; intros Hrewr; first discriminate.
+    destruct t0 as [|e0 t0]; destruct t2 as [|e2 t2]; try (simpl in *; discriminate).
+  + destruct t2; try discriminate. inversion Hrewr; subst. by intuition.
+  + destruct t0; try discriminate. inversion Hrewr; simpl in Hrewr; subst. clear Hrewr.
+    apply epsilon_star_inform_preserves_component in Hstar2.
+    unfold_state s0. unfold_state s3. unfold_state s1. unfold_state s2.
+    simpl in Hstar2.
+    inversion Hstep; inversion H; subst; simpl in *;
+      try (congruence);
+      try (rewrite Pointer.inc_preserves_component in Hstar2; congruence);
+      try (
+          match goal with
+          | Hfind: find_label_in_component _ _ _ = _ |- _ =>
+            apply find_label_in_component_1 in Hfind
+          end;
+          congruence
+        ).
+  + unfold Eapp in *. 
+    apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
+Qed.
+
+  
 (* RB: Could be phrased in terms of does_prefix. *)
 Theorem behavior_prefix_star {p b m} :
   program_behaves (CS.sem_inform p) b ->
