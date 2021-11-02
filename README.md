@@ -107,34 +107,6 @@ Completing these proofs simply requires us to extend module signatures and
 implementations, and derive the desired easy facts in this enriched setting.
 
 ```coq
-pointer_of_alloc
-  : forall (mem : Memory.t) (cid : Component.id) (sz : nat) 
-      (mem' : Memory.t) (ptr' : Pointer.t) (nb : Block.id),
-    Memory.alloc mem cid sz = Some (mem', ptr') ->
-    next_block mem cid = Some nb -> ptr' = (Permission.data, cid, nb, 0%Z)
-
-Memory.alloc_after_load
-  : forall (mem : Memory.t) (P : Permission.id) (C : Component.id)
-      (b : Block.id) (o : Block.offset) (v : value) 
-      (size : nat),
-    Memory.load mem (P, C, b, o) = Some v ->
-    exists (mem' : Memory.t) (b' : Block.id),
-      b' <> b /\
-      Memory.alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z))
-
-next_block_alloc_neq
-  : forall (m : Memory.t) (C : Component.id) (n : nat) 
-      (m' : Memory.t) (b : Pointer.t) (C' : Component.id),
-    Memory.alloc m C n = Some (m', b) ->
-    C' <> C -> next_block m' C' = next_block m C'
-
-next_block_alloc
-  : forall (m : Memory.t) (C : Component.id) (n : nat) 
-      (m' : Memory.t) (b : Pointer.t),
-    Memory.alloc m C n = Some (m', b) ->
-    next_block m C = Some (Pointer.block b) /\
-    next_block m' C = Some (ssrnat.addn (Pointer.block b) 1)
-
 load_next_block_None
   : forall (mem : Memory.t) (ptr : Pointer.t) (b : Block.id),
     next_block mem (Pointer.component ptr) = Some b ->
@@ -232,15 +204,6 @@ CS.load_component_prog_interface
     Star (CS.sem p) s t s' ->
     Memory.load (CS.s_memory s') ptr = Some (Ptr ptr') ->
     Pointer.component ptr' \in domm (Source.prog_interface p)
-
-CS.comes_from_initial_state_mem_domm
-  : forall p : Source.program,
-    Source.well_formed_program p ->
-    Source.closed_program p ->
-    forall (s : CS.state) (t : trace event) (s' : state (CS.sem p)),
-    CS.initial_state p s ->
-    Star (CS.sem p) s t s' ->
-    domm (CS.s_memory s') = domm (Source.prog_interface p)
 ```
 
 #### Target language ####

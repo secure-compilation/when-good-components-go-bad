@@ -562,13 +562,59 @@ Section Semantics.
   Lemma step_preserves_mem_domm s t s' :
     Step sem s t s' ->
     domm (s_memory s) = domm (s_memory s').
-  Admitted.
+  Proof.
+    intros Hstep.
+    inversion Hstep; subst;
+      try reflexivity. (* Most operations do not modify the memory. *)
+    - (* Preservation by Memory.alloc. *)
+      match goal with
+      | Halloc : Memory.alloc _ _ _ = _ |- _ =>
+        unfold Memory.alloc in Halloc;
+          destruct (mem C) as [memC |] eqn:Hcase;
+            [| discriminate];
+          destruct (ComponentMemory.alloc memC (Z.to_nat size)) as [memC' b];
+          inversion Halloc; subst; simpl;
+          rewrite domm_set fsetU1in; [reflexivity |];
+          apply /dommP; now eauto
+      end.
+    - (* Preservation by Memory.store. *)
+      rename H into Hstore.
+    match goal with
+    | Hstore : Memory.store _ ?PTR ?V = _ |- _ =>
+      unfold Memory.store in Hstore;
+        destruct (Permission.eqb (Pointer.permission PTR) Permission.data) eqn:Hperm;
+        [| discriminate];
+        destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
+        [| discriminate];
+        destruct (ComponentMemory.store
+                    memC (Pointer.block PTR) (Pointer.offset PTR) V)
+          as [memC' |] eqn:Hcase2;
+        [| discriminate];
+        inversion Hstore as [Hsetm];
+        simpl; rewrite domm_set fsetU1in;
+          [reflexivity |];
+          apply /dommP; now eauto
+    end.
+  Qed.
 
   Lemma comes_from_initial_state_mem_domm s t s' :
     initial_state p s ->
     Star sem s t s' ->
     domm (s_memory s') = domm (prog_interface p).
-  Admitted.
+  Proof.
+    intros Hini Hstar.
+    apply star_iff_starR in Hstar.
+    revert Hini.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+      subst;
+      intros Hini.
+    - unfold initial_state, initial_machine_state in Hini; subst s.
+      pose proof cprog_main_existence complete_program as Hmain.
+      destruct (prog_main p) as [main |]; [| discriminate].
+      now rewrite domm_prepare_buffers.
+    - specialize (IHHstar Hini).
+      apply step_preserves_mem_domm in Hstep23. congruence.
+  Qed.
 
   (* NOTE: Consider a CSInvariants for the Source *)
   Definition private_pointers_never_leak_S metadata_size :=
