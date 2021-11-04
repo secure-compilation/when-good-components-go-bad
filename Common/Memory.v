@@ -4,6 +4,8 @@ Require Import Common.Linking.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 Require Import Coq.Logic.ProofIrrelevance.
+Require Import Lia.
+Require Import Coq.Program.Equality.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -37,8 +39,6 @@ Module Type AbstractComponentMemory.
   Parameter alloc : t -> nat -> t * Block.id.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
-  Parameter load_all : t -> Block.id -> option (list value).
-  Parameter store_all : t -> Block.id -> list value -> option t.
   Parameter domm : t -> {fset Block.id}.
   Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
   Parameter next_block : t -> Block.id.
@@ -46,11 +46,6 @@ Module Type AbstractComponentMemory.
   (* Parameter transfer_memory_block : t -> Block.id -> t -> Block.id -> t. *)
   (*Parameter mem_eqType : eqType.*)
 
-  Axiom load_load_all:
-    forall m b i v,
-      load m b i = Some v ->
-      exists vs, load_all m b = Some vs /\ nth_error vs (Z.to_nat i) = Some v.
-  
   Axiom load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -83,48 +78,13 @@ Module Type AbstractComponentMemory.
                         else None
                       else None.
 
-  Axiom load_all_after_alloc:
-    forall m m' n b,
-      alloc m n = (m', b) ->
-      forall b',
-        b' <> b -> load_all m' b' = load_all m b'.
-
   Axiom load_after_store:
     forall m m' b i v,
       store m b i v = Some m' ->
     forall b' i',
       load m' b' i' =
       if (b', i') == (b, i) then Some v else load m b' i'.
-
-  Axiom load_all_after_store_all:
-    forall m m' b vs,
-      store_all m b vs = Some m' ->
-      forall b',
-      load_all m' b' =
-      if b' == b then Some vs else load_all m b'.
-  
-  (* Axiom load_after_transfer_memory_block: *)
-  (*   forall m b m' b' mres i, *)
-  (*     mres = transfer_memory_block m b m' b' -> *)
-  (*     load m b i = load mres b' i. *)
-
-  (* Axiom load_all_after_transfer_memory_block: *)
-  (*   forall m b m' b' mres, *)
-  (*     mres = transfer_memory_block m b m' b' -> *)
-  (*     load_all m b = load_all mres b'. *)
-
-  (* Axiom load_unwritten_addr_after_transfer_memory_block: *)
-  (*   forall m b m' b' bl i, *)
-  (*     bl != b' -> *)
-  (*     load m' bl i = *)
-  (*     load (transfer_memory_block m b m' b') bl i. *)
-  
-  (* Axiom load_all_unwritten_addr_after_transfer_memory_block: *)
-  (*   forall m b m' b' bl, *)
-  (*     bl != b' -> *)
-  (*     load_all m' bl = *)
-  (*     load_all (transfer_memory_block m b m' b') bl. *)
-  
+   
   Axiom store_after_load:
     forall m b i v v',
       load m b i = Some v ->
@@ -139,12 +99,6 @@ Module Type AbstractComponentMemory.
     (exists m',
         store m b i v' = Some m').
   
-  (* Axiom store_all_after_load_all: *)
-  (*   forall m b vs vs', *)
-  (*     load_all m b = Some vs -> *)
-  (*     length vs = length vs' -> *)
-  (*     exists m', *)
-  (*       store_all m b vs' = Some m'. *)
     
   Axiom domm_prealloc :
     forall bufs m,
@@ -260,7 +214,9 @@ Module ComponentMemory : AbstractComponentMemory.
         nextblock_content := _ |},
      nextblock m).
   Next Obligation.
-  Admitted.
+    destruct m. simpl in *.
+    apply nextblock_content0. by eapply leq_trans; eauto.
+  Defined.
 
   Program Definition alloc m (size : nat) : mem * Block.id :=
     let fresh_block := nextblock m in
@@ -270,7 +226,11 @@ Module ComponentMemory : AbstractComponentMemory.
         nextblock_content := _ |},
      fresh_block).
   Next Obligation.
-  Admitted.
+    destruct m. simpl in *. rewrite setmE.
+    destruct (b == nextblock0) eqn:econtra; rewrite econtra; move : econtra => /eqP => econtra; subst.
+    - by rewrite ltnn in H.
+    - apply nextblock_content0. by eapply leq_trans; eauto.
+  Defined.
 
   Definition load m b i : option value :=
     match getm (content m) b with
@@ -295,23 +255,11 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
   Next Obligation.
-  Admitted.
-
-  Definition load_all m b : option (list value) := getm (content m) b.
-
-  (* NOTE: Is this used any more? Seemingly not *)
-  Program Definition store_all m b vs : option mem :=
-    match getm (content m) b with
-    | Some chunk =>
-      if length chunk == length vs then (* NOTE: Use match? (Or proof mode) *)
-        Some {| content := setm (content m) b vs;
-                nextblock := nextblock m;
-                nextblock_content := _ |}
-      else None
-    | None => None
-    end.
-  Next Obligation.
-  Admitted.
+    destruct m. rewrite setmE.
+    destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition);
+      move : eb0 => /eqP => eb0; subst.
+    simpl in *. apply nextblock_content0 in H. by rewrite H in Heq_anonymous0.
+  Defined.
 
   Definition domm (m : t) := @domm nat_ordType block (content m).
 
@@ -596,32 +544,6 @@ Module ComponentMemory : AbstractComponentMemory.
       ++ by apply Zle_0_nat.
       ++ by apply Zle_bool_imp_le.
   Qed.  
-    
-  Lemma load_load_all:
-    forall m b i v,
-      load m b i = Some v ->
-      exists vs, load_all m b = Some vs /\ nth_error vs (Z.to_nat i) = Some v.
-  Proof.
-    intros ? ? ? ?. unfold load, load_all.
-    destruct ((content m) b); intros Hload; try discriminate.
-    eexists. split; try reflexivity. rewrite <- Hload.
-    destruct (0 <=? i)%Z; auto. discriminate.
-  Qed.
-
-  Lemma load_all_after_alloc:
-    forall m m' n b,
-      alloc m n = (m', b) ->
-      forall b',
-        b' <> b -> load_all m' b' = load_all m b'.
-  Admitted.
-
-  Lemma load_all_after_store_all:
-    forall m m' b vs,
-      store_all m b vs = Some m' ->
-      forall b',
-      load_all m' b' =
-      if b' == b then Some vs else load_all m b'.
-  Admitted.
   
   (* Lemma load_all_after_transfer_memory_block: *)
   (*   forall m b m' b' mres, *)
@@ -655,6 +577,9 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     move=> m m' b i v Hstore b' i'.
     move: Hstore; rewrite /store /load.
+    set CNT := (content m b).
+    (*** dependent induction CNT.
+    - rewrite <- x. ***)
     (* NOTE: Handle dependent pattern matching *)
   (*   case m_b: (content m b) => [chunk|] //=. *)
   (*   case: (Z.leb_spec0 0 i)=> [i_pos|//] /=. *)
@@ -1015,12 +940,6 @@ Module Memory.
       | None => None
       end
     else None.
-
-  Definition load_all (mem: t) (addr: Component.id * Block.id) : option (list value) :=
-    match mem (addr.1) with
-    | Some memC => ComponentMemory.load_all memC addr.2
-    | None => None
-    end.
 
   (* NOTE: Unused *)
   (* Definition store_all (mem: t) (addr: Component.id * Block.id) (vs: list value) *)
