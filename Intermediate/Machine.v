@@ -992,6 +992,14 @@ Definition prepare_procedures_initial_memory_aux' (p: program) :=
     (domm (prog_interface p)).
 **************************************************)
 
+Definition is_main_proc p comp_id proc_id :=
+  match prog_main p with
+  | true =>
+    (Component.main =? comp_id) && (Procedure.main =? proc_id)
+  | false => false
+  end.
+  
+
 (* As above, replace the old function with the new, and remove accumulators. *)
 Definition prepare_procedures_initial_memory_aux (p: program) :=
   mkfmapf
@@ -1006,7 +1014,20 @@ Definition prepare_procedures_initial_memory_aux (p: program) :=
                end
              )
        in
-       reserve_component_blocks p C Cmem (elementsm Cprocs))
+       let map_entrypoint :=
+           fun P =>
+             match prog_interface p C with
+             | Some Ciface =>
+               if (P \in Component.export Ciface) || is_main_proc p C P then Some (P, P)
+               else None
+             | None => None
+             end
+       in
+       let Centrypoints := mkfmap (seq.pmap map_entrypoint (domm Cprocs))
+       in
+       (Cmem, Cprocs, Centrypoints)
+    )
+       (* reserve_component_blocks p C Cmem (elementsm Cprocs)) *)
     (domm (prog_interface p)).
 
 (*************************************************
@@ -1173,14 +1194,15 @@ Proof.
     inversion Hlinkable as [_ Hdisjoint].
     have Hcontra : False by apply (fdisjoint_partition_notinboth Hdisjoint Hc Hp).
     inversion Hcontra.
-  - rewrite unionmE.
+  - rewrite !unionmE.
     rewrite !mkfmapfE.
     rewrite Hp Hc.
     have Hpc : Cid \in domm (prog_interface (program_link p c))
       by apply in_domm_program_link.
     rewrite Hpc.
-    have Helts : (elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
-            (elementsm (odflt emptym ((prog_procedures p) Cid)))
+    have Helts :
+      (domm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+      (domm (odflt emptym ((prog_procedures p) Cid)))
       by rewrite (prog_link_procedures_unionm Hwfp Hp Hc).
     rewrite Helts.
     have Hprealloc :
@@ -1203,15 +1225,19 @@ Proof.
       by rewrite (prog_link_buffers_unionm Hwfp Hp Hc).
     rewrite Hprealloc.
     simpl.
-    unfold reserve_component_blocks.
-    rewrite unionmE.
+    rewrite !unionmE.
     have [Cid_int Hp']: (exists x, (prog_interface p) Cid = Some x)
       by  apply /dommP.
     rewrite Hp'.
     simpl.
+    assert (exists x, prog_procedures p Cid = Some x) as [Cid_proc HCid_proc].
+    { apply/dommP. by rewrite -wfprog_defined_procedures; auto. }
+    rewrite HCid_proc. simpl.
     destruct (prog_main p) as [|] eqn:Hmainp;
-      destruct (prog_main c) as [|] eqn:Hmainc.
-    + easy. (* Contra. *)
+      destruct (prog_main c) as [|] eqn:Hmainc;
+      unfold is_main_proc; simpl; rewrite Hmainp Hmainc.
+    + unfold linkable_mains in *. exfalso.
+      move : Hmains => /negP => Hmains. by intuition. (* Contra. *)
     + reflexivity.
     + destruct Cid as [| n].
       * (* Contra. *)
@@ -1226,15 +1252,15 @@ Proof.
       * reflexivity.
     + reflexivity. (* Easy case. *)
   - (* RB: TODO: Refactor symmetric case to last one. *)
-    rewrite unionmE.
+    rewrite !unionmE.
     rewrite !mkfmapfE.
     rewrite Hp Hc.
     have Hpc : Cid \in domm (prog_interface (program_link p c))
       by rewrite (program_linkC Hwfp Hwfc Hlinkable) ;
       apply in_domm_program_link.
     rewrite Hpc.
-    have Helts: (elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
-            (elementsm (odflt emptym ((prog_procedures c) Cid)))
+    have Helts: (domm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (domm (odflt emptym ((prog_procedures c) Cid)))
       by rewrite (program_linkC Hwfp Hwfc Hlinkable) (prog_link_procedures_unionm Hwfc Hc Hp).
     rewrite Helts.
     have Hprealloc :
@@ -1258,21 +1284,24 @@ Proof.
       by rewrite (program_linkC Hwfp Hwfc Hlinkable) (prog_link_buffers_unionm Hwfc Hc Hp).
     rewrite Hprealloc.
     simpl.
-    unfold reserve_component_blocks.
-    rewrite unionmE.
+    rewrite !unionmE.
     have Hp': (prog_interface p) Cid = None
       by apply /dommPn; rewrite Hp.
     rewrite Hp'.
     have [Cid_int Hc'] : exists x, (prog_interface c) Cid = Some x
       by apply /dommP.
     rewrite Hc'.
+    assert (prog_procedures p Cid = None) as HCid_proc.
+    { apply/dommPn. rewrite -wfprog_defined_procedures; auto. by apply/dommPn. }
+    rewrite HCid_proc. simpl.
     destruct (prog_main p) as [|] eqn:Hmainp;
-      destruct (prog_main c) as [|] eqn:Hmainc.
+      destruct (prog_main c) as [|] eqn:Hmainc;
+      unfold is_main_proc; simpl; rewrite Hmainp Hmainc.
     + (* Contra. *)
       unfold linkable_mains in Hmains.
       rewrite Hmainp Hmainc in Hmains.
       discriminate.
-    + simpl. rewrite Hmainp Hmainc.
+    + simpl. 
       destruct Cid as [| n].
       * (* Contra, *)
         inversion Hwfc as [_ _ _ _ _ _ _ Hmain_compc].
@@ -1284,8 +1313,8 @@ Proof.
         rewrite Hmainc in Hmain_compc.
         discriminate.
       * reflexivity.
-    + simpl. rewrite Hmainp Hmainc. reflexivity.
-    + simpl. rewrite Hmainp Hmainc. reflexivity.
+    + simpl. reflexivity.
+    + simpl. reflexivity.
   - (* in neither, pretty immediate *)
     by rewrite unionmE !mkfmapfE domm_union in_fsetU Hp Hc.
 Qed.
@@ -1395,10 +1424,7 @@ Proof.
        discriminate].
   unfold elementsm in Hcode. simpl in Hcode.
   rewrite (wfprog_defined_buffers Hwf) in Hdomm.
-  destruct (dommP Hdomm) as [Cbufs HCbufs].
-  rewrite HCbufs in Hcode. simpl in Hcode.
-  destruct (reserve_component_blocks_some Hcode) as [b' HPcode].
-  now exists Cprocs, b'.
+  destruct (dommP Hdomm) as [Cbufs HCbufs]. by eauto.
 Qed.
 
 Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
@@ -1489,7 +1515,7 @@ Local Opaque Memory.load.
     rewrite Hdomm in Hload;
     [| discriminate].
   unfold reserve_component_blocks in Hload.
-  destruct (ComponentMemoryExtra.reserve_blocks
+  (*destruct (ComponentMemoryExtra.reserve_blocks
               (ComponentMemory.prealloc (*(odflt emptym (prog_buffers p C))*)
                  match prog_buffers p C with
                     | Some buf => setm emptym Block.local buf
@@ -1498,11 +1524,11 @@ Local Opaque Memory.load.
               )
               (length (elementsm (odflt emptym (prog_procedures p C)))))
     as [Cmem' bs] eqn:Hcase.
-  rewrite Hcase in Hload.
+  rewrite Hcase in Hload.*)
   simpl in Hload.
   rewrite (wfprog_defined_buffers Hwf) in Hdomm.
   move: Hdomm => /dommP => [[buf Hbuf]].
-  rewrite Hbuf in Hcase. simpl in Hcase.
+  (*rewrite Hbuf in Hcase. simpl in Hcase.*)
   rewrite ComponentMemory.load_prealloc in Hload.
   destruct (0 <=? o)%Z eqn:Hoff;
     [| discriminate].

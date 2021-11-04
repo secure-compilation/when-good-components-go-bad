@@ -1790,14 +1790,14 @@ Proof.
     try reflexivity. (* Most operations do not modify the memory. *)
   - (* Preservation by Memory.store. *)
     match goal with
-    | Hstore : Memory.store _ ?PTR ?V = _ |- _ =>
+    | Hstore : Memory.store _ ?PTR (Register.get ?REG ?REGS) = _ |- _ =>
       unfold Memory.store in Hstore;
         destruct (Permission.eqb (Pointer.permission PTR) Permission.data) eqn:Hperm;
         [| discriminate];
         destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
         [| discriminate];
         destruct (ComponentMemory.store
-                    memC (Pointer.block PTR) (Pointer.offset PTR) V)
+                    memC (Pointer.block PTR) (Pointer.offset PTR) (Register.get REG REGS))
           as [memC' |] eqn:Hcase2;
         [| discriminate];
         inversion Hstore as [Hsetm];
@@ -2516,28 +2516,6 @@ Proof.
         (* rewrite contra in e1; *)
         try discriminate; auto; clear e1;
           unfold reserve_component_blocks; intros [procs [bid H]].
-  - assert (etmp : is_true (cid \in domm (prog_interface p))).
-    { erewrite domm_domm; rewrite e; auto. }
-    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
-    destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0];
-           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
-           discriminate).
-    destruct (ComponentMemoryExtra.reserve_blocks
-                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
-                   match prog_buffers p cid with
-                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
-                   | None => emptym
-                   end
-                )
-         (length (elementsm (odflt emptym (Some n)))))
-             as [compMem bs] eqn:rsvblk.
-    rewrite rsvblk in H.
-    destruct H as [H1 H2].
-    apply ComponentMemoryExtra.reserve_blocks_length in rsvblk.
-    exists n. inversion H1. subst. apply mkfmap_Some in H2.
-    specialize (in_zip2 H2) as H2_2.
-    unfold elementsm in *. apply in_unzip2 in H2_2 as [? ?]. by eauto.
 Qed.
 
 (****************************************************************
@@ -3008,28 +2986,9 @@ case: st1 t1 st2 / Hstep => //=.
 - (* Relies on lemma IConst_possible_values above. *)
   intros _ _ ? ? ? ? ? Hexec Hreg.
   specialize (IConst_possible_values _ _ _ Hexec)
-    as [[i ev]|[perm [cid [bid [off [? [? [? ?]]] (*[procs' [? [? [Hprocs ?]]]]*)]]]]];
+    as [[i ev]|[perm [cid [bid [off [? [? [? ?]]] ]]]]];
     subst; auto.
-  (*destruct H1 as [Hperm [? ?]]. subst perm.*)
   simpl. by rewrite !eqxx.
-  (*******************************************
-  simpl.
-  destruct (Permission.eqb perm Permission.code) eqn:e; auto.
-  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
-    as [procs HShouldBeProvable2].
-  { by admit. }
-
-  rewrite HShouldBeProvable2.
-  rewrite <- beq_nat_refl, andTb, andbT.
-
-  assert (procs = procs').
-  {
-    rewrite Hprocs in HShouldBeProvable2.
-    by inversion HShouldBeProvable2.
-  }
-
-    by subst.
-   ***************************************)
 
 - intros ? ? ? ? ? ? ? ? Hexec Hfind _.
   specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
@@ -3044,6 +3003,16 @@ case: st1 t1 st2 / Hstep => //=.
     unfold find_label_in_component, find_label_in_component_helper  in *.
     destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
       last by rewrite e2 in Hfind.
+    unfold G, prepare_global_env, prepare_procedures_initial_memory,
+      prepare_procedures_initial_memory_aux in e2.
+    simpl in *.
+    rewrite mapmE mkfmapfE in e2.
+    simpl in *. unfold omap, obind, oapp in e2.
+    destruct (Pointer.component pc
+                                \in domm (prog_interface p)) eqn:epc;
+      rewrite epc in e2; last discriminate.
+    inversion e2. rewrite e1 in H0. simpl in H0. subst.
+
 
     (* Search _ find_label_in_component_helper. *)
     

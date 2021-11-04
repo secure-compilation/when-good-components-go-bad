@@ -198,9 +198,9 @@ Proof.
   rewrite -Hiface.
   destruct (C \in domm (prog_interface p)) eqn:HC.
   - rewrite HC.
-    intro HSome.
+    intro HSome. simpl in *.
     destruct ((prog_procedures p) C) as [procs |] eqn:Hcase1;
-      last discriminate.
+      last by rewrite domm0 in HSome.
     assert (exists procs', (prog_procedures p') C = Some procs') as [procs' Hcase1'].
     { apply /dommP.
       rewrite -(wfprog_defined_procedures Hwf') -Hiface (wfprog_defined_procedures Hwf).
@@ -220,34 +220,18 @@ Proof.
     { apply /dommP.
       rewrite -(wfprog_defined_buffers Hwf') -Hiface (wfprog_defined_buffers Hwf).
       apply /dommP. now exists bufs. }
-    rewrite -> Hcase1', Hcase2'.
+    rewrite -> Hcase1'.
     (* RB: NOTE: For now, phrase in terms of domains. *)
-    assert (P \in domm (reserve_component_blocks
-                          p
-                          C
-                          (ComponentMemory.prealloc (*bufs*)
-                             (setm (T:=nat_ordType) emptym Block.local bufs)
-                          ) procs).2) as Hdomm.
-    {
-      apply /dommP. eauto.
-      (* RB: TODO: Clean up this step. *)
-    }
+    
     apply /dommP.
     (* Continue to case analyze both machines in sync. *)
-    unfold reserve_component_blocks. unfold reserve_component_blocks in Hdomm.
     
 
     remember (setm (T:=nat_ordType) emptym Block.local bufs) as bufs_one.
     remember (setm (T:=nat_ordType) emptym Block.local bufs') as bufs'_one.
     
-    destruct (ComponentMemoryExtra.reserve_blocks
-                (ComponentMemory.prealloc bufs_one) (length procs))
-      as [Cmem bs] eqn:Hblocks.
-    destruct (ComponentMemoryExtra.reserve_blocks
-                (ComponentMemory.prealloc bufs'_one) (length procs'))
-      as [Cmem' bs'] eqn:Hblocks'.
-    rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
-    rewrite <- Hiface.
+    rewrite domm_mkfmap.
+    
     assert (Hmain : matching_mains p p') by now apply interface_implies_matching_mains.
     destruct (prog_main p) as [|] eqn:Hcase3;
       destruct (prog_main p') as [|] eqn:Hcase4.
@@ -255,33 +239,49 @@ Proof.
       | |- is_true (P \in seq.unzip1 (seq.pmap ?F ?L)) => remember F as fmap eqn:Hfmap
       end.
       simpl in Hfmap.
-      rewrite -domm_mkfmap. rewrite -domm_mkfmap in Hdomm.
-      remember (seq.zip (seq.unzip1 procs') bs') as l' eqn:Hl'.
-      remember (seq.zip (seq.unzip1 procs) bs) as l eqn:Hl.
+      rewrite -domm_mkfmap. 
       destruct (prog_interface p C) as [iface |] eqn:Hiface_eq.
       * assert (Hin: forall l,
                    P \in domm (mkfmap (seq.pmap fmap l)) <->
-                         (P \in Component.export iface \/ (P = 0 /\ C = 0)) /\ P \in domm (mkfmap l)).
+                         (P \in Component.export iface \/
+                                (P = 0 /\ C = 0)) /\ P \in (fset l)).
         {
           clear -Hfmap.
           intros l; subst; split.
           - intros H; induction l.
             + move: H => /dommP [v Hv]; by [].
             + simpl in H; unfold oapp in H.
-              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+              destruct (a \in Component.export iface) eqn:HP';
                 rewrite HP' in H; simpl in H.
               * move: H; rewrite domm_set => /fsetU1P.
                 move=> [Heq | Hdomm]; subst.
                 -- split; first now left.
-                   rewrite domm_set; simpl.
+                   rewrite fset_cons.
                    apply /fsetU1P; now left.
                 -- specialize (IHl Hdomm) as [IH1 IH2].
                    split; try assumption.
-                   rewrite domm_set; apply /fsetU1P; now right.
-              * destruct C eqn:HeqC; destruct P' eqn:HeqP'; simpl in *;
+                   rewrite fset_cons; apply /fsetU1P; now right.
+              * unfold is_main_proc in *.
+                (***********************************************************
+                  START FIXING...
+                  - Use fset_cons
+                  - Undserstand how to use IHl.
+                 **********************************************)
+                (*******************************************************
+                destruct C eqn:HeqC; destruct a eqn:HeqP'; subst; simpl in *.
+                -- destruct P; rewrite fset_cons.
+                   ++ split; first by intuition.
+                      by apply/fsetU1P; intuition.
+                   ++ 
+                -- specialize (IHl H).
+                --
+                destruct (prog_main p') eqn:eprog_main.
+                {
+                  
+                }
                   try (specialize (IHl H) as [IH1 IH2]; split; first assumption;
-                       rewrite domm_set in_fsetU; apply /orP; now right).
-                move: H; rewrite domm_set => /fsetU1P [Heq | Hdomm]; subst.
+                       rewrite fset_cons in_fsetU; apply /orP; now right).
+                  move: H; rewrite fset_cons => /fsetU1P [Heq | Hdomm]; subst.
                 -- split; first now right.
                    rewrite domm_set; simpl. apply /fsetU1P; now left.
                 -- specialize (IHl Hdomm) as [IH1 IH2].
@@ -444,7 +444,8 @@ Proof.
         move: Hdomm => //=. apply /negP.
         now rewrite domm0.
   - now rewrite HC.
-  Qed.
+********************************************************************)
+Admitted.
 
 (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
    operating on an explicit program link, one then being the exact symmetric of
