@@ -332,25 +332,24 @@ Module Source.
           by rewrite imported_procedure_filter_comp.
       + clear pp_C_P Hcalls Hints.
         induction Pexpr; auto; simpl in *.
-        *
-          apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+        * apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
           -- by apply IHPexpr1.
           -- by apply IHPexpr2.
         * apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
           -- by apply IHPexpr1.
           -- by apply IHPexpr2.
-        * (* some more splits and rewrites with andP are needed *)
-          admit.
-        * 
-          apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+        * apply/andP. move: Hfunptr => /andP [] => Hp1 => /andP => [[Hp2 Hp3]].
+          split; last (apply/andP; split).
           -- by apply IHPexpr1.
           -- by apply IHPexpr2.
-        * 
-          apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+          -- by apply IHPexpr3.
+        * apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+          -- by apply IHPexpr1.
+          -- by apply IHPexpr2.
+        * apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
           -- by apply IHPexpr1.
           -- by apply IHPexpr2.
         * by rewrite find_procedure_filter_comp C_Cs.
-          
     - apply/eq_fset=> C; move/wfprog_defined_buffers/eq_fset/(_ C): wf.
       rewrite /= !mem_domm !filtermE.
       by case: (pb C) (pi C) (C \in Cs) => [?|] //= [?|] //= [].
@@ -358,9 +357,10 @@ Module Source.
       case pi_C: (pi C)=> [CI|] //=.
       case: ifP=> //= C_Cs _.
       move/wfprog_well_formed_buffers/(_ C): wf=> /=.
-      (* rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?]. *)
-      (* by exists bufs => //=; rewrite filtermE pb_C /= C_Cs. *)
-      admit.
+      rewrite pi_C=> /(_ erefl) [[buf bufs] /= wf_buf pb_C].
+      split.
+      exists buf; last exact wf_buf. by rewrite /= filtermE C_Cs bufs.
+      rewrite filtermE C_Cs. now destruct (pb C).
     - have /= /implyP := proj1 (wfprog_main_existence wf).
       have /= /implyP := proj2 (wfprog_main_existence wf).
       rewrite /prog_main /find_procedure !mem_domm !filtermE.
@@ -370,8 +370,7 @@ Module Source.
       + case: (pp Component.main)=> [C_procs|] //= _.
         by case: (Component.main \in Cs).
       + case: (pp Component.main)=> [C_procs|] //= _.
-  (* Qed. *)
-  Admitted.
+  Qed.
 
   Lemma linkable_programs_has_component p1 p2 :
     linkable (prog_interface p1) (prog_interface p2) ->
@@ -547,6 +546,15 @@ Module Source.
     mapm (fun initial_buffer =>
             ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
          (prog_buffers p).
+
+  Lemma domm_prepare_buffers p :
+    well_formed_program p ->
+    domm (prepare_buffers p) = domm (prog_interface p).
+  Proof.
+    intros Hwf.
+    unfold prepare_buffers. rewrite domm_map.
+    now rewrite wfprog_defined_buffers.
+  Qed.
 
   Lemma find_procedure_in_linked_programs:
     forall p1 p2,

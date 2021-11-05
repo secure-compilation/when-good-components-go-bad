@@ -147,11 +147,6 @@ the memory sharing setting. To remove these assumptions it suffices to adapt
 previous proofs to the richer well-formedness criteria.
 
 ```coq
-Source.well_formed_program_unlink
-  : forall (Cs : {fset Component.id}) (p : Source.program),
-    Source.well_formed_program p ->
-    Source.well_formed_program (Source.program_unlink Cs p)
-
 Source.linking_well_formedness
   : forall p1 p2 : Source.program,
     Source.well_formed_program p1 ->
