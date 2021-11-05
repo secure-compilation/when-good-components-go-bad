@@ -253,7 +253,6 @@ Section SigmaShiftingBlockIds.
     unfold left_block_id_good_for_shifting, sigma_shifting_lefttoright_option.
     destruct (metadata_size_lhs <= lbid) eqn:elhs; intuition.
     - by eexists.
-    - by auto.
     - by destruct H.
   Qed.
 
@@ -265,7 +264,6 @@ Section SigmaShiftingBlockIds.
     unfold right_block_id_good_for_shifting, sigma_shifting_righttoleft_option.
     destruct (metadata_size_rhs <= lbid) eqn:elhs; intuition.
     - by eexists.
-    - by auto.
     - by destruct H.
   Qed.
 
