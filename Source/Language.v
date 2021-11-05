@@ -548,6 +548,15 @@ Module Source.
             ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
          (prog_buffers p).
 
+  Lemma domm_prepare_buffers p :
+    well_formed_program p ->
+    domm (prepare_buffers p) = domm (prog_interface p).
+  Proof.
+    intros Hwf.
+    unfold prepare_buffers. rewrite domm_map.
+    now rewrite wfprog_defined_buffers.
+  Qed.
+
   Lemma find_procedure_in_linked_programs:
     forall p1 p2,
       well_formed_program p1 ->
