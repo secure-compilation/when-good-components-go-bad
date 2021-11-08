@@ -6,6 +6,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 Require Import Coq.Logic.ProofIrrelevance.
 Require Import Lia.
 Require Import Coq.Program.Equality.
+From Equations Require Import Equations.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -170,7 +171,8 @@ Module ComponentMemory : AbstractComponentMemory.
     content : NMap block;
     nextblock : Block.id;
     nextblock_content : forall b, nextblock <= b -> content b = None
-  }.
+                 }.
+  Derive NoConfusion for mem.
   (*Definition t := mem.*)
 
   Definition eqCompMem compMem1 compMem2 :=
@@ -240,20 +242,56 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
 
-  Program Definition store m b i v : option mem :=
-    match getm (content m) b with
-    | Some chunk =>
-      if (0 <=? i)%Z then
-        match list_upd chunk (Z.to_nat i) v with
-        | Some chunk' =>
-          Some {| content := setm (content m) b chunk';
-                  nextblock := nextblock m;
-                  nextblock_content := _ |}
-        | _ => None
-        end
-      else None
-    | None => None
-    end.
+  (* Program Definition store m b i v: option mem := *)
+  (*         match getm (content m) b with *)
+  (*         | Some chunk => *)
+  (*             if (0 <=? i)%Z then *)
+  (*               match list_upd chunk (Z.to_nat i) v with *)
+  (*               | Some chunk' => *)
+  (*                   Some {| content := setm (content m) b chunk'; *)
+  (*                          nextblock := nextblock m; *)
+  (*                          nextblock_content := _ |} *)
+  (*               | _ => None *)
+  (*               end *)
+  (*             else None *)
+  (*         | None => None *)
+  (*         end. *)
+  (* Next Obligation. *)
+  (*   destruct m. rewrite setmE. *)
+  (*   destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition); *)
+  (*     move : eb0 => /eqP => eb0; subst. *)
+  (*   simpl in *. apply nextblock_content0 in H. by rewrite H in Heq_anonymous0. *)
+  (* Defined. *)
+  Equations store (m: mem) b (i: Z) (v: value) : option mem :=
+  (* Program Definition store m b i v : option mem := *)
+    store m b i v with (getm (content m) b) => {
+        store m b i v (Some chunk) with (0 <=? i)%Z =>
+          { store m b i v (Some chunk) true with (list_upd chunk (Z.to_nat i) v) => {
+              store m b i v (Some chunk) true (Some chunk') :=
+                    Some {| content := setm (content m) b chunk';
+                           nextblock := nextblock m;
+                           nextblock_content := _ |};
+              store m b i v (Some chunk) true None :=
+                    None
+            };
+            store m b i v (Some chunk) false := None
+          };
+        store m b i v None := None
+      }.
+        (* store m b i v := *)
+        (*   match getm (content m) b with *)
+        (*   | Some chunk => *)
+        (*       if (0 <=? i)%Z then *)
+        (*         match list_upd chunk (Z.to_nat i) v with *)
+        (*         | Some chunk' => *)
+        (*             Some {| content := setm (content m) b chunk'; *)
+        (*                    nextblock := nextblock m; *)
+        (*                    nextblock_content := _ |} *)
+        (*         | _ => None *)
+        (*         end *)
+        (*       else None *)
+        (*   | None => None *)
+        (*   end *)
   Next Obligation.
     destruct m. rewrite setmE.
     destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition);
