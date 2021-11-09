@@ -205,7 +205,28 @@ Module ComponentMemory : AbstractComponentMemory.
        nextblock := S (fold_left Nat.max (domm bufs) 0);
        nextblock_content := _ |}.
   Next Obligation.
-  Admitted.
+    rewrite mapmE.
+    destruct (bufs b) as [buf |] eqn:Hbuf; simpl;
+      last reflexivity.
+    assert (Hdomm : b \in ((domm bufs) : seq Block.id)). {
+      apply /dommP. by eauto. }
+    remember (domm bufs : seq Block.id) as d.
+    remember 0 as n.
+    clear -H Hdomm. exfalso.
+    revert n H.
+    induction d as [| d' ds']; intros n H.
+    - by inversion Hdomm.
+    - simpl in *.
+      rewrite in_cons in Hdomm.
+      move: Hdomm => /orP [/eqP |] H'.
+      + subst d'.
+        revert n H. clear.
+        induction ds' as [| d' ds' IHds']; simpl; intros n H.
+        * move: H => /leP. lia.
+        * specialize (IHds' (Nat.max n d')). apply IHds'.
+          now rewrite -Nat.max_assoc (Nat.max_comm d' b) Nat.max_assoc.
+      + eauto.
+  Qed.
 
   Program Definition empty :=
     {| content := emptym; nextblock := 0; nextblock_content := _ |}.
