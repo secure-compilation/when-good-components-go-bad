@@ -1329,7 +1329,7 @@ Proof.
     eapply sd_determ_1; eauto.
   destruct (silent_or_not_silent t').
   subst. inv H1.
-  left; intuition. eapply sd_determ_2; eauto.
+  left; intuition. (* eapply sd_determ_2; eauto. *)
   destruct (silent_or_not_silent t'').
   subst. inv H1. elim H2; auto.
   right; intuition.

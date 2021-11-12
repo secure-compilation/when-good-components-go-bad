@@ -7,6 +7,9 @@ Require Import Coq.Logic.ProofIrrelevance.
 Require Import Lia.
 Require Import Coq.Program.Equality.
 
+Show Obligation Tactic.
+(* Tactics.program_simpl *)
+
 From Equations Require Import Equations.
 
 Set Bullet Behavior "Strict Subproofs".
@@ -239,7 +242,7 @@ Module ComponentMemory : AbstractComponentMemory.
   Next Obligation.
     destruct m. simpl in *.
     apply nextblock_content0. by eapply leq_trans; eauto.
-  Defined.
+  Qed.
 
   Program Definition alloc m (size : nat) : mem * Block.id :=
     let fresh_block := nextblock m in
@@ -253,7 +256,7 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (b == nextblock0) eqn:econtra; rewrite econtra; move : econtra => /eqP => econtra; subst.
     - by rewrite ltnn in H.
     - apply nextblock_content0. by eapply leq_trans; eauto.
-  Defined.
+  Qed.
 
   Definition load m b i : option value :=
     match getm (content m) b with
@@ -1997,3 +2000,7 @@ Lemma component_memory_after_alloc_neq mem C sz mem' ptr C' :
   C' <> C ->
   mem C' = mem' C'.
 Admitted.
+
+(* Restore obligation tactic, some alterations to implicit arguments leak to
+   uses of equality predicates later on. *)
+Obligation Tactic := Tactics.program_simpl.

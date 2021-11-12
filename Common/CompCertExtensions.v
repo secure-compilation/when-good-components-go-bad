@@ -91,7 +91,7 @@ Proof.
     assumption.
   - intros s0 t0 HstarR0 t3 Ht3.
     eapply starR_step.
-    + apply (IHHstarR2 _ _ HstarR0 _ (erefl (t0 ** t1))).
+    + apply (IHHstarR2 _ _ HstarR0 _ (@erefl _ (t0 ** t1))).
     + apply Hstep2.
     + subst.
       rewrite Eapp_assoc.
