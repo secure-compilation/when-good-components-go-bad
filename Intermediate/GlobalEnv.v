@@ -5,7 +5,7 @@ Require Import Lib.Monads.
 
 Import Intermediate.
 
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssreflect ssrfun seq.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -524,17 +524,25 @@ Definition find_label_in_procedure G (pc : Pointer.t) (l : label) : option Point
   | None => None
   end.
 
-Fixpoint find_label_in_component_helper
+
+Definition find_label_in_component_helper
          G (procs: list (Block.id * code))
          (pc: Pointer.t) (l: label) : option Pointer.t :=
-  match procs with
+  match filter (fun b_c =>
+                  isSome
+                    (find_label_in_procedure
+                       G
+                       (Pointer.permission pc,
+                        Pointer.component pc, b_c.1, 0%Z)
+                       l
+                    )
+               )
+               procs
+  with
   | [] => None
   | (p_block,p_code) :: procs' =>
-    match find_label_in_procedure G (Pointer.permission pc,
-                                     Pointer.component pc, p_block, 0%Z) l with
-    | None => find_label_in_component_helper G procs' pc l
-    | Some ptr => Some ptr
-    end
+    find_label_in_procedure G (Pointer.permission pc,
+                               Pointer.component pc, p_block, 0%Z) l
   end.
 
 Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Pointer.t :=
@@ -562,6 +570,29 @@ Proof.
   destruct pc' as [[[pc'p pc'c] pc'b] pc'o].
   inversion Hfind. subst.
   split; auto; split; auto.
+Qed.
+
+
+Lemma find_label_in_procedure_spec G pc l perm c b o:
+  find_label_in_procedure G pc l = Some (perm, c, b, o) <->
+  (
+    exists C_procs P_code,
+      getm (genv_procedures G) (Pointer.component pc) = Some C_procs /\
+      getm C_procs (Pointer.block pc) = Some P_code /\
+      perm = Pointer.permission pc /\
+      c = Pointer.component pc /\
+      b = Pointer.block pc /\
+      find_label P_code l = Some o
+  ).
+Proof.
+  unfold find_label_in_procedure.
+  split; [intros Hfind | intros [? [? [HC_procs [HP_code [? [? [? Ho]]]]]]]].
+  - destruct (genv_procedures G (Pointer.component pc)) as [A|] eqn:eA;
+      last discriminate.
+    destruct (A (Pointer.block pc)) as [B|] eqn:eB; last discriminate.
+    destruct (find_label B l) as [C|] eqn:eC; last discriminate.
+    inversion Hfind; subst. do 2 eexists. intuition; by eauto.
+  - subst. by rewrite HC_procs HP_code Ho.
 Qed.
 
 Lemma find_label_in_procedure_1:
@@ -602,17 +633,14 @@ Lemma find_label_in_component_helper_guarantees:
     Pointer.permission pc = Pointer.permission pc' /\
     Pointer.component pc = Pointer.component pc'.
 Proof.
-  intros G procs pc pc' l Hfind.
-  induction procs.
-  - discriminate.
-  - simpl in *.
-    destruct a.
-    destruct (find_label_in_procedure
-                G (Pointer.permission pc, Pointer.component pc, i, 0%Z) l)
-             eqn:Hfind'.
-    + apply find_label_in_procedure_guarantees in Hfind'.
-      simpl in *. inversion Hfind. subst. by intuition.
-    + apply IHprocs; auto.
+  unfold find_label_in_component_helper. intros G procs pc pc' l Hfind.
+  destruct [seq b_c <- procs
+           | find_label_in_procedure
+               G
+               (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l] eqn:efilter;
+    first discriminate.
+  destruct p as [? ?].
+  apply find_label_in_procedure_guarantees in Hfind. by intuition.
 Qed.
 
 Lemma find_label_in_component_1:
@@ -626,6 +654,18 @@ Proof.
     try discriminate.
   eapply find_label_in_component_helper_guarantees in Hfind; by intuition.
 Qed.
+
+Lemma find_label_in_component_perm:
+  forall G pc pc' l,
+    find_label_in_component G pc l = Some pc' ->
+    Pointer.permission pc = Pointer.permission pc'.
+Proof.
+  intros G pc pc' l Hfind.
+  unfold find_label_in_component in Hfind.
+  destruct (getm (genv_procedures G) (Pointer.component pc)) as [procs|];
+    try discriminate.
+  eapply find_label_in_component_helper_guarantees in Hfind; by intuition.
+Qed.  
 
 Lemma find_label_in_component_program_link_left:
   forall {c pc},
@@ -647,23 +687,52 @@ Proof.
   rewrite HNone.
   destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc))
     as [procs |] eqn:Hcase;
-    rewrite Hcase.
+    rewrite Hcase; simpl; last by auto.
   - simpl.
-    (* Inlined is the corresponding lemma on find_label_in_component_helper. *)
-    induction (elementsm procs) as [| [p_block code] elts IHelts];
-      first reflexivity.
     unfold find_label_in_component_helper; simpl.
-    assert (Hnotin' : Pointer.component
-                        (Pointer.permission pc, Pointer.component pc, p_block, 0%Z)
-                      \notin domm (prog_interface c)).
+    assert (Hnotin' : forall b,
+               Pointer.component
+                 (Pointer.permission pc, Pointer.component pc, b, 0%Z)
+                 \notin domm (prog_interface c)).
       by done.
-    rewrite <- (prepare_global_env_link Hwfp Hwfc Hlinkable).
-    rewrite (find_label_in_procedure_program_link_left Hnotin' Hwfp Hwfc Hlinkable).
-    fold find_label_in_component_helper.
-    rewrite <- IHelts.
-    rewrite <- (prepare_global_env_link Hwfp Hwfc Hlinkable).
-    reflexivity.
-  - reflexivity.
+
+    assert (Hrewr: forall b_c: Block.id * code,
+               find_label_in_procedure
+                 (global_env_union (prepare_global_env p) (prepare_global_env c))
+                 (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l
+               =
+               find_label_in_procedure
+                 (prepare_global_env p)
+                 (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l
+           ).
+    {
+      rewrite <- (prepare_global_env_link Hwfp Hwfc Hlinkable).
+      intros b_c.
+      by rewrite
+        (find_label_in_procedure_program_link_left (Hnotin' b_c.1) Hwfp Hwfc Hlinkable).
+    }
+    assert (Hrewr2:
+               [seq b_c <- elementsm procs
+               | find_label_in_procedure
+                   (global_env_union (prepare_global_env p)
+                                     (prepare_global_env c))
+                   (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l]
+               =
+               [seq b_c <- elementsm procs
+               | find_label_in_procedure
+                   (prepare_global_env p)
+                   (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l]
+           ).
+    {
+      apply eq_filter. unfold "=1". intros. by rewrite Hrewr.
+    }
+    rewrite Hrewr2.
+    destruct ([seq b_c <- elementsm procs
+              | find_label_in_procedure
+                  (prepare_global_env p)
+                  (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l]); auto.
+    destruct p0 as [b cd].
+    specialize (Hrewr (b, cd)). by simpl in Hrewr.
 Qed.
 
 (* RB: Unified presentation of linkable + linkable_mains, to be used as needed
