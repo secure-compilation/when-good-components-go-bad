@@ -2465,20 +2465,16 @@ case: st1 t1 st2 / Hstep => //=.
     destruct pc as [[[perm ?] ?] ?]. simpl in *. subst.
     destruct Hexec as [? [? [? [? [? [? ?]]]]]]. discriminate.
   + unfold find_label_in_component in *.
-    (*unfold prepare_global_env in *. simpl in *.*)
-    assert (Hprepare_procedures:
-              genv_procedures (prepare_global_env p) (Pointer.component pc)
-              =
-              prog_procedures p (Pointer.component pc)
-           ).
-    {
-      admit.
-    }
-    rewrite <- Hprepare_procedures.
     destruct (genv_procedures (prepare_global_env p) (Pointer.component pc))
       as [procMap|] eqn:eSome;
       last discriminate.
-    rewrite andbT -beq_nat_refl andTb.
+    assert (exists x, prog_procedures p (Pointer.component pc) = Some x) as [? HSome].
+    {
+      apply/dommP. rewrite <- wfprog_defined_procedures; auto.
+      rewrite <- domm_genv_procedures. apply/dommP. by eauto.
+    }
+    erewrite <- genv_procedures_prog_procedures_eq; eauto.
+    rewrite eSome andbT -beq_nat_refl andTb.
     assert (Hfind_label_in_component_helper_spec:
               forall perm c bid o,
               find_label_in_component_helper
@@ -2535,15 +2531,8 @@ case: st1 t1 st2 / Hstep => //=.
 
   rewrite HShouldBeProvable2 andTb andbT.
   inversion Hexec as [? [? [G1 [G2 _]]]].
-  assert (Hprepare_procedures:
-            genv_procedures (prepare_global_env p) (Pointer.component pc)
-            =
-            prog_procedures p (Pointer.component pc)
-         ).
-  {
-    admit.
-  }
-  rewrite Hprepare_procedures HShouldBeProvable2 in G1.
+  erewrite genv_procedures_prog_procedures_eq in G1; eauto.
+  rewrite HShouldBeProvable2 in G1.
   inversion G1. subst. by rewrite G2.
 - move=> ????????? /eqP ->.
     by move=> /imported_procedure_iff /= ->.

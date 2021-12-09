@@ -74,6 +74,27 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma genv_procedures_prog_procedures_eq : forall p c x,
+    well_formed_program p ->
+    prog_procedures p c = Some x ->
+    genv_procedures (prepare_global_env p) c =
+    prog_procedures p c.
+Proof.
+  intros ? ? ? Hwf HSome.
+  simpl. rewrite mapmE. unfold omap, obind, oapp.
+  destruct (prepare_procedures_initial_memory_aux p c) as [someRes|] eqn:ec;
+    rewrite ec; unfold prepare_procedures_initial_memory_aux in *;
+      rewrite mkfmapfE in ec;
+      destruct (c \in domm (prog_interface p)) eqn:ecintf; rewrite ecintf in ec;
+        inversion ec; clear ec; simpl.
+  - unfold odflt, oapp. by rewrite HSome.
+  - assert (c \in domm (prog_interface p)).
+    {
+      rewrite wfprog_defined_procedures; auto. apply/dommP. by eauto.
+    }
+    congruence.
+Qed.
+
 Definition global_env_union (genv1 genv2 : global_env) : global_env := {|
   genv_interface   := unionm (genv_interface   genv1) (genv_interface   genv2);
   genv_procedures  := unionm (genv_procedures  genv1) (genv_procedures  genv2);
