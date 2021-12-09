@@ -138,3 +138,15 @@ Proof.
   apply Hsubset'.
   assumption.
 Qed.
+
+Ltac find_if_inside_hyp H :=
+  let e := fresh "e" in
+  let t := type of H in
+  match t with
+  |  context [if ?X then _ else _] => destruct X eqn:e
+  end.
+Ltac find_if_inside_goal :=
+  let e := fresh "e" in
+  match goal with
+  | [ |- context[if ?X then _ else _] ] => destruct X eqn:e
+  end.

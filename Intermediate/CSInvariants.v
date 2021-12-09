@@ -185,7 +185,7 @@ Lemma initial_wf_mem p:
       prog_main p ->
       wf_mem_wrt_t_pc
         (mapm (T:=nat_ordType)
-              (fun x : ComponentMemory.t * NMap code * NMap Block.id => x.1.1)
+              (fun x => x.1.1)
               (prepare_procedures_initial_memory_aux p)) E0 Component.main.
   (**
      (* No pointers in static buffers. *)

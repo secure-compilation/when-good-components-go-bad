@@ -349,11 +349,11 @@ Module Register.
 End Register.
 
 Module EntryPoint.
-  Definition t := NMap (NMap Block.id).
+  Definition t := NMap (seq Block.id).
 
   Definition get (C: Component.id) (P: Procedure.id) (E: t) : option Block.id :=
     match getm E C with
-    | Some addrs => getm addrs P
+    | Some addrs => if P \in addrs then Some P else None
     | None => None
     end.
 
@@ -903,72 +903,6 @@ Proof.
     as [Cmem bs] eqn:HCmem.
 Qed.
 
-(* In the foreseen, controlled use of this function, we always go on the Some
-   branch. For each component C, we read its (initial) memory and use it to
-   construct the initial state of C, recursing after we update its maps. Given
-   identical inputs (component memories, which we have by compositionality of
-   that piece of code) the outputs will be identical. *)
-(* For each pair of component id and component procedures in comps_code, build
-   the triad of program memory memory, component code map and entry point map by
-   folding over them. For each pair, reserve component blocks and update the maps
-   for the current component.
-     As in the function to reserve component blocks, from the calling point,
-   observe that the initial values of the accumulators are, again, the existing
-   memory, partially initialized, and two empty maps; and that, again, comps_proc
-   is an alternative representation of a map, and the procedure on each pair is
-   independent from all others. *)
-Fixpoint reserve_procedure_blocks' p acc comps_code
-  : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  let aux acc comps_code :=
-      let '(mem, procs, entrypoints) := acc in
-      let '(C, Cprocs) := comps_code in
-    match getm mem C with
-    | Some Cmem =>
-      let '(Cmem', Cprocs, Centrypoints) :=
-          reserve_component_blocks' p C (Cmem, emptym, emptym) (elementsm Cprocs) in
-      let mem' := setm mem C Cmem' in
-      let procs' := setm procs C Cprocs in
-      let entrypoints' := setm entrypoints C Centrypoints in
-      (mem', procs', entrypoints')
-    | None =>
-      (* this shouldn't happen if memory was initialized before the call *)
-      (* we just skip initialization for this component *)
-      (mem, procs, entrypoints)
-    end
-  in fold_left aux comps_code acc.
-
-(* The simplified function builds a partial map by applying the refactored
-   per-component process over each pair, noting that in some cases (which should
-   never occur!) initialization is skipped, then unpack the parts and repack them
-   in the expected map formats.
-     Note that we are creating a new memory instead of explicitly updating the
-   old memory. Both processes should be equivalent if the map is actually total,
-   as is expected. *)
-Fixpoint reserve_procedure_blocks p (mem : Memory.t) comps_code
-  : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  let map_component_memory '(C, Cprocs) :=
-    match getm mem C with
-    | Some Cmem => Some (C, reserve_component_blocks p C Cmem (elementsm Cprocs))
-      (* this shouldn't happen if memory was initialized before the call *)
-      (* we just skip initialization for this component *)
-    | None => None
-    end in
-  let acc := pmap map_component_memory comps_code in
-  let '(comps', mems, procs, eps) := (unzip1 acc, unzip1 (unzip1 (unzip2 acc)),
-                                      unzip2 (unzip1 (unzip2 acc)), unzip2 (unzip2 acc)) in
-  (mkfmap (zip comps' mems), mkfmap (zip comps' procs), mkfmap (zip comps' eps)).
-
-(* RB: TODO: Make sure these functions are only used with initial memories. *)
-Definition prepare_procedures' (p: program) (mem: Memory.t)
-  : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  reserve_procedure_blocks' p (mem, emptym, emptym) (elementsm (prog_procedures p)).
-
-(* The main function to prepare the procedures of a program from a memory simply
-   calls the helper, now without a trivial accumulator. *)
-Definition prepare_procedures (p: program) (mem: Memory.t)
-  : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  reserve_procedure_blocks p mem (elementsm (prog_procedures p)).
-
 (* For each component, integrate the (now separate) fetching of its procedures,
    obtention of its initial component memory and then reserve_component_blocks.
    The logic of reserve_procedure_blocks is implicit in the map-like nature of
@@ -1000,6 +934,30 @@ Definition is_main_proc p comp_id proc_id :=
   end.
   
 
+Definition is_entrypoint_of_comp (p: program) (C: Component.id)
+           (P: Procedure.id) : bool :=
+  match prog_interface p C with
+  | Some Ciface =>
+    (P \in Component.export Ciface) || is_main_proc p C P
+  | None => false
+  end.
+
+Lemma is_entrypoint_of_comp_linking p c C P:
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    is_entrypoint_of_comp p C P ->
+    is_entrypoint_of_comp (program_link p c) C P.
+Proof.
+  intros Hwfp Hwfc Hlinkable Hentryp.
+  unfold is_entrypoint_of_comp in *.
+  destruct (prog_interface p C) eqn:epC; last discriminate.
+  inversion Hlinkable. simpl. rewrite unionmE. rewrite epC. simpl.
+  move : Hentryp => /orP => [[G | G]]; apply/orP; first by auto.
+  right. unfold is_main_proc in *. destruct (prog_main p) eqn:emain; last discriminate.
+  simpl. by rewrite emain.
+Qed.
+
 (* As above, replace the old function with the new, and remove accumulators. *)
 Definition prepare_procedures_initial_memory_aux (p: program) :=
   mkfmapf
@@ -1014,16 +972,8 @@ Definition prepare_procedures_initial_memory_aux (p: program) :=
                end
              )
        in
-       let map_entrypoint :=
-           fun P =>
-             match prog_interface p C with
-             | Some Ciface =>
-               if (P \in Component.export Ciface) || is_main_proc p C P then Some (P, P)
-               else None
-             | None => None
-             end
-       in
-       let Centrypoints := mkfmap (seq.pmap map_entrypoint (domm Cprocs))
+       let Centrypoints :=
+           filter (fun pid => is_entrypoint_of_comp p C pid) (domm Cprocs)
        in
        (Cmem, Cprocs, Centrypoints)
     )
@@ -1047,17 +997,6 @@ Definition prepare_procedures_initial_memory (p: program)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
   let m := prepare_procedures_initial_memory_aux p in
   (mapm (fun x => x.1.1) m, mapm (fun x => x.1.2) m, mapm snd m).
-
-(* We want to ensure something like this:
-     Goal
-       forall p, prepare_procedures_initial_memory p =
-                 prepare_procedures p (prepare_initial_memory p).
-  Possibly assuming the well-formedness of the program. *)
-Theorem prepare_procedures_initial_memory_equiv :
-  forall p,
-    prepare_procedures_initial_memory p =
-    prepare_procedures p (prepare_initial_memory p).
-Admitted.
 
 (* initialization of a linked program *)
 
@@ -1228,29 +1167,36 @@ Proof.
     rewrite !unionmE.
     have [Cid_int Hp']: (exists x, (prog_interface p) Cid = Some x)
       by  apply /dommP.
-    rewrite Hp'.
-    simpl.
     assert (exists x, prog_procedures p Cid = Some x) as [Cid_proc HCid_proc].
     { apply/dommP. by rewrite -wfprog_defined_procedures; auto. }
     rewrite HCid_proc. simpl.
-    destruct (prog_main p) as [|] eqn:Hmainp;
-      destruct (prog_main c) as [|] eqn:Hmainc;
-      unfold is_main_proc; simpl; rewrite Hmainp Hmainc.
-    + unfold linkable_mains in *. exfalso.
-      move : Hmains => /negP => Hmains. by intuition. (* Contra. *)
-    + reflexivity.
-    + destruct Cid as [| n].
-      * (* Contra. *)
-        inversion Hwfp as [_ _ _ _ _ _ _ Hmain_compp].
-        (* specialize (Hmain_compp Hmainp). *)
-        (* have Hp'' : (prog_interface p) 0 = None by apply /dommPn. *)
-        (* rewrite Hp'' in Hp'. *)
-        apply proj1 in Hmain_compp.
-        specialize (Hmain_compp Hp).
-        rewrite Hmainp in Hmain_compp.
-        discriminate.
-      * reflexivity.
-    + reflexivity. (* Easy case. *)
+    assert (Hfiltereq:
+              [seq pid <- domm Cid_proc
+              | is_entrypoint_of_comp (program_link p c) Cid pid]
+              =
+              [seq pid <- domm Cid_proc | is_entrypoint_of_comp p Cid pid]
+           ).
+    {
+      apply eq_in_filter. unfold prop_in1. intros ? Hin.
+      unfold is_entrypoint_of_comp. simpl. rewrite unionmE Hp'. simpl.
+      unfold is_main_proc.
+      destruct (prog_main p) as [|] eqn:Hmainp;
+        destruct (prog_main c) as [|] eqn:Hmainc;
+        unfold is_main_proc; simpl; rewrite Hmainp Hmainc.
+      - unfold linkable_mains in *. exfalso.
+        move : Hmains => /negP => Hmains. by intuition.
+      - reflexivity.
+      - destruct Cid as [| n].
+        + (* Contra. *)
+          inversion Hwfp as [_ _ _ _ _ _ _ Hmain_compp].
+          apply proj1 in Hmain_compp.
+          specialize (Hmain_compp Hp).
+          rewrite Hmainp in Hmain_compp.
+          discriminate.
+        + reflexivity.
+      - reflexivity.
+    }
+    by rewrite Hfiltereq.
   - (* RB: TODO: Refactor symmetric case to last one. *)
     rewrite !unionmE.
     rewrite !mkfmapfE.
@@ -1287,34 +1233,42 @@ Proof.
     rewrite !unionmE.
     have Hp': (prog_interface p) Cid = None
       by apply /dommPn; rewrite Hp.
-    rewrite Hp'.
     have [Cid_int Hc'] : exists x, (prog_interface c) Cid = Some x
       by apply /dommP.
-    rewrite Hc'.
     assert (prog_procedures p Cid = None) as HCid_proc.
     { apply/dommPn. rewrite -wfprog_defined_procedures; auto. by apply/dommPn. }
     rewrite HCid_proc. simpl.
-    destruct (prog_main p) as [|] eqn:Hmainp;
-      destruct (prog_main c) as [|] eqn:Hmainc;
-      unfold is_main_proc; simpl; rewrite Hmainp Hmainc.
-    + (* Contra. *)
-      unfold linkable_mains in Hmains.
-      rewrite Hmainp Hmainc in Hmains.
-      discriminate.
-    + simpl. 
-      destruct Cid as [| n].
-      * (* Contra, *)
-        inversion Hwfc as [_ _ _ _ _ _ _ Hmain_compc].
-        (* specialize (Hmain_compc Hmainc). *)
-        (* have Hc'' : (prog_interface c) 0 = None by apply /dommPn. *)
-        (* rewrite Hc'' in Hc'. *)
-        apply proj1 in Hmain_compc.
-        specialize (Hmain_compc Hc).
-        rewrite Hmainc in Hmain_compc.
+    assert (Hfiltereq:
+              [seq pid <- domm (odflt emptym (prog_procedures c Cid))
+              | is_entrypoint_of_comp (program_link p c) Cid pid]
+              =
+              [seq pid <- domm (odflt emptym (prog_procedures c Cid)) |
+               is_entrypoint_of_comp c Cid pid]
+           ).
+    {
+      apply eq_in_filter. unfold prop_in1. intros ? Hin.
+      unfold is_entrypoint_of_comp. simpl. rewrite unionmE Hp'. simpl.
+      unfold is_main_proc.
+      destruct (prog_main p) as [|] eqn:Hmainp;
+        destruct (prog_main c) as [|] eqn:Hmainc;
+        unfold is_main_proc; simpl; rewrite Hmainp Hmainc.
+      - (* Contra. *)
+        unfold linkable_mains in Hmains.
+        rewrite Hmainp Hmainc in Hmains.
         discriminate.
-      * reflexivity.
-    + simpl. reflexivity.
-    + simpl. reflexivity.
+      - simpl. 
+        destruct Cid as [| n].
+        + (* Contra, *)
+          inversion Hwfc as [_ _ _ _ _ _ _ Hmain_compc].
+          apply proj1 in Hmain_compc.
+          specialize (Hmain_compc Hc).
+          rewrite Hmainc in Hmain_compc.
+          discriminate.
+        + reflexivity.
+      - simpl. reflexivity.
+      - simpl. reflexivity.
+    }
+    by rewrite Hfiltereq.
   - (* in neither, pretty immediate *)
     by rewrite unionmE !mkfmapfE domm_union in_fsetU Hp Hc.
 Qed.
