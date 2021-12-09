@@ -141,28 +141,7 @@ that we expose a reasoning principle for equality of component memories.
 
 #### Source language ####
 
-The first block of assumptions on the source language correspond to simple
-extensions to the program well-formedness property made to facilitate work in
-the memory sharing setting. To remove these assumptions it suffices to adapt
-previous proofs to the richer well-formedness criteria.
-
-```coq
-Source.linking_well_formedness
-  : forall p1 p2 : Source.program,
-    Source.well_formed_program p1 ->
-    Source.well_formed_program p2 ->
-    linkable (Source.prog_interface p1) (Source.prog_interface p2) ->
-    Source.well_formed_program (Source.program_link p1 p2)
-
-CS.eval_kstep_sound
-  : forall (G : global_env) (st : CS.state) (t : trace event)
-      (st' : CS.state),
-    CS.eval_kstep G st = Some (t, st') -> CS.kstep G st t st'
-```
-
-The second group of assumptions corresponds to general properties of the
-language semantics, similar to existing language invariants, and provable by
-standard inductions on program execution.
+These axioms are provable by standard inductions on program execution.
 
 ```coq
 CS.load_data_next_block

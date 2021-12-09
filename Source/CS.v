@@ -175,8 +175,8 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     C = C' ->
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
-    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v), old_call_arg] E0
-            [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, Int v]
+    kstep G [State C, s, mem, Kcall C' P k, E_val v, old_call_arg] E0
+            [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, v]
 | KS_ExternalCall : forall C s mem k C' P v P_expr old_call_arg,
     C <> C' ->
     (* check permission *)
@@ -188,8 +188,8 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
             [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, v]
 | KS_InternalReturn: forall C s mem k v arg C' old_call_arg,
     C = C' ->
-    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v), arg] E0
-            [State C', s, mem, k, E_val (Int v), old_call_arg]
+    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val v, arg] E0
+            [State C', s, mem, k, E_val v, old_call_arg]
 | KS_ExternalReturn: forall C s mem k v arg C' old_call_arg,
     C <> C' ->
     kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val v, arg]
@@ -390,7 +390,10 @@ Proof.
            reflexivity)
   end.
   - repeat simplify_option.
-    + admit. (*case: (_ =P _) => [->|?]; econstructor; eauto.*)
+    + destruct (C0 == C) eqn:eC0.
+      * assert (C0 = C). by apply/eqP. subst.
+        eapply KS_InternalReturn; by auto.
+      * econstructor. intros ?. subst. by rewrite eq_refl in eC0.
     + econstructor; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
@@ -400,7 +403,7 @@ Proof.
     + by econstructor; eauto; apply/eqP.
     + econstructor; eauto.
     + by econstructor; eauto; apply/eqP.
-    + admit. (*econstructor; eauto; exact/eqP.*)
+    + econstructor; eauto. by apply/eqP.
     + econstructor; eauto; first exact/eqP/negbT.
       apply imported_procedure_iff. assumption.
     + econstructor; eauto.
@@ -409,7 +412,7 @@ Proof.
       assert (i0 = Permission.code). by apply /Permission.eqP. subst.
       assert (i1 = C). by apply beq_nat_true. subst.
       by econstructor.
-Admitted.
+Qed.
 
 Theorem eval_kstep_correct:
   forall G st t st',
