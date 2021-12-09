@@ -592,8 +592,7 @@ Proof.
   inversion Hfind. subst.
   split; auto; split; auto.
 Qed.
-
-
+  
 Lemma find_label_in_procedure_spec G pc l perm c b o:
   find_label_in_procedure G pc l = Some (perm, c, b, o) <->
   (
@@ -622,6 +621,26 @@ Lemma find_label_in_procedure_1:
     Pointer.component pc = Pointer.component pc'.
 Proof.
   eapply find_label_in_procedure_guarantees.
+Qed.
+
+
+Lemma find_label_in_component_helper_Some_exists_code:
+  forall p procMap l pc perm c bid o,
+    genv_procedures (prepare_global_env p) (Pointer.component pc) = Some procMap ->
+    find_label_in_component_helper
+      (prepare_global_env p) (elementsm procMap) pc l =
+    Some (perm, c, bid, o) ->
+    exists cd, procMap bid = Some cd.
+Proof.
+  intros ? ? ? ? ? ? ? ? HprocMap HSome.
+  unfold find_label_in_component_helper in *.
+  destruct ([seq b_c <- elementsm procMap
+            | find_label_in_procedure
+                (prepare_global_env p)
+                (Pointer.permission pc, Pointer.component pc, b_c.1, 0%Z) l])
+           as [|[p_block x] t] eqn:efilter; first discriminate.
+  apply find_label_in_procedure_spec in HSome as [? [? [G1 [? [? [? [? ?]]]]]]].
+  rewrite HprocMap in G1. inversion G1; subst. by eauto.
 Qed.
 
 Lemma find_label_in_procedure_program_link_left:

@@ -2475,35 +2475,7 @@ case: st1 t1 st2 / Hstep => //=.
     }
     erewrite <- genv_procedures_prog_procedures_eq; eauto.
     rewrite eSome andbT -beq_nat_refl andTb.
-    assert (Hfind_label_in_component_helper_spec:
-              forall perm c bid o,
-              find_label_in_component_helper
-                (prepare_global_env p) (elementsm procMap) pc l =
-              Some (perm, c, bid, o) ->
-              exists cd, procMap bid = Some cd
-           ).
-    {
-      admit.
-
-      (** Might be helpful when proving this lemma: *)
-      (***
-          unfold find_label_in_component, find_label_in_component_helper  in *.
-          destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
-          last by rewrite e2 in Hfind.
-          unfold G, prepare_global_env, prepare_procedures_initial_memory,
-          prepare_procedures_initial_memory_aux in *.
-    simpl in *.
-    rewrite mapmE mkfmapfE in e2.
-    rewrite mapmE mkfmapfE in Hfind.
-    
-    simpl in *. unfold omap, obind, oapp in *.
-    destruct (Pointer.component pc \in domm (prog_interface p)) eqn:epc;
-      rewrite epc in e2; rewrite epc in Hfind; last discriminate.
-    inversion e2. rewrite e1 in H0. simpl in H0. subst.
-    
-       ***)
-    }
-    apply Hfind_label_in_component_helper_spec in Hfind as [? G1].
+    apply find_label_in_component_helper_Some_exists_code in Hfind as [? G1]; auto.
     by rewrite G1.
     
 
@@ -2537,7 +2509,9 @@ case: st1 t1 st2 / Hstep => //=.
 - move=> ????????? /eqP ->.
     by move=> /imported_procedure_iff /= ->.
 - by move=> ??????? /eqP ->.
-Admitted.
+Qed.
+
+(* Print Assumptions intermediate_well_formed_events. *)
 
 Lemma intermediate_well_formed_trace : forall t cs cs',
   Star (sem_inform p) cs t cs' ->
@@ -2593,7 +2567,6 @@ Proof.
   pose proof intermediate_well_formed_events
        p
        valid_program
-       complete_program
        st t_inform st' Hstar_inform as Hwf_inform.
   exact (well_formed_event_inform_well_formed_event_project_non_inform
            t_inform t Hwf_inform Hproj).
@@ -2618,7 +2591,7 @@ Proof.
   intros t cs cs' H H' H'' H'''.
   pose proof star_sem_non_inform_star_sem_inform p cs t cs' H
     as [t_inform [Hstar_inform Hproj]].
-  pose proof intermediate_well_formed_trace p valid_program complete_program
+  pose proof intermediate_well_formed_trace p valid_program
        t_inform cs cs' Hstar_inform H' H'' H'''
     as Hwf_trace_inform.
   exact (well_formed_trace_inform_well_formed_trace_project_non_inform
