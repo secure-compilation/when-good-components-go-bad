@@ -6,6 +6,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 Require Import Coq.Logic.ProofIrrelevance.
 Require Import Lia.
 Require Import Coq.Program.Equality.
+(* From Equations Require Import Equations. *)
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -170,7 +171,7 @@ Module ComponentMemory : AbstractComponentMemory.
     content : NMap block;
     nextblock : Block.id;
     nextblock_content : forall b, nextblock <= b -> content b = None
-  }.
+                 }.
   (*Definition t := mem.*)
 
   Definition eqCompMem compMem1 compMem2 :=
@@ -240,26 +241,62 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
 
-  Program Definition store m b i v : option mem :=
-    match getm (content m) b with
-    | Some chunk =>
-      if (0 <=? i)%Z then
-        match list_upd chunk (Z.to_nat i) v with
-        | Some chunk' =>
-          Some {| content := setm (content m) b chunk';
-                  nextblock := nextblock m;
-                  nextblock_content := _ |}
-        | _ => None
-        end
-      else None
-    | None => None
-    end.
+  Program Definition store m b i v: option mem :=
+          match getm (content m) b with
+          | Some chunk =>
+              if (0 <=? i)%Z then
+                match list_upd chunk (Z.to_nat i) v with
+                | Some chunk' =>
+                    Some {| content := setm (content m) b chunk';
+                           nextblock := nextblock m;
+                           nextblock_content := _ |}
+                | _ => None
+                end
+              else None
+          | None => None
+          end.
   Next Obligation.
     destruct m. rewrite setmE.
     destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition);
       move : eb0 => /eqP => eb0; subst.
     simpl in *. apply nextblock_content0 in H. by rewrite H in Heq_anonymous0.
   Defined.
+  (* Equations store (m: mem) b (i: Z) (v: value) : option mem := *)
+  (* (* Program Definition store m b i v : option mem := *) *)
+  (*   store m b i v with (getm (content m) b) => { *)
+  (*       store m b i v (Some chunk) with (0 <=? i)%Z => *)
+  (*         { store m b i v (Some chunk) true with (list_upd chunk (Z.to_nat i) v) => { *)
+  (*             store m b i v (Some chunk) true (Some chunk') := *)
+  (*                   Some {| content := setm (content m) b chunk'; *)
+  (*                          nextblock := nextblock m; *)
+  (*                          nextblock_content := _ |}; *)
+  (*             store m b i v (Some chunk) true None := *)
+  (*                   None *)
+  (*           }; *)
+  (*           store m b i v (Some chunk) false := None *)
+  (*         }; *)
+  (*       store m b i v None := None *)
+  (*     }. *)
+  (*       (* store m b i v := *) *)
+  (*       (*   match getm (content m) b with *) *)
+  (*       (*   | Some chunk => *) *)
+  (*       (*       if (0 <=? i)%Z then *) *)
+  (*       (*         match list_upd chunk (Z.to_nat i) v with *) *)
+  (*       (*         | Some chunk' => *) *)
+  (*       (*             Some {| content := setm (content m) b chunk'; *) *)
+  (*       (*                    nextblock := nextblock m; *) *)
+  (*       (*                    nextblock_content := _ |} *) *)
+  (*       (*         | _ => None *) *)
+  (*       (*         end *) *)
+  (*       (*       else None *) *)
+  (*       (*   | None => None *) *)
+  (*       (*   end *) *)
+  (* Next Obligation. *)
+  (*   destruct m. rewrite setmE. *)
+  (*   destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition); *)
+  (*     move : eb0 => /eqP => eb0; subst. *)
+  (*   simpl in *. apply nextblock_content0 in H. *)
+  (*   Admitted. *)
 
   Definition domm (m : t) := @domm nat_ordType block (content m).
 
@@ -576,10 +613,11 @@ Module ComponentMemory : AbstractComponentMemory.
       if (b', i') == (b, i) then Some v else load m b' i'.
   Proof.
     move=> m m' b i v Hstore b' i'.
-    move: Hstore; rewrite /store /load.
-    set CNT := (content m b).
-    (*** dependent induction CNT.
-    - rewrite <- x. ***)
+    (* move: Hstore; rewrite /store /load. *)
+    (* funelim (store m b i v). *)
+    (* set CNT := (content m b). *)
+    (* dependent induction CNT.
+    - rewrite <- x. *)
     (* NOTE: Handle dependent pattern matching *)
   (*   case m_b: (content m b) => [chunk|] //=. *)
   (*   case: (Z.leb_spec0 0 i)=> [i_pos|//] /=. *)
@@ -631,7 +669,7 @@ Module ComponentMemory : AbstractComponentMemory.
       exists m',
         store m b i v' = Some m'.
   Proof.
-    move=> m b i v v'; rewrite /load /store.
+    (* move=> m b i v v'; rewrite /load /store. *)
     (* NOTE: Handle dependent pattern matching *)
   (*   case m_b: (content m b)=> [chunk|] //. *)
   (*   case: (Z.leb_spec0 0 i)=> [i_pos|] //= chunk_i. *)
@@ -669,7 +707,7 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     intros. split; intros [e Hsome].
     - eapply store_after_load; eauto.
-    - rewrite /load. rewrite /store in Hsome.
+    - rewrite /load. (* rewrite /store in Hsome. *)
       (* NOTE: Handle dependent pattern matching *)
   (*     case m_b: (content m b)=> [chunk|] //; rewrite m_b in Hsome; try discriminate. *)
   (*     destruct (0 <=? i)%Z eqn:ei; try discriminate. *)
@@ -713,7 +751,7 @@ Module ComponentMemory : AbstractComponentMemory.
       store m b i v = Some m' ->
       next_block m = next_block m'.
   Proof.
-    unfold store, next_block. intros ? ? ? ? ? Hstore.
+    (* unfold store, next_block. intros ? ? ? ? ? Hstore. *)
     (* NOTE: Handle dependent pattern matching *)
   (*   destruct (content m b) as [ch|]; try discriminate. *)
   (*   destruct (0 <=? i)%Z; try discriminate. *)
