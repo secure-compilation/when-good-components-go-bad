@@ -201,27 +201,6 @@ CS.load_component_prog_interface
     Pointer.component ptr' \in domm (Source.prog_interface p)
 ```
 
-#### Target language ####
-
-Similarly to the source language, the proofs use some previously unstated invariants of
-target program executions, to be proved by the same standard techniques as their
-source counterparts.
-
-```coq
-
-CS.intermediate_well_formed_events
-  : forall p : Intermediate.program,
-    Intermediate.well_formed_program p ->
-    Intermediate.closed_program p ->
-    forall (st : state (CS.sem_inform p)) (t : trace event_inform)
-      (st' : state (CS.sem_inform p)),
-    Star (CS.sem_inform p) st t st' ->
-    all
-      (well_formed_event (Intermediate.prog_interface p)
-         (Intermediate.prog_procedures p)) t
-
-```
-
 #### Back-translation ####
 
 The proof of back-translation currently relies on a small number of reasonable
