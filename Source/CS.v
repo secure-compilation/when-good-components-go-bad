@@ -538,13 +538,304 @@ Section Semantics.
       by eauto.
   Qed.
 
+  Lemma load_component_prog_interface_intitial_state s ptr ptr':
+    initial_state p s ->
+    Memory.load (s_memory s) ptr = Some (Ptr ptr') ->
+    Pointer.component ptr' \in domm (prog_interface p).
+  Proof.
+    intros Hini Hload.
+    unfold initial_state, initial_machine_state in Hini.
+    apply cprog_main_existence in complete_program as HisSome.
+    destruct (prog_main p) eqn:emain; last discriminate. subst. simpl in *.
+    unfold prepare_buffers, Memory.load in *. rewrite mapmE in Hload.
+    find_if_inside_hyp Hload; last discriminate.
+    destruct ((prog_buffers p (Pointer.component ptr))) as [buf|] eqn:ebuf;
+      last discriminate.
+    simpl in *. rewrite ComponentMemory.load_prealloc in Hload.
+    find_if_inside_hyp Hload; last discriminate.
+    destruct (setm emptym 0 buf (Pointer.block ptr)) as [buf'|] eqn:esetm;
+      last discriminate.
+    destruct buf'; first (find_if_inside_hyp Hload; discriminate).
+    apply nth_error_In in Hload.
+    rewrite setmE in esetm.
+    find_if_inside_hyp esetm; last discriminate. inversion esetm; subst; clear esetm.
+    assert (exists x, prog_interface p (Pointer.component ptr) = Some x) as [? H_].
+    {
+      apply/dommP. rewrite wfprog_defined_buffers; auto. apply/dommP; by eauto.
+    }
+    assert (H__: prog_interface p (Pointer.component ptr)). by rewrite H_.
+    specialize (wfprog_well_formed_buffers valid_program H__) as [? Bwf].
+    clear H_ H__. unfold Buffer.well_formed_buffer_opt in *.
+    rewrite ebuf in Bwf. simpl in *. move : Bwf => /andP => [[_ Bwf]].
+    apply In_in in Hload.
+    assert (contra: exists2 x, x \in l & ~~ (fun v : value => ~~ is_ptr v) x).
+    { by eauto. }
+    move : contra => /allPn => contra. by rewrite Bwf in contra.
+  Qed.
+
+  Definition runtime_val_wf_wrt_prog_interface (v: value) : bool :=
+    match v with
+      | Ptr ptr => Pointer.component ptr \in domm (prog_interface p)
+      | _ => true
+    end.
+  
+  Fixpoint runtime_expr_wf_wrt_prog_interface (e: expr) : bool :=
+    match e with
+    | E_val v => runtime_val_wf_wrt_prog_interface v      
+    | E_binop _ e1 e2 =>
+      runtime_expr_wf_wrt_prog_interface e1 &&
+      runtime_expr_wf_wrt_prog_interface e2
+    | E_seq e1 e2 =>
+      runtime_expr_wf_wrt_prog_interface e1 &&
+      runtime_expr_wf_wrt_prog_interface e2
+    | E_if e1 e2 e3 =>
+      runtime_expr_wf_wrt_prog_interface e1 &&
+      runtime_expr_wf_wrt_prog_interface e2 &&
+      runtime_expr_wf_wrt_prog_interface e3
+    | E_alloc e =>
+      runtime_expr_wf_wrt_prog_interface e
+    | E_deref e =>
+      runtime_expr_wf_wrt_prog_interface e
+    | E_assign e1 e2 =>
+      runtime_expr_wf_wrt_prog_interface e1 &&
+      runtime_expr_wf_wrt_prog_interface e2
+    | E_call _ _ e =>
+      runtime_expr_wf_wrt_prog_interface e
+    | E_callptr e1 e2 =>
+      runtime_expr_wf_wrt_prog_interface e1 &&
+      runtime_expr_wf_wrt_prog_interface e2
+    | E_funptr _
+    | E_arg
+    | E_local
+    | E_exit => true
+    end.
+
+  Fixpoint cont_wf_wrt_prog_interface (k: cont) : bool :=
+    match k with
+    | Kbinop1 _ e k2 =>
+      runtime_expr_wf_wrt_prog_interface e &&
+      cont_wf_wrt_prog_interface k2
+    | Kbinop2 _ v k2 =>
+      runtime_val_wf_wrt_prog_interface v &&
+      cont_wf_wrt_prog_interface k2
+    | Kseq e k2 =>
+      runtime_expr_wf_wrt_prog_interface e &&
+      cont_wf_wrt_prog_interface k2
+    | Kif e1 e2 k3 =>
+      runtime_expr_wf_wrt_prog_interface e1 &&
+      runtime_expr_wf_wrt_prog_interface e2 &&
+      cont_wf_wrt_prog_interface k3
+    | Kalloc k2 =>
+      cont_wf_wrt_prog_interface k2
+    | Kderef k2 =>
+      cont_wf_wrt_prog_interface k2
+    | Kassign1 e k2 =>
+      runtime_expr_wf_wrt_prog_interface e &&
+      cont_wf_wrt_prog_interface k2
+    | Kassign2 v k2 =>
+      runtime_val_wf_wrt_prog_interface v &&
+      cont_wf_wrt_prog_interface k2
+    | Kcall _ _ k2 =>
+      cont_wf_wrt_prog_interface k2
+    | Kcallptr1 e k2 =>
+      runtime_expr_wf_wrt_prog_interface e &&
+      cont_wf_wrt_prog_interface k2
+    | Kcallptr2 v k2 =>
+      runtime_val_wf_wrt_prog_interface v &&
+      cont_wf_wrt_prog_interface k2
+    | Kstop => true
+    end.
+
+  Definition stack_wf_wrt_prog_interface (s: stack) : bool :=
+    all (fun frm =>
+           (f_component frm \in domm (prog_interface p))
+           &&
+           runtime_val_wf_wrt_prog_interface (f_arg frm) 
+           &&
+           cont_wf_wrt_prog_interface (f_cont frm) 
+        )
+        s.
+  
+  Lemma values_are_integers_runtime_expr_wf_wrt_prog_interface e:
+    values_are_integers e ->
+    runtime_expr_wf_wrt_prog_interface e.
+  Proof.
+    induction e; auto; intros Hval; inversion Hval as [Hval'];
+      try (
+          move : Hval' => /andP => [[Hval1 Hval2]];
+                                   specialize (IHe1 Hval1);
+                                   specialize (IHe2 Hval2);
+                                   simpl; by rewrite IHe1 IHe2
+        ).
+    - destruct v; by auto.
+    - move : Hval' => /andP => [[Hval1 Hval_]].
+      move : Hval_ => /andP => [[Hval2 Hval3]].
+      specialize (IHe1 Hval1).
+      specialize (IHe2 Hval2).
+      specialize (IHe3 Hval3).
+      simpl. by rewrite IHe1 IHe2 IHe3.
+  Qed.
+
+  Lemma well_formed_expr_runtime_expr_wf_wrt_prog_interface C e:
+    well_formed_expr p C e ->
+    runtime_expr_wf_wrt_prog_interface e.
+  Proof.
+    unfold well_formed_expr. intros [_ [? _]].
+    by apply values_are_integers_runtime_expr_wf_wrt_prog_interface.
+  Qed.
+
+  Lemma runtime_val_wf_wrt_prog_interface_eval_binop v1 v2 op:
+    runtime_val_wf_wrt_prog_interface v1 ->
+    runtime_val_wf_wrt_prog_interface v2 ->
+    runtime_val_wf_wrt_prog_interface (eval_binop op v1 v2).
+  Proof.
+    intros Hv1 Hv2.
+    destruct op; destruct v1 as [| [[[perm1 c1] b1] o1] |];
+      destruct v2 as [| [[[perm2 c2] b2] o2] |]; simpl in *; auto.
+    - find_if_inside_goal; by auto.
+    - find_if_inside_goal; by auto.
+  Qed.
+  
+  Lemma load_component_prog_interface_inductively_provable s t s':
+    initial_state p s ->
+    Star sem s t s' ->
+    (
+      (
+        forall ptr ptr',
+          Memory.load (s_memory s') ptr = Some (Ptr ptr') ->
+          Pointer.component ptr' \in domm (prog_interface p)
+      )
+      /\
+      runtime_expr_wf_wrt_prog_interface (s_expr s')
+      /\
+      cont_wf_wrt_prog_interface (s_cont s')
+      /\
+      runtime_val_wf_wrt_prog_interface (s_arg s')
+      /\
+      s_component s' \in domm (prog_interface p)
+      /\
+      stack_wf_wrt_prog_interface (s_stack s')                   
+    ).
+  Proof.
+    intros Hini Hstar.
+    apply star_iff_starR in Hstar.
+    revert Hini.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+      subst;
+      intros Hini.
+    - split; [intros ? ? Hload | split; [| ]].
+      + by eapply load_component_prog_interface_intitial_state; eauto.
+      + unfold initial_state, initial_machine_state in Hini.
+        destruct (prog_main p) eqn:emain; subst; simpl; auto.
+        unfold prog_main in emain.
+        apply wfprog_well_formed_procedures in emain; auto.
+        unfold well_formed_expr in *. destruct emain as [_ [G_ _]].
+        by apply values_are_integers_runtime_expr_wf_wrt_prog_interface in G_.
+      + unfold initial_state, initial_machine_state in Hini.
+        destruct (prog_main p) eqn:emain; subst; simpl; auto.
+        * rewrite wfprog_main_existence; auto; by rewrite emain.
+        * specialize (cprog_main_existence complete_program) as contra.
+          by rewrite emain in contra.
+    - specialize (IHHstar Hini)
+        as [IHload [IHexpr [IHcont [IHarg [IHcomp IHstack]]]]];
+            simpl in *.
+      split;
+        [
+          intros ? ? Hload; inversion Hstep23; subst;
+          try (simpl in Hload; eapply IHload; by eauto)
+        |].
+      + (* Hload in context; case alloc *)
+        simpl in *. 
+        destruct ((Pointer.component ptr, Pointer.block ptr) ==
+                  (Pointer.component ptr0, Pointer.block ptr0)) eqn:eqalloc.
+        * move : eqalloc => /eqP => eqalloc.
+          specialize (Memory.load_after_alloc_eq _ _ _ _ _ _ H0 eqalloc) as Hload'.
+          rewrite Hload' in Hload. repeat (find_if_inside_hyp Hload; last discriminate).
+          discriminate.
+        * assert (Hneq: (Pointer.component ptr, Pointer.block ptr) <>
+                        (Pointer.component ptr0, Pointer.block ptr0)).
+          { unfold not. move => /eqP => contra. by rewrite contra in eqalloc. } 
+          specialize (Memory.load_after_alloc _ _ _ _ _ _ H0 Hneq) as Hrewr.
+          rewrite Hrewr in Hload. by eapply IHload; eauto.
+      + (* Hload in context; case store *)
+        simpl in *.
+        specialize (Memory.load_after_store _ _ _ _ ptr H) as Hload'.
+        rewrite Hload' in Hload.
+        find_if_inside_hyp Hload.
+        * inversion Hload; subst; clear Hload.
+          simpl in IHcont. by move : IHcont => /andP => [[G_ _]].
+        * eapply IHload; by eauto.
+      + split; [inversion Hstep23; subst; simpl in *; auto;
+                try (by move : IHexpr => /andP => [[? ?]]);
+                try (by move : IHcont => /andP => [[? ?]])
+               |].
+        * apply runtime_val_wf_wrt_prog_interface_eval_binop; auto.
+          by move : IHcont => /andP => [[? ?]].
+        * move : IHexpr => /andP => [[G_ ?]].
+          by move : G_ => /andP => [[? ?]].
+        * move : IHcont => /andP => [[G_ ?]].
+          move : G_ => /andP => [[? ?]].
+          by find_if_inside_goal.
+        * by apply Memory.component_of_alloc_ptr in H0; subst.
+        * destruct v; auto. by eapply IHload; eauto.
+        * apply wfprog_well_formed_procedures in H0; auto.
+          by eapply well_formed_expr_runtime_expr_wf_wrt_prog_interface; eauto.
+        * apply wfprog_well_formed_procedures in H1; auto.
+          by eapply well_formed_expr_runtime_expr_wf_wrt_prog_interface; eauto.
+        * split; [inversion Hstep23; subst; simpl in *; auto;
+                try (move : IHexpr => /andP => [[IHe1 IHe2]]);
+                try (move : IHcont => /andP => [[IHk1 IHk2]]);
+                auto;
+                try (
+                    match goal with
+                    | H1 : is_true (?X), H2: is_true (?Y) |-
+                      is_true (andb ?X ?Y) => by rewrite H1 H2
+                    end
+                  )
+               |].
+          -- move : IHe1 => /andP => [[IHe1 IHe2_]].
+             by rewrite IHe2_ IHe2 IHcont.
+          -- move : IHstack => /andP => [[IHstack _]].
+             by move : IHstack => /andP => [[_ ?]].
+          -- move : IHstack => /andP => [[IHstack _]].
+             by move : IHstack => /andP => [[_ ?]].
+          -- split; [inversion Hstep23; subst; simpl in *; auto;
+                     try (move : IHexpr => /andP => [[IHe1 IHe2]]);
+                     try (move : IHcont => /andP => [[IHk1 IHk2]]);
+                     auto;
+                     try (
+                         match goal with
+                         | H1 : is_true (?X), H2: is_true (?Y) |-
+                           is_true (andb ?X ?Y) => by rewrite H1 H2
+                         end
+                       )
+                    |].
+             ++ do 2 (move : IHstack => /andP => [[IHstack _]]).
+                by move : IHstack => /andP => [[_ ?]].
+             ++ do 2 (move : IHstack => /andP => [[IHstack _]]).
+                by move : IHstack => /andP => [[_ ?]].
+             ++ split; [inversion Hstep23; subst; simpl in *; auto |].
+                ** by eapply find_procedure_prog_interface; eauto.
+                ** by repeat (move : IHstack => /andP => [[IHstack _]]).
+                ** inversion Hstep23; subst; simpl in *; auto.
+                   --- by rewrite IHarg IHcont IHstack IHcomp.
+                   --- by rewrite IHarg IHcont IHstack IHcomp.
+                   --- by (move : IHstack => /andP => [[_ ?]]).
+                   --- by (move : IHstack => /andP => [[_ ?]]).
+  Qed.
+  
   Lemma load_component_prog_interface s t s' ptr ptr' :
     initial_state p s ->
     Star sem s t s' ->
     Memory.load (s_memory s') ptr = Some (Ptr ptr') ->
     Pointer.component ptr' \in domm (prog_interface p).
-  Admitted.
-
+  Proof.
+    intros Hini Hstar.
+    specialize (load_component_prog_interface_inductively_provable Hini Hstar);
+      intuition.
+    by eapply H1; eauto.
+  Qed.
+  
   (* TODO: Move to Common/Memory.v *)
   Lemma load_some_in_domm mem ptr v:
     Memory.load mem ptr = Some v ->

@@ -157,16 +157,6 @@ CS.load_data_next_block
     exists Cmem : ComponentMemory.t,
       CS.s_memory s' C = Some Cmem /\ b < ComponentMemory.next_block Cmem
 
-CS.load_component_prog_interface
-  : forall p : Source.program,
-    Source.well_formed_program p ->
-    Source.closed_program p ->
-    forall (s : CS.state) (t : trace event) (s' : state (CS.sem p))
-      (ptr ptr' : Pointer.t),
-    CS.initial_state p s ->
-    Star (CS.sem p) s t s' ->
-    Memory.load (CS.s_memory s') ptr = Some (Ptr ptr') ->
-    Pointer.component ptr' \in domm (Source.prog_interface p)
 ```
 
 #### Back-translation ####

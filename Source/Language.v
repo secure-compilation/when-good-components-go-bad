@@ -179,6 +179,16 @@ Module Source.
     cprog_main_existence: prog_main p
   }.
 
+  Lemma find_procedure_prog_interface p C P P_expr:
+    well_formed_program p ->
+    find_procedure (prog_procedures p) C P = Some P_expr ->
+    C \in domm (prog_interface p).
+  Proof.
+    unfold find_procedure. intros Hwf. apply wfprog_defined_procedures in Hwf.
+    destruct (prog_procedures p C) eqn:eC; last discriminate. intros nP.
+    rewrite Hwf. apply/dommP. eauto.
+  Qed.
+  
   Theorem linkable_disjoint_procedures :
     forall prog1 prog2,
       well_formed_program prog1 ->
