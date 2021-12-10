@@ -545,23 +545,26 @@ Section Semantics.
     Pointer.component ptr' \in domm (prog_interface p).
   Admitted.
 
-  Lemma load_component_prog_interface_addr s t s' ptr v :
-    initial_state p s ->
-    Star sem s t s' ->
-    Memory.load (s_memory s') ptr = Some v ->
-    Pointer.component ptr \in domm (prog_interface p).
-  Admitted.
+  (* TODO: Move to Common/Memory.v *)
+  Lemma load_some_in_domm mem ptr v:
+    Memory.load mem ptr = Some v ->
+    Pointer.component ptr \in domm mem.
+  Proof.
+    unfold Memory.load. find_if_inside_goal; last discriminate.
+    destruct (mem (Pointer.component ptr)) eqn:emem; last discriminate. intros _.
+    apply/dommP. by eauto.
+  Qed.
 
-  Lemma load_data_next_block s t s' ptr C b o :
+  Lemma initial_state_domm_s_memory s:
     initial_state p s ->
-    Star sem s t s' ->
-    Memory.load (s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
-  exists Cmem,
-    (* Memory.next_block (s_memory s') c = some b' /\ *)
-    (s_memory s') C = Some Cmem /\
-    b < ComponentMemory.next_block Cmem.
-  Admitted.
-
+    domm (s_memory s) = domm (prog_interface p).
+  Proof.
+    unfold initial_state. intros. subst. unfold initial_machine_state.
+    apply cprog_main_existence in complete_program as HisSome.
+    destruct (prog_main p) eqn:emain; last discriminate. simpl.
+    by apply domm_prepare_buffers.
+  Qed.
+  
   Lemma step_preserves_mem_domm s t s' :
     Step sem s t s' ->
     domm (s_memory s) = domm (s_memory s').
@@ -611,13 +614,46 @@ Section Semantics.
     induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
       subst;
       intros Hini.
-    - unfold initial_state, initial_machine_state in Hini; subst s.
-      pose proof cprog_main_existence complete_program as Hmain.
-      destruct (prog_main p) as [main |]; [| discriminate].
-      now rewrite domm_prepare_buffers.
+    - by apply initial_state_domm_s_memory.
     - specialize (IHHstar Hini).
       apply step_preserves_mem_domm in Hstep23. congruence.
   Qed.
+  
+  Lemma load_component_prog_interface_addr s t s' ptr v :
+    initial_state p s ->
+    Star sem s t s' ->
+    Memory.load (s_memory s') ptr = Some v ->
+    Pointer.component ptr \in domm (prog_interface p).
+  Proof.
+    intros Hini Hstar.
+    apply star_iff_starR in Hstar.
+    revert Hini.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+      subst;
+      intros Hini Hload.
+    - apply load_some_in_domm in Hload.
+      by erewrite <- initial_state_domm_s_memory; eauto.
+    - specialize (IHHstar Hini).
+      inversion Hstep23; subst;
+        try (simpl in Hload; apply IHHstar; by auto);
+        (
+          apply load_some_in_domm in Hload; simpl in Hload;
+          apply star_iff_starR in Hstar12;
+          specialize (comes_from_initial_state_mem_domm Hini Hstar12) as G_; simpl in G_
+        ).
+      + apply Memory.domm_alloc in H0. by rewrite -G_ H0. 
+      + apply Memory.domm_store in H. by rewrite -G_ H.
+  Qed.
+      
+  Lemma load_data_next_block s t s' ptr C b o :
+    initial_state p s ->
+    Star sem s t s' ->
+    Memory.load (s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
+  exists Cmem,
+    (* Memory.next_block (s_memory s') c = some b' /\ *)
+    (s_memory s') C = Some Cmem /\
+    b < ComponentMemory.next_block Cmem.
+  Admitted.
 
   (* NOTE: Consider a CSInvariants for the Source *)
   Definition private_pointers_never_leak_S metadata_size :=
