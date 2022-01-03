@@ -139,26 +139,6 @@ initialization_correct_component_memory
 Despite its name, this last assumption is, like the others, trivial provided
 that we expose a reasoning principle for equality of component memories.
 
-#### Source language ####
-
-These axioms are provable by standard inductions on program execution.
-
-```coq
-CS.load_data_next_block
-  : forall p : Source.program,
-    Source.well_formed_program p ->
-    Source.closed_program p ->
-    forall (s : CS.state) (t : trace event) (s' : state (CS.sem p))
-      (ptr : Pointer.t) (C : Component.id) (b : Block.id) 
-      (o : Block.offset),
-    CS.initial_state p s ->
-    Star (CS.sem p) s t s' ->
-    Memory.load (CS.s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
-    exists Cmem : ComponentMemory.t,
-      CS.s_memory s' C = Some Cmem /\ b < ComponentMemory.next_block Cmem
-
-```
-
 #### Back-translation ####
 
 The proof of back-translation currently relies on a small number of reasonable
