@@ -688,32 +688,35 @@ Section Definability.
     | e :: suffix' =>
       match code_pointer_of_event e with
       | Some (cid, pid) =>
-        match procedures_of_trace_recursive
-                whole_trace
-                suffix'
-                procs_init
-        with
-        | Some res_suffix' =>
-          (* Look up the code pointer in the result of the recursive call *)
-          match res_suffix' cid with
-          | Some procs_of_cid =>
-            (* cid found. Update the procs_of_cid map by adding the code of pid *)
-            let updated_procs :=
-                setm
-                  procs_of_cid
-                  pid
-                  (procedure_of_trace cid pid whole_trace)
-            in
-            Some (setm res_suffix' 
-                       cid
-                       updated_procs)
-          | None => None
-          (* cid not found. Something is wrong. *)
+        if cid == cur_comp_of_event e
+        then
+          match procedures_of_trace_recursive
+                  whole_trace
+                  suffix'
+                  procs_init
+          with
+          | Some res_suffix' =>
+            (* Look up the code pointer in the result of the recursive call *)
+            match res_suffix' cid with
+            | Some procs_of_cid =>
+              (* cid found. Update the procs_of_cid map by adding the code of pid *)
+              let updated_procs :=
+                  setm
+                    procs_of_cid
+                    pid
+                    (procedure_of_trace cid pid whole_trace)
+              in
+              Some (setm res_suffix' 
+                         cid
+                         updated_procs)
+            | None => None
+              (* cid not found. Something is wrong. *)
+            end
+          | None =>
+            (* Recursive call is None *)
+            None
           end
-        | None =>
-          (* Recursive call is None *)
-          None
-        end
+        else None
       | None =>
         (* No code pointer extracted from event e -- proceed to suffix'. *)
         procedures_of_trace_recursive whole_trace suffix' procs_init
@@ -789,7 +792,9 @@ Section Definability.
     destruct (code_pointer_of_event e) as [[cid pid]|] eqn:ecode_pointer;
       last first.
     - by eapply IHt'; eauto.
-    - destruct (procedures_of_trace_recursive whole_trace t' procs_map)
+    - destruct (cid == cur_comp_of_event e) eqn:ecid; rewrite ecid in HSome;
+        [|discriminate].
+      destruct (procedures_of_trace_recursive whole_trace t' procs_map)
         as [procs_of_cid|] eqn:eprocs_of_cid; [|discriminate].
       destruct (procs_of_cid cid) as [procscid|] eqn:eprocscid;
         [|discriminate].
@@ -824,10 +829,13 @@ Section Definability.
     - destruct (code_pointer_of_event e) as [[cid pid]|] eqn:ecode_pointer;
         last first.
       + by apply (IHt' procs_map Hprocs_map C P exp _ HSome).
-      + destruct (procedures_of_trace_recursive whole_trace t' procs_map)
+      + destruct (cid == cur_comp_of_event e) eqn:ecid; rewrite ecid in HSome;
+          [|discriminate].
+        destruct (procedures_of_trace_recursive whole_trace t' procs_map)
           as [procs_of_cid|] eqn:eprocs_of_cid; [|discriminate].
         destruct (procs_of_cid cid) as [procscid|] eqn:eprocscid;
           [|discriminate].
+        rewrite ecid in H1.
         inversion H1; subst. clear H1 HSome.
         rewrite setmE in H.
         destruct (C == cid) eqn:eC_cid; [move : eC_cid => /eqP => ?; subst|].
@@ -886,12 +894,109 @@ Section Definability.
     - by apply find_procedure_exported_procedures_of_trace_case2; auto.
   Qed.
 
+  Lemma valid_procedure_find_procedure_Some (t: trace event_inform) C P procs_map:
+    procedures_of_trace t = Some procs_map ->
+    C \in domm intf ->
+    valid_procedure C P t ->
+    exists exp,
+      Source.find_procedure procs_map C P = Some exp.
+  Proof.
+    intros HSome.
+    move=> /dommP [CI C_CI] [[-> ->]|[?|H]]; [eexists|eexists|].
+    - eapply find_procedures_of_trace_main; eauto.
+    - eapply find_procedures_of_trace_exp; eauto.
+    - move: H HSome.
+      rewrite /Source.find_procedure /procedures_of_trace
+              /procedure_ids_of_trace.
+      intros H HSome.
+      assert (LEMMA:
+                forall wholet,
+                  procedures_of_trace_recursive wholet t
+                                                (exported_procedures_of_trace wholet)
+                  = Some procs_map ->
+                  exists exp : expr,
+                    match procs_map C with
+                    | Some C_procs => C_procs P
+                    | None => None
+                    end = Some exp
+             ).
+      {
+        clear HSome.
+        generalize dependent procs_map.
+        induction t; intros ? ? HSome.
+        + by rewrite in_fset0 in H.
+        + simpl in H.
+          destruct (C == cur_comp_of_event a) eqn:eC; rewrite eC in H.
+          * rewrite in_fsetU in H.
+            move : H => /orP => [[H1 | H2]].
+            -- destruct a; try by rewrite in_fset0 in H1.
+               destruct v as [| [[[[] c] b] o] |]; try by rewrite in_fset0 in H1.
+               rewrite in_fset1 in H1. move : H1 => /eqP => H1; subst.
+               (** HSome should solve the goal. by simpl and rewriting setmE somehow*)
+               simpl in HSome. simpl in eC.
+               move : eC => /eqP => eC; subst.
+               destruct (c == i) eqn:ei'; [|discriminate].
+               move : ei' => /eqP => ?; subst.
+               destruct (procedures_of_trace_recursive
+                           wholet t (exported_procedures_of_trace wholet))
+                        as [procs_map'|] eqn:eprocs_map';
+                 [|discriminate].
+               destruct (procs_map' i) as [entry|] eqn:eentry; [|discriminate].
+               inversion HSome as [H0]. rewrite setmE eqxx. 
+               by rewrite setmE eqxx; eauto.
+            -- specialize (IHt H2).
+               simpl in HSome.
+               destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecodeptr.
+               ++ destruct (cid == cur_comp_of_event a) eqn:ecid;
+                    rewrite ecid in HSome; [|discriminate].
+                 destruct (procedures_of_trace_recursive
+                              wholet t (exported_procedures_of_trace wholet))
+                   as [procs_map'|] eqn:eprocs_map';
+                    [|discriminate].
+                  destruct (procs_map' cid) as [procs_map_entry|] eqn:eentry;
+                    [|discriminate].
+                  specialize (IHt _ _ eprocs_map').
+                  inversion HSome as [H0]. clear HSome. rewrite setmE.
+                  destruct (C == cid) eqn:eC2; [|assumption].
+                  assert (HTrue: cid = cur_comp_of_event a).
+                  {
+                    move : eC => /eqP => eC. subst.
+                    move : eC2 => /eqP => eC2. by subst.
+                  }
+                  subst. rewrite setmE.
+                  destruct (P == pid) eqn:eP; rewrite eP; [by eexists; eauto|].
+                  move : eC => /eqP => ?; subst. by rewrite eentry in IHt.
+               ++ by specialize (IHt _ _ HSome).
+          * specialize (IHt H).
+            simpl in HSome.
+            destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecodeptr.
+            ++ destruct (cid == cur_comp_of_event a) eqn:ecid;
+                 rewrite ecid in HSome; [|discriminate].
+               destruct (procedures_of_trace_recursive
+                            wholet t (exported_procedures_of_trace wholet))
+                 as [procs_map'|] eqn:eprocs_map';
+                 [|discriminate].
+               destruct (procs_map' cid) as [procs_map_entry|] eqn:eentry;
+                 [|discriminate].
+               specialize (IHt _ _ eprocs_map').
+               inversion HSome as [H0]. clear HSome. rewrite setmE.
+               destruct (C == cid) eqn:eC2; [|assumption].
+               move : eC2 => /eqP => ?; subst.
+               rewrite setmE.
+               destruct (P == pid) eqn:eP; rewrite eP; [by eexists; eauto|].
+               by rewrite eentry in IHt.
+            ++ by specialize (IHt _ _ HSome).
+      }
+      eapply LEMMA; eauto.
+  Qed.    
+    
+    
+    
   Lemma find_procedures_of_trace (t: trace event_inform) C P procs_map:
     procedures_of_trace t = Some procs_map ->
     C \in domm intf ->
-          valid_procedure C P t ->
-          Source.find_procedure procs_map C P
-          = Some (procedure_of_trace C P t).
+    valid_procedure C P t ->
+    Source.find_procedure procs_map C P = Some (procedure_of_trace C P t).
   Proof.
     intros HSome.
     move=> /dommP [CI C_CI] [[-> ->]|[?|H]];
@@ -901,6 +1006,18 @@ Section Definability.
     move: H HSome.
     rewrite /Source.find_procedure /procedures_of_trace
             /procedure_ids_of_trace.
+    Search valid_procedure.
+    assert (forall t', )
+    remember t as wholet.
+    induction t; intros H HSome.
+    - by rewrite in_fset0 in H.
+    - simpl in H.
+      destruct (C == cur_comp_of_event a) eqn:eC; rewrite eC in H.
+      + simpl in H.
+        admit.
+      + specialize (IHt H).
+      Search comp_subtrace.
+      Search app cons.
     rewrite mapimE C_CI //= mkfmapfE.
     case: eqP=> _ //= H.
     - by rewrite in_fsetU in_fsetU H !orbT.
