@@ -894,15 +894,14 @@ Section Definability.
     - by apply find_procedure_exported_procedures_of_trace_case2; auto.
   Qed.
 
-  Lemma valid_procedure_find_procedure_Some (t: trace event_inform) C P procs_map:
+  Lemma find_procedures_of_trace (t: trace event_inform) C P procs_map:
     procedures_of_trace t = Some procs_map ->
     C \in domm intf ->
     valid_procedure C P t ->
-    exists exp,
-      Source.find_procedure procs_map C P = Some exp.
+    Source.find_procedure procs_map C P = Some (procedure_of_trace C P t).
   Proof.
     intros HSome.
-    move=> /dommP [CI C_CI] [[-> ->]|[?|H]]; [eexists|eexists|].
+    move=> /dommP [CI C_CI] [[-> ->]|[?|H]]; [auto|auto|].
     - eapply find_procedures_of_trace_main; eauto.
     - eapply find_procedures_of_trace_exp; eauto.
     - move: H HSome.
@@ -914,11 +913,10 @@ Section Definability.
                   procedures_of_trace_recursive wholet t
                                                 (exported_procedures_of_trace wholet)
                   = Some procs_map ->
-                  exists exp : expr,
-                    match procs_map C with
-                    | Some C_procs => C_procs P
-                    | None => None
-                    end = Some exp
+                  match procs_map C with
+                  | Some C_procs => C_procs P
+                  | None => None
+                  end = Some (procedure_of_trace C P wholet)
              ).
       {
         clear HSome.
@@ -964,8 +962,10 @@ Section Definability.
                     move : eC2 => /eqP => eC2. by subst.
                   }
                   subst. rewrite setmE.
-                  destruct (P == pid) eqn:eP; rewrite eP; [by eexists; eauto|].
-                  move : eC => /eqP => ?; subst. by rewrite eentry in IHt.
+                  destruct (P == pid) eqn:eP; rewrite eP.
+                  ** move : eP => /eqP => ?; subst.
+                     move : eC2 => /eqP => ?; by subst.
+                  ** move : eC => /eqP => ?; subst. by rewrite eentry in IHt.
                ++ by specialize (IHt _ _ HSome).
           * specialize (IHt H).
             simpl in HSome.
@@ -983,48 +983,14 @@ Section Definability.
                destruct (C == cid) eqn:eC2; [|assumption].
                move : eC2 => /eqP => ?; subst.
                rewrite setmE.
-               destruct (P == pid) eqn:eP; rewrite eP; [by eexists; eauto|].
-               by rewrite eentry in IHt.
+               destruct (P == pid) eqn:eP; rewrite eP.
+               ** move : eP => /eqP => ?; by subst.
+               ** by rewrite eentry in IHt.
             ++ by specialize (IHt _ _ HSome).
       }
       eapply LEMMA; eauto.
   Qed.    
     
-    
-    
-  Lemma find_procedures_of_trace (t: trace event_inform) C P procs_map:
-    procedures_of_trace t = Some procs_map ->
-    C \in domm intf ->
-    valid_procedure C P t ->
-    Source.find_procedure procs_map C P = Some (procedure_of_trace C P t).
-  Proof.
-    intros HSome.
-    move=> /dommP [CI C_CI] [[-> ->]|[?|H]];
-            [by apply: find_procedures_of_trace_main
-            |by apply: find_procedures_of_trace_exp|].
-    
-    move: H HSome.
-    rewrite /Source.find_procedure /procedures_of_trace
-            /procedure_ids_of_trace.
-    Search valid_procedure.
-    assert (forall t', )
-    remember t as wholet.
-    induction t; intros H HSome.
-    - by rewrite in_fset0 in H.
-    - simpl in H.
-      destruct (C == cur_comp_of_event a) eqn:eC; rewrite eC in H.
-      + simpl in H.
-        admit.
-      + specialize (IHt H).
-      Search comp_subtrace.
-      Search app cons.
-    rewrite mapimE C_CI //= mkfmapfE.
-    case: eqP=> _ //= H.
-    - by rewrite in_fsetU in_fsetU H !orbT.
-    - by rewrite in_fsetU H.
-  Qed.
-
-
   Definition program_of_trace (t: trace event_inform) : Source.program :=
     {| Source.prog_interface  := intf;
       Source.prog_procedures := procedures_of_trace t;
