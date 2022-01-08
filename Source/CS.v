@@ -834,11 +834,9 @@ Section Semantics.
     intros Hini Hstar.
     specialize (load_component_prog_interface_inductively_provable Hini Hstar);
       intuition.
-    by eapply H1; eauto.
+    (* by eapply H1; eauto. *)
   Qed.
 
-  
-  
   (* TODO: Move to Common/Memory.v *)
   Lemma load_some_in_domm mem ptr v:
     Memory.load mem ptr = Some v ->
@@ -962,6 +960,8 @@ Section Semantics.
     - move => /andP [? ?]. rewrite IHe1; by auto.
     - move => /andP [? ?]. rewrite IHe1; by auto.
   Qed.
+
+(* Print Assumptions comes_from_initial_state_mem_domm. *)
 
   Lemma b_next_block_eval_binop mem v1 v2 op:
     b_nextblock mem v1 ->
