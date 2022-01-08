@@ -1997,6 +1997,11 @@ Section Definability.
           =>
           erewrite Memory.load_after_store_eq;
           [reflexivity | exact H]
+        | H : Memory.store ?MEM ?PTR ?V = Some ?MEM',
+          G : Memory.load ?MEM' ?PTR = Some _ |- _
+          =>
+          erewrite Memory.load_after_store_eq in G;
+          [reflexivity | exact H]
         | H : Memory.store ?MEM (_, ?C, ?B, ?O) ?V = Some ?MEM'
           |- Memory.load ?MEM' (_, ?C', ?B', ?O') = ?V'
           =>
@@ -2018,10 +2023,48 @@ Section Definability.
                    | _ => fail
                    end
                  end)]
+        | H : Memory.store ?MEM (_, ?C, ?B, ?O) ?V = Some ?MEM',
+          G : Memory.load ?MEM' (_, ?C', ?B', ?O') = ?V' |- _
+          =>
+          erewrite Memory.load_after_store_neq in G;
+          [| | exact H];
+          [| injection;
+             (discriminate
+              || contradiction
+              || congruence
+              || match O with
+                 | reg_offset ?R =>
+                   match O' with
+                   | reg_offset ?R' => now (destruct R; destruct R')
+                   | _ => now destruct R
+                   end
+                 | _ =>
+                   match O' with
+                   | reg_offset ?R' => now destruct R'
+                   | _ => fail
+                   end
+                 end)]
         | H : Memory.alloc ?MEM ?C ?N = Some (?MEM', ?B')
           |- Memory.load ?MEM' (_, ?C', ?B'', ?O') = ?V'
           =>
           erewrite Memory.load_after_alloc;
+          [| exact H |];
+          [| injection;
+             (discriminate
+              || contradiction
+              || congruence
+              || match O with
+                 | reg_offset ?R => now destruct R
+                 | _ => fail
+                 end
+              || match O' with
+                 | reg_offset ?R => now destruct R
+                 | _ => fail
+                 end)]
+        | H : Memory.alloc ?MEM ?C ?N = Some (?MEM', ?B'),
+          G : Memory.load ?MEM' (_, ?C', ?B'', ?O') = ?V' |- _
+          =>
+          erewrite Memory.load_after_alloc in G;
           [| exact H |];
           [| injection;
              (discriminate
@@ -3384,6 +3427,11 @@ Section Definability.
 
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
+    Abort.
+
+    Lemma definability_does_not_leak prefix s :
+      Star (CS.sem p) (CS.initial_machine_state p) prefix s ->
+      good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) prefix.
     Admitted.
 
     (* A proof of relational definability on the right. Existential
