@@ -6,7 +6,11 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 Require Import Coq.Logic.ProofIrrelevance.
 Require Import Lia.
 Require Import Coq.Program.Equality.
-(* From Equations Require Import Equations. *)
+
+Show Obligation Tactic.
+(* Tactics.program_simpl *)
+
+From Equations Require Import Equations.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -204,7 +208,28 @@ Module ComponentMemory : AbstractComponentMemory.
        nextblock := S (fold_left Nat.max (domm bufs) 0);
        nextblock_content := _ |}.
   Next Obligation.
-  Admitted.
+    rewrite mapmE.
+    destruct (bufs b) as [buf |] eqn:Hbuf; simpl;
+      last reflexivity.
+    assert (Hdomm : b \in ((domm bufs) : seq Block.id)). {
+      apply /dommP. by eauto. }
+    remember (domm bufs : seq Block.id) as d.
+    remember 0 as n.
+    clear -H Hdomm. exfalso.
+    revert n H.
+    induction d as [| d' ds']; intros n H.
+    - by inversion Hdomm.
+    - simpl in *.
+      rewrite in_cons in Hdomm.
+      move: Hdomm => /orP [/eqP |] H'.
+      + subst d'.
+        revert n H. clear.
+        induction ds' as [| d' ds' IHds']; simpl; intros n H.
+        * move: H => /leP. lia.
+        * specialize (IHds' (Nat.max n d')). apply IHds'.
+          now rewrite -Nat.max_assoc (Nat.max_comm d' b) Nat.max_assoc.
+      + eauto.
+  Qed.
 
   Program Definition empty :=
     {| content := emptym; nextblock := 0; nextblock_content := _ |}.
@@ -217,7 +242,7 @@ Module ComponentMemory : AbstractComponentMemory.
   Next Obligation.
     destruct m. simpl in *.
     apply nextblock_content0. by eapply leq_trans; eauto.
-  Defined.
+  Qed.
 
   Program Definition alloc m (size : nat) : mem * Block.id :=
     let fresh_block := nextblock m in
@@ -231,7 +256,7 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (b == nextblock0) eqn:econtra; rewrite econtra; move : econtra => /eqP => econtra; subst.
     - by rewrite ltnn in H.
     - apply nextblock_content0. by eapply leq_trans; eauto.
-  Defined.
+  Qed.
 
   Definition load m b i : option value :=
     match getm (content m) b with
@@ -241,62 +266,32 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
 
-  Program Definition store m b i v: option mem :=
-          match getm (content m) b with
-          | Some chunk =>
-              if (0 <=? i)%Z then
-                match list_upd chunk (Z.to_nat i) v with
-                | Some chunk' =>
-                    Some {| content := setm (content m) b chunk';
-                           nextblock := nextblock m;
-                           nextblock_content := _ |}
-                | _ => None
-                end
-              else None
-          | None => None
-          end.
+  (* TODO: Either place at the top of this module or somewhere in Common *)
+  (* Arguments exist {_ _} _ _. *)
+  (* Fail Definition inspect {A} (x : A) : { y : A | y = x } := exist x eq_refl. *)
+  Definition inspect {A} (x : A) : { y : A | y = x } := @exist _ _ x Logic.eq_refl.
+
+  Equations store (m: mem) b (i: Z) (v: value) : option mem :=
+    store m b i v with inspect (getm (content m) b) => {
+      store m b i v (@exist _ _ (Some chunk) H1) with inspect (0 <=? i)%Z =>
+      { store m b i v (@exist _ _ (Some chunk) H1) (@exist _ _ true H2) with inspect (list_upd chunk (Z.to_nat i) v) => {
+          store m b i v (@exist _ _ (Some chunk) H1) (@exist _ _ true H2) (@exist _ _ (Some chunk') H3) :=
+            Some {| content := setm (content m) b chunk';
+                    nextblock := nextblock m;
+                    nextblock_content := _ |};
+          store m b i v (@exist _ _ (Some chunk) H1) (@exist _ _ true H2) (@exist _ _ None H3) :=
+            None
+        };
+        store m b i v (@exist _ _ (Some chunk) H1) (@exist _ _ false H2) := None
+      };
+      store m b i v (@exist _ _ None H1) := None
+    }.
   Next Obligation.
     destruct m. rewrite setmE.
     destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition);
       move : eb0 => /eqP => eb0; subst.
-    simpl in *. apply nextblock_content0 in H. by rewrite H in Heq_anonymous0.
-  Defined.
-  (* Equations store (m: mem) b (i: Z) (v: value) : option mem := *)
-  (* (* Program Definition store m b i v : option mem := *) *)
-  (*   store m b i v with (getm (content m) b) => { *)
-  (*       store m b i v (Some chunk) with (0 <=? i)%Z => *)
-  (*         { store m b i v (Some chunk) true with (list_upd chunk (Z.to_nat i) v) => { *)
-  (*             store m b i v (Some chunk) true (Some chunk') := *)
-  (*                   Some {| content := setm (content m) b chunk'; *)
-  (*                          nextblock := nextblock m; *)
-  (*                          nextblock_content := _ |}; *)
-  (*             store m b i v (Some chunk) true None := *)
-  (*                   None *)
-  (*           }; *)
-  (*           store m b i v (Some chunk) false := None *)
-  (*         }; *)
-  (*       store m b i v None := None *)
-  (*     }. *)
-  (*       (* store m b i v := *) *)
-  (*       (*   match getm (content m) b with *) *)
-  (*       (*   | Some chunk => *) *)
-  (*       (*       if (0 <=? i)%Z then *) *)
-  (*       (*         match list_upd chunk (Z.to_nat i) v with *) *)
-  (*       (*         | Some chunk' => *) *)
-  (*       (*             Some {| content := setm (content m) b chunk'; *) *)
-  (*       (*                    nextblock := nextblock m; *) *)
-  (*       (*                    nextblock_content := _ |} *) *)
-  (*       (*         | _ => None *) *)
-  (*       (*         end *) *)
-  (*       (*       else None *) *)
-  (*       (*   | None => None *) *)
-  (*       (*   end *) *)
-  (* Next Obligation. *)
-  (*   destruct m. rewrite setmE. *)
-  (*   destruct (b0 == b) eqn:eb0; rewrite eb0; last (by intuition); *)
-  (*     move : eb0 => /eqP => eb0; subst. *)
-  (*   simpl in *. apply nextblock_content0 in H. *)
-  (*   Admitted. *)
+    simpl in *. apply nextblock_content0 in H. by rewrite H in H1.
+  Qed.
 
   Definition domm (m : t) := @domm nat_ordType block (content m).
 
@@ -613,23 +608,21 @@ Module ComponentMemory : AbstractComponentMemory.
       if (b', i') == (b, i) then Some v else load m b' i'.
   Proof.
     move=> m m' b i v Hstore b' i'.
-    (* move: Hstore; rewrite /store /load. *)
-    (* funelim (store m b i v). *)
-    (* set CNT := (content m b). *)
-    (* dependent induction CNT.
-    - rewrite <- x. *)
-    (* NOTE: Handle dependent pattern matching *)
-  (*   case m_b: (content m b) => [chunk|] //=. *)
-  (*   case: (Z.leb_spec0 0 i)=> [i_pos|//] /=. *)
-  (*   case upd_chunk: (list_upd chunk (Z.to_nat i) v) => [chunk'|] // [<- {m'}] /=. *)
-  (*   rewrite setmE xpair_eqE; case: (b' =P b) => [-> {b'}|] //=. *)
-  (*   case: (i' =P i) => [-> {i'}|i'_ne_i] /=. *)
-  (*   - move/Z.leb_spec0: i_pos => ->; exact: list_upd_nth_error_same upd_chunk. *)
-  (*   - rewrite m_b; case: (Z.leb_spec0 0 i')=> [i'_pos|] //=. *)
-  (*     apply: list_upd_nth_error_other; eauto. *)
-  (*     contradict i'_ne_i; symmetry; exact: Z2Nat.inj i'_ne_i. *)
-  (* Qed. *)
-  Admitted.
+    funelim (store m b i v); try congruence.
+    rewrite Hstore in Heqcall. injection Heqcall as ?. subst m'.
+    injection H as H.
+    injection H0 as H0.
+    injection H1 as H1.
+    rewrite /load /=.
+    rewrite setmE xpair_eqE; case: (b' =P b) => [-> {b'}|] //=.
+    case: (i' =P i) => [-> {i'}|i'_ne_i] /=.
+    - rewrite -e0.
+      exact: list_upd_nth_error_same H.
+    - rewrite H1; case: (Z.leb_spec0 0 i')=> [i'_pos|] //=.
+      apply: list_upd_nth_error_other; eauto.
+      contradict i'_ne_i; symmetry.
+      apply Z2Nat.inj; eauto. by apply /Z.leb_spec0.
+  Qed.
 
   (* Lemma load_after_transfer_memory_block: *)
   (*   forall m b m' b' mres i, *)
@@ -2007,3 +2000,7 @@ Lemma component_memory_after_alloc_neq mem C sz mem' ptr C' :
   C' <> C ->
   mem C' = mem' C'.
 Admitted.
+
+(* Restore obligation tactic, some alterations to implicit arguments leak to
+   uses of equality predicates later on. *)
+Obligation Tactic := Tactics.program_simpl.
