@@ -3447,7 +3447,7 @@ Section Definability.
         project_non_inform prefix_inform = prefix' /\
         traces_shift_each_other_option all_zeros_shift (uniform_shift 1) (project_non_inform prefix) prefix' /\
         well_formed_state_r s prefix suffix cs /\
-        (* good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) prefix' /\ *)
+        (* good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) prefix'. *)
         shared_locations_have_only_shared_values (CS.s_memory cs) (uniform_shift 1).
     Proof.
       have Eintf : genv_interface (prepare_global_env p) = intf by [].
@@ -3856,10 +3856,58 @@ Section Definability.
                                  now rewrite Hdomm0.
             -- by move=> [].
           * unfold valid_procedure. now auto.
+(*
+        + constructor. intros [cid bid] Hshared.
+          inversion Hshared.
+          * now destruct t0.
+          * now destruct t0.
+*)
+(* shared_locations_have_only_shared_values *)
         + simpl. intros ptr [cid bid] v Hload Heq Hshift.
           injection Heq as ? ?; subst cid bid.
           destruct v as [| [[[[|] C] b] o] |]; try reflexivity.
+          do 8
+          match goal with
+          | LOAD : Memory.load ?MEM ?PTR = Some (Ptr (Permission.data, C, b, o)),
+            STORE : Memory.store _ ?PTR' _ = Some ?MEM
+            |- _ =>
+            let Hneq := fresh "Hneq" in
+            destruct (Pointer.eqP PTR' PTR) as [| Hneq];
+              [ (* Equality case is trivial *)
+                subst PTR;
+                erewrite Memory.load_after_store_eq in LOAD;
+                [| exact STORE];
+                injection LOAD as CONTRA;
+                discriminate CONTRA
+              | (* Progress in inequality case *)
+                erewrite Memory.load_after_store_neq in LOAD;
+                [| eassumption | eassumption (* Inequality from destruct*)];
+                clear Hneq
+               ]
+          end.
+          destruct ptr as [[[[|] C0] b0] o0];
+            first by inversion Hload.
+          destruct b0 as [| b0'];
+            first by inversion Hshift.
+          destruct (Nat.eqb_spec Component.main C0) as [| Hnemain].
+          * subst C0.
+            destruct Hsteady0 as [_ [_ [_ Hblock0]]].
+            assert (exists x, Memory.next_block (mem_of_event_inform e_dummy) Component.main = Some x). { rewrite /e_dummy /=. rewrite next_block_initial_memory. eauto. eauto. }
+                                                                                                        Check Hblock0 1. Search Memory.next_block e_dummy.
+
+          (*   Search mem0 Component.main. *)
+          (* 2:{ specialize (Hotherblock0 _ Hnemain). Search Source.prepare_buffers Memory.next_block. (* can even say more: we don't need component_buffer *) } *)
+          (* Search mem0. *)
+            (* Search _ Memory.load component_buffer. *)
+            admit.
+
+            *
+          (* * subst C0. admit. *)
+          (* * rewrite <- (Hothercomp0 _ _ _ Hnemain) in Hload. *)
+          (*   Check next_block_prepare_buffers. *)
+          (*   Check Memory.load_next_block_None. *)
           admit.
+(**)
       - (* Inductive step. *)
         rewrite -catA => Et.
         assert (wf_int_pref' : well_formed_intermediate_prefix (prefix ++ [:: e])).
@@ -3962,6 +4010,7 @@ Section Definability.
               last eassumption;
               last now apply nesym.
             exact (Hleak0 _ _ _ Hload Logic.eq_refl Hgood). }
+        (* assert (Hleak1 := Hleak0). *)
 
         (* TODO: Probably split into a separate lemma (after it is in better
          shape). *)
@@ -3976,6 +4025,7 @@ Section Definability.
                      (project_non_inform (prefix ++ [e]))
                      (prefix' ++ event_non_inform_of [e']) /\
                    shared_locations_have_only_shared_values (CS.s_memory cs') (uniform_shift 1)
+                   (* good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) (prefix' ++ event_non_inform_of [e']) *)
                (* match_events e e' *) (* <- Lift to noninformative traces relating only zero/singleton traces *)
                (* event_renames_event_at_shared_addr  *)
                (* /\ e ~ e' *)
@@ -4577,9 +4627,16 @@ Section Definability.
                         injection H2 as ?; subst e0.
                         inversion H4; now destruct t0.
                 * now destruct tprefix.
+(* shared_locations_have_only_shared_values *)
               + simpl. intros ptr [cid bid] v Hload Heq Hgood.
                 injection Heq as ? ?; subst cid bid.
                 admit.
+(* *)
+              (* + constructor. intros [cid bid] Hshared. *)
+              (*   rewrite /left_addr_good_for_shifting *)
+              (*           /left_block_id_good_for_shifting. *)
+              (*   inversion Hleak1. subst t0. *)
+              (*   admit. *)
             }
 
             (** Non-empty trace prefix case **)
@@ -5475,16 +5532,112 @@ Section Definability.
                   {
                     eapply star_trans; try eassumption; last reflexivity.
                     eapply star_trans; try eassumption; last reflexivity. }
-                  specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra ?].
+                  (* specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra ?]. *)
+                  specialize (Hno_leaks _ _ Hstar0_ret) as Hcontra.
+                  assert (H : good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
+                                                     (prefix' ++ [:: ECall C P' vcom mem1 C'])
+                         ).
+                  {
+                    admit. (* This is the only part of the theorem that we need here. *)
+                  } clear H.
+                  (* inversion Hshift. subst t0 t'. inversion H0. admit. subst. clear H3 H4 H9. Check Hcontra. *)
                   rewrite cats1 in Hcontra.
                   inversion Hcontra; subst t0.
-                  apply H0 in Hshared. simpl in Hshared.
+                  (* apply H0 in Hshared. simpl in Hshared. *)
+                  apply H in Hshared. simpl in Hshared.
                   destruct b as [| b']; last reflexivity.
                   rewrite /uniform_shift
                           /left_block_id_good_for_shifting in Hshared.
                   assumption.
               }
-            + simpl. admit.
+            + simpl. intros ptr [cid bid] v Hload Heq Hgood.
+              injection Heq as ? ?; subst cid bid.
+              destruct v as [| [[[[|] C0] b0] o0] |]; try reflexivity.
+              (* NOTE: This kind of tactic is also used in the base case,
+                 should be generalized and used throughout. *)
+              do 1
+                 match goal with
+                 | LOAD : Memory.load ?MEM ?PTR = Some (Ptr _),
+                   STORE : Memory.store _ ?PTR' _ = Some ?MEM
+                   |- _ =>
+                   let Hneq := fresh "Hneq" in
+                   destruct (Pointer.eqP PTR' PTR) as [| Hneq];
+                   [ (* Equality case is trivial *)
+                     subst PTR;
+                     erewrite Memory.load_after_store_eq in LOAD;
+                     [| exact STORE];
+                     injection LOAD as CONTRA;
+                     discriminate CONTRA
+                   | (* Progress in inequality case *)
+                     erewrite Memory.load_after_store_neq in LOAD;
+                     [| eassumption | eassumption (* Inequality from destruct*)];
+                     clear Hneq
+                   ]
+                 end.
+              destruct (Pointer.eqP
+                          (Permission.data, C', Block.local, reg_offset E_R_COM)
+                          ptr) as [| Hneq].
+              { subst ptr.
+                erewrite Memory.load_after_store_eq in Hload;
+                  last eassumption.
+                injection Hload as ?; subst vcom.
+                exact (Hleak0 _ _ _ Hvcom Logic.eq_refl Hgood). }
+              erewrite Memory.load_after_store_neq in Hload;
+                [| eassumption | eassumption].
+              clear Hneq.
+              do 6
+                 match goal with
+                 | LOAD : Memory.load ?MEM ?PTR = Some (Ptr _),
+                   STORE : Memory.store _ ?PTR' _ = Some ?MEM
+                   |- _ =>
+                   let Hneq := fresh "Hneq" in
+                   destruct (Pointer.eqP PTR' PTR) as [| Hneq];
+                   [ (* Equality case is trivial *)
+                     subst PTR;
+                     erewrite Memory.load_after_store_eq in LOAD;
+                     [| exact STORE];
+                     injection LOAD as CONTRA;
+                     discriminate CONTRA
+                   | (* Progress in inequality case *)
+                     erewrite Memory.load_after_store_neq in LOAD;
+                     [| eassumption | eassumption (* Inequality from destruct*)];
+                     clear Hneq
+                   ]
+                 end.
+              destruct b0 as [| b0']; last reflexivity.
+              destruct ptr as [[[[|] C1] b1] o1]; first by discriminate.
+              destruct b1 as [| b1']; first discriminate.
+              destruct (Nat.eqb_spec C' C1) as [| Hneq].
+              * subst C1. admit.
+              * rewrite <- (Hmem2' _ _ _ Hneq) in Hload.
+                do 2 (erewrite Memory.load_after_store_neq in Hload;
+                      last eassumption;
+                      last discriminate).
+                Search mem.
+              (* do 1 *)
+              (*    match goal with *)
+              (*    | LOAD : Memory.load ?MEM ?PTR = Some (Ptr _), *)
+              (*      STORE : Memory.store _ ?PTR' _ = Some ?MEM *)
+              (*      |- _ => *)
+              (*      let Hneq := fresh "Hneq" in *)
+              (*      destruct (Pointer.eqP PTR' PTR) as [| Hneq]; *)
+              (*      [ (* Equality case is trivial *) *)
+              (*        subst PTR; *)
+              (*        erewrite Memory.load_after_store_eq in LOAD; *)
+              (*        [| exact STORE]; *)
+              (*        injection LOAD as CONTRA; *)
+              (*        discriminate CONTRA *)
+              (*      | (* Progress in inequality case *) *)
+              (*        erewrite Memory.load_after_store_neq in LOAD; *)
+              (*        [| eassumption | eassumption (* Inequality from destruct*)]; *)
+              (*        clear Hneq *)
+              (*      ] *)
+              (*    end. *)
+
+
+              (*   Search mem1. *)
+          (* clear -Hload Hgood Hmem2 Hmem2'. *)
+                admit.
           (* END CASE: CALL *)
 
           (* CASE: [ERet], [ERetInform] *)
@@ -6466,10 +6619,17 @@ Section Definability.
                   eapply star_trans; try eassumption; last reflexivity.
                   eapply star_trans; try eassumption; reflexivity.
                 }
-                specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra ?].
-                rewrite cats1 in Hcontra.
-                inversion Hcontra; subst t0.
-                apply H0 in Hshared. simpl in Hshared.
+                (* specialize (Hno_leaks _ _ Hstar0_ret) as [? Hcontra]. *)
+                (* rewrite cats1 in Hcontra. *)
+                (* inversion Hcontra; subst t0. *)
+                specialize (Hno_leaks _ _ Hstar0_ret). inversion Hno_leaks. subst t0.
+                assert (H0 : good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
+                                                   (prefix' ++ [:: ERet C vcom mem1 C'])).
+                {
+                  admit. (* Only part of the theorem being used here. *)
+                } clear H0.
+                (* apply H0 in Hshared. simpl in Hshared. *)
+                rewrite -cats1 in Hshared. apply H in Hshared.
                 destruct b as [| b']; last reflexivity.
                 rewrite /uniform_shift
                         /left_block_id_good_for_shifting in Hshared.
