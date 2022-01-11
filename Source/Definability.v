@@ -1155,7 +1155,8 @@ Section Definability.
     unfold program_of_trace. rewrite Hprocs_map. eexists; split; eauto.
     split=> //=.
     - exact: closed_interface_is_sound.
-    - by rewrite /procedures_of_trace domm_mapi.
+      (******************************************
+    - rewrite /procedures_of_trace in Hprocs_map. domm_mapi.
     - move=> C P.
       rewrite /exported_procedure /Program.has_component /Component.is_exporting.
       case=> CI [C_CI P_CI].
@@ -1389,6 +1390,7 @@ Section Definability.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
+       ***************************************)
   Admitted.
 
   Lemma closed_program_of_trace t :
