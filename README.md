@@ -141,19 +141,6 @@ that we expose a reasoning principle for equality of component memories.
 
 #### Back-translation ####
 
-The proof of back-translation currently relies on a small number of reasonable
-assumptions. The well-formedness of the back-translated program holds by
-construction. Like similar proofs that talk more generally about all source and
-target language programs, a few simple adaptations are needed to accommodate the
-strengthened notion of program well-formedness.
-
-```coq
-well_formed_events_well_formed_program
-  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
-    all (well_formed_event intf procs) t ->
-    Source.well_formed_program (program_of_trace t)
-```
-
 A small number of renaming and reachability properties of procedure calls:
 
 ```coq
