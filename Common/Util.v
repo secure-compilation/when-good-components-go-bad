@@ -1,6 +1,6 @@
 Require Import Common.Definitions.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool seq.
+From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -79,6 +79,9 @@ Proof.
     easy.
 Qed.
 
+End Domm.
+
+
 Lemma cats2 {A} s (e1 e2 : A) :
   (s ++ [:: e1]) ++ [:: e2] = rcons (rcons s e1) e2.
 Proof.
@@ -99,4 +102,51 @@ Proof.
 Qed.
 
 
-End Domm.
+Lemma mem_codomm_setm :
+  forall (T S : ordType) (m : {fmap T -> S}) (k1 k2 : T) (v v' : S),
+    m k1 = Some v ->
+    v' \in codomm (setm m k2 v) ->
+    v' \in codomm m.
+Proof.
+  intros T S m k1 k2 v v' Hmem Hmemcodomm.
+  apply/codommP.
+  pose (H' := @codommP _ _ (setm m k2 v) v' Hmemcodomm).
+  destruct H' as [kOfv' H'mem].
+  rewrite setmE in H'mem.
+  destruct (kOfv' == k2) eqn:k2kOfv'.
+  - eexists k1. rewrite <- H'mem. exact Hmem.
+  - eexists kOfv'. exact H'mem.
+Qed.
+
+Lemma in_fsubset :
+  forall (T : ordType) (s1 s2 : {fset T}),
+    (forall v, v \in s1 -> v \in s2) -> fsubset s1 s2.
+Proof.
+  intros ? ? ? Hinin.
+  apply/fsubsetP.
+  unfold sub_mem.
+  exact Hinin.
+Qed.
+
+Lemma fsubset_in :
+  forall (T : ordType) (s1 s2 : {fset T}) v,
+    fsubset s1 s2 -> v \in s1 -> v \in s2.
+Proof.
+  intros ? ? ? ? Hsubset Hin.
+  pose (@fsubsetP _ s1 s2 Hsubset) as Hsubset'.
+  unfold sub_mem in Hsubset'.
+  apply Hsubset'.
+  assumption.
+Qed.
+
+Ltac find_if_inside_hyp H :=
+  let e := fresh "e" in
+  let t := type of H in
+  match t with
+  |  context [if ?X then _ else _] => destruct X eqn:e
+  end.
+Ltac find_if_inside_goal :=
+  let e := fresh "e" in
+  match goal with
+  | [ |- context[if ?X then _ else _] ] => destruct X eqn:e
+  end.

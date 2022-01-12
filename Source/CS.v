@@ -175,8 +175,8 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     C = C' ->
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
-    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v), old_call_arg] E0
-            [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, Int v]
+    kstep G [State C, s, mem, Kcall C' P k, E_val v, old_call_arg] E0
+            [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, v]
 | KS_ExternalCall : forall C s mem k C' P v P_expr old_call_arg,
     C <> C' ->
     (* check permission *)
@@ -188,8 +188,8 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
             [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, v]
 | KS_InternalReturn: forall C s mem k v arg C' old_call_arg,
     C = C' ->
-    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v), arg] E0
-            [State C', s, mem, k, E_val (Int v), old_call_arg]
+    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val v, arg] E0
+            [State C', s, mem, k, E_val v, old_call_arg]
 | KS_ExternalReturn: forall C s mem k v arg C' old_call_arg,
     C <> C' ->
     kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val v, arg]
@@ -390,7 +390,10 @@ Proof.
            reflexivity)
   end.
   - repeat simplify_option.
-    + admit. (*case: (_ =P _) => [->|?]; econstructor; eauto.*)
+    + destruct (C0 == C) eqn:eC0.
+      * assert (C0 = C). by apply/eqP. subst.
+        eapply KS_InternalReturn; by auto.
+      * econstructor. intros ?. subst. by rewrite eq_refl in eC0.
     + econstructor; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
@@ -400,7 +403,7 @@ Proof.
     + by econstructor; eauto; apply/eqP.
     + econstructor; eauto.
     + by econstructor; eauto; apply/eqP.
-    + admit. (*econstructor; eauto; exact/eqP.*)
+    + econstructor; eauto. by apply/eqP.
     + econstructor; eauto; first exact/eqP/negbT.
       apply imported_procedure_iff. assumption.
     + econstructor; eauto.
@@ -409,7 +412,7 @@ Proof.
       assert (i0 = Permission.code). by apply /Permission.eqP. subst.
       assert (i1 = C). by apply beq_nat_true. subst.
       by econstructor.
-Admitted.
+Qed.
 
 Theorem eval_kstep_correct:
   forall G st t st',
@@ -535,30 +538,327 @@ Section Semantics.
       by eauto.
   Qed.
 
+  Lemma load_component_prog_interface_intitial_state s ptr ptr':
+    initial_state p s ->
+    Memory.load (s_memory s) ptr = Some (Ptr ptr') ->
+    Pointer.component ptr' \in domm (prog_interface p).
+  Proof.
+    intros Hini Hload.
+    unfold initial_state, initial_machine_state in Hini.
+    apply cprog_main_existence in complete_program as HisSome.
+    destruct (prog_main p) eqn:emain; last discriminate. subst. simpl in *.
+    unfold prepare_buffers, Memory.load in *. rewrite mapmE in Hload.
+    find_if_inside_hyp Hload; last discriminate.
+    destruct ((prog_buffers p (Pointer.component ptr))) as [buf|] eqn:ebuf;
+      last discriminate.
+    simpl in *. rewrite ComponentMemory.load_prealloc in Hload.
+    find_if_inside_hyp Hload; last discriminate.
+    destruct (setm emptym 0 buf (Pointer.block ptr)) as [buf'|] eqn:esetm;
+      last discriminate.
+    destruct buf'; first (find_if_inside_hyp Hload; discriminate).
+    apply nth_error_In in Hload.
+    rewrite setmE in esetm.
+    find_if_inside_hyp esetm; last discriminate. inversion esetm; subst; clear esetm.
+    assert (exists x, prog_interface p (Pointer.component ptr) = Some x) as [? H_].
+    {
+      apply/dommP. rewrite wfprog_defined_buffers; auto. apply/dommP; by eauto.
+    }
+    assert (H__: prog_interface p (Pointer.component ptr)). by rewrite H_.
+    specialize (wfprog_well_formed_buffers valid_program H__) as [? Bwf].
+    clear H_ H__. unfold Buffer.well_formed_buffer_opt in *.
+    rewrite ebuf in Bwf. simpl in *. move : Bwf => /andP => [[_ Bwf]].
+    apply In_in in Hload.
+    assert (contra: exists2 x, x \in l & ~~ (fun v : value => ~~ is_ptr v) x).
+    { by eauto. }
+    move : contra => /allPn => contra. by rewrite Bwf in contra.
+  Qed.
+
+  Definition runtime_val_wf_wrt_prog_interface_ (v: value) : bool :=
+    match v with
+      | Ptr ptr => Pointer.component ptr \in domm (prog_interface p)
+      | _ => true
+    end.
+  
+  Fixpoint runtime_expr_struct_invariant
+           (e: expr) (val_test: value -> bool) : bool :=
+    match e with
+    | E_val v => val_test v      
+    | E_binop _ e1 e2 =>
+      runtime_expr_struct_invariant e1 val_test &&
+      runtime_expr_struct_invariant e2 val_test
+    | E_seq e1 e2 =>
+      runtime_expr_struct_invariant e1 val_test &&
+      runtime_expr_struct_invariant e2 val_test
+    | E_if e1 e2 e3 =>
+      runtime_expr_struct_invariant e1 val_test &&
+      runtime_expr_struct_invariant e2 val_test &&
+      runtime_expr_struct_invariant e3 val_test
+    | E_alloc e =>
+      runtime_expr_struct_invariant e val_test
+    | E_deref e =>
+      runtime_expr_struct_invariant e val_test
+    | E_assign e1 e2 =>
+      runtime_expr_struct_invariant e1 val_test &&
+      runtime_expr_struct_invariant e2 val_test
+    | E_call _ _ e =>
+      runtime_expr_struct_invariant e val_test
+    | E_callptr e1 e2 =>
+      runtime_expr_struct_invariant e1 val_test &&
+      runtime_expr_struct_invariant e2 val_test
+    | E_funptr _
+    | E_arg
+    | E_local
+    | E_exit => true
+    end.
+
+  Fixpoint cont_struct_invariant (k: cont) (val_test: value -> bool) : bool :=
+    match k with
+    | Kbinop1 _ e k2 =>
+      runtime_expr_struct_invariant e val_test &&
+      cont_struct_invariant k2 val_test
+    | Kbinop2 _ v k2 =>
+      val_test v &&
+      cont_struct_invariant k2 val_test
+    | Kseq e k2 =>
+      runtime_expr_struct_invariant e val_test &&
+      cont_struct_invariant k2 val_test
+    | Kif e1 e2 k3 =>
+      runtime_expr_struct_invariant e1 val_test &&
+      runtime_expr_struct_invariant e2 val_test &&
+      cont_struct_invariant k3 val_test
+    | Kalloc k2 =>
+      cont_struct_invariant k2 val_test
+    | Kderef k2 =>
+      cont_struct_invariant k2 val_test
+    | Kassign1 e k2 =>
+      runtime_expr_struct_invariant e val_test &&
+      cont_struct_invariant k2 val_test
+    | Kassign2 v k2 =>
+      val_test v &&
+      cont_struct_invariant k2 val_test
+    | Kcall _ _ k2 =>
+      cont_struct_invariant k2 val_test
+    | Kcallptr1 e k2 =>
+      runtime_expr_struct_invariant e val_test &&
+      cont_struct_invariant k2 val_test
+    | Kcallptr2 v k2 =>
+      val_test v &&
+      cont_struct_invariant k2 val_test
+    | Kstop => true
+    end.
+
+  Definition stack_wf_wrt_prog_interface (s: stack) (val_test: value -> bool) : bool :=
+    all (fun frm =>
+           (f_component frm \in domm (prog_interface p))
+           &&
+           val_test (f_arg frm) 
+           &&
+           cont_struct_invariant (f_cont frm) val_test 
+        )
+        s.
+  
+  Lemma values_are_integers_runtime_expr_wf_wrt_prog_interface e:
+    values_are_integers e ->
+    runtime_expr_struct_invariant e (runtime_val_wf_wrt_prog_interface_).
+  Proof.
+    induction e; auto; intros Hval; inversion Hval as [Hval'];
+      try (
+          move : Hval' => /andP => [[Hval1 Hval2]];
+                                   specialize (IHe1 Hval1);
+                                   specialize (IHe2 Hval2);
+                                   simpl; by rewrite IHe1 IHe2
+        ).
+    - destruct v; by auto.
+    - move : Hval' => /andP => [[Hval1 Hval_]].
+      move : Hval_ => /andP => [[Hval2 Hval3]].
+      specialize (IHe1 Hval1).
+      specialize (IHe2 Hval2).
+      specialize (IHe3 Hval3).
+      simpl. by rewrite IHe1 IHe2 IHe3.
+  Qed.
+
+  Lemma well_formed_expr_runtime_expr_wf_wrt_prog_interface C e:
+    well_formed_expr p C e ->
+    runtime_expr_struct_invariant e runtime_val_wf_wrt_prog_interface_.
+  Proof.
+    unfold well_formed_expr. intros [_ [? _]].
+    by apply values_are_integers_runtime_expr_wf_wrt_prog_interface.
+  Qed.
+
+  Lemma runtime_val_wf_wrt_prog_interface_eval_binop v1 v2 op:
+    runtime_val_wf_wrt_prog_interface_ v1 ->
+    runtime_val_wf_wrt_prog_interface_ v2 ->
+    runtime_val_wf_wrt_prog_interface_ (eval_binop op v1 v2).
+  Proof.
+    intros Hv1 Hv2.
+    destruct op; destruct v1 as [| [[[perm1 c1] b1] o1] |];
+      destruct v2 as [| [[[perm2 c2] b2] o2] |]; simpl in *; auto.
+    - find_if_inside_goal; by auto.
+    - find_if_inside_goal; by auto.
+  Qed.
+  
+  Lemma load_component_prog_interface_inductively_provable s t s':
+    initial_state p s ->
+    Star sem s t s' ->
+    (
+      (
+        forall ptr ptr',
+          Memory.load (s_memory s') ptr = Some (Ptr ptr') ->
+          Pointer.component ptr' \in domm (prog_interface p)
+      )
+      /\
+      runtime_expr_struct_invariant (s_expr s') runtime_val_wf_wrt_prog_interface_
+      /\
+      cont_struct_invariant (s_cont s') runtime_val_wf_wrt_prog_interface_
+      /\
+      runtime_val_wf_wrt_prog_interface_ (s_arg s')
+      /\
+      s_component s' \in domm (prog_interface p)
+      /\
+      stack_wf_wrt_prog_interface (s_stack s') runtime_val_wf_wrt_prog_interface_                   
+    ).
+  Proof.
+    intros Hini Hstar.
+    apply star_iff_starR in Hstar.
+    revert Hini.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+      subst;
+      intros Hini.
+    - split; [intros ? ? Hload | split; [| ]].
+      + by eapply load_component_prog_interface_intitial_state; eauto.
+      + unfold initial_state, initial_machine_state in Hini.
+        destruct (prog_main p) eqn:emain; subst; simpl; auto.
+        unfold prog_main in emain.
+        apply wfprog_well_formed_procedures in emain; auto.
+        unfold well_formed_expr in *. destruct emain as [_ [G_ _]].
+        by apply values_are_integers_runtime_expr_wf_wrt_prog_interface in G_.
+      + unfold initial_state, initial_machine_state in Hini.
+        destruct (prog_main p) eqn:emain; subst; simpl; auto.
+        * rewrite wfprog_main_existence; auto; by rewrite emain.
+        * specialize (cprog_main_existence complete_program) as contra.
+          by rewrite emain in contra.
+    - specialize (IHHstar Hini)
+        as [IHload [IHexpr [IHcont [IHarg [IHcomp IHstack]]]]];
+            simpl in *.
+      split;
+        [
+          intros ? ? Hload; inversion Hstep23; subst;
+          try (simpl in Hload; eapply IHload; by eauto)
+        |].
+      + (* Hload in context; case alloc *)
+        simpl in *. 
+        destruct ((Pointer.component ptr, Pointer.block ptr) ==
+                  (Pointer.component ptr0, Pointer.block ptr0)) eqn:eqalloc.
+        * move : eqalloc => /eqP => eqalloc.
+          specialize (Memory.load_after_alloc_eq _ _ _ _ _ _ H0 eqalloc) as Hload'.
+          rewrite Hload' in Hload. repeat (find_if_inside_hyp Hload; last discriminate).
+          discriminate.
+        * assert (Hneq: (Pointer.component ptr, Pointer.block ptr) <>
+                        (Pointer.component ptr0, Pointer.block ptr0)).
+          { unfold not. move => /eqP => contra. by rewrite contra in eqalloc. } 
+          specialize (Memory.load_after_alloc _ _ _ _ _ _ H0 Hneq) as Hrewr.
+          rewrite Hrewr in Hload. by eapply IHload; eauto.
+      + (* Hload in context; case store *)
+        simpl in *.
+        specialize (Memory.load_after_store _ _ _ _ ptr H) as Hload'.
+        rewrite Hload' in Hload.
+        find_if_inside_hyp Hload.
+        * inversion Hload; subst; clear Hload.
+          simpl in IHcont. by move : IHcont => /andP => [[G_ _]].
+        * eapply IHload; by eauto.
+      + split; [inversion Hstep23; subst; simpl in *; auto;
+                try (by move : IHexpr => /andP => [[? ?]]);
+                try (by move : IHcont => /andP => [[? ?]])
+               |].
+        * apply runtime_val_wf_wrt_prog_interface_eval_binop; auto.
+          by move : IHcont => /andP => [[? ?]].
+        * move : IHexpr => /andP => [[G_ ?]].
+          by move : G_ => /andP => [[? ?]].
+        * move : IHcont => /andP => [[G_ ?]].
+          move : G_ => /andP => [[? ?]].
+          by find_if_inside_goal.
+        * by apply Memory.component_of_alloc_ptr in H0; subst.
+        * destruct v; auto. by eapply IHload; eauto.
+        * apply wfprog_well_formed_procedures in H0; auto.
+          by eapply well_formed_expr_runtime_expr_wf_wrt_prog_interface; eauto.
+        * apply wfprog_well_formed_procedures in H1; auto.
+          by eapply well_formed_expr_runtime_expr_wf_wrt_prog_interface; eauto.
+        * split; [inversion Hstep23; subst; simpl in *; auto;
+                try (move : IHexpr => /andP => [[IHe1 IHe2]]);
+                try (move : IHcont => /andP => [[IHk1 IHk2]]);
+                auto;
+                try (
+                    match goal with
+                    | H1 : is_true (?X), H2: is_true (?Y) |-
+                      is_true (andb ?X ?Y) => by rewrite H1 H2
+                    end
+                  )
+               |].
+          -- move : IHe1 => /andP => [[IHe1 IHe2_]].
+             by rewrite IHe2_ IHe2 IHcont.
+          -- move : IHstack => /andP => [[IHstack _]].
+             by move : IHstack => /andP => [[_ ?]].
+          -- move : IHstack => /andP => [[IHstack _]].
+             by move : IHstack => /andP => [[_ ?]].
+          -- split; [inversion Hstep23; subst; simpl in *; auto;
+                     try (move : IHexpr => /andP => [[IHe1 IHe2]]);
+                     try (move : IHcont => /andP => [[IHk1 IHk2]]);
+                     auto;
+                     try (
+                         match goal with
+                         | H1 : is_true (?X), H2: is_true (?Y) |-
+                           is_true (andb ?X ?Y) => by rewrite H1 H2
+                         end
+                       )
+                    |].
+             ++ do 2 (move : IHstack => /andP => [[IHstack _]]).
+                by move : IHstack => /andP => [[_ ?]].
+             ++ do 2 (move : IHstack => /andP => [[IHstack _]]).
+                by move : IHstack => /andP => [[_ ?]].
+             ++ split; [inversion Hstep23; subst; simpl in *; auto |].
+                ** by eapply find_procedure_prog_interface; eauto.
+                ** by repeat (move : IHstack => /andP => [[IHstack _]]).
+                ** inversion Hstep23; subst; simpl in *; auto.
+                   --- by rewrite IHarg IHcont IHstack IHcomp.
+                   --- by rewrite IHarg IHcont IHstack IHcomp.
+                   --- by (move : IHstack => /andP => [[_ ?]]).
+                   --- by (move : IHstack => /andP => [[_ ?]]).
+  Qed.
+  
   Lemma load_component_prog_interface s t s' ptr ptr' :
     initial_state p s ->
     Star sem s t s' ->
     Memory.load (s_memory s') ptr = Some (Ptr ptr') ->
     Pointer.component ptr' \in domm (prog_interface p).
-  Admitted.
+  Proof.
+    intros Hini Hstar.
+    specialize (load_component_prog_interface_inductively_provable Hini Hstar);
+      intuition.
+    by eapply H1; eauto.
+  Qed.
 
-  Lemma load_component_prog_interface_addr s t s' ptr v :
+  
+  
+  (* TODO: Move to Common/Memory.v *)
+  Lemma load_some_in_domm mem ptr v:
+    Memory.load mem ptr = Some v ->
+    Pointer.component ptr \in domm mem.
+  Proof.
+    unfold Memory.load. find_if_inside_goal; last discriminate.
+    destruct (mem (Pointer.component ptr)) eqn:emem; last discriminate. intros _.
+    apply/dommP. by eauto.
+  Qed.
+
+  Lemma initial_state_domm_s_memory s:
     initial_state p s ->
-    Star sem s t s' ->
-    Memory.load (s_memory s') ptr = Some v ->
-    Pointer.component ptr \in domm (prog_interface p).
-  Admitted.
-
-  Lemma load_data_next_block s t s' ptr C b o :
-    initial_state p s ->
-    Star sem s t s' ->
-    Memory.load (s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
-  exists Cmem,
-    (* Memory.next_block (s_memory s') c = some b' /\ *)
-    (s_memory s') C = Some Cmem /\
-    b < ComponentMemory.next_block Cmem.
-  Admitted.
-
+    domm (s_memory s) = domm (prog_interface p).
+  Proof.
+    unfold initial_state. intros. subst. unfold initial_machine_state.
+    apply cprog_main_existence in complete_program as HisSome.
+    destruct (prog_main p) eqn:emain; last discriminate. simpl.
+    by apply domm_prepare_buffers.
+  Qed.
+  
   Lemma step_preserves_mem_domm s t s' :
     Step sem s t s' ->
     domm (s_memory s) = domm (s_memory s').
@@ -608,14 +908,550 @@ Section Semantics.
     induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
       subst;
       intros Hini.
-    - unfold initial_state, initial_machine_state in Hini; subst s.
-      pose proof cprog_main_existence complete_program as Hmain.
-      destruct (prog_main p) as [main |]; [| discriminate].
-      now rewrite domm_prepare_buffers.
+    - by apply initial_state_domm_s_memory.
     - specialize (IHHstar Hini).
       apply step_preserves_mem_domm in Hstep23. congruence.
   Qed.
+  
+  Lemma load_component_prog_interface_addr s t s' ptr v :
+    initial_state p s ->
+    Star sem s t s' ->
+    Memory.load (s_memory s') ptr = Some v ->
+    Pointer.component ptr \in domm (prog_interface p).
+  Proof.
+    intros Hini Hstar.
+    apply star_iff_starR in Hstar.
+    revert Hini.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+      subst;
+      intros Hini Hload.
+    - apply load_some_in_domm in Hload.
+      by erewrite <- initial_state_domm_s_memory; eauto.
+    - specialize (IHHstar Hini).
+      inversion Hstep23; subst;
+        try (simpl in Hload; apply IHHstar; by auto);
+        (
+          apply load_some_in_domm in Hload; simpl in Hload;
+          apply star_iff_starR in Hstar12;
+          specialize (comes_from_initial_state_mem_domm Hini Hstar12) as G_; simpl in G_
+        ).
+      + apply Memory.domm_alloc in H0. by rewrite -G_ H0. 
+      + apply Memory.domm_store in H. by rewrite -G_ H.
+  Qed.
 
+  Definition b_nextblock mem (v: value) : bool :=
+    match v with
+    | Ptr (Permission.data, C, b, o) =>
+      match mem C with
+      | Some Cmem => b <? ComponentMemory.next_block Cmem
+      | None => false
+      end
+    | _ => true
+    end.
+
+  Lemma values_are_integers_b_nextblock e mem:
+    values_are_integers e ->
+    runtime_expr_struct_invariant e (b_nextblock mem).
+  Proof.
+    induction e; simpl; auto.
+    - by destruct v; auto.
+    - move => /andP [? ?]. rewrite IHe1; by auto.
+    - move => /andP [? ?]. rewrite IHe1; by auto.
+    - move => /andP [? H]. move : H => /andP => [[? ?]].
+      rewrite IHe1; auto. rewrite IHe2; by auto.
+    - move => /andP [? ?]. rewrite IHe1; by auto.
+    - move => /andP [? ?]. rewrite IHe1; by auto.
+  Qed.
+
+  Lemma b_next_block_eval_binop mem v1 v2 op:
+    b_nextblock mem v1 ->
+    b_nextblock mem v2 ->
+    b_nextblock mem (eval_binop op v1 v2).
+  Proof.
+    intros Hv1 Hv2.
+    destruct op; destruct v1 as [| [[[perm1 c1] b1] o1] |];
+      destruct v2 as [| [[[perm2 c2] b2] o2] |]; simpl in *; auto.
+    - find_if_inside_goal; by auto.
+    - find_if_inside_goal; by auto.
+  Qed.
+  
+  Lemma load_data_next_block_initial_state s:
+    initial_state p s ->
+    forall ptr C b o,
+      Memory.load (s_memory s) ptr = Some (Ptr (Permission.data, C, b, o)) ->
+      exists Cmem,
+        (s_memory s) C = Some Cmem /\
+        b < ComponentMemory.next_block Cmem.
+  Proof.
+    intros Hinit ? ? ? ? Hload.
+    unfold initial_state in Hinit. subst.
+    unfold initial_machine_state in *.
+    destruct (prog_main p) eqn:e; simpl in *.
+    - unfold prepare_buffers, Memory.load in *.
+      find_if_inside_hyp Hload; [|discriminate].
+      rewrite mapmE in Hload.
+      unfold omap, obind, oapp in *.
+      destruct (prog_buffers p (Pointer.component ptr)) as [buf|] eqn:ebuf;
+        [|discriminate].
+      simpl in *. rewrite ComponentMemory.load_prealloc in Hload.
+      find_if_inside_hyp Hload; [|discriminate].
+      rewrite setmE in Hload.
+      find_if_inside_hyp Hload; [|discriminate].
+      destruct buf as [sz|chnk].
+      + find_if_inside_hyp Hload; discriminate.
+      + assert (exists x, prog_interface p (Pointer.component ptr) = Some x)
+          as [? Hifc].
+        {
+          apply/dommP. specialize (wfprog_defined_buffers valid_program) as Hrewr.
+          rewrite Hrewr. apply/dommP. by eauto.   
+        }
+        assert (Hifc_: prog_interface p (Pointer.component ptr)).
+        { by rewrite Hifc. }
+        specialize (wfprog_well_formed_buffers valid_program Hifc_) as Hwfbuf.
+        rewrite ebuf in Hwfbuf.
+        simpl in *. destruct Hwfbuf as [_ G_]. move : G_ => /andP => [[_ G_]].
+        move : G_ => /allP => G_. apply nth_error_In, In_in, G_ in Hload.
+        by simpl in *.
+    - unfold Memory.load in *. find_if_inside_hyp Hload; [|discriminate].
+      by rewrite emptymE in Hload.
+  Qed.
+
+  Lemma b_nextblock_alloc v (mem: Memory.t) C sz ptr mem':
+    b_nextblock mem v ->
+    Memory.alloc mem C (Z.to_nat sz) = Some (mem', ptr) ->
+    b_nextblock mem' v.
+  Proof.
+    intros Hb Halloc. 
+    destruct v as [ | [[[[] c] b] o] | ]; auto. simpl in *.
+    unfold Memory.alloc in *.
+    destruct (mem c) as [memc|] eqn:ememc; [|discriminate].
+    destruct (mem C) as [memC|] eqn:ememC; [|discriminate].
+    destruct (ComponentMemory.alloc memC (Z.to_nat sz))
+      as [memC' b'] eqn:ememC'.
+    inversion Halloc; subst. rewrite setmE.
+    find_if_inside_goal.
+    + move : e => /eqP => ?; subst.
+      apply ComponentMemory.next_block_alloc in ememC' as [G1 G2]; subst; rewrite G2.
+      apply Nat.ltb_lt. apply/ssrnat.leP. apply ssrnat.ltn_addr.
+      apply/ssrnat.leP. apply Nat.ltb_lt.
+      rewrite ememc in ememC. inversion ememC; subst. by rewrite Hb.
+    + by rewrite ememc.
+  Qed.
+    
+  Lemma b_nextblock_store (mem: Memory.t) v P C b o v' mem':
+    b_nextblock mem v ->
+    Memory.store mem (P, C, b, o) v' = Some mem' ->
+    b_nextblock mem' v.
+  Proof.
+    intros Hb Hstore. 
+    destruct v as [ | [[[[] c] bv] ov] | ]; auto. simpl in *.
+    unfold Memory.store in *.
+    destruct (mem c) as [memc|] eqn:ememc; [|discriminate].
+    find_if_inside_hyp Hstore; [|discriminate]; simpl in *.
+    destruct (mem C) as [memC|] eqn:ememC; [|discriminate].
+    destruct (ComponentMemory.store memC b o v')
+      as [memC'|] eqn:ememC'; [|discriminate].
+    inversion Hstore; subst. rewrite setmE.
+    find_if_inside_goal.
+    + apply ComponentMemory.next_block_store_stable in ememC'. rewrite -ememC'.
+      move : e0 => /eqP => ?; subst. rewrite ememc in ememC. inversion ememC. by subst.
+    + by rewrite ememc.
+  Qed.
+  
+  Lemma runtime_expr_struct_invariant_b_nextblock_alloc
+        re (mem: Memory.t) C sz ptr mem':
+    runtime_expr_struct_invariant re (b_nextblock mem) ->
+    Memory.alloc mem C (Z.to_nat sz) = Some (mem', ptr) ->
+    runtime_expr_struct_invariant re (b_nextblock mem').
+  Proof.
+    induction re; auto; intros Hre Halloc; simpl in *;
+      try (move : Hre => /andP => [[H1 H2]]; apply/andP; by intuition).
+    - by eapply b_nextblock_alloc; eauto.
+    - move : Hre => /andP => [[H1 H2]]. apply/andP. intuition.
+      move : H1 => /andP => [[? ?]]. apply/andP. by intuition.
+  Qed. 
+      
+  Lemma runtime_expr_struct_invariant_b_nextblock_store
+        re (mem: Memory.t) P C b o v' mem':
+    runtime_expr_struct_invariant re (b_nextblock mem) ->
+    Memory.store mem (P, C, b, o) v' = Some mem' ->
+    runtime_expr_struct_invariant re (b_nextblock mem').
+  Proof.
+    induction re; auto; intros Hre Hstore; simpl in *;
+      try (move : Hre => /andP => [[H1 H2]]; apply/andP; by intuition).
+    - by eapply b_nextblock_store; eauto.
+    - move : Hre => /andP => [[H1 H2]]. apply/andP. intuition.
+      move : H1 => /andP => [[? ?]]. apply/andP. by intuition.
+  Qed. 
+  
+  Lemma cont_struct_invariant_b_nextblock_alloc k (mem: Memory.t) C sz ptr mem' :
+    cont_struct_invariant k (b_nextblock mem) ->
+    Memory.alloc mem C (Z.to_nat sz) = Some (mem', ptr) ->
+    cont_struct_invariant k (b_nextblock mem').
+  Proof.
+    induction k; auto; intros Hmem Halloc; simpl in *;
+      move : Hmem => /andP => [[H1 H2]]; apply/andP; intuition;
+                                try (by eapply b_nextblock_alloc; eauto);
+                                try (by eapply runtime_expr_struct_invariant_b_nextblock_alloc; eauto).
+    - apply/andP. move : H1 => /andP => [[? ?]].
+      split; by eapply runtime_expr_struct_invariant_b_nextblock_alloc; eauto.
+  Qed.
+
+  Lemma cont_struct_invariant_b_nextblock_store k (mem: Memory.t) P C b o v mem':
+    cont_struct_invariant k (b_nextblock mem) ->
+    Memory.store mem (P, C, b, o) v = Some mem' ->
+    cont_struct_invariant k (b_nextblock mem').
+  Proof.
+    induction k; auto; intros Hmem Hstore; simpl in *;
+      move : Hmem => /andP => [[H1 H2]]; apply/andP; intuition;
+                                try (by eapply b_nextblock_store; eauto);
+                                try (by eapply runtime_expr_struct_invariant_b_nextblock_store; eauto).
+    - apply/andP. move : H1 => /andP => [[? ?]].
+      split; by eapply runtime_expr_struct_invariant_b_nextblock_store; eauto.
+  Qed.
+
+  Lemma stack_wf_wrt_prog_interface_b_nextblock_alloc
+        s (mem: Memory.t) C size mem' ptr:
+    stack_wf_wrt_prog_interface s (b_nextblock mem) ->
+    Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
+    stack_wf_wrt_prog_interface s (b_nextblock mem').
+  Proof.
+    induction s using last_ind; auto. unfold stack_wf_wrt_prog_interface.
+    rewrite !all_rcons. intros Hwf Halloc.
+    repeat (let H := fresh "H" in move : Hwf => /andP => [[Hwf H]]).
+    specialize (IHs H Halloc).
+    apply/andP; split; [|assumption].
+    apply/andP; split; [|by eapply cont_struct_invariant_b_nextblock_alloc; eauto].
+    apply/andP; split; [assumption|by eapply b_nextblock_alloc; eauto].
+  Qed.
+    
+  Lemma stack_wf_wrt_prog_interface_b_nextblock_store
+        s (mem: Memory.t) P C b o v mem':
+    stack_wf_wrt_prog_interface s (b_nextblock mem) ->
+    Memory.store mem (P, C, b, o) v = Some mem' ->
+    stack_wf_wrt_prog_interface s (b_nextblock mem').
+  Proof.
+    induction s using last_ind; auto. unfold stack_wf_wrt_prog_interface.
+    rewrite !all_rcons. intros Hwf Hstore.
+    repeat (let H := fresh "H" in move : Hwf => /andP => [[Hwf H]]).
+    specialize (IHs H Hstore).
+    apply/andP; split; [|assumption].
+    apply/andP; split; [|by eapply cont_struct_invariant_b_nextblock_store; eauto].
+    apply/andP; split; [assumption|by eapply b_nextblock_store; eauto].
+  Qed.
+
+
+  Lemma load_data_next_block_inductively_provable s t s' :
+    initial_state p s ->
+    Star sem s t s' ->
+    (
+      (
+        forall ptr C b o,
+          Memory.load (s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
+          exists Cmem,
+            (* Memory.next_block (s_memory s') c = some b' /\ *)
+            (s_memory s') C = Some Cmem /\
+            b < ComponentMemory.next_block Cmem
+      )
+      /\
+      runtime_expr_struct_invariant (s_expr s') (b_nextblock (s_memory s'))
+      /\
+      cont_struct_invariant (s_cont s') (b_nextblock (s_memory s'))
+      /\
+      b_nextblock (s_memory s') (s_arg s')
+      /\
+      (exists cmem,
+          (s_memory s') (s_component s') = Some cmem
+          /\
+          Block.local <? ComponentMemory.next_block cmem
+      )
+      /\
+      stack_wf_wrt_prog_interface (s_stack s') (b_nextblock (s_memory s'))
+      /\
+      (
+        forall C',
+          C' \in domm (prog_interface p) ->
+          exists cmem : ComponentMemory.t,
+            (s_memory s') C' = Some cmem /\
+            Block.local <? ComponentMemory.next_block cmem
+      )
+    ).
+  Proof.
+    intros Hini Hstar.
+    apply star_iff_starR in Hstar.
+    revert Hini.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+      subst;
+      intros Hini.
+    - split; [intros ? ? ? ? Hload | split; [| ]].
+      + by eapply load_data_next_block_initial_state; eauto.
+      + unfold initial_state, initial_machine_state in Hini.
+        destruct (prog_main p) eqn:emain; subst; simpl; auto.
+        unfold prog_main in emain.
+        apply wfprog_well_formed_procedures in emain; auto.
+        unfold well_formed_expr in *. destruct emain as [_ [G_ _]].
+          by eapply values_are_integers_b_nextblock in G_; eauto.
+      + unfold initial_state, initial_machine_state in Hini.
+        destruct (prog_main p) eqn:emain; subst; simpl; try by eauto; intuition.
+        -- assert (exists cmem, prepare_buffers p Component.main = Some cmem) as [? ?].
+           {
+             apply/dommP. rewrite domm_prepare_buffers; auto.
+             rewrite wfprog_main_existence; auto.
+             by rewrite emain.
+           }
+           assert (G1: Block.local <? ComponentMemory.next_block x).
+           {
+             unfold prepare_buffers in H. rewrite mapmE in H.
+             unfold omap, obind, oapp in *.
+             destruct (prog_buffers p Component.main)
+               as [buf|] eqn:ebuf; [|discriminate].
+             inversion H; subst. by rewrite ComponentMemory.nextblock_prealloc.
+           }
+           intuition.
+           ++ exists x; by intuition.
+           ++ assert (exists cmem, prepare_buffers p C' = Some cmem) as [? ?].
+              {
+                apply/dommP. rewrite domm_prepare_buffers; auto.
+              }
+              eexists; intuition; eauto.
+              unfold prepare_buffers in H1. rewrite mapmE in H1.
+              unfold omap, obind, oapp in *.
+              destruct (prog_buffers p C')
+                as [buf|] eqn:ebuf; [|discriminate].
+              inversion H1; subst. by rewrite ComponentMemory.nextblock_prealloc.
+        -- intuition; destruct complete_program;
+             by rewrite emain in cprog_main_existence0. 
+    - specialize (IHHstar Hini)
+        as [IHload [IHexpr [IHcont [IHarg [[compMem [HcompMem HcompMem2]] [IHstack IHfind]]]]]];
+            simpl in *.
+      split;
+        [
+          intros ? ? ? ? Hload; inversion Hstep23; subst;
+          try (simpl in Hload; eapply IHload; by eauto)
+         |]; simpl in *.
+      + destruct ((Pointer.component ptr, Pointer.block ptr) ==
+                  (Pointer.component ptr0, Pointer.block ptr0)) eqn:eptr.
+        * move : eptr => /eqP => eptr.
+          erewrite Memory.load_after_alloc_eq in Hload; eauto.
+          repeat (find_if_inside_hyp Hload; [|discriminate]).
+          by inversion Hload.
+        * erewrite Memory.load_after_alloc in Hload; eauto.
+          -- specialize (IHload _ _ _ _ Hload) as [? [? ?]].
+             unfold Memory.alloc in *.
+             destruct (mem C0) as [memC0|] eqn:eC0; [|discriminate].
+             destruct (ComponentMemory.alloc memC0 (Z.to_nat size))
+               as [memC' b'] eqn:ememC'.
+             inversion H0; subst. rewrite setmE.
+             find_if_inside_goal.
+             ++ move : e => /eqP => ?; subst. rewrite eC0 in H1. inversion H1; subst.
+                simpl in *. apply ComponentMemory.next_block_alloc in ememC' as [G1 G2].
+                subst. exists memC'. intuition. 
+                rewrite G2. apply/ssrnat.ltP. 
+                apply ssrnat.ltn_addr. by apply/ssrnat.ltP.
+             ++ rewrite H1. by eauto.
+          -- apply/eqP. by rewrite eptr.
+      + destruct (Pointer.eq (P', C', b', o') ptr) eqn:eptr.
+        * move : eptr => /Pointer.eqP => eptr; subst.
+          specialize (Memory.load_after_store_eq _ _ _ _ H) as H_.
+          rewrite Hload in H_. inversion H_; subst. clear H_.
+          simpl in *. move : IHcont => /andP => [[G1 G2]].
+          unfold Memory.store in H. find_if_inside_hyp H; [simpl in *|discriminate].
+          destruct (mem C') as [memC'|] eqn:ememC'; [|discriminate].
+          destruct (ComponentMemory.store memC' b' o' (Ptr (Permission.data, C, b, o)))
+            as [memC'_after|] eqn:ememC'_after; [|discriminate].
+          inversion H; subst. clear H. move : e => /Permission.eqP => e. subst.
+          rewrite setmE. find_if_inside_goal.
+          -- move : e => /eqP => ?; subst. exists memC'_after; intuition.
+             rewrite ememC' in G1.
+             apply ComponentMemory.next_block_store_stable in ememC'_after.
+             by rewrite -ememC'_after -Nat.ltb_lt. 
+          -- destruct (mem C) as [memC|] eqn:ememC; [|discriminate].
+             exists memC; intuition. by rewrite -Nat.ltb_lt.
+        * move : eptr => /Pointer.eqP => eptr.
+          erewrite (Memory.load_after_store_neq _ _ _ _ _ eptr) in Hload; eauto.
+          specialize (IHload _ _ _ _ Hload) as [memC [ememC G1]].
+          unfold Memory.store in H. find_if_inside_hyp H; [simpl in *|discriminate].
+          destruct (mem C') as [memC'|] eqn:ememC'; [|discriminate].
+          destruct (ComponentMemory.store memC' b' o' v)
+            as [memC'_after|] eqn:ememC'_after; [|discriminate].
+          inversion H; subst. clear H. move : e => /Permission.eqP => e. subst.
+          rewrite setmE. find_if_inside_goal.
+          -- move : e => /eqP => ?; subst. exists memC'_after; intuition.
+             rewrite ememC' in ememC; inversion ememC; subst.
+             apply ComponentMemory.next_block_store_stable in ememC'_after.
+             by rewrite -ememC'_after. 
+          -- by eexists; eauto.
+      + split; [inversion Hstep23; subst; simpl in *; auto;
+                try (by move : IHexpr => /andP => [[? ?]]);
+                try (by move : IHcont => /andP => [[? ?]])
+               |].
+        * apply b_next_block_eval_binop; auto.
+          by move : IHcont => /andP => [[? ?]].
+        * move : IHexpr => /andP => [[G_ ?]].
+          by move : G_ => /andP => [[? ?]].
+        * move : IHcont => /andP => [[G_ ?]].
+          move : G_ => /andP => [[? ?]].
+          by find_if_inside_goal.
+        * by rewrite HcompMem.
+        * destruct ptr as [[[[] c] b] o]; auto.
+          specialize (Memory.next_block_alloc _ _ _ _ _ H0) as [G1 G2].
+          specialize (Memory.component_of_alloc_ptr _ _ _ _ _ H0). simpl; intros; subst.
+          simpl in *. unfold Memory.next_block in *.
+          rewrite HcompMem in G1.
+          destruct (mem' C) as [mem'C|] eqn:emem'C; [|discriminate].
+          inversion G1. subst. inversion G2 as [G3]. rewrite G3 ssrnat.addn1.
+          by apply Nat.ltb_lt.
+        * destruct v as [| [[[[] c] b] o] |]; auto.
+          specialize (IHload _ _ _ _ H) as [? [G1 G2]]. simpl. rewrite G1. 
+          by apply Nat.ltb_lt.
+        * destruct v as [| [[[[] c] b] o] |]; auto.
+          move : IHcont => /andP => [[G1 _]].
+          simpl in *.
+          assert (exists Cmem, mem' c = Some Cmem) as [memc ememc].
+          { apply/ dommP. erewrite <- Memory.domm_store; eauto. apply/dommP.
+            by destruct (mem c) as [memc|] eqn:ememc; [|discriminate]; eauto.
+          }
+          rewrite ememc. 
+          specialize (Memory.next_block_store_stable _ _ _ _ c H) as Heq.
+          destruct (mem c) as [memc_|] eqn:ememc_; [|discriminate].
+          unfold Memory.next_block in *. rewrite ememc ememc_ in Heq.
+          inversion Heq as [Hrewr]. by rewrite Hrewr.
+        * apply values_are_integers_b_nextblock.
+          eapply wfprog_well_formed_procedures in H0; auto.
+          unfold well_formed_expr in *. by intuition.
+        * apply values_are_integers_b_nextblock.
+          eapply wfprog_well_formed_procedures in H1; auto.
+          unfold well_formed_expr in *. by intuition.
+        * split; [inversion Hstep23; subst; simpl in *; auto;
+                try (move : IHexpr => /andP => [[IHe1 IHe2]]);
+                try (move : IHcont => /andP => [[IHk1 IHk2]]);
+                auto;
+                try (
+                    match goal with
+                    | H1 : is_true (?X), H2: is_true (?Y) |-
+                      is_true (andb ?X ?Y) => by rewrite H1 H2
+                    end
+                  )
+               |].
+          -- move : IHe1 => /andP => [[IHe1 IHe2_]].
+             by rewrite IHe2_ IHe2 IHcont.
+          -- by eapply cont_struct_invariant_b_nextblock_alloc; eauto.
+          -- by eapply cont_struct_invariant_b_nextblock_store; eauto.
+          -- move : IHstack => /andP => [[IHstack _]].
+             by move : IHstack => /andP => [[_ ?]].
+          -- move : IHstack => /andP => [[IHstack _]].
+             by move : IHstack => /andP => [[_ ?]].
+          -- split; [inversion Hstep23; subst; simpl in *; auto;
+                     try (move : IHexpr => /andP => [[IHe1 IHe2]]);
+                     try (move : IHcont => /andP => [[IHk1 IHk2]]);
+                     auto;
+                     try (
+                         match goal with
+                         | H1 : is_true (?X), H2: is_true (?Y) |-
+                           is_true (andb ?X ?Y) => by rewrite H1 H2
+                         end
+                       )
+                    |].
+             ++ by eapply b_nextblock_alloc; eauto.
+             ++ by eapply b_nextblock_store; eauto.
+             ++ do 2 (move : IHstack => /andP => [[IHstack _]]).
+                by move : IHstack => /andP => [[_ ?]].
+             ++ do 2 (move : IHstack => /andP => [[IHstack _]]).
+                by move : IHstack => /andP => [[_ ?]].
+             ++ split; [inversion Hstep23; subst; simpl in *; auto;
+                        try (by rewrite HcompMem; eauto)
+                       |].
+                ** specialize (@b_nextblock_alloc
+                                 (Ptr (Permission.data, C, Block.local, 0%Z))
+                                 mem C size ptr mem')
+                    as G1.
+                   assert (b_nextblock
+                             mem (Ptr (Permission.data, C, Block.local, 0%Z))) as G2.
+                   {
+                     simpl. by rewrite HcompMem.
+                   }
+                   specialize (G1 G2 H0). simpl in G1.
+                   destruct (mem' C); [|discriminate].
+                   by eauto.
+                ** specialize (@b_nextblock_store
+                                 
+                                 mem
+                                 (Ptr (Permission.data, C, Block.local, 0%Z))
+                                 P' C' b' o' v mem') as G1.
+                   assert (b_nextblock
+                             mem (Ptr (Permission.data, C, Block.local, 0%Z))) as G2.
+                   {
+                     simpl. by rewrite HcompMem.
+                   }
+                   specialize (G1 G2 H). simpl in G1.
+                   destruct (mem' C); [|discriminate].
+                   by eauto.
+                ** eapply IHfind; eauto. by eapply find_procedure_prog_interface; eauto.
+                ** repeat (move : IHstack => /andP => [[IHstack _]]).
+                   by eapply IHfind; eauto.
+                ** split; [inversion Hstep23; subst; simpl in *; auto |].
+                   --- by eapply stack_wf_wrt_prog_interface_b_nextblock_alloc; eauto.
+                   --- by eapply stack_wf_wrt_prog_interface_b_nextblock_store; eauto.
+                   --- repeat (apply/andP; split; [|assumption]).
+                       by eapply find_procedure_prog_interface; eauto.
+                   --- repeat (apply/andP; split; [|assumption]).
+                       assert (Hrewr: mem =
+                                      s_memory [State C, s, mem,
+                                                Kcall C' P k,
+                                                E_val v, old_call_arg]) by auto.
+                       erewrite <- comes_from_initial_state_mem_domm.
+                       +++ apply/dommP. exists compMem. by erewrite <- Hrewr.
+                       +++ eassumption.
+                       +++ apply star_iff_starR. eassumption.
+                   --- by (move : IHstack => /andP => [[_ ?]]).
+                   --- by (move : IHstack => /andP => [[_ ?]]).
+                   --- inversion Hstep23; subst; simpl in *; auto.
+                       +++ intros ? Hdomm.
+                           specialize (IHfind _ Hdomm) as [? [Ga Gb]].
+                           specialize (@b_nextblock_alloc
+                                         (Ptr (Permission.data, C', Block.local, 0%Z))
+                                         mem C size ptr mem')
+                             as G1.
+                           assert (b_nextblock
+                                     mem
+                                     (Ptr (Permission.data, C', Block.local, 0%Z)))
+                             as G2.
+                           {
+                             simpl. by rewrite Ga.
+                           }
+                           specialize (G1 G2 H0). simpl in G1.
+                           destruct (mem' C'); [|discriminate].
+                           by eauto.
+                       +++ intros C'0 Hdomm.
+                           specialize (IHfind _ Hdomm) as [? [Ga Gb]].
+                           specialize (@b_nextblock_store
+                                         mem
+                                         (Ptr (Permission.data, C'0, Block.local, 0%Z))
+                                         P' C' b' o' v mem') as G1.
+                           assert (b_nextblock
+                                     mem (Ptr (Permission.data, C'0, Block.local, 0%Z)))
+                             as G2.
+                           {
+                             simpl. by rewrite Ga.
+                           }
+                           specialize (G1 G2 H). simpl in G1.
+                           destruct (mem' C'0); [|discriminate].
+                           by eauto.
+  Qed.
+
+  Lemma load_data_next_block:
+      forall s t s' ptr C b o,
+        initial_state p s ->
+        Star sem s t s' ->
+        Memory.load (CS.s_memory s') ptr = Some (Ptr (Permission.data, C, b, o)) ->
+        exists Cmem : ComponentMemory.t,
+          CS.s_memory s' C = Some Cmem /\ b < ComponentMemory.next_block Cmem.
+  Proof.
+    intros.
+    specialize (load_data_next_block_inductively_provable H H0) as [G1 _].
+    eapply G1; eauto.
+  Qed.
+  
   (* NOTE: Consider a CSInvariants for the Source *)
   Definition private_pointers_never_leak_S metadata_size :=
     forall (s : state) (t : Events.trace Events.event),

@@ -145,20 +145,17 @@ Proof.
         rewrite mapm_mkfmapf.
         apply eq_fmap.
         assert (Hassert:
-                  mkfmapf ((fun x : ComponentMemory.t * NMap code * NMap Block.id =>
+                  mkfmapf ((fun x : ComponentMemory.t * NMap code * seq Procedure.id =>
                               x.1.1) \o
                                      (fun C : nat_ordType =>
-                                        Intermediate.reserve_component_blocks
-                                          p C
-                                          (ComponentMemory.prealloc
-                                             match Intermediate.prog_buffers p C with
-                                             | Some buf => [fmap (Block.local, buf)]
-                                             | None => emptym
-                                             end)
-                                          (elementsm
-                                             (odflt
-                                                emptym
-                                                (Intermediate.prog_procedures p C))))
+                                        (ComponentMemory.prealloc
+                                           match Intermediate.prog_buffers p C with
+                                           | Some buf => [fmap (Block.local, buf)]
+                                           | None => emptym
+                                           end,
+                                         odflt emptym (Intermediate.prog_procedures p C),
+                                         [seq pid <- domm (odflt emptym (Intermediate.prog_procedures p C))
+                                         | Intermediate.is_entrypoint_of_comp p C pid]))
                           ) =1
                  mkfmapf (fun C : nat =>
                             ComponentMemory.prealloc
@@ -172,10 +169,7 @@ Proof.
           match goal with |- ?x =1 ?y => assert (Hrewr: x = y) end.
           {
             apply FunctionalExtensionality.functional_extensionality_dep.
-            intros C. simpl.
-            unfold odflt, oapp.
-            destruct (Intermediate.prog_procedures p C) eqn:eprog_proc; simpl; auto.
-            by rewrite Intermediate.reserve_component_blocks_1_1.
+            intros C. by simpl.
           }
           by rewrite Hrewr.
         }
@@ -296,7 +290,6 @@ Proof.
   {
     apply: CS.intermediate_well_formed_events Hstar.
     - by apply: Intermediate.linking_well_formedness.
-    - assumption.
   }
   have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
   have wf_t : well_formed_trace intf procs t.
@@ -304,7 +297,7 @@ Proof.
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
       (* TODO: Duplicate assumption, new non-implicit parameters. *)
       by apply: (CS.intermediate_well_formed_trace
-                   _ wf_p_c Hclosed _ _ _ Hstar Logic.eq_refl HmainP wf_p_c).
+                   _ wf_p_c _ _ _ Hstar Logic.eq_refl HmainP wf_p_c).
   }
   pose bufs := Intermediate.prog_buffers (Intermediate.program_link p c).
   have intf_dom_buf:

@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
+Require Import Common.Util.
 Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
@@ -178,6 +179,16 @@ Module Source.
     cprog_main_existence: prog_main p
   }.
 
+  Lemma find_procedure_prog_interface p C P P_expr:
+    well_formed_program p ->
+    find_procedure (prog_procedures p) C P = Some P_expr ->
+    C \in domm (prog_interface p).
+  Proof.
+    unfold find_procedure. intros Hwf. apply wfprog_defined_procedures in Hwf.
+    destruct (prog_procedures p C) eqn:eC; last discriminate. intros nP.
+    rewrite Hwf. apply/dommP. eauto.
+  Qed.
+  
   Theorem linkable_disjoint_procedures :
     forall prog1 prog2,
       well_formed_program prog1 ->
@@ -482,21 +493,50 @@ Module Source.
         * by rewrite linkable_imported_procedure //; eauto.
       + by case: wf=> [[? [? ?]]|[? [? ?]]].
       + case: wf=> [[Hwf1 [Hwf2 Hwf3]]|[Hwf1 [Hwf2 Hwf3]]]; clear Hwf1 Hwf2;
-                     unfold well_formed_E_funptr;
-                     induction Pexpr; auto; admit.
-        (* rewrite linkable_programs_find_procedure wf1 wf2 link. *)
-        (* + some splitting similar to what is done in 
-           lemma well_formed_program_unlink *)
-        
+                    generalize dependent Pexpr; intros Pexpr; induction Pexpr;
+                      intros HwfPexpr; auto;
+                        try (by inversion HwfPexpr as [G];
+                             move : G => /andP => [[G1 G2]]; simpl; intuition);
+                        try (by inversion HwfPexpr as [G];
+                             move : G => /andP => [[G1 G2']];
+                              move : G2' => /andP => [[G2 G3]];
+                               simpl; rewrite IHPexpr1; auto; simpl; intuition).
+          -- simpl in *.
+             specialize (linkable_programs_find_procedure wf1 wf2 link) as Hrewr.
+             assert (exists Pexpr, find_procedure (prog_procedures p1) C i =
+                              Some Pexpr) as [? G].
+             {
+               destruct (find_procedure (prog_procedures p1) C i) eqn:e;
+                 last discriminate.
+               by eauto.
+             }
+             eapply or_introl in G. eapply Hrewr in G. by rewrite G.
+          -- simpl in *.
+             specialize (linkable_programs_find_procedure wf1 wf2 link) as Hrewr.
+             assert (exists Pexpr, find_procedure (prog_procedures p2) C i =
+                              Some Pexpr) as [? G].
+             {
+               destruct (find_procedure (prog_procedures p2) C i) eqn:e;
+                 last discriminate.
+               by eauto.
+             }
+             eapply or_intror in G. eapply Hrewr in G. by rewrite G.
     - by rewrite /= !domm_union (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
     - rewrite /has_required_local_buffers /= => C.
       move: (linkable_disjoint_buffers wf1 wf2 link)=> dis_buf.
       move/wfprog_well_formed_buffers in wf1.
       move/wfprog_well_formed_buffers in wf2.
-      (* rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE. *)
-      (*   by rewrite mem_domm; case/wf1=> [? ->] /=; eauto. *)
-      (* by rewrite mem_domm; case/wf2=> [? ->] /=; eauto. *)
-      admit.
+      rewrite -mem_domm domm_union in_fsetU.
+      move => /orP => [[Cinp1 | Cinp2]];
+                      last rewrite unionmC //; rewrite unionmE.
+      + rewrite mem_domm in Cinp1. specialize (wf1 _ Cinp1) as [G G'].
+        unfold has_required_local_buffers in *.
+        find_if_inside_goal; auto.
+        destruct G as [? contra]. by rewrite contra in e.
+      + rewrite mem_domm in Cinp2. specialize (wf2 _ Cinp2) as [G G'].
+        unfold has_required_local_buffers in *.
+        find_if_inside_goal; auto.
+        destruct G as [? contra]. by rewrite contra in e.
     - split.
       + have /implyP := proj1 (wfprog_main_existence wf1).
         have /implyP := proj1 (wfprog_main_existence wf2).
@@ -513,8 +553,7 @@ Module Source.
         case: (prog_interface p1 Component.main)=> [CI|] //=.
         case: ((prog_procedures p2) Component.main)=> [CI|] //=.
         intros H1 H2 H3. by rewrite H3 in H1.
-  (* Qed. *)
-  Admitted.
+  Qed.
 
   Lemma interface_preserves_closedness_l p1 p2 p1' :
     closed_program (program_link p1 p2) ->
