@@ -1512,7 +1512,7 @@ Section Definability.
     split=> //=.
     - rewrite /Source.prog_main. simpl. erewrite find_procedures_of_trace_main; eauto.
   Qed.
-
+  
   Arguments Memory.load  : simpl nomatch.
   Arguments Memory.store : simpl nomatch.
 
@@ -1532,9 +1532,12 @@ Section Definability.
     (* [DynShare]: This should be the projection of t_inform.
        This projection function may be defined in the Intermedicate/CS.v *)
 
-    Let p    := program_of_trace t.
-    Let init := Source.prepare_buffers p.
-
+    Hypothesis p_exists : exists p, program_of_trace t = Some p.
+    
+    (**********
+     Let p    := program_of_trace t.
+     Let init := Source.prepare_buffers p.
+     *********)
     Local Definition component_buffer C := C \in domm intf.
 
     Lemma valid_procedure_has_block C P :
@@ -2383,12 +2386,17 @@ Section Definability.
               contradiction.
     Qed.
 
-    Lemma prepare_buffers_prealloc C :
+    Lemma prepare_buffers_prealloc C p :
       (* prog_buffers C = Some buf -> *)
+      program_of_trace t = Some p ->
       component_buffer C ->
       Source.prepare_buffers p C = Some (ComponentMemory.prealloc [fmap (0, (inr meta_buffer))]).
     Proof.
-      rewrite /Source.prepare_buffers /p /program_of_trace
+      destruct p_exists as [p' Hp']. rewrite Hp'. intros Hxx. inversion Hxx; subst. move : Hp'.
+      rewrite /program_of_trace.
+      destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
+      intros Hinv. inversion Hinv; subst.
+      rewrite /Source.prepare_buffers
               mapmE /omap /obind /oapp /=
               mapmE /omap /obind /oapp /=.
       destruct (intf C) as [CI |] eqn:H_CI;
@@ -2397,16 +2405,22 @@ Section Definability.
     Qed.
 
     (* TODO: Move to language *)
-    Lemma next_block_prepare_buffers C :
+    Lemma next_block_prepare_buffers C p :
+      program_of_trace t = Some p ->
       component_buffer C ->
       Memory.next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
     Proof.
+      destruct p_exists as [p' Hp']. rewrite Hp'. intros Hxx. inversion Hxx; subst. move : Hp'.
+      rewrite /program_of_trace.
+      destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
+      intros Hinv. inversion Hinv as [Hp]. rewrite Hp.
+
       rewrite /component_buffer /Memory.next_block /Source.prepare_buffers => C_b.
       rewrite mapmE /omap /obind /oapp.
       destruct (Source.prog_buffers p C) as [buf |] eqn:Hbuf.
       - rewrite ComponentMemory.nextblock_prealloc.
         now rewrite domm_set domm0 fsetU0.
-      - rewrite /p /program_of_trace /= in Hbuf.
+      - subst. simpl in Hbuf. 
         rewrite mapmE /omap /obind /oapp in Hbuf.
         move: C_b => /dommP => [[CI H_CI]].
         now rewrite H_CI in Hbuf.
@@ -2435,15 +2449,21 @@ Section Definability.
 
     (* NOTE: This lemma is easier to use if Z-to-nat conversion is in the RHS,
        and the >= 0 condition is added as a hypothesis to the statement. *)
-    Lemma load_prepare_buffers C o :
+    Lemma load_prepare_buffers C o p:
+      program_of_trace t = Some p ->
       component_buffer C ->
       (* (0 <= o)%Z -> *)
       (* Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, o) = nth_error meta_buffer (Z.to_nat o). *)
       Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, Z.of_nat o) = nth_error meta_buffer o.
     Proof.
+      destruct p_exists as [p' Hp']. rewrite Hp'. intros Hxx. inversion Hxx; subst. move : Hp'.
+      rewrite /program_of_trace.
+      destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
+      intros Hinv. inversion Hinv as [Hp]. rewrite Hp.
+      subst.
       rewrite /component_buffer => /dommP [CI Hint].
       rewrite /Memory.load /=
-              /Source.prepare_buffers /p /program_of_trace /=
+              /Source.prepare_buffers /=
               mapmE /omap /obind /oapp
               mapmE /omap /obind /oapp
               Hint
@@ -2562,7 +2582,8 @@ Section Definability.
                try (exact Hstore); try congruence
              end.
 
-    Lemma initialization_correct: forall C stk mem k arg prefix e,
+    Lemma initialization_correct: forall C stk mem k arg prefix e p,
+        program_of_trace t = Some p ->
         component_buffer C ->
         postcondition_steady_state e mem C \/ postcondition_uninitialized prefix e mem C ->
         exists mem' i,
@@ -2589,7 +2610,16 @@ Section Definability.
               Memory.load mem (Permission.data, C', b, offset) =
               Memory.load mem' (Permission.data, C', b, offset)).
     Proof.
-      move=> C stk mem k arg prefix e C_b.
+      destruct p_exists as [p' Hp']. rewrite Hp'. 
+
+      move=> C stk mem k arg prefix e p Hxx C_b.
+      
+      inversion Hxx; subst. move : Hp'.
+      rewrite /program_of_trace.
+      destruct (procedures_of_trace t)
+        as [procs_of_trace_t|] eqn:eprocst; [|discriminate].
+      intros Hinv. inversion Hinv as [Hp]. rewrite Hp.
+      
       case.
       - move=> [] load_initflag [] load_localbuf postcond.
         exists mem, 0%Z.
