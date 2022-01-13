@@ -1532,14 +1532,25 @@ Section Definability.
     (* [DynShare]: This should be the projection of t_inform.
        This projection function may be defined in the Intermedicate/CS.v *)
 
-    Hypothesis p_exists : exists p, program_of_trace t = Some p.
+    Variable p : Source.program.
+    Hypothesis Hprog_of_trace : program_of_trace t = Some p.
     
     (**********
      Let p    := program_of_trace t.
-     Let init := Source.prepare_buffers p.
      *********)
+    
+    Let init := Source.prepare_buffers p.
+
     Local Definition component_buffer C := C \in domm intf.
 
+    Hypothesis wf_p_interm: Machine.Intermediate.well_formed_program p_interm.
+    Hypothesis closed_p_interm: Machine.Intermediate.closed_program p_interm.
+    Hypothesis p_interm_intf: Machine.Intermediate.prog_interface p_interm = intf.
+
+    Lemma domm_t_procs_exported_procedures_of_trace:
+      domm t_procs = domm (exported_procedures_of_trace t).
+    Proof. by rewrite domm_exported_procedures_of_trace_interface. Qed.
+    
     Lemma valid_procedure_has_block C P :
       valid_procedure C P t ->
       component_buffer C.
@@ -2268,11 +2279,6 @@ Section Definability.
        NOTE: Propositional and not boolean conjunction in the conclusion at the
        moment. *)
 
-    (* TODO: Move these hypotheses up *)
-    Hypothesis wf_p_interm: Machine.Intermediate.well_formed_program p_interm.
-    Hypothesis closed_p_interm: Machine.Intermediate.closed_program p_interm.
-    Hypothesis p_interm_intf: Machine.Intermediate.prog_interface p_interm = intf.
-
     (* Cf. event_non_inform_of_nil_or_singleton *)
     Lemma project_non_inform_singleton e:
       project_non_inform [:: e] = [::] \/
@@ -2386,16 +2392,14 @@ Section Definability.
               contradiction.
     Qed.
 
-    Lemma prepare_buffers_prealloc C p :
+    Lemma prepare_buffers_prealloc C :
       (* prog_buffers C = Some buf -> *)
-      program_of_trace t = Some p ->
       component_buffer C ->
       Source.prepare_buffers p C = Some (ComponentMemory.prealloc [fmap (0, (inr meta_buffer))]).
     Proof.
-      destruct p_exists as [p' Hp']. rewrite Hp'. intros Hxx. inversion Hxx; subst. move : Hp'.
-      rewrite /program_of_trace.
+      unfold program_of_trace in Hprog_of_trace.
       destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
-      intros Hinv. inversion Hinv; subst.
+      inversion Hprog_of_trace; subst.
       rewrite /Source.prepare_buffers
               mapmE /omap /obind /oapp /=
               mapmE /omap /obind /oapp /=.
@@ -2405,20 +2409,18 @@ Section Definability.
     Qed.
 
     (* TODO: Move to language *)
-    Lemma next_block_prepare_buffers C p :
-      program_of_trace t = Some p ->
+    Lemma next_block_prepare_buffers C :
       component_buffer C ->
       Memory.next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
     Proof.
-      destruct p_exists as [p' Hp']. rewrite Hp'. intros Hxx. inversion Hxx; subst. move : Hp'.
-      rewrite /program_of_trace.
+      unfold program_of_trace in Hprog_of_trace.
       destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
-      intros Hinv. inversion Hinv as [Hp]. rewrite Hp.
-
+      inversion Hprog_of_trace.
+      rewrite H0.
       rewrite /component_buffer /Memory.next_block /Source.prepare_buffers => C_b.
-      rewrite mapmE /omap /obind /oapp.
+      rewrite mapmE /omap /obind /oapp. 
       destruct (Source.prog_buffers p C) as [buf |] eqn:Hbuf.
-      - rewrite ComponentMemory.nextblock_prealloc.
+      - simpl. rewrite ComponentMemory.nextblock_prealloc.
         now rewrite domm_set domm0 fsetU0.
       - subst. simpl in Hbuf. 
         rewrite mapmE /omap /obind /oapp in Hbuf.
@@ -2449,19 +2451,20 @@ Section Definability.
 
     (* NOTE: This lemma is easier to use if Z-to-nat conversion is in the RHS,
        and the >= 0 condition is added as a hypothesis to the statement. *)
-    Lemma load_prepare_buffers C o p:
-      program_of_trace t = Some p ->
+    Lemma load_prepare_buffers C o :
       component_buffer C ->
       (* (0 <= o)%Z -> *)
       (* Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, o) = nth_error meta_buffer (Z.to_nat o). *)
       Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, Z.of_nat o) = nth_error meta_buffer o.
     Proof.
-      destruct p_exists as [p' Hp']. rewrite Hp'. intros Hxx. inversion Hxx; subst. move : Hp'.
-      rewrite /program_of_trace.
+      unfold program_of_trace in Hprog_of_trace.
       destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
-      intros Hinv. inversion Hinv as [Hp]. rewrite Hp.
-      subst.
+      inversion Hprog_of_trace as [Hprog_of_trace'].
+      rewrite Hprog_of_trace'.
+
       rewrite /component_buffer => /dommP [CI Hint].
+
+      subst p.
       rewrite /Memory.load /=
               /Source.prepare_buffers /=
               mapmE /omap /obind /oapp
@@ -2582,8 +2585,7 @@ Section Definability.
                try (exact Hstore); try congruence
              end.
 
-    Lemma initialization_correct: forall C stk mem k arg prefix e p,
-        program_of_trace t = Some p ->
+    Lemma initialization_correct: forall C stk mem k arg prefix e,
         component_buffer C ->
         postcondition_steady_state e mem C \/ postcondition_uninitialized prefix e mem C ->
         exists mem' i,
@@ -2610,16 +2612,13 @@ Section Definability.
               Memory.load mem (Permission.data, C', b, offset) =
               Memory.load mem' (Permission.data, C', b, offset)).
     Proof.
-      destruct p_exists as [p' Hp']. rewrite Hp'. 
+      unfold program_of_trace in Hprog_of_trace.
+      destruct (procedures_of_trace t) as [procs_map|] eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace as [Hprog_of_trace'].
+      rewrite Hprog_of_trace'.
 
-      move=> C stk mem k arg prefix e p Hxx C_b.
-      
-      inversion Hxx; subst. move : Hp'.
-      rewrite /program_of_trace.
-      destruct (procedures_of_trace t)
-        as [procs_of_trace_t|] eqn:eprocst; [|discriminate].
-      intros Hinv. inversion Hinv as [Hp]. rewrite Hp.
-      
+      move=> C stk mem k arg prefix e C_b.
+            
       case.
       - move=> [] load_initflag [] load_localbuf postcond.
         exists mem, 0%Z.
@@ -3920,7 +3919,7 @@ Section Definability.
       addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C')).
     Admitted.
 
-    Lemma definability_does_not_leak :
+    Lemma definability_does_not_leak:
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Admitted.
 
@@ -3940,9 +3939,29 @@ Section Definability.
         (* good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) prefix' /\ *)
         shared_locations_have_only_shared_values (CS.s_memory cs) (uniform_shift 1).
     Proof.
-      have Eintf : genv_interface (prepare_global_env p) = intf by [].
+      assert (Hprog_of_trace_copy: program_of_trace t = Some p) by auto.
+      unfold program_of_trace in Hprog_of_trace_copy.
+      destruct (procedures_of_trace t) as [procs_map|] eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace_copy as [Hprog_of_trace'].
+      rewrite Hprog_of_trace'.
+
+      assert (Hload_prepare_buffers: forall C o,
+      component_buffer C ->
+      Memory.load (Source.prepare_buffers
+                     {|
+                          Source.prog_interface := intf;
+                          Source.prog_procedures := procs_map;
+                          Source.prog_buffers := mapm (fun=> inr meta_buffer) intf |}
+                  )
+                  (Permission.data, C, Block.local, Z.of_nat o) =
+      nth_error meta_buffer o).
+      {
+        rewrite Hprog_of_trace'. by eapply load_prepare_buffers.
+      }
+      
+      have Eintf : genv_interface (prepare_global_env p) = intf by subst p.
       have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p
-        by [].
+        by subst p.
 
       (* Proof by induction on the prefix. Prior to inducting, generalize on
          the suffix. *)
@@ -3953,7 +3972,7 @@ Section Definability.
 
         assert (Hmain_buffers_p: Component.main \in domm (Source.prog_buffers p)).
         {
-          unfold p, program_of_trace. simpl.
+          subst p. simpl.
           apply/dommP. rewrite mapmE.
           destruct (intf Component.main); last discriminate. simpl. eauto.
         }
@@ -3965,7 +3984,7 @@ Section Definability.
                                Block.local, reg_offset reg) = Some Undef).
         {
           (** Follows from the definition of meta_buffer. *)
-          intros. unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+          intros. subst p. unfold Source.prepare_buffers, Memory.load.
           simpl. rewrite !mapmE.
           destruct (intf Component.main); last discriminate; auto.
           simpl. by destruct reg; rewrite ComponentMemory.load_prealloc setmE.
@@ -3979,7 +3998,7 @@ Section Definability.
                ).
         {
           (** Follows from the definition of meta_buffer. *)
-          unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+          subst p. unfold Source.prepare_buffers, Memory.load.
           simpl. rewrite !mapmE.
           destruct (intf Component.main); last discriminate; auto.
           simpl. by rewrite ComponentMemory.load_prealloc setmE.
@@ -4016,7 +4035,7 @@ Section Definability.
             + assumption.
             + rewrite ComponentMemory.nextblock_prealloc.
               by rewrite domm_set domm0 fsetU0.
-          - rewrite /Source.prepare_buffers
+          - subst p. rewrite /Source.prepare_buffers
                     mapmE /omap /obind /oapp /=
                     mapmE /omap /obind /oapp /=.
             destruct (intf Component.main); last discriminate.
@@ -4087,7 +4106,7 @@ Section Definability.
                     (Int 0%Z) (Int 0%Z)) as [mem7 Hmem7].
         simplify_memory.
         rewrite -Hsamecomp0; try discriminate.
-        unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+        subst p. unfold Source.prepare_buffers, Memory.load.
         simpl. rewrite !mapmE.
         destruct (intf Component.main); last discriminate; auto.
         simpl. by rewrite ComponentMemory.load_prealloc setmE.
@@ -4111,8 +4130,8 @@ Section Definability.
 
         exists (StackState Component.main []), E0, E0.
         split; [| split; [| split; [| split]]].
-        + rewrite /CS.initial_machine_state /Source.prog_main
-                  find_procedures_of_trace_main.
+        + rewrite /CS.initial_machine_state /Source.prog_main.
+          erewrite find_procedures_of_trace_main; last (subst p; by eauto).
           take_step.
           eapply star_trans with (t2 := E0);
             first exact Hstar0;
@@ -4124,7 +4143,7 @@ Section Definability.
             instantiate (1 := Int 1%Z).
             (** Follows from the definition of meta_buffer. *)
             rewrite -Hsamecomp0; try discriminate.
-            unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+            subst p. unfold Source.prepare_buffers, Memory.load.
             simpl. rewrite !mapmE.
             destruct (intf Component.main); last discriminate; auto.
             simpl. by rewrite ComponentMemory.load_prealloc setmE.
@@ -4171,7 +4190,7 @@ Section Definability.
                   simplify_memory.
                   rewrite -(Z2Nat.id EXTCALL_offset) /EXTCALL_offset; [| lia].
                   rewrite -Hothercomp0; try congruence.
-                  now rewrite load_prepare_buffers.
+                  now rewrite Hload_prepare_buffers.
             -- by move=> [].
             -- move=> C r H.
                destruct (Nat.eqb_spec C Component.main) as [| Heq].
@@ -4300,7 +4319,8 @@ Section Definability.
                                  unfold Memory.next_block in Hotherblock0.
                                  specialize (Hotherblock0 _ (nesym Heq)).
                                  rewrite HCmem in Hotherblock0.
-                                 rewrite /Source.prepare_buffers
+                                  
+                                 rewrite -Hprog_of_trace' /Source.prepare_buffers
                                          mapmE /omap /obind /oapp /=
                                          mapmE /omap /obind /oapp /=
                                    in Hotherblock0.
@@ -4311,7 +4331,7 @@ Section Definability.
                                  now rewrite domm_set domm0 fsetU0.
                              *** exfalso.
                                  assert (Hdomm_bufs : C \in domm (Source.prepare_buffers p)). {
-                                 rewrite /Source.prepare_buffers /=.
+                                 rewrite -Hprog_of_trace' /Source.prepare_buffers /=.
                                  rewrite mem_domm
                                          mapmE /omap /obind /oapp
                                          mapmE /omap /obind /oapp.
@@ -4323,7 +4343,7 @@ Section Definability.
                                }
                                assert (Hdomm0 : C \in domm mem0). {
                                  assert (Hdomm_p : domm (Source.prepare_buffers p) = domm (Source.prog_interface p))
-                                   by (by rewrite /Source.prepare_buffers
+                                   by (by rewrite -Hprog_of_trace' /Source.prepare_buffers
                                                   /p /program_of_trace
                                                   !domm_map).
                                  rewrite Hdomm_p in Hdomm_bufs.
@@ -4331,12 +4351,17 @@ Section Definability.
                                    last first;
                                    try reflexivity.
                                  - simpl.
-                                   rewrite /CS.initial_machine_state /Source.prog_main
-                                           find_procedures_of_trace_main.
+                                   rewrite /CS.initial_machine_state /Source.prog_main.
+                                   erewrite find_procedures_of_trace_main;
+                                     last (by subst; eauto).
                                    take_step.
                                    exact Hstar0.
-                                 - now apply closed_program_of_trace.
-                                 - eapply well_formed_events_well_formed_program; eauto.
+                                 - eapply closed_program_of_trace; eauto.
+                                 - eapply well_formed_events_well_formed_program
+                                     in wf_events as [? [? ?]]; eauto.
+                                   + erewrite Hprog_of_trace in H. inversion H.
+                                       by subst x.
+                                   + by eapply domm_t_procs_exported_procedures_of_trace.
                                  - exact Hdomm_bufs.
                                }
                                repeat
@@ -4643,9 +4668,12 @@ Section Definability.
                 eapply star_step. simpl.
                 apply CS.eval_kstep_sound. simpl.
                 rewrite (negbTE C_ne_C').
-                rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+                rewrite -> imported_procedure_iff in Himport.
+                rewrite <- Hprog_of_trace' at 1.
+                rewrite Himport.
                 rewrite <- imported_procedure_iff in Himport.
-                now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+                rewrite <- Hprog_of_trace' at 1. simpl.
+                now rewrite (find_procedures_of_trace_exp eprocst (closed_intf Himport)).
                 take_step.
                 eapply star_trans.
                 eapply Star12.
@@ -5241,9 +5269,13 @@ Section Definability.
               eapply star_step. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
-              rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+              rewrite -> imported_procedure_iff in Himport.
+              rewrite <- Hprog_of_trace' at 1.
+              rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              rewrite <- Hprog_of_trace' at 1. simpl.
+              now rewrite (find_procedures_of_trace_exp eprocst (closed_intf Himport)).
+
               take_step.
               eapply star_trans.
               eapply Star12.
@@ -5707,7 +5739,11 @@ Section Definability.
 
                          assert (Hwf_p: Source.well_formed_program p).
                          {
-                           by eapply well_formed_events_well_formed_program; eauto.
+                           eapply well_formed_events_well_formed_program
+                             in wf_events as [p_wf [Hp_wf1 Hp_wf2]]; eauto.
+                           + erewrite Hprog_of_trace in Hp_wf1. inversion Hp_wf1.
+                               by subst p_wf.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
                          }
                          assert (Hclosed_p: Source.closed_program p).
                          {
@@ -5804,7 +5840,7 @@ Section Definability.
                                             Logic.eq_refl starG
                                          ) as G'.
                               simpl in *. rewrite p_interm_intf.
-                              by intuition.
+                              by subst p; intuition.
                             }
 
                             specialize (wf_mem10' _ HCb Cb_C) as
@@ -6113,7 +6149,7 @@ Section Definability.
                     take_steps; eauto.
                     take_steps; eauto.
                     take_steps; eauto.
-                    take_steps. simpl. by rewrite find_procedures_of_trace.
+                    take_steps. simpl. erewrite find_procedures_of_trace; eauto; by subst p.
                     take_steps. simplify_memory.
                     take_steps; simplify_memory.
                     take_steps.
@@ -6677,7 +6713,11 @@ Section Definability.
 
                        assert (Hwf_p: Source.well_formed_program p).
                        {
-                         by eapply well_formed_events_well_formed_program; eauto.
+                         eapply well_formed_events_well_formed_program
+                           in wf_events as [p_wf [Hp_wf1 Hp_wf2]]; eauto.
+                         + erewrite Hprog_of_trace in Hp_wf1. inversion Hp_wf1.
+                             by subst p_wf.
+                         + by eapply domm_t_procs_exported_procedures_of_trace.
                        }
                        assert (Hclosed_p: Source.closed_program p).
                        {
@@ -6780,7 +6820,7 @@ Section Definability.
                                           Logic.eq_refl Star_init_ret
                                        ) as G'.
                             simpl in *. rewrite p_interm_intf.
-                            by intuition.
+                            by subst p; intuition.
                           }
 
 
@@ -6813,14 +6853,19 @@ Section Definability.
                     rewrite /sigma_shifting_wrap_bid_in_addr //=.
                     by rewrite ssrnat.subn0 ssrnat.addn1.
                   * inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem8 ?].
-                    subst.
+                    subst C0 k exp cs'.
                     eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
                       last reflexivity.
                     (* clear -wf_int_pref' Hmem1 Hmem1' Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hcom Hshared wf_regs wf_mem8 wf_mem8'. *)
                     (* clear. *)
                     inversion Hshared.
-                    -- find_rcons_rcons.
-                       constructor. simpl in *.
+                    --
+                      match goal with
+                      | H:rcons ?t1 ?e1 = rcons ?t2 ?e2 |- _ =>
+                        apply rcons_inj in H; inversion H; clear H
+                      end.
+                      subst addr t0 e.
+                      constructor. simpl in *.
                        (* Use [H1] and [wf_cs'] *)
                        (* clear -H1 wf_int_pref' wf_regs Hmem1 Hmem1' Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hcom Hshared wf_mem8 wf_mem8'. *)
                        eapply addr_shared_so_far_inv_1
@@ -6828,7 +6873,8 @@ Section Definability.
                               (mem8 := mem9)
                               (C := C)
                               (C' := C');
-                         simpl; eauto; congruence.
+                         simpl; eauto.
+                       unfold C, not. by intros; subst.
 
                     -- apply rcons_inj in H.
                        inversion H; subst e t0; clear H.
