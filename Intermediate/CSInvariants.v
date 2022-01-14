@@ -1585,7 +1585,7 @@ Proof.
     + inversion IHHreach; subst; simpl in *; subst; try by intuition.
       * apply private_reachable_and_exists_private; eauto.
       * apply current_pc_reachable; auto.    
-    + by apply Hnothing_shared in H1.
+    (* + by apply Hnothing_shared in H1. *)
     + by apply Hnothing_shared in H3.
 Qed.
 

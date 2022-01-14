@@ -185,7 +185,7 @@ CoFixpoint build_traceinf' (s1: state L) (t1: trace Ev) (ST: Star L s0 t1 s1) : 
   | existT s2 (exist t2 (conj A B)) =>
     Econsinf' Ev
               t2
-              (build_traceinf' (star_trans ST A (refl_equal _)))
+              (build_traceinf' (star_trans ST A refl_equal))
               B
   end.
 
