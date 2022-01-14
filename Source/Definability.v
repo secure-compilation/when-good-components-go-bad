@@ -5533,7 +5533,7 @@ Section Definability.
                     eapply star_trans; try eassumption; last reflexivity.
                     eapply star_trans; try eassumption; last reflexivity. }
                   (* specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra ?]. *)
-                  specialize (Hno_leaks _ _ Hstar0_ret) as Hcontra.
+                  specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra _].
                   assert (H : good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
                                                      (prefix' ++ [:: ECall C P' vcom mem1 C'])
                          ).
@@ -6622,7 +6622,7 @@ Section Definability.
                 (* specialize (Hno_leaks _ _ Hstar0_ret) as [? Hcontra]. *)
                 (* rewrite cats1 in Hcontra. *)
                 (* inversion Hcontra; subst t0. *)
-                specialize (Hno_leaks _ _ Hstar0_ret). inversion Hno_leaks. subst t0.
+                specialize (Hno_leaks _ _ Hstar0_ret) as [Hno_leaks _]. inversion Hno_leaks. subst t0.
                 assert (H0 : good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
                                                    (prefix' ++ [:: ERet C vcom mem1 C'])).
                 {
