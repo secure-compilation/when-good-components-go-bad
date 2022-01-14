@@ -3425,6 +3425,58 @@ Section Definability.
       addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C')).
     Admitted.
 
+    Lemma shareable_eassign_extcall_lt :
+      forall s,
+        CS.s_expr s = E_assign EXTCALL (E_val (Int 1)) ->
+        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
+      forall n t s',
+        n < 8 ->
+        starN CS.kstep (prepare_global_env p) n s t s' ->
+      (* exists t s', *)
+        (* starN CS.kstep (prepare_global_env p) n s t s' /\ *)
+        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1).
+    Proof.
+      intros s Hexpr Hshared n t' s' Hn HstarN.
+      destruct s. simpl in *. subst s_expr.
+      match goal with
+      | HstarN : starN _ _ _ _ _ _ |- _ =>
+        inversion HstarN; subst; clear HstarN
+      end.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H0; subst; clear H0.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H1; subst; clear H1.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H0; subst; clear H0.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H1; subst; clear H1.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H0; subst; clear H0.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H1; subst; clear H1.
+      assumption.
+      inversion H; subst; clear H.
+      inversion H0; subst; clear H0.
+      simpl.
+      intros ptr [cid bid] v Hload Haddr Hshift.
+      inversion Haddr; subst; clear Haddr.
+      destruct (Pointer.eqP (Permission.data, s_component, Block.local, EXTCALL_offset) ptr).
+      { subst. simpl in *.
+        unfold left_block_id_good_for_shifting, uniform_shift, Block.local in Hshift.
+          by []. }
+      { eapply Memory.load_after_store_neq in H13; last eassumption.
+        unfold shared_locations_have_only_shared_values in Hshared.
+        rewrite H13 in Hload.
+        eapply Hshared; try eassumption. reflexivity. }
+      lia.
+    Qed.
+
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Abort.
