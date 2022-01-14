@@ -3477,6 +3477,54 @@ Section Definability.
       lia.
     Qed.
 
+    (* pop_cont *)
+
+    Lemma shareable_eassign_extcall_eq :
+      forall s e k,
+        CS.s_expr s = E_assign EXTCALL (E_val (Int 1)) ->
+        CS.s_cont s = Kseq e k ->
+        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
+      forall t s',
+        starN CS.kstep (prepare_global_env p) 8 s t s' ->
+        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1) /\
+        CS.s_expr s' = e /\ CS.s_cont s' = k.
+        (* s'.memory changes, but exactly how is ideally of no interest;
+           other parts remain unchanged *)
+    Proof.
+      (* Merge with lemma above? *)
+    Admitted.
+
+    Lemma shareable_ederef_loc_of_reg :
+      forall s,
+        CS.s_expr s = E_deref (loc_of_reg E_R_COM) ->
+        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
+      forall n t s',
+        n < 5 ->
+        starN CS.kstep (prepare_global_env p) n s t s' ->
+      (* exists t s', *)
+        (* starN CS.kstep (prepare_global_env p) n s t s' /\ *)
+        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1).
+    Admitted.
+
+    Lemma shareable_ereturn :
+      forall s,
+        CS.s_expr s = (E_assign EXTCALL (E_val (Int 1));; E_deref (loc_of_reg E_R_COM)) ->
+        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
+      forall n t s',
+        n < 13 ->
+        starN CS.kstep (prepare_global_env p) n s t s' ->
+      (* exists t s', *)
+        (* starN CS.kstep (prepare_global_env p) n s t s' /\ *)
+        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1).
+    Proof.
+      intros s Hexpr Hshared n t' s' Hn HstarN.
+      destruct s. simpl in *. subst s_expr.
+
+      inversion HstarN; subst; clear HstarN.
+      assumption.
+      inversion H; subst; clear H.
+    Abort.
+
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Abort.
