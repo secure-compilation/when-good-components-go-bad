@@ -78,7 +78,7 @@ End Util.
 
 Module CSInvariants.
 
-(** Unary invariants about the intermediate semantics *)
+(** Unary invariants about the source semantics *)
 
 Import Source.
 
@@ -117,18 +117,12 @@ Inductive wf_load (pc_comp: Component.id) (t: trace event)
         addr_shared_so_far (Pointer.component load_at, Pointer.block load_at) t ->
         wf_load pc_comp t load_at ptr.
 
-(** TODO: Write as an inductive. *)
 Definition wf_mem_wrt_t_pc (mem: Memory.t) (t: trace event)
            (pc_comp: Component.id) : Prop :=
 forall load_at ptr,
   Memory.load mem load_at = Some (Ptr ptr) ->
   Pointer.permission ptr = Permission.data ->
   wf_load pc_comp t load_at ptr.
-
-  (* forall r ptr, *)
-  (*   Register.get r reg = Ptr ptr -> *)
-  (*   Pointer.permission ptr = Permission.data -> *)
-(*   wf_ptr_wrt_cid_t pc_comp t *)
 
   Fixpoint runtime_expr_struct_invariant
            (e: expr) (val_test: value -> Prop) : Prop :=
@@ -200,11 +194,11 @@ forall load_at ptr,
 
   Definition stack_struct_invariant (s: CS.stack) (val_test: value -> Prop) : Prop :=
     List.Forall (fun frm =>
-           val_test (CS.f_arg frm)
-           /\
-           cont_struct_invariant (CS.f_cont frm) val_test
-        )
-        s.
+                   val_test (CS.f_arg frm)
+                   /\
+                   cont_struct_invariant (CS.f_cont frm) val_test
+                )
+                s.
 
 Definition wf_expr_wrt_t_pc (e: expr) (t: trace event)
            (pc_comp: Component.id): Prop :=
@@ -233,16 +227,6 @@ Definition wf_stack_wrt_t_pc (stk: CS.stack) (t: trace event)
          Pointer.permission ptr = Permission.data ->
          wf_ptr_wrt_cid_t pc_comp t ptr).
 
-(* Definition reach_from_reg_wf_wrt_t_pc (reg: Register.t) (t: trace event) *)
-(*            (mem: Memory.t) (pc_comp: Component.id) := *)
-(*   forall r ptr ptr_c ptr_b v_c v_b, *)
-(*     Register.get r reg = Ptr ptr -> *)
-(*     Pointer.permission ptr = Permission.data -> *)
-(*     Pointer.component ptr = ptr_c -> *)
-(*     Pointer.block ptr = ptr_b -> *)
-(*     Reachable mem (fset1 (ptr_c, ptr_b)) (v_c, v_b) -> *)
-(*     (forall v_o, wf_ptr_wrt_cid_t pc_comp t (Permission.data, v_c, v_b, v_o)). *)
-
 Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
   wf_expr_wrt_t_pc (CS.s_expr s) t (CS.s_component s) /\
   wf_mem_wrt_t_pc (CS.s_memory s) t (CS.s_component s) /\
@@ -250,17 +234,87 @@ Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
   wf_stack_wrt_t_pc (CS.s_stack s) t (CS.s_component s).
 
 Lemma initial_wf_mem p:
-  closed_program p ->
   well_formed_program p ->
-  prog_main p ->
   wf_mem_wrt_t_pc (prepare_buffers p) E0 Component.main.
 Proof.
-  Admitted.
+  intros Hwf. constructor.
+  - unfold E0. intros contra; inversion contra; by find_nil_rcons.
+  - unfold E0. intros contra; inversion contra; by find_nil_rcons.
+  - unfold prepare_buffers in *. unfold Memory.load in *.
+    find_if_inside_hyp H; [|discriminate].
+    rewrite mapmE in H.
+    destruct (prog_buffers p (Pointer.component load_at)) as [buf|] eqn:ebuf;
+      [|discriminate]; simpl in H.
+    rewrite ComponentMemory.load_prealloc in H.
+    find_if_inside_hyp H; [|discriminate].
+    rewrite setmE in H.
+    find_if_inside_hyp H; [|discriminate].
+    destruct buf as [sz|chunk] eqn:ebuf2.
+    + find_if_inside_hyp H; discriminate.
+    + inversion Hwf.
+      assert (exists x, prog_interface p (Pointer.component load_at) = Some x)
+        as [? Hintf'].
+      {
+        apply/dommP. rewrite wfprog_defined_buffers0. apply/dommP. by eauto.
+      }
+      assert (Hintf: prog_interface p (Pointer.component load_at)). by rewrite Hintf'.
+      specialize (wfprog_well_formed_buffers0 _ Hintf) as [Hbuf1 Hbuf2].
+      rewrite ebuf in Hbuf2. simpl in *.
+      move : Hbuf2 => /andP => [[? G]]. move : G => /allP => G.
+      apply nth_error_In, In_in in H. by apply G in H.
+Qed.
 
+Lemma values_are_integers_expr_wrt_t_pc cur_comp expr:
+  values_are_integers expr ->
+  forall t,
+    wf_expr_wrt_t_pc expr t cur_comp.
+Proof.
+  induction expr; auto; intros Hvalues t; inversion Hvalues; simpl in *; auto.
+  - destruct v; discriminate.
+  - move : Hvalues => /andP => [[G1 G2]].
+    constructor.
+    + apply IHexpr1; by auto.
+    + apply IHexpr2; by auto.
+  - move : Hvalues => /andP => [[G1 G2]].
+    constructor.
+    + apply IHexpr1; by auto.
+    + apply IHexpr2; by auto.
+  - move : Hvalues => /andP => [[G1 G2]].
+    move : G2 => /andP => [[G21 G22]].
+    constructor.
+    + apply IHexpr1; by auto.
+    + split; [apply IHexpr2|apply IHexpr3]; by auto.
+  - move : Hvalues => /andP => [[G1 G2]].
+    constructor.
+    + apply IHexpr1; by auto.
+    + apply IHexpr2; by auto.
+  - move : Hvalues => /andP => [[G1 G2]].
+    constructor.
+    + apply IHexpr1; by auto.
+    + apply IHexpr2; by auto.
+Qed.
+    
 Lemma is_prefix_wf_state_t s p t:
   closed_program p ->
   well_formed_program p ->
   is_prefix s p t ->
   wf_state_t s t.
 Proof.
+  unfold is_prefix. simpl.
+  intros Hclosed Hwf Hstar.
+  remember (prepare_global_env p) as G eqn:HG.
+  remember (CS.initial_machine_state p) as s0 eqn:Hs0.
+  revert HG Hs0.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros; subst.
+  - unfold CS.initial_machine_state.
+    inversion Hclosed. destruct (prog_main p) eqn:emain; [|discriminate].
+    constructor; simpl.
+    + apply values_are_integers_expr_wrt_t_pc. inversion Hwf. 
+      specialize (wfprog_well_formed_procedures0 _ _ _ emain).
+      inversion wfprog_well_formed_procedures0. by intuition.
+    + split; [apply initial_wf_mem; assumption | split; by constructor].
+  - 
+  
   Admitted.
