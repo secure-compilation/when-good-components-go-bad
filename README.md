@@ -107,24 +107,6 @@ Completing these proofs simply requires us to extend module signatures and
 implementations, and derive the desired easy facts in this enriched setting.
 
 ```coq
-load_next_block_None
-  : forall (mem : Memory.t) (ptr : Pointer.t) (b : Block.id),
-    next_block mem (Pointer.component ptr) = Some b ->
-    Pointer.block ptr >= b -> Memory.load mem ptr = None
-
-ComponentMemory.load_next_block
-
-component_memory_after_store_neq
-  : forall (mem : Memory.t) (ptr : Pointer.t) (v : value) 
-      (mem' : Memory.t) (C : Component.id),
-    Memory.store mem ptr v = Some mem' ->
-    Pointer.component ptr <> C -> mem C = mem' C
-
-component_memory_after_alloc_neq
-  : forall (mem : Memory.t) (C : Component.id) (sz : nat) 
-      (mem' : Memory.t) (ptr : Pointer.t) (C' : Component.id),
-    Memory.alloc mem C sz = Some (mem', ptr) -> C' <> C -> mem C' = mem' C'
-
 initialization_correct_component_memory
   : forall (C : Component.id) (mem mem' : Memory.t),
     (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
