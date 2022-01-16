@@ -2969,7 +2969,8 @@ Section Definability.
           congruence.
     Qed.
 
-
+    (* NOTE: This result could live in Common.Memory, although the current
+       statement is very specific to its uses here. *)
     Corollary initialization_correct_component_memory C mem mem':
       (forall C' b offset,
           C <> C' ->
@@ -2980,10 +2981,29 @@ Section Definability.
           Memory.next_block mem C' = Memory.next_block mem' C') ->
       forall C', C <> C' -> mem C' = mem' C'.
     Proof.
-      clear.
-    Admitted. (* Quick and dirty corollary, component memory equality is easy to
-                 prove but requires exposing some additional principles in
-                 ComponentMemory. *)
+      intros Hload Hnext C' Hneq.
+      destruct (mem C') as [memC' |] eqn:HmemC';
+        destruct (mem' C') as [mem'C' |] eqn:Hmem'C'.
+      - suffices: (memC' = mem'C');
+          [congruence |].
+        apply ComponentMemory.load_next_block_eq.
+        + intros b i.
+          unfold Memory.load in Hload. simpl in Hload.
+          specialize (Hload C' b i Hneq). rewrite HmemC' Hmem'C' in Hload.
+          assumption.
+        + unfold Memory.next_block in Hnext.
+          specialize (Hnext C' Hneq). rewrite HmemC' Hmem'C' in Hnext.
+          now injection Hnext.
+      - unfold Memory.next_block in Hnext.
+        specialize (Hnext C' Hneq). rewrite HmemC' Hmem'C' in Hnext.
+        discriminate.
+      - unfold Memory.next_block in Hnext.
+        specialize (Hnext C' Hneq). rewrite HmemC' Hmem'C' in Hnext.
+        discriminate.
+      - reflexivity.
+    Qed.
+
+    (* Print Assumptions initialization_correct_component_memory. *)
 
     Lemma addr_shared_so_far_inv_1
           (ret_val : value)
