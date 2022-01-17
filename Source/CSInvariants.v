@@ -264,3 +264,5 @@ Lemma is_prefix_wf_state_t s p t:
   wf_state_t s t.
 Proof.
   Admitted.
+
+End CSInvariants.

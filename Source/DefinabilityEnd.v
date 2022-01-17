@@ -173,7 +173,7 @@ Proof.
           }
           by rewrite Hrewr.
         }
-        by rewrite Hassert.
+        by rewrite -Hassert.
       }
       assert (regs0 = Intermediate.Register.init).
       {
@@ -374,6 +374,7 @@ Proof.
     {
       eapply well_formed_events_well_formed_program; auto.
       (* by exact: well_formed_events_well_formed_program. *)
+      eassumption.
       eassumption.
     }
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
