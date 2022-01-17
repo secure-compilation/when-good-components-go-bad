@@ -3382,6 +3382,229 @@ Section Definability.
       addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C')).
     Admitted.
 
+    Fixpoint has_no_local (e: expr) :=
+      match e with
+      | E_val v =>
+          match v with
+          | Ptr (Permission.data, _, 0, _) => False
+          | _ => True
+          end
+      | E_local => False
+      | E_binop b e1 e2 => has_no_local e1 /\ has_no_local e2
+      | E_seq e1 e2 => has_no_local e2
+      | E_if e1 e2 e3 => has_no_local e2 /\ has_no_local e3
+      | E_alloc e1 => True
+      | E_deref e1 => True
+      | E_assign e1 e2 => True
+      | E_call C P e1 => True
+      | E_callptr e1 e2 => True
+      | E_arg => True
+      | E_funptr P => True
+      | E_exit => True
+      end.
+
+    Definition safe_value (v: value) :=
+      match v with
+      | Ptr (Permission.data, _, 0, _) => False
+      | _ => True
+      end.
+
+    Fixpoint safe_expr1 (e: expr) :=
+      match e with
+      | E_val v => safe_value v
+      | E_local => True
+      | E_binop b e1 e2 => safe_expr1 e1 /\ safe_expr1 e2
+      | E_seq e1 e2 => safe_expr1 e1 /\ safe_expr1 e2
+      | E_if e1 e2 e3 => safe_expr1 e1 /\ safe_expr1 e2 /\ safe_expr1 e3
+      | E_alloc e1 => safe_expr1 e1
+      | E_deref e1 => safe_expr1 e1
+      | E_assign e1 e2 => safe_expr1 e1 /\ safe_expr1 e2 /\ has_no_local e2
+      | E_call C P e1 => safe_expr1 e1
+      | E_callptr e1 e2 => safe_expr1 e1 /\ safe_expr1 e2
+      | E_arg => True
+      | E_funptr P => True
+      | E_exit => True
+      end.
+
+    Fixpoint safe_cont1 (k: cont) :=
+      match k with
+      | Kstop => True
+      | Kbinop1 _ e k => safe_expr1 e /\ safe_cont1 k
+      | Kbinop2 _ _ k => safe_cont1 k
+      | Kseq e k => safe_expr1 e /\ safe_cont1 k
+      | Kif e1 e2 k => safe_expr1 e1 /\ safe_expr1 e2 /\ safe_cont1 k
+      | Kalloc k => safe_cont1 k
+      | Kderef k => safe_cont1 k
+      | Kassign1 e k => safe_expr1 e /\ safe_cont1 k
+      | Kassign2 _ k => safe_cont1 k
+      | Kcall _ _ k => safe_cont1 k
+      | Kcallptr1 e k => safe_expr1 e /\ safe_cont1 k
+      | Kcallptr2 _ k => safe_cont1 k
+      end.
+
+    Fixpoint safe_cont_expr1 (n: nat) (k: cont) (e: expr) :=
+      match n with
+      | 0 => False
+      | S n =>
+          match e with
+          | E_val v =>
+              match k with
+              | Kstop => safe_value v (* necessary because [Kstop] can mean: we're returning to another component *)
+              | Kbinop1 b e2 k => safe_cont_expr1 n (Kbinop2 b v k) e2
+              | Kbinop2 b v' k => safe_cont_expr1 n k (E_val (eval_binop b v' v))
+              | Kseq e k => safe_cont_expr1 n k e
+              | Kif e2 e3 k => safe_cont_expr1 n k e2 /\
+                                safe_cont_expr1 n k e3
+              | Kalloc k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+              | Kderef k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+              | Kassign1 e1 k => safe_value v /\ safe_cont_expr1 n (Kassign2 v k) e1
+              | Kassign2 v k => safe_value v /\ safe_cont_expr1 n k (E_val v)
+              | Kcall C P k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+              | Kcallptr1 e1 k => safe_cont_expr1 n (Kcallptr2 v k) e1
+              | Kcallptr2 v' k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+              end
+          | E_local =>
+              forall C, safe_cont_expr1 n k (E_val (Ptr (Permission.data, C, Block.local, 0%Z)))
+          | E_binop b e1 e2 => safe_cont_expr1 n (Kbinop1 b e2 k) e1
+          | E_seq e1 e2 =>  safe_cont_expr1 n (Kseq e2 k) e1
+          | E_if e1 e2 e3 => safe_cont_expr1 n (Kif e2 e3 k) e1
+          | E_alloc e1 => safe_cont_expr1 n (Kalloc k) e1
+          | E_deref e1 => safe_cont_expr1 n (Kderef k) e1
+          | E_assign e1 e2 => safe_cont_expr1 n (Kassign1 e1 k) e2
+          | E_call C P e1 => safe_cont_expr1 n (Kcall C P k) e1
+          | E_callptr e1 e2 => safe_cont_expr1 n (Kcallptr1 e1 k) e2
+          | E_arg => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+          | E_funptr P => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+          | E_exit => True
+          end
+      end.
+    Arguments safe_cont_expr1: simpl nomatch.
+
+    Definition safe_expr_cont (e: expr) (k: cont) :=
+      safe_expr1 e /\ safe_cont1 k.
+
+    Definition safe_memory (mem: Memory.t) :=
+      forall ptr v,
+        Memory.load mem ptr = Some v ->
+        safe_value v.
+
+    Definition safe_stack (n: nat) (stk: CS.stack) :=
+      List.Forall (fun frm => (forall v, safe_value v -> safe_cont_expr1 n (CS.f_cont frm) (E_val v))
+                             /\ safe_value (CS.f_arg frm)) stk.
+
+    Lemma safe_S_n: forall n k e,
+      safe_cont_expr1 n k e ->
+      safe_cont_expr1 (S n) k e.
+    Proof.
+      induction n.
+      - intros. by [].
+      - intros k e safe.
+        destruct k, e; simpl in *; auto;
+        (repeat (match goal with
+               | H: _ /\ _ |- _ => destruct H
+               | |- _ /\ _ => split
+               end));
+          (repeat match goal with
+               | H: safe_cont_expr1 n _ _ |- _ => apply IHn in H
+               end);
+          try (now auto);
+        try now (intros v0 safe_v0; specialize (safe v0 safe_v0); apply IHn in safe; auto).
+        (* + intros v; specialize (H0 v); apply IHn in H0; auto. *)
+        (* + destruct v as [| [[[[]] []]] |]; auto. *)
+        (*   apply IHn in safe; auto. *)
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C0. specialize (safe C0); apply IHn in safe; auto.
+        + intros C0. specialize (safe C0); apply IHn in safe; auto.
+        (* + intros C0. specialize (safe C); apply IHn in safe; auto. *)
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C. specialize (safe C); apply IHn in safe; auto.
+    Qed.
+
+    Lemma safe_preserved_by_step (ge: global_env):
+      forall s1 s2 t n,
+        safe_memory (CS.s_memory s1) ->
+        (* safe_expr1 (CS.s_expr s1) -> *)
+        (* safe_cont1 (CS.s_cont s1) -> *)
+        safe_cont_expr1 n (CS.s_cont s1) (CS.s_expr s1)->
+        safe_stack n (CS.s_stack s1) ->
+        safe_value (CS.s_arg s1) ->
+        CS.kstep ge s1 t s2 ->
+        safe_memory (CS.s_memory s2) /\
+          (* safe_expr1 (CS.s_expr s2) /\ *)
+          (* safe_cont1 (CS.s_cont s2) /\ *)
+          safe_cont_expr1 n (CS.s_cont s2) (CS.s_expr s2) /\
+          safe_stack n (CS.s_stack s2) /\
+          safe_value (CS.s_arg s2).
+    Proof.
+      intros s1 s2 t0 n safe_mem
+             (* safe_expr safe_cont *)
+             safe_cont_expr safe_stk safe_arg step.
+      destruct s1, s2; subst; simpl in *.
+      destruct n as [| n]; first by contradiction.
+      inversion step; subst;
+        (try now (apply safe_S_n in safe_cont_expr; unfold safe_cont_expr1 in *; simpl in *; intuition));
+        (try now (unfold safe_cont_expr1 in *; simpl in *; intuition));
+        try now (intuition; eapply safe_S_n in safe_cont_expr; eapply safe_cont_expr; eauto).
+      - intuition.
+        apply safe_S_n in safe_cont_expr. destruct safe_cont_expr.
+        destruct (i != 0%Z); auto.
+      - (* Alloc *)
+        intuition.
+        + intros ptr' v Hload.
+          case eC: (Pointer.component ptr == Pointer.component ptr');
+            case eB: (Pointer.block ptr == Pointer.block ptr');
+            move: eC => /eqP eC; subst;
+            move: eB => /eqP eB; subst.
+          * erewrite Memory.load_after_alloc_eq in Hload; [| eassumption | auto].
+            move: Hload; case _: ifP; last by [].
+            case _: ifP; last by [].
+            case _: ifP; last by [].
+            by move=> _ _ _ [] <- //=.
+          * erewrite Memory.load_after_alloc in Hload; [| eassumption | congruence].
+            eapply safe_mem; eauto.
+          * erewrite Memory.load_after_alloc in Hload; [| eassumption | congruence].
+            eapply safe_mem; eauto.
+          * erewrite Memory.load_after_alloc in Hload; [| eassumption | congruence].
+            eapply safe_mem; eauto.
+        + eapply safe_S_n in safe_cont_expr. eapply safe_cont_expr.
+          (* TODO: add invariant [next_block > 0] *)
+          admit.
+      - (* Store *)
+        intuition.
+        + intros ptr' v' Hload.
+          destruct (Pointer.eqP (P', C', b', o') ptr') as [e | e].
+          * subst.
+            erewrite (Memory.load_after_store_eq _ _ v) in Hload; eauto.
+            inversion Hload; subst; clear Hload.
+            now destruct safe_cont_expr.
+          * erewrite Memory.load_after_store_neq in Hload; eauto.
+        + eapply safe_S_n in safe_cont_expr.
+          simpl in *; intuition.
+      - (* Calls *)
+        intuition.
+        + admit.
+        + eapply safe_S_n in safe_cont_expr.
+          simpl in *; constructor; intuition.
+        + (* MMissing something!! *)
+          admit.
+      - intuition. (* Same case as previously *)
+        + admit.
+        + eapply safe_S_n in safe_cont_expr.
+          simpl in *; constructor; intuition.
+        + (* MMissing something!! *)
+          admit.
+      - inversion safe_stk; intuition.
+      - inversion safe_stk; intuition.
+    Admitted.
+
+
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Admitted.
