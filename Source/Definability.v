@@ -2789,8 +2789,12 @@ Section Definability.
           (* Currently, [wf] is too strong: this only holds for those components that
            * actually are initialized, i.e. components where we can load from *)
           (x: forall C,
+              component_buffer C ->
               well_formed_memory_snapshot_steadystate mem mem' C
-              \/ (forall b, ~ Reachability.Reachable mem (addr_of_value v) (C, b))):
+              \/ (forall b, ~ Reachability.Reachable mem (addr_of_value v) (C, b)))
+          (y: forall C b o v,
+              Memory.load mem (Permission.data, C, b, o) = Some v ->
+              component_buffer C):
           (* (wf: forall C b o v, *)
           (*     Memory.load mem (Permission.data, C, b, o) = Some v -> *)
           (*     well_formed_memory_snapshot_steadystate mem mem' C) : *)
@@ -2827,7 +2831,7 @@ Section Definability.
           apply In_in in in_compMem.
           apply ComponentMemory.load_block_load in in_compMem as [ptro [i in_compMem]].
           exists ptro, i. by rewrite in_compMem. }
-        specialize (x C') as [wf | wf].
+        specialize (x C') as [wf | wf]; first now eapply y; eauto.
         2: eapply wf in reachable; contradiction.
         (* specialize (wf C' _ _ _ load_mem). *)
         apply steadysnap_shift in wf.
@@ -2872,15 +2876,22 @@ Section Definability.
               Some (arg_of_event e))
           (* (forall C, postcondition_steady_state e mem C \/ postcondition_uninitialized prefix' e mem C) *)
           (wf1: forall C,
+              component_buffer C ->
               C = cur_comp_of_event e ->
               well_formed_memory_snapshot_steadystate (mem_of_event e) (mem_of_event e') C)
           (wf2: forall C,
+              component_buffer C ->
               well_formed_memory_snapshot_steadystate (mem_of_event e) (mem_of_event e') C \/
                 (forall b, ~ addr_shared_so_far (C, b) t1))
           (wf3: forall C b,
+              component_buffer C ->
               C <> cur_comp_of_event e ->
               ~ addr_shared_so_far (C, b) t1 ->
               ~ addr_shared_so_far (C, b) (rcons t1 e))
+          (* this comes from [CS.CS.comes_from_initial_state_mem_domm] *)
+          (wf4: forall C b o v,
+              Memory.load (mem_of_event e) (Permission.data, C, b, o) = Some v ->
+              component_buffer C)
           (* (x: forall C, *)
           (*     well_formed_memory_snapshot_steadystate (mem_of_event e) (mem_of_event e') C *)
           (*     \/ (forall b, ~ Reachability.Reachable (mem_of_event e) (addr_of_value (arg_of_event e)) (C, b))) *)
@@ -2900,20 +2911,20 @@ Section Definability.
       generalize dependent e'. generalize dependent t1'.
       generalize dependent e. generalize dependent t1.
       induction shared as [addr t0 e0 reachable | addr addr' t0 e0 shared IH reachable].
-      - intros t1 e eq_traces wf3 t1' traces_rename e' values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons.
+      - intros t1 e eq_traces wf3 wf4 t1' traces_rename e' values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons.
         constructor.
         eapply addr_shared_so_far_inv_1'; eauto.
-        intros C.
+        intros C C_b.
         destruct (C == (cur_comp_of_event e)) eqn:eC.
         + move: eC => /eqP eC; subst.
           left; now eapply wf1.
         + move: eC => /eqP eC.
-          specialize (wf2 C) as [wf | wf]; first now left.
+          specialize (wf2 C C_b) as [wf | wf]; first now left.
           right. intros b0 reach_b0.
           specialize (wf b0). eapply wf3 in wf; eauto.
           eapply wf. constructor. eauto.
           (* Source invariant similar to CSInvariants.CSInvariants.not_shared_diff_comp_not_shared_call *)
-      - intros t1 e eq_traces wf3 t1' traces_rename e' values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons.
+      - intros t1 e eq_traces wf3 wf4 t1' traces_rename e' values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons.
         destruct addr' as [cid bid].
         replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z)))
           in reachable by reflexivity.
@@ -2933,12 +2944,12 @@ Section Definability.
         destruct bid'; first discriminate. simpl in shift.
         inversion shift; subst.
         by rewrite ssrnat.subn1 ssrnat.addn0.
-        intros C.
+        intros C C_b.
         destruct (C == (cur_comp_of_event e)) eqn:eC.
         + move: eC => /eqP eC; subst.
           left; now eapply wf1.
         + move: eC => /eqP eC.
-          specialize (wf2 C) as [wf | wf]; first now left.
+          specialize (wf2 C C_b) as [wf | wf]; first now left.
           right. intros b0 reach_b0.
           specialize (wf b0). eapply wf3 in wf; eauto.
           eapply wf. eapply reachable_from_previously_shared. eauto. eauto.
