@@ -2857,7 +2857,7 @@ Section Definability.
     Lemma addr_shared_so_far_inv_1
           (mem0 mem1: Memory.t)
           (mem: Memory.t)
-          (v vcom: value)
+          (* (v vcom: value) *)
           (e e': event)
           (t1 t1': trace event)
           (mem0_mem1: forall C b o, Memory.load mem0 (Permission.data, C, S b, o) =
@@ -2885,7 +2885,26 @@ Section Definability.
         constructor.
         eapply addr_shared_so_far_inv_1'; eauto.
         admit.
+
+        (* postcondition_uninitialized =  *)
+        (* fun (t : trace event_inform) (e : event_inform) (mem : Memory.t) (C : Component.id) => *)
+        (* Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) = Some (Int 0) /\ *)
+        (* Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) = Some Undef /\ *)
+        (* postcondition_event_snapshot_uninitialized e mem C /\ *)
+        (* (forall b : Block.id, ~ addr_shared_so_far (C, b) (project_non_inform (rcons t e))) *)
       - intros t1 e eq_traces t1' traces_rename e' values_rename Cb b eq_addr; find_rcons_rcons.
+        (* inversion traces_rename; subst; clear traces_rename. *)
+        (* + inversion shared; subst; clear shared; *)
+        (*     by destruct t0. *)
+        (* + specialize (H1 _ shared) as [addr [Haddr1 [Haddr2 Haddr3]]]. *)
+        (*   eapply reachable_from_previously_shared. eauto. *)
+        (*   destruct addr as [cid bid]. *)
+        (*   replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z))) by reflexivity. *)
+        (*   eapply addr_shared_so_far_inv_1' with (v := Ptr (Permission.data, cid, bid, 0%Z)). eauto. *)
+        (*   rewrite /all_zeros_shift /uniform_shift //=. *)
+        (*   rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr /sigma_shifting_lefttoright_addr_bid /sigma_shifting_lefttoright_option. *)
+
+
         destruct addr' as [cid bid].
         replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z)))
           in reachable by reflexivity.
@@ -2896,8 +2915,15 @@ Section Definability.
         { inversion shared; eexists; eexists; eauto. }
         inversion traces_rename; [by destruct t2|].
         find_rcons_rcons.
-        eapply reachable_from_previously_shared; eauto. eapply IH; eauto.
-        admit.
+        eapply reachable_from_previously_shared; eauto.
+        specialize (H2 _ shared) as [[cid' bid'] [shift [ren shar]]].
+        rewrite //= /all_zeros_shift /uniform_shift //= in shift.
+        rewrite /sigma_shifting_wrap_bid_in_addr in shift.
+        rewrite /sigma_shifting_lefttoright_addr_bid in shift.
+        rewrite /sigma_shifting_lefttoright_option in shift.
+        destruct bid'; first discriminate. simpl in shift.
+        inversion shift; subst.
+        rewrite ssrnat.subn1 ssrnat.addn0. eauto.
     Admitted.
 
 
