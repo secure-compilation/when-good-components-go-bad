@@ -2788,9 +2788,12 @@ Section Definability.
           (*     component_buffer C) *)
           (* Currently, [wf] is too strong: this only holds for those components that
            * actually are initialized, i.e. components where we can load from *)
-          (wf: forall C b o v,
-              Memory.load mem (Permission.data, C, b, o) = Some v ->
-              well_formed_memory_snapshot_steadystate mem mem' C) :
+          (x: forall C,
+              well_formed_memory_snapshot_steadystate mem mem' C
+              \/ (forall b, ~ Reachability.Reachable mem (addr_of_value v) (C, b))):
+          (* (wf: forall C b o v, *)
+          (*     Memory.load mem (Permission.data, C, b, o) = Some v -> *)
+          (*     well_formed_memory_snapshot_steadystate mem mem' C) : *)
       forall Cb b,
         Reachability.Reachable mem (addr_of_value v) (Cb, b) ->
         Reachability.Reachable mem' (addr_of_value vcom) (Cb, S b).
@@ -2824,7 +2827,9 @@ Section Definability.
           apply In_in in in_compMem.
           apply ComponentMemory.load_block_load in in_compMem as [ptro [i in_compMem]].
           exists ptro, i. by rewrite in_compMem. }
-        specialize (wf C' _ _ _ load_mem).
+        specialize (x C') as [wf | wf].
+        2: eapply wf in reachable; contradiction.
+        (* specialize (wf C' _ _ _ load_mem). *)
         apply steadysnap_shift in wf.
         rewrite /well_formed_memory_snapshot_steadystate_shift in wf.
         assert (S_b_not_local: S b' <> Block.local) by by [].
@@ -2865,6 +2870,20 @@ Section Definability.
           (values_rename:
             shift_value_option (uniform_shift 1) all_zeros_shift (arg_of_event e') =
               Some (arg_of_event e))
+          (* (forall C, postcondition_steady_state e mem C \/ postcondition_uninitialized prefix' e mem C) *)
+          (wf1: forall C,
+              C = cur_comp_of_event e ->
+              well_formed_memory_snapshot_steadystate (mem_of_event e) (mem_of_event e') C)
+          (wf2: forall C,
+              well_formed_memory_snapshot_steadystate (mem_of_event e) (mem_of_event e') C \/
+                (forall b, ~ addr_shared_so_far (C, b) t1))
+          (wf3: forall C b,
+              C <> cur_comp_of_event e ->
+              ~ addr_shared_so_far (C, b) t1 ->
+              ~ addr_shared_so_far (C, b) (rcons t1 e))
+          (* (x: forall C, *)
+          (*     well_formed_memory_snapshot_steadystate (mem_of_event e) (mem_of_event e') C *)
+          (*     \/ (forall b, ~ Reachability.Reachable (mem_of_event e) (addr_of_value (arg_of_event e)) (C, b))) *)
           (traces_rename:
             traces_rename_each_other_option (uniform_shift 1) all_zeros_shift t1' t1):
       forall Cb b,
@@ -2881,30 +2900,20 @@ Section Definability.
       generalize dependent e'. generalize dependent t1'.
       generalize dependent e. generalize dependent t1.
       induction shared as [addr t0 e0 reachable | addr addr' t0 e0 shared IH reachable].
-      - intros t1 e eq_traces t1' traces_rename e' values_rename Cb b eq_addr; find_rcons_rcons.
+      - intros t1 e eq_traces wf3 t1' traces_rename e' values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons.
         constructor.
         eapply addr_shared_so_far_inv_1'; eauto.
-        admit.
-
-        (* postcondition_uninitialized =  *)
-        (* fun (t : trace event_inform) (e : event_inform) (mem : Memory.t) (C : Component.id) => *)
-        (* Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) = Some (Int 0) /\ *)
-        (* Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) = Some Undef /\ *)
-        (* postcondition_event_snapshot_uninitialized e mem C /\ *)
-        (* (forall b : Block.id, ~ addr_shared_so_far (C, b) (project_non_inform (rcons t e))) *)
-      - intros t1 e eq_traces t1' traces_rename e' values_rename Cb b eq_addr; find_rcons_rcons.
-        (* inversion traces_rename; subst; clear traces_rename. *)
-        (* + inversion shared; subst; clear shared; *)
-        (*     by destruct t0. *)
-        (* + specialize (H1 _ shared) as [addr [Haddr1 [Haddr2 Haddr3]]]. *)
-        (*   eapply reachable_from_previously_shared. eauto. *)
-        (*   destruct addr as [cid bid]. *)
-        (*   replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z))) by reflexivity. *)
-        (*   eapply addr_shared_so_far_inv_1' with (v := Ptr (Permission.data, cid, bid, 0%Z)). eauto. *)
-        (*   rewrite /all_zeros_shift /uniform_shift //=. *)
-        (*   rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr /sigma_shifting_lefttoright_addr_bid /sigma_shifting_lefttoright_option. *)
-
-
+        intros C.
+        destruct (C == (cur_comp_of_event e)) eqn:eC.
+        + move: eC => /eqP eC; subst.
+          left; now eapply wf1.
+        + move: eC => /eqP eC.
+          specialize (wf2 C) as [wf | wf]; first now left.
+          right. intros b0 reach_b0.
+          specialize (wf b0). eapply wf3 in wf; eauto.
+          eapply wf. constructor. eauto.
+          (* Source invariant similar to CSInvariants.CSInvariants.not_shared_diff_comp_not_shared_call *)
+      - intros t1 e eq_traces wf3 t1' traces_rename e' values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons.
         destruct addr' as [cid bid].
         replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z)))
           in reachable by reflexivity.
@@ -2923,10 +2932,17 @@ Section Definability.
         rewrite /sigma_shifting_lefttoright_option in shift.
         destruct bid'; first discriminate. simpl in shift.
         inversion shift; subst.
-        rewrite ssrnat.subn1 ssrnat.addn0. eauto.
-    Admitted.
-
-
+        by rewrite ssrnat.subn1 ssrnat.addn0.
+        intros C.
+        destruct (C == (cur_comp_of_event e)) eqn:eC.
+        + move: eC => /eqP eC; subst.
+          left; now eapply wf1.
+        + move: eC => /eqP eC.
+          specialize (wf2 C) as [wf | wf]; first now left.
+          right. intros b0 reach_b0.
+          specialize (wf b0). eapply wf3 in wf; eauto.
+          eapply wf. eapply reachable_from_previously_shared. eauto. eauto.
+    Qed.
 
     (* Lemma addr_shared_so_far_inv_1 *)
     (*         (ret_val : value) *)
@@ -5381,9 +5397,7 @@ Section Definability.
                       -- rewrite /all_zeros_shift /uniform_shift //=.
                          rewrite /sigma_shifting_wrap_bid_in_addr //=.
                          by rewrite ssrnat.subn0 ssrnat.addn1.
-                      --
-
-                         assert (Hwf_p: Source.well_formed_program p).
+                      -- assert (Hwf_p: Source.well_formed_program p).
                          {
                            by eapply well_formed_events_well_formed_program; eauto.
                          }
@@ -5542,9 +5556,6 @@ Section Definability.
                       -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                          inversion Hshift; eauto.
                 - intros [Cb b] Hshared.
-                  (*clear -wf_int_pref' wf_cs' Hmem1  Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hmem9 Hmem10 Hvcom Hshared.*)
-                  unfold C in *.
-                  admit.
                 - easy.
                 - rewrite /all_zeros_shift /uniform_shift
                           /sigma_shifting_wrap_bid_in_addr
