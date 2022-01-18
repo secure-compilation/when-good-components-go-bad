@@ -3442,6 +3442,9 @@ Section Definability.
       | Kcallptr2 _ k => safe_cont1 k
       end.
 
+    (* Hope that: safe_expr e -> exists n, safe_cont_expr1 n Kstop e *)
+    (* k = Kassign1 e1 v and e = E_local -> safe_expr e /\ ~ safe_cont_expr1 n k e *)
+
     Fixpoint safe_cont_expr1 (n: nat) (k: cont) (e: expr) :=
       match n with
       | 0 => False
@@ -3458,10 +3461,10 @@ Section Definability.
               | Kalloc k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
               | Kderef k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
               | Kassign1 e1 k => safe_value v /\ safe_cont_expr1 n (Kassign2 v k) e1
-              | Kassign2 v k => safe_value v /\ safe_cont_expr1 n k (E_val v)
-              | Kcall C P k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+              | Kassign2 v' k => safe_value v' /\ safe_cont_expr1 n k (E_val v')
+              | Kcall C P k => (forall v', safe_value v' -> safe_cont_expr1 n k (E_val v'))
               | Kcallptr1 e1 k => safe_cont_expr1 n (Kcallptr2 v k) e1
-              | Kcallptr2 v' k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
+              | Kcallptr2 v' k => safe_value v /\ (forall v', safe_value v' -> safe_cont_expr1 n k (E_val v'))
               end
           | E_local =>
               forall C, safe_cont_expr1 n k (E_val (Ptr (Permission.data, C, Block.local, 0%Z)))
@@ -3530,15 +3533,11 @@ Section Definability.
     Lemma safe_preserved_by_step (ge: global_env):
       forall s1 s2 t n,
         safe_memory (CS.s_memory s1) ->
-        (* safe_expr1 (CS.s_expr s1) -> *)
-        (* safe_cont1 (CS.s_cont s1) -> *)
         safe_cont_expr1 n (CS.s_cont s1) (CS.s_expr s1)->
         safe_stack n (CS.s_stack s1) ->
         safe_value (CS.s_arg s1) ->
         CS.kstep ge s1 t s2 ->
         safe_memory (CS.s_memory s2) /\
-          (* safe_expr1 (CS.s_expr s2) /\ *)
-          (* safe_cont1 (CS.s_cont s2) /\ *)
           safe_cont_expr1 n (CS.s_cont s2) (CS.s_expr s2) /\
           safe_stack n (CS.s_stack s2) /\
           safe_value (CS.s_arg s2).
@@ -3603,6 +3602,25 @@ Section Definability.
       - inversion safe_stk; intuition.
       - inversion safe_stk; intuition.
     Admitted.
+
+    Lemma ini_ok: forall C P t0,
+        safe_cont_expr1 1000 Kstop (procedure_of_trace C P t0).
+    Proof.
+      intros [] [] [].
+      - simpl. intros. split.
+        + unfold extcall_check.
+          unfold init_local_buffer_expr. unfold copy_local_datum_expr.
+          unfold buffer_nth, buffer_size. destruct (prog_buffers 0).
+          * admit.
+          * simpl. intuition.
+        + intuition.
+      - simpl. intuition.
+        + admit.
+        + admit.
+        + admit.
+          Admitted.
+
+
 
 
     Lemma definability_does_not_leak :
