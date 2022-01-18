@@ -94,33 +94,6 @@ in_unzip2
     x \in unzip2 xs -> exists n : nat_ordType, xs n = Some x
 ```
 
-#### Memory model ####
-
-We have made small extensions to the CompCert memory model. Perhaps the most
-significant is that we expose the strategy used by the allocator to assign new
-block identifiers, as well as expose a bit more information about the shape of
-allocated pointers. This is done in order to reason about memory layouts and
-relate the contents of the memories in a trace and those of its
-back-translation. In addition, for simplicity, some results that apply only to
-individual component memories are lifted to operate on whole memories.
-Completing these proofs simply requires us to extend module signatures and
-implementations, and derive the desired easy facts in this enriched setting.
-
-```coq
-initialization_correct_component_memory
-  : forall (C : Component.id) (mem mem' : Memory.t),
-    (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
-     C <> C' ->
-     Memory.load mem (Permission.data, C', b, offset) =
-     Memory.load mem' (Permission.data, C', b, offset)) ->
-    (forall C' : Component.id,
-     C <> C' -> next_block mem C' = next_block mem' C') ->
-    forall C' : Component.id, C <> C' -> mem C' = mem' C'
-```
-
-Despite its name, this last assumption is, like the others, trivial provided
-that we expose a reasoning principle for equality of component memories.
-
 #### Back-translation ####
 
 The proof of back-translation currently relies on a small number of reasonable
