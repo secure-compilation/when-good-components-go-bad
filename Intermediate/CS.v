@@ -1688,7 +1688,6 @@ Proof.
     apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
 Qed.
 
-
 Lemma silent_step_preserves_component G s s' :
   CS.step G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
@@ -1806,6 +1805,30 @@ Proof.
   erewrite find_label_in_procedure_1; by eauto.
 Qed.
   
+
+Lemma starR_cur_comp_of_event_inform p s t1 e1 s1: 
+  starR step (GlobalEnv.prepare_global_env p) s (seq.rcons t1 e1) s1 ->
+  next_comp_of_event e1 = Pointer.component (state_pc s1).
+Proof.
+rewrite -seq.cats1. intros Hstar. apply star_iff_starR in Hstar.
+  specialize (star_app_inv (singleton_traces_inform p) _ _ Hstar)
+    as [? [_ Hstar2]].
+  remember [e1] as t. revert Heqt.
+  induction Hstar2; subst; intros Hrewr; first discriminate.
+  destruct t0 as [|e0 t0]; destruct t2 as [|e2 t2]; simpl in *; try discriminate.
+  + destruct t2; try discriminate. inversion Hrewr; subst. by intuition.
+  + destruct t0; try discriminate; simpl in *. inversion Hrewr; subst. clear Hrewr.
+    assert (Hrewr: next_comp_of_event e1 = Pointer.component (state_pc s2)).
+    {
+      unfold_states.
+      inversion H; simpl in *; subst; auto; try by rewrite Pointer.inc_preserves_component.
+      eapply find_label_in_component_1; eauto.
+    }
+    simpl in Hrewr.
+    rewrite Hrewr. eapply epsilon_star_inform_preserves_component. apply Hstar2.
+  + unfold Eapp in *. rewrite app_comm_cons in Hrewr.
+    apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
+Qed.
 
 Lemma epsilon_star_non_inform_preserves_program_component p c s1 s2 :
   CS.is_program_component s1 (prog_interface c) ->
