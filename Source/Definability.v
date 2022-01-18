@@ -3444,6 +3444,89 @@ Section Definability.
 
     (* Hope that: safe_expr e -> exists n, safe_cont_expr1 n Kstop e *)
     (* k = Kassign1 e1 v and e = E_local -> safe_expr e /\ ~ safe_cont_expr1 n k e *)
+    Fixpoint size_expr (e: expr) :=
+      match e with
+      | E_val _ => 0
+      | E_arg => 1
+      | E_local => 1
+      | E_binop b e1 e2 => 3 + size_expr e1 + size_expr e2
+      | E_seq e1 e2 => 2 + size_expr e1 + size_expr e2
+      | E_if e1 e2 e3 => 2 + size_expr e1 + size_expr e2 + size_expr e3
+      | E_alloc e => 2 + size_expr e
+      | E_deref e => 2 + size_expr e
+      | E_assign e1 e2 => 3 + size_expr e1 + size_expr e2
+      | E_call _ _ e => 2 + size_expr e
+      | E_callptr e1 e2 => 4 + size_expr e1 + size_expr e2
+      | E_funptr P => 1
+      | E_exit => 1
+      end.
+
+    Fixpoint size_cont (k: cont) :=
+      match k with
+      | Kstop => 0
+      | Kbinop1 b e k => 2 + size_expr e + size_cont k
+      | Kbinop2 b v k => 1 + size_cont k
+      | Kseq e k => 1 + size_expr e + size_cont k
+      | Kif e2 e3 k => 1 + size_expr e2 + size_expr e3 + size_cont k
+      | Kalloc k => 1 + size_cont k
+      | Kderef k => 1 + size_cont k
+      | Kassign1 e k => 2 + size_expr e + size_cont k
+      | Kassign2 v k => 1 + size_cont k
+      | Kcall _ _ k => 1 + size_cont k
+      | Kcallptr1 e k => 3 + size_expr e + size_cont k
+      | Kcallptr2 v k => 2 + size_cont k
+      end.
+
+    Require Import Coq.Program.Wf.
+    Program Fixpoint safe_cont_expr (k: cont) (e: expr) {measure (size_cont k + size_expr e)}:=
+      match e with
+      | E_val v =>
+          match k with
+          | Kstop => safe_value v (* necessary because [Kstop] can mean: we're returning to another component *)
+          | Kbinop1 b e2 k => safe_cont_expr (Kbinop2 b v k) e2
+          | Kbinop2 b v' k => safe_cont_expr k (E_val (eval_binop b v' v))
+          | Kseq e k => safe_cont_expr k e
+          | Kif e2 e3 k => safe_cont_expr k e2 /\
+                            safe_cont_expr k e3
+          | Kalloc k => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+          | Kderef k => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+          | Kassign1 e1 k => safe_value v /\ safe_cont_expr (Kassign2 v k) e1
+          | Kassign2 v' k => safe_value v' /\ safe_cont_expr k (E_val v')
+          | Kcall C P k => safe_value v /\ (forall v', safe_value v' -> safe_cont_expr k (E_val v'))
+          | Kcallptr1 e1 k => safe_value v /\ safe_cont_expr (Kcallptr2 v k) e1
+          | Kcallptr2 v' k => safe_value v' /\ (forall C P, safe_cont_expr (Kcall C P k) (E_val v'))
+          end
+      | E_local =>
+          forall C, safe_cont_expr k (E_val (Ptr (Permission.data, C, Block.local, 0%Z)))
+      | E_binop b e1 e2 => safe_cont_expr (Kbinop1 b e2 k) e1
+      | E_seq e1 e2 =>  safe_cont_expr (Kseq e2 k) e1
+      | E_if e1 e2 e3 => safe_cont_expr (Kif e2 e3 k) e1
+      | E_alloc e1 => safe_cont_expr (Kalloc k) e1
+      | E_deref e1 => safe_cont_expr (Kderef k) e1
+      | E_assign e1 e2 => safe_cont_expr (Kassign1 e1 k) e2
+      | E_call C P e1 => safe_cont_expr (Kcall C P k) e1
+      | E_callptr e1 e2 => safe_cont_expr (Kcallptr1 e1 k) e2
+      | E_arg => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+      | E_funptr P => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+      | E_exit => True
+      end.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
+    Next Obligation. simpl. lia. Defined.
 
     Fixpoint safe_cont_expr1 (n: nat) (k: cont) (e: expr) :=
       match n with
@@ -3462,9 +3545,9 @@ Section Definability.
               | Kderef k => (forall v, safe_value v -> safe_cont_expr1 n k (E_val v))
               | Kassign1 e1 k => safe_value v /\ safe_cont_expr1 n (Kassign2 v k) e1
               | Kassign2 v' k => safe_value v' /\ safe_cont_expr1 n k (E_val v')
-              | Kcall C P k => (forall v', safe_value v' -> safe_cont_expr1 n k (E_val v'))
-              | Kcallptr1 e1 k => safe_cont_expr1 n (Kcallptr2 v k) e1
-              | Kcallptr2 v' k => safe_value v /\ (forall v', safe_value v' -> safe_cont_expr1 n k (E_val v'))
+              | Kcall C P k => safe_value v /\ (forall v', safe_value v' -> safe_cont_expr1 n k (E_val v'))
+              | Kcallptr1 e1 k => safe_value v /\ safe_cont_expr1 n (Kcallptr2 v k) e1
+              | Kcallptr2 v' k => safe_value v' /\ (forall C P, safe_cont_expr1 n (Kcall C P k) (E_val v'))
               end
           | E_local =>
               forall C, safe_cont_expr1 n k (E_val (Ptr (Permission.data, C, Block.local, 0%Z)))
@@ -3527,10 +3610,14 @@ Section Definability.
         + intros C0. specialize (safe C0); apply IHn in safe; auto.
         (* + intros C0. specialize (safe C); apply IHn in safe; auto. *)
         + intros C. specialize (safe C); apply IHn in safe; auto.
+        + intros C P. specialize (H0 C P); apply IHn in H0; auto.
         + intros C. specialize (safe C); apply IHn in safe; auto.
     Qed.
 
-    Lemma safe_preserved_by_step (ge: global_env):
+    Lemma safe_preserved_by_step (ge: global_env)
+          (ge_good: forall C P expr n,
+              Source.find_procedure (genv_procedures ge) C P = Some expr ->
+              safe_cont_expr1 n Kstop expr):
       forall s1 s2 t n,
         safe_memory (CS.s_memory s1) ->
         safe_cont_expr1 n (CS.s_cont s1) (CS.s_expr s1)->
@@ -3588,17 +3675,15 @@ Section Definability.
           simpl in *; intuition.
       - (* Calls *)
         intuition.
-        + admit.
+        + by eapply ge_good; eauto.
         + eapply safe_S_n in safe_cont_expr.
           simpl in *; constructor; intuition.
-        + (* MMissing something!! *)
-          admit.
+        + simpl in safe_cont_expr. intuition.
       - intuition. (* Same case as previously *)
-        + admit.
+        + by eapply ge_good; eauto.
         + eapply safe_S_n in safe_cont_expr.
           simpl in *; constructor; intuition.
-        + (* MMissing something!! *)
-          admit.
+        + simpl in safe_cont_expr. intuition.
       - inversion safe_stk; intuition.
       - inversion safe_stk; intuition.
     Admitted.
