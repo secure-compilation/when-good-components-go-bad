@@ -5564,6 +5564,10 @@ Section Definability.
                            find_rcons_rcons. inversion H8; subst; eauto.
                          } subst.
                          auto.
+                      -- eapply wfmem in wf_mem; last reflexivity. admit.
+                      -- admit.
+                      -- admit.
+                      -- admit.
                       -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                          inversion Hshift; eauto.
                 - intros [Cb b] Hshared.
