@@ -231,7 +231,11 @@ Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
   wf_expr_wrt_t_pc (CS.s_expr s) t (CS.s_component s) /\
   wf_mem_wrt_t_pc (CS.s_memory s) t (CS.s_component s) /\
   wf_cont_wrt_t_pc (CS.s_cont s) t (CS.s_component s) /\
-  wf_stack_wrt_t_pc (CS.s_stack s) t (CS.s_component s).
+  wf_stack_wrt_t_pc (CS.s_stack s) t (CS.s_component s) /\
+  (forall ptr,
+         CS.s_arg s = Ptr ptr ->
+         Pointer.permission ptr = Permission.data ->
+         wf_ptr_wrt_cid_t (CS.s_component s) t ptr).
 
 Lemma initial_wf_mem p:
   well_formed_program p ->
@@ -315,6 +319,106 @@ Proof.
       specialize (wfprog_well_formed_procedures0 _ _ _ emain).
       inversion wfprog_well_formed_procedures0. by intuition.
     + split; [apply initial_wf_mem; assumption | split; by constructor].
-  - 
-  
-  Admitted.
+  - assert (IHstar_: wf_state_t s1 t1) by (apply IHstar; auto).
+    clear IHstar. unfold wf_state_t in IHstar_.
+    intuition. (** destructs IHstar_ recursively *)
+    inversion Hstep12; subst; (try rewrite E0_right);
+      unfold wf_state_t; simpl in *; try by intuition. 
+    + (** KS_Binop1 *)
+      intuition.
+      (** wf_cont remains *)
+      inversion H.
+      constructor; [assumption|by unfold wf_cont_wrt_t_pc in H0].
+    + (** KS_Binop2 *)
+      intuition.
+      (** wf_cont remains *)
+      constructor; [by unfold wf_expr_wrt_t_pc in H |
+                    unfold wf_cont_wrt_t_pc in H0; by intuition].
+    + (** KS_BinopEval *)
+      intuition.
+      (** wf_expr remains *)
+      simpl in H.
+      unfold wf_cont_wrt_t_pc, wf_expr_wrt_t_pc in *. simpl in *.
+      destruct H0 as [Hv1 Hk].
+      clear -H Hv1.
+      (** TODO: Refactor as a lemma *)
+      intros ? Heval Hperm.
+      destruct op; simpl in *; auto.
+      * destruct v1 as [| [[[[] c1] b1] o1] |] eqn:ev1; try discriminate.
+        -- destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; simpl in *; inversion Heval;
+             simpl in *; subst; try discriminate.
+           specialize (H _ Logic.eq_refl Logic.eq_refl).
+           inversion H; subst; constructor; by auto.
+        -- destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; simpl in *; inversion Heval;
+             simpl in *; subst; discriminate.
+        -- destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; simpl in *; inversion Heval;
+             simpl in *; subst; try discriminate.
+           specialize (Hv1 _ Logic.eq_refl Logic.eq_refl).
+           inversion Hv1; subst; constructor; by auto.
+      * destruct v1 as [| [[[[] c1] b1] o1] |] eqn:ev1; try discriminate.
+        -- destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; simpl in *; inversion Heval;
+             simpl in *; subst; discriminate.
+        -- destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; simpl in *; inversion Heval;
+             simpl in *; subst; try discriminate.
+           find_if_inside_hyp Heval; discriminate.
+        -- destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; simpl in *; inversion Heval;
+             simpl in *; subst.
+           ++ specialize (Hv1 _ Logic.eq_refl Logic.eq_refl).
+              inversion Hv1; subst; constructor; by auto.
+           ++ find_if_inside_hyp Heval; discriminate.
+      * destruct v1 as [| [[[[] c1] b1] o1] |] eqn:ev1; try discriminate.
+        destruct v2 as [| [[[[] c1] b1] o1] |] eqn:ev2; discriminate.
+      * destruct v1 as [| [[[[] c1] b1] o1] |] eqn:ev1; try discriminate;
+          destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; discriminate.
+      * destruct v1 as [| [[[[] c1] b1] o1] |] eqn:ev1; try discriminate;
+          destruct v2 as [| [[[[] c2] b2] o2] |] eqn:ev2; try discriminate.
+        -- destruct (Pointer.leq (Permission.code, c1, b1, o1)
+                                 (Permission.code, c2, b2, o2)); discriminate.
+        -- destruct (Pointer.leq (Permission.data, c1, b1, o1)
+                                 (Permission.data, c2, b2, o2)); discriminate.
+    + (** KS_Seq1 *)
+      intuition.
+      (** wf_cont remains *)
+      inversion H.
+      constructor; assumption.
+    + (** KS_If1 *)
+      intuition.
+      (** wf_cont remains *)
+      inversion H. intuition.
+      constructor; intuition; assumption.
+    + (** KS_If2 *)
+      intuition.
+      (** wf_expr remains *)
+      inversion H0. intuition.
+      find_if_inside_goal; assumption.
+    + (** KS_Arg *)
+      intuition.
+      (** wf_expr remains *)
+      unfold wf_expr_wrt_t_pc. simpl. intros.
+      inversion H3. constructor.
+    + (** KS_AllocEval *)
+      intuition.
+      * (** wf_expr *)
+        apply Memory.component_of_alloc_ptr in H5. subst.
+        unfold wf_expr_wrt_t_pc. simpl. intros.
+        inversion H5; subst.
+        destruct ptr0 as [[[ ?] ?] ?]; simpl.
+        by constructor.
+      * (** wf_mem *)
+        unfold wf_mem_wrt_t_pc in H1.
+        intros ? ? Hload.
+        destruct ((Pointer.component load_at, Pointer.block load_at) ==
+                  (Pointer.component ptr, Pointer.block ptr)) eqn:e.
+        -- erewrite Memory.load_after_alloc_eq in Hload; eauto.
+           ++ repeat (find_if_inside_hyp Hload; [|discriminate]).
+              discriminate.
+           ++ by apply/eqP.
+        -- erewrite Memory.load_after_alloc in Hload; eauto.
+           apply/eqP. by rewrite e.
+    + (** KS_DerefEval *)
+      intuition.
+      (** wf_expr *)
+      unfold wf_expr_wrt_t_pc. simpl. intros ? ? Hperm. subst.
+      
+
+Admitted.
