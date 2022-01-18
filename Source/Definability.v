@@ -6793,7 +6793,8 @@ Section Definability.
                     subst.
                     eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
                       last reflexivity.
-                    eapply addr_shared_so_far_inv_1; eauto.
+                    eapply addr_shared_so_far_inv_1 with (mem := mem0); eauto.
+                    -- admit.
                     -- simpl.
                        unfold all_zeros_shift, uniform_shift.
                        destruct (wf_regs Machine.R_COM _ Logic.eq_refl) as [vcom' [newarg' [G1 [G2 G3]]]].
@@ -6816,8 +6817,12 @@ Section Definability.
                          find_rcons_rcons. inversion H1; subst; eauto.
                        } subst.
                        auto.
-                      -- eapply traces_rename_each_other_option_symmetric. reflexivity.
-                         inversion Hshift; eauto.
+                    -- admit.
+                    -- admit.
+                    -- admit.
+                    -- admit.
+                    -- eapply traces_rename_each_other_option_symmetric. reflexivity.
+                       inversion Hshift; eauto.
               - intros [Cb b] Hshared.
                 (*clear -wf_int_pref' wf_cs' Hmem1 Hmem1' Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hcom Hshared.*)
                 admit.
