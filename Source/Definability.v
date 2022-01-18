@@ -3528,6 +3528,43 @@ Section Definability.
     Next Obligation. simpl. lia. Defined.
     Next Obligation. simpl. lia. Defined.
 
+    Lemma red_safe_cont_expr (k: cont) (e: expr):
+      safe_cont_expr k e =
+      match e with
+      | E_val v =>
+          match k with
+          | Kstop => safe_value v (* necessary because [Kstop] can mean: we're returning to another component *)
+          | Kbinop1 b e2 k => safe_cont_expr (Kbinop2 b v k) e2
+          | Kbinop2 b v' k => safe_cont_expr k (E_val (eval_binop b v' v))
+          | Kseq e k => safe_cont_expr k e
+          | Kif e2 e3 k => safe_cont_expr k e2 /\
+                            safe_cont_expr k e3
+          | Kalloc k => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+          | Kderef k => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+          | Kassign1 e1 k => safe_value v /\ safe_cont_expr (Kassign2 v k) e1
+          | Kassign2 v' k => safe_value v' /\ safe_cont_expr k (E_val v')
+          | Kcall C P k => safe_value v /\ (forall v', safe_value v' -> safe_cont_expr k (E_val v'))
+          | Kcallptr1 e1 k => safe_value v /\ safe_cont_expr (Kcallptr2 v k) e1
+          | Kcallptr2 v' k => safe_value v' /\ (forall C P, safe_cont_expr (Kcall C P k) (E_val v'))
+          end
+      | E_local =>
+          forall C, safe_cont_expr k (E_val (Ptr (Permission.data, C, Block.local, 0%Z)))
+      | E_binop b e1 e2 => safe_cont_expr (Kbinop1 b e2 k) e1
+      | E_seq e1 e2 =>  safe_cont_expr (Kseq e2 k) e1
+      | E_if e1 e2 e3 => safe_cont_expr (Kif e2 e3 k) e1
+      | E_alloc e1 => safe_cont_expr (Kalloc k) e1
+      | E_deref e1 => safe_cont_expr (Kderef k) e1
+      | E_assign e1 e2 => safe_cont_expr (Kassign1 e1 k) e2
+      | E_call C P e1 => safe_cont_expr (Kcall C P k) e1
+      | E_callptr e1 e2 => safe_cont_expr (Kcallptr1 e1 k) e2
+      | E_arg => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+      | E_funptr P => (forall v, safe_value v -> safe_cont_expr k (E_val v))
+      | E_exit => True
+      end.
+    Proof.
+      Admitted.
+
+
     Fixpoint safe_cont_expr1 (n: nat) (k: cont) (e: expr) :=
       match n with
       | 0 => False
