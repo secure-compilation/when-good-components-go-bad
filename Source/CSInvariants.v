@@ -419,6 +419,80 @@ Proof.
       intuition.
       (** wf_expr *)
       unfold wf_expr_wrt_t_pc. simpl. intros ? ? Hperm. subst.
-      
-
+      destruct ptr as [[[[] cloaded] bloaded] oloaded]; [discriminate|].
+      clear Hperm.
+      specialize (H1 _ _ H3 Logic.eq_refl).
+      unfold wf_expr_wrt_t_pc in H. simpl in H.
+      assert (P' = Permission.data).
+      { by apply Memory.load_some_permission in H3. }
+      subst.
+      specialize (H _ Logic.eq_refl Logic.eq_refl).
+      inversion H1; simpl in *; subst.
+      * inversion H; subst.
+        -- by constructor.
+        -- contradiction.
+      * by constructor.
+      * by constructor.
+    + (** KS_FunPtr *)
+      intuition.
+      unfold wf_expr_wrt_t_pc. simpl. intros ? inv contra. inversion inv. subst.
+      simpl in *. discriminate.
+    + (** KS_Assign1 *)
+      intuition.
+      (** wf_cont *)
+      constructor; simpl; inversion H; assumption.
+    + (** KS_Assign2 *)
+      intuition. inversion H0. constructor; assumption.
+    + (** KS_AssignEval *)
+      intuition.
+      * (** wf_expr *)
+        unfold wf_expr_wrt_t_pc. simpl. inversion H0; assumption.
+      * (** wf_mem *)
+        intros ? ? Hload Hperm.
+        destruct ptr as [[[[] cptr] bptr] optr]; [discriminate|]. clear Hperm.
+        erewrite Memory.load_after_store in Hload; [| by eauto].
+        assert (P' = Permission.data).
+        { by apply Memory.store_some_permission in H3. }
+        subst. unfold wf_expr_wrt_t_pc in H. simpl in H.
+        specialize (H _ Logic.eq_refl Logic.eq_refl). 
+        inversion H0 as [Hv ?].
+        find_if_inside_hyp Hload.
+        -- move : e => /Pointer.eqP => ?. inversion Hload. subst.
+           specialize (Hv _ Logic.eq_refl Logic.eq_refl).
+           inversion Hv; subst.
+           ++ destruct (classic (addr_shared_so_far (cptr, bptr) t1))
+               as [ptrshr|ptrnotshr].
+              ** apply shared_stuff_from_anywhere; assumption.
+              ** destruct (classic (addr_shared_so_far (C', b') t1))
+                  as [C'b'shr|C'b'notshr].
+                 --- apply private_stuff_of_current_pc_from_shared_addr; by auto.
+                 --- apply private_stuff_from_corresp_private_addr; auto.
+                     inversion H; [by auto | contradiction].
+           ++ apply shared_stuff_from_anywhere; assumption.
+        -- apply H1; by auto.
+    + (** KS_InitCallPtr1 *)
+      intuition. inversion H.
+      constructor; assumption.
+    + (** KS_InitCallPtr2 *)
+      intuition. unfold wf_expr_wrt_t_pc in H. simpl in *.
+      inversion H0.
+      constructor; assumption.
+    + (** KS_InitCallPtr3 *)
+      intuition. inversion H0. assumption.
+    + (** KS_InternalCall *)
+      intuition.
+      * (** wf_expr *)
+        apply values_are_integers_expr_wrt_t_pc.
+        destruct Hwf.
+          by specialize (wfprog_well_formed_procedures0 _ _ _ H5) as [_ [? _]].
+      * (** wf_cont *)
+          by constructor.
+      * constructor; simpl; by intuition.
+    + (** KS_ExternalCall *)
+      intuition.
+      * (** wf_expr *)
+        apply values_are_integers_expr_wrt_t_pc.
+        destruct Hwf.
+          by specialize (wfprog_well_formed_procedures0 _ _ _ H6) as [_ [? _]].
+      * 
 Admitted.
