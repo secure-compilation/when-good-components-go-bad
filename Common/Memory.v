@@ -667,24 +667,42 @@ Module ComponentMemory : AbstractComponentMemory.
   (*     + rewrite m'bl //. *)
   (*   - simpl. rewrite remmE. case blb': (bl == b')=> //. rewrite m'bl //. *)
   (* Qed. *)
-      
+
+  Lemma list_upd_some_nth_error_none {T: Type}:
+    forall chunk n v',
+    @list_upd T chunk n v' = None ->
+    @nth_error T chunk n = None.
+  Proof.
+    intros chunk.
+    induction chunk as [|v_ih].
+    - now intros [|].
+    - intros n v' Hnone.
+      simpl in Hnone.
+      destruct n as [|n'] eqn:Hn;
+        first discriminate.
+      simpl. eapply IHchunk.
+      destruct (list_upd chunk n' v') as [rest'|] eqn:Hupd;
+        first discriminate.
+      eassumption.
+  Qed.
+
   Lemma store_after_load:
     forall m b i v v',
       load m b i = Some v ->
       exists m',
         store m b i v' = Some m'.
   Proof.
-    (* move=> m b i v v'; rewrite /load /store. *)
-    (* NOTE: Handle dependent pattern matching *)
-  (*   case m_b: (content m b)=> [chunk|] //. *)
-  (*   case: (Z.leb_spec0 0 i)=> [i_pos|] //= chunk_i. *)
-  (*   suffices [? ->] : *)
-  (*     exists chunk', list_upd chunk (Z.to_nat i) v' = Some chunk' by eauto. *)
-  (*   elim: {m_b i i_pos} chunk (Z.to_nat i) chunk_i => [|v'' chunk IH] [|i] //=. *)
-  (*   - by eauto. *)
-  (*   - by move=> /IH [chunk' ->]; eauto. *)
-  (* Qed. *)
-  Admitted.
+    move=> m b i v v'; rewrite /load.
+    case m_b: (content m b)=> [chunk|] //.
+    case: (Z.leb_spec0 0 i)=> [i_pos|] //= chunk_i.
+    funelim (store m b i v').
+    - congruence.
+    - assert (e0' := e0). symmetry in e0'. move: e0' => /Z.leb_spec0. lia.
+    - rewrite -Heqcall. now eauto.
+    - rewrite -e in m_b. injection m_b as ?; subst b0.
+      rewrite (list_upd_some_nth_error_none _ _ _ (Logic.eq_sym e1)) in chunk_i.
+      discriminate.
+  Qed.
 
   Lemma list_upd_some_nth_error_some {T: Type}:
     forall chunk n v' chunk',
@@ -713,14 +731,10 @@ Module ComponentMemory : AbstractComponentMemory.
     intros. split; intros [e Hsome].
     - eapply store_after_load; eauto.
     - rewrite /load. (* rewrite /store in Hsome. *)
-      (* NOTE: Handle dependent pattern matching *)
-  (*     case m_b: (content m b)=> [chunk|] //; rewrite m_b in Hsome; try discriminate. *)
-  (*     destruct (0 <=? i)%Z eqn:ei; try discriminate. *)
-  (*     destruct (list_upd chunk (Z.to_nat i) v') as [chunk'|] eqn:echunk; *)
-  (*       try discriminate. *)
-  (*     by specialize (list_upd_some_nth_error_some _ _ _ _ echunk). *)
-  (* Qed. *)
-  Admitted.
+      funelim (store m b i v'); try congruence.
+      rewrite -e -e0.
+      exact (list_upd_some_nth_error_some _ _ _ _ (Logic.eq_sym e1)).
+  Qed.
 
   Lemma domm_prealloc :
     forall bufs m,
@@ -756,14 +770,11 @@ Module ComponentMemory : AbstractComponentMemory.
       store m b i v = Some m' ->
       next_block m = next_block m'.
   Proof.
-    (* unfold store, next_block. intros ? ? ? ? ? Hstore. *)
-    (* NOTE: Handle dependent pattern matching *)
-  (*   destruct (content m b) as [ch|]; try discriminate. *)
-  (*   destruct (0 <=? i)%Z; try discriminate. *)
-  (*   destruct (list_upd ch (Z.to_nat i) v); try discriminate. *)
-  (*   inversion Hstore. by subst. *)
-  (* Qed. *)
-  Admitted.
+    intros m m' b i v Hstore.
+    funelim (store m b i v); try congruence.
+    rewrite Hstore in Heqcall. injection Heqcall as ?; subst m'.
+    reflexivity.
+  Qed.
 
   Lemma load_next_block m b i v :
     load m b i = Some v ->
