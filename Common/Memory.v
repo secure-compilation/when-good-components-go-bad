@@ -164,10 +164,16 @@ Module Type AbstractComponentMemory.
       load s b off = Some v ->
       (0 <= off)%Z.
 
-  Axiom load_next_block_eq :
+  (* NOTE: A weak equality principle currenly used to reason about
+     program initialization without having to make the memory model
+     more general, instead establishing the sufficient conditions
+     externally for specific memories. *)
+  Axiom load_next_block_init_eq :
     forall m m',
       (forall b i, load m b i = load m' b i) ->
-      next_block m = next_block m' -> (* ? *)
+      next_block m = next_block m' ->
+      next_block m = 1 ->
+      (exists i v, load m 0 i = Some v) ->
       m = m'.
 
 End AbstractComponentMemory.
@@ -804,13 +810,73 @@ Module ComponentMemory : AbstractComponentMemory.
     by move: H => /Z.leb_spec0.
   Qed.
 
-  Lemma load_next_block_eq m m' :
-    (forall b i, load m b i = load m' b i) ->
-    next_block m = next_block m' -> (* ? *)
-    m = m'.
-  Admitted.
+  Remark load_chunks_eq (chunk0 chunk1 : block) :
+    (forall i : Z,
+        (if (0 <=? i)%Z then nth_error chunk0 (Z.to_nat i) else None) =
+        (if (0 <=? i)%Z then nth_error chunk1 (Z.to_nat i) else None)) ->
+    chunk0 = chunk1.
+  Proof.
+    revert chunk1.
+    induction chunk0 as [| a0 chunk0' IHchunk0'];
+      intros chunk1 Hloads.
+    - destruct chunk1 as [| a1 chunk1'].
+      + reflexivity.
+      + specialize (Hloads 0%Z). discriminate.
+    - destruct chunk1 as [| a1 chunk1'].
+      + specialize (Hloads 0%Z). discriminate.
+      + simpl in Hloads.
+        assert (Hload0 := Hloads 0%Z). injection Hload0 as ?. subst a1.
+        rewrite (IHchunk0' chunk1');
+          first reflexivity.
+        intros i.
+        destruct (Z.leb_spec 0 i) as [Hle | Hgt];
+          last reflexivity.
+        specialize (Hloads (Z.succ i)%Z).
+        destruct (Z.leb_spec 0 (Z.succ i)) as [Hle' | Hgt'];
+          last lia.
+        rewrite Z2Nat.inj_succ in Hloads; assumption.
+  Qed.
 
-  Print Assumptions load_next_block_eq.
+  Lemma load_next_block_init_eq m m' :
+    (forall b i, load m b i = load m' b i) ->
+    next_block m = next_block m' ->
+    next_block m = 1 ->
+    (exists i v, load m 0 i = Some v) ->
+    m = m'.
+  Proof.
+    destruct m. destruct m'.
+    unfold load. intros Hloads Hnexts Hnext [off [v Hload]].
+    apply /eqCompMemP /andP. simpl in *.
+    subst nextblock0 nextblock1.
+    split; apply /eqP;
+      last reflexivity.
+    apply eq_fmap. intros b.
+    destruct (content0 b) as [chunk0 |] eqn:Hchunk0;
+      destruct (content1 b) as [chunk1 |] eqn:Hchunk1.
+    - specialize (Hloads b). rewrite Hchunk0 Hchunk1 in Hloads.
+      rewrite Hchunk0 Hchunk1.
+      suffices: chunk0 = chunk1;
+        first congruence.
+      now apply load_chunks_eq.
+    - specialize (Hloads b). rewrite Hchunk0 Hchunk1 in Hloads.
+      destruct (Nat.leb_spec0 1 b) as [Hle | Hgt].
+      + move: Hle => /leP => Hle.
+        apply nextblock_content0 in Hle. congruence.
+      + destruct b;
+          last lia.
+        rewrite Hchunk0 in Hload.
+        specialize (Hloads off). rewrite Hload in Hloads. discriminate.
+    - specialize (Hloads b). rewrite Hchunk0 Hchunk1 in Hloads.
+      destruct (Nat.leb_spec0 1 b) as [Hle | Hgt].
+      + move: Hle => /leP => Hle.
+        apply nextblock_content1 in Hle. congruence.
+      + destruct b;
+          last lia.
+        rewrite Hchunk0 in Hload. discriminate.
+    - rewrite Hchunk0 Hchunk1. reflexivity.
+  Qed.
+
+  (* Print Assumptions load_next_block_init_eq. *)
 
 End ComponentMemory.
 
