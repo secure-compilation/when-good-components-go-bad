@@ -164,6 +164,18 @@ Module Type AbstractComponentMemory.
       load s b off = Some v ->
       (0 <= off)%Z.
 
+  (* NOTE: A weak equality principle currenly used to reason about
+     program initialization without having to make the memory model
+     more general, instead establishing the sufficient conditions
+     externally for specific memories. *)
+  Axiom load_next_block_init_eq :
+    forall m m',
+      (forall b i, load m b i = load m' b i) ->
+      next_block m = next_block m' ->
+      next_block m = 1 ->
+      (exists i v, load m 0 i = Some v) ->
+      m = m'.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -764,10 +776,13 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (0 <=? i)%Z; [| discriminate].
     intros H.
     destruct (Nat.ltb_spec0 b nextblock0).
-    (* Require Import Lia. *)
-    - admit.
-    - admit.
-  Admitted.
+    - now apply /ltP.
+    - move: n => /ltP => n. rewrite -leqNgt in n.
+      rewrite (nextblock_content0 _ n) in Hcontent0.
+      discriminate.
+  Qed.
+
+  (* Print Assumptions load_next_block. *)
 
   Lemma load_after_reserve_block :
     forall m b i v,
@@ -784,7 +799,6 @@ Module ComponentMemory : AbstractComponentMemory.
     unfold load. intros Hload. rewrite Hload. reflexivity.
   Qed.
 
-
   Lemma load_offset :
     forall s b off v,
       load s b off = Some v ->
@@ -795,6 +809,74 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (0 <=? off)%Z eqn:H; try discriminate.
     by move: H => /Z.leb_spec0.
   Qed.
+
+  Remark load_chunks_eq (chunk0 chunk1 : block) :
+    (forall i : Z,
+        (if (0 <=? i)%Z then nth_error chunk0 (Z.to_nat i) else None) =
+        (if (0 <=? i)%Z then nth_error chunk1 (Z.to_nat i) else None)) ->
+    chunk0 = chunk1.
+  Proof.
+    revert chunk1.
+    induction chunk0 as [| a0 chunk0' IHchunk0'];
+      intros chunk1 Hloads.
+    - destruct chunk1 as [| a1 chunk1'].
+      + reflexivity.
+      + specialize (Hloads 0%Z). discriminate.
+    - destruct chunk1 as [| a1 chunk1'].
+      + specialize (Hloads 0%Z). discriminate.
+      + simpl in Hloads.
+        assert (Hload0 := Hloads 0%Z). injection Hload0 as ?. subst a1.
+        rewrite (IHchunk0' chunk1');
+          first reflexivity.
+        intros i.
+        destruct (Z.leb_spec 0 i) as [Hle | Hgt];
+          last reflexivity.
+        specialize (Hloads (Z.succ i)%Z).
+        destruct (Z.leb_spec 0 (Z.succ i)) as [Hle' | Hgt'];
+          last lia.
+        rewrite Z2Nat.inj_succ in Hloads; assumption.
+  Qed.
+
+  Lemma load_next_block_init_eq m m' :
+    (forall b i, load m b i = load m' b i) ->
+    next_block m = next_block m' ->
+    next_block m = 1 ->
+    (exists i v, load m 0 i = Some v) ->
+    m = m'.
+  Proof.
+    destruct m. destruct m'.
+    unfold load. intros Hloads Hnexts Hnext [off [v Hload]].
+    apply /eqCompMemP /andP. simpl in *.
+    subst nextblock0 nextblock1.
+    split; apply /eqP;
+      last reflexivity.
+    apply eq_fmap. intros b.
+    destruct (content0 b) as [chunk0 |] eqn:Hchunk0;
+      destruct (content1 b) as [chunk1 |] eqn:Hchunk1.
+    - specialize (Hloads b). rewrite Hchunk0 Hchunk1 in Hloads.
+      rewrite Hchunk0 Hchunk1.
+      suffices: chunk0 = chunk1;
+        first congruence.
+      now apply load_chunks_eq.
+    - specialize (Hloads b). rewrite Hchunk0 Hchunk1 in Hloads.
+      destruct (Nat.leb_spec0 1 b) as [Hle | Hgt].
+      + move: Hle => /leP => Hle.
+        apply nextblock_content0 in Hle. congruence.
+      + destruct b;
+          last lia.
+        rewrite Hchunk0 in Hload.
+        specialize (Hloads off). rewrite Hload in Hloads. discriminate.
+    - specialize (Hloads b). rewrite Hchunk0 Hchunk1 in Hloads.
+      destruct (Nat.leb_spec0 1 b) as [Hle | Hgt].
+      + move: Hle => /leP => Hle.
+        apply nextblock_content1 in Hle. congruence.
+      + destruct b;
+          last lia.
+        rewrite Hchunk0 in Hload. discriminate.
+    - rewrite Hchunk0 Hchunk1. reflexivity.
+  Qed.
+
+  (* Print Assumptions load_next_block_init_eq. *)
 
 End ComponentMemory.
 
@@ -1359,11 +1441,33 @@ Module Memory.
     now destruct (m C') as [Cmem' |].
   Qed.
 
+  Remark lt_n_le_False x y : x < y -> y <= x -> False.
+    revert y. induction x as [| x' IHx']; intros y H1 H2.
+    - now destruct y.
+    - destruct y.
+      + now inversion H1.
+      + eapply IHx'; by eauto.
+  Qed.
+
   Lemma load_next_block_None mem ptr b :
     next_block mem (Pointer.component ptr) = Some b ->
     Pointer.block ptr >= b ->
     load mem ptr = None.
-  Admitted.
+  Proof.
+    unfold next_block.
+    destruct ptr as [[[[] C] b'] o];
+      [reflexivity |].
+    unfold load. simpl. intros Hnext Hle.
+    destruct (mem C) as [memC |] eqn:HmemC;
+      [| discriminate].
+    injection Hnext as ?; subst b.
+    destruct (ComponentMemory.load memC b' o) as [v |] eqn:Hload;
+      [| reflexivity].
+    apply ComponentMemory.load_next_block in Hload.
+    exfalso. eapply lt_n_le_False; by eauto.
+  Qed.
+
+  (* Print Assumptions load_next_block_None. *)
 
 End Memory.
 
@@ -1993,13 +2097,43 @@ Lemma component_memory_after_store_neq mem ptr v mem' C :
   Memory.store mem ptr v = Some mem' ->
   Pointer.component ptr <> C ->
   mem C = mem' C.
-Admitted.
+Proof.
+  unfold Memory.store.
+  intros Hstore Hcomp.
+  destruct ptr as [[[[] C'] b] o];
+    [discriminate |].
+  simpl in Hstore.
+  destruct (mem C') as [memC' |] eqn:HmemC';
+    [| discriminate].
+  destruct (ComponentMemory.store memC' b o v) as [memC'' |] eqn:Hstore';
+    [| discriminate].
+  injection Hstore as ?; subst mem'.
+  rewrite setmE.
+  destruct (C == C') eqn:Heq; rewrite Heq;
+    [| reflexivity].
+  rewrite <- eqnE in Heq. move: Heq => /eqnP => ?. subst C'. contradiction.
+Qed.
+
+(* Print Assumptions component_memory_after_store_neq. *)
 
 Lemma component_memory_after_alloc_neq mem C sz mem' ptr C' :
   Memory.alloc mem C sz = Some (mem', ptr) ->
   C' <> C ->
   mem C' = mem' C'.
-Admitted.
+Proof.
+  unfold Memory.alloc.
+  intros Halloc Hcomp.
+  destruct (mem C) as [memC |] eqn:HmemC;
+    [| discriminate].
+  destruct (ComponentMemory.alloc memC sz) as [memC' b] eqn:Halloc'.
+  injection Halloc as ? ?; subst mem' ptr.
+  rewrite setmE.
+  destruct (C' == C) eqn:Heq; rewrite Heq;
+    [| reflexivity].
+  rewrite <- eqnE in Heq. move: Heq => /eqnP => ?. subst C'. contradiction.
+Qed.
+
+(* Print Assumptions component_memory_after_alloc_neq. *)
 
 (* Restore obligation tactic, some alterations to implicit arguments leak to
    uses of equality predicates later on. *)
