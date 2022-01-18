@@ -6794,7 +6794,7 @@ Section Definability.
                     eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
                       last reflexivity.
                     eapply addr_shared_so_far_inv_1 with (mem := mem0); eauto.
-                    -- admit.
+                    -- intros. by simplify_memory'.
                     -- simpl.
                        unfold all_zeros_shift, uniform_shift.
                        destruct (wf_regs Machine.R_COM _ Logic.eq_refl) as [vcom' [newarg' [G1 [G2 G3]]]].
@@ -6817,10 +6817,223 @@ Section Definability.
                          find_rcons_rcons. inversion H1; subst; eauto.
                        } subst.
                        auto.
-                    -- admit.
-                    -- admit.
-                    -- admit.
-                    -- admit.
+                    -- eapply wfmem in wf_mem; last reflexivity.
+                       destruct wf_mem as [_ [wf_mem _]].
+                       intros; subst; simpl in *.
+                       unfold postcondition_steady_state, postcondition_event_snapshot_steadystate in wf_mem.
+                       specialize (wf_mem _ C_b C_next_e1) as [_ [_ [G _]]].
+                       intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                       specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                       eexists; split; last split; eauto.
+                       ++ intros offset v Hload.
+                          specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                          inversion wf_int_pref' as [U1 U2].
+                          rewrite !cats1 in U1.
+                          inversion U1.
+                          ** now destruct prefix0.
+                          ** now destruct prefix0 as [| ? []].
+                          ** find_rcons_rcons. find_rcons_rcons.
+                             inversion H6; subst; clear H6. eauto.
+                       ++ intros offset v Hload.
+                          inversion wf_int_pref' as [U1 U2].
+                          rewrite !cats1 in U1.
+                          inversion U1.
+                          ** now destruct prefix0.
+                          ** now destruct prefix0 as [| ? []].
+                          ** find_rcons_rcons. find_rcons_rcons.
+                             inversion H6; subst; clear H6. eauto.
+                    -- eapply wfmem in wf_mem; last reflexivity.
+                       destruct wf_mem as [_ [wf_mem1 wf_mem2]].
+                       intros C0 C0_b.
+                       destruct (C0 == next_comp_of_event e1) eqn:eC0;
+                         move: eC0 => /eqP eC0; subst.
+                       ++ left.
+                          specialize (wf_mem1 _ C0_b Logic.eq_refl) as [_ [_ [G _]]].
+                          { intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                            specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                            eexists; split; last split; eauto.
+                            ++ intros offset v Hload.
+                               specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                               inversion wf_int_pref' as [U1 U2].
+                               rewrite !cats1 in U1.
+                               inversion U1.
+                               ** now destruct prefix0.
+                               ** now destruct prefix0 as [| ? []].
+                               ** find_rcons_rcons. find_rcons_rcons.
+                                  inversion H1; subst; clear H1. eauto.
+                            ++ intros offset v Hload.
+                               inversion wf_int_pref' as [U1 U2].
+                               rewrite !cats1 in U1.
+                               inversion U1.
+                               ** now destruct prefix0.
+                               ** now destruct prefix0 as [| ? []].
+                               ** find_rcons_rcons. find_rcons_rcons.
+                                  inversion H1; subst; clear H1. eauto. }
+                       ++ specialize (wf_mem2 C0 C0_b eC0) as [wf_mem2 | wf_mem2].
+                          ** left. destruct wf_mem2 as [_ [_ [G _]]].
+                             { intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                               specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                               eexists; split; last split; eauto.
+                               ++ intros offset v Hload.
+                                  specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                                  inversion wf_int_pref' as [U1 U2].
+                                  rewrite !cats1 in U1.
+                                  inversion U1.
+                                  ** now destruct prefix0.
+                                  ** now destruct prefix0 as [| ? []].
+                                  ** find_rcons_rcons. find_rcons_rcons.
+                                     inversion H1; subst; clear H1. eauto.
+                               ++ intros offset v Hload.
+                                  inversion wf_int_pref' as [U1 U2].
+                                  rewrite !cats1 in U1.
+                                  inversion U1.
+                                  ** now destruct prefix0.
+                                  ** now destruct prefix0 as [| ? []].
+                                  ** find_rcons_rcons. find_rcons_rcons.
+                                     inversion H1; subst; clear H1. eauto. }
+                          ** right.
+                             destruct wf_mem2 as [_ [_ [_ G]]].
+                             now rewrite cats1.
+                    -- intros C0 b0 C0_b not_eq not_shared shared.
+                       assert (inv_mem: CSInvariants.CSInvariants.wf_mem_wrt_t_pc
+                                          (mem_of_event_inform e1)
+                                          (project_non_inform (prefix0 ++ [:: e1]))
+                                          C).
+                       { destruct p_gens_t_inform as [x star].
+                         rewrite Et in star. Search "star" "app".
+                         eapply star_app_inv in star as [x0 [star1 _]];
+                           last eapply CS.CS.singleton_traces_inform.
+                         eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
+                         eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
+                         Check CSInvariants.CSInvariants.is_prefix.
+                         eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
+                         erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                         erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       assert (inv_regs: CSInvariants.CSInvariants.wf_reg_wrt_t_pc
+                                           (register_file_of_event_inform e1)
+                                           (project_non_inform (prefix0 ++ [:: e1]))
+                                           C).
+                       { destruct p_gens_t_inform as [x star].
+                         rewrite Et in star.
+                         eapply star_app_inv in star as [x0 [star1 _]];
+                           last eapply CS.CS.singleton_traces_inform.
+                         eapply CSInvariants.CSInvariants.wf_state_wf_reg; eauto.
+                         eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
+                         eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
+                         erewrite CS.CS.starR_register_file_of_event_inform; first by reflexivity.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                         erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       clear -inv_mem inv_regs shared not_shared not_eq wf_int_pref'.
+                       inversion shared; subst; clear shared.
+                       ++ find_rcons_rcons. simpl in H1.
+                          remember (C0, b0) as addr.
+                          rewrite -Heqaddr in H1.
+                          remember (addr_of_value ret_val) as addr_set.
+                          generalize dependent b0. generalize dependent C0. generalize dependent ret_val.
+                          induction H1.
+                          ** intros new_arg wf_int_pref' eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             simpl in H. destruct new_arg as [| [[[[]]]] |]; try discriminate.
+                             simpl in H. rewrite in_fset1 in H.
+                             move: H => /eqP H. inversion H; subst; clear H.
+                             unfold CSInvariants.CSInvariants.wf_reg_wrt_t_pc in inv_regs.
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H1; subst; clear H1. simpl in *.
+                                 specialize (inv_regs _ _ H9 Logic.eq_refl).
+                                 inversion inv_regs; subst; clear inv_regs.
+                                 +++ unfold C in C0_cur. contradiction.
+                                 +++ contradiction.
+                          ** intros new_arg wf_int_pref' eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             apply In_in in H0.
+                             apply ComponentMemory.load_block_load in H0 as [? [i Hload']].
+                             assert (Hload: Memory.load mem' (Permission.data, cid, bid, i) =
+                                              Some (Ptr (Permission.data, C0, b0, x))).
+                             { Local Transparent Memory.load.
+                               unfold Memory.load. simpl. rewrite H. assumption.
+                               Local Opaque Memory.load. }
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H3; subst; clear H3. simpl in *.
+                                 specialize (inv_mem _ _ Hload Logic.eq_refl).
+                                 inversion inv_mem; subst; clear inv_mem.
+                                 (* CSInvariants.CSInvariants.wf_load *)
+                                 +++ simpl in *. subst.
+                                     specialize (IHReachable H3 _ wf_int_pref').
+                                     eapply IHReachable; eauto.
+                                 +++ simpl in *. subst. contradiction.
+                                 +++ simpl in *. subst. contradiction.
+                       ++ find_rcons_rcons. simpl in H2.
+                          remember (C0, b0) as addr.
+                          rewrite -Heqaddr in H2.
+                          remember (fset1 addr') as addr_set.
+                          generalize dependent b0. generalize dependent C0. generalize dependent addr'.
+                          induction H2.
+                          ** intros addr' shared eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             simpl in H. destruct addr' as [cid bid].
+                             simpl in H. rewrite in_fset1 in H.
+                             move: H => /eqP H. inversion H; subst; clear H.
+                             contradiction.
+                          ** intros addr' shared eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             apply In_in in H0.
+                             apply ComponentMemory.load_block_load in H0 as [? [i Hload']].
+                             assert (Hload: Memory.load mem' (Permission.data, cid, bid, i) =
+                                              Some (Ptr (Permission.data, C0, b0, x))).
+                             { Local Transparent Memory.load.
+                               unfold Memory.load. simpl. rewrite H. assumption.
+                               Local Opaque Memory.load. }
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H3; subst; clear H3. simpl in *.
+                                 specialize (inv_mem _ _ Hload Logic.eq_refl).
+                                 inversion inv_mem; subst; clear inv_mem.
+                                 (* CSInvariants.CSInvariants.wf_load *)
+                                 +++ simpl in *. subst.
+                                     eapply IHReachable; eauto.
+                                 +++ simpl in *. subst. contradiction.
+                                 +++ simpl in *. subst. contradiction.
+                    -- intros C0 b0 o v Hload. unfold component_buffer.
+                       (* Use p_interm and p_gens_t. *)
+                       (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
+                       destruct p_gens_t_inform as [x star].
+                       rewrite Et in star.
+                       eapply star_app_inv in star as [x0 [star1 _]];
+                         last eapply CS.CS.singleton_traces_inform.
+
+                       rewrite <- (CS.CS.comes_from_initial_state_mem_domm x0 intf); eauto.
+                       Local Transparent Memory.load.
+                       unfold Memory.load in Hload. simpl in Hload.
+                       destruct (mem' C0) eqn:mem'_C0; last discriminate.
+                       erewrite <- CS.CS.starR_memory_of_event_inform.
+                       inversion wf_int_pref' as [U1 _].
+                       rewrite !cats1 in U1.
+                       inversion U1.
+                       --- now destruct prefix0.
+                       --- now destruct prefix0 as [| ? []].
+                       --- find_rcons_rcons. find_rcons_rcons.
+                           inversion H1; subst; clear H1. simpl in *.
+                           apply /dommP. eexists; eauto.
+                       --- eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                       --- unfold CS.CS.comes_from_initial_state.
+                           eapply Machine.Intermediate.cprog_main_existence in closed_p_interm as [? [? ?]].
+                           eexists; eexists; eexists; split. eauto.
+                           split; eauto.
+                           split; eauto.
+                           split; eauto. reflexivity.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
               - intros [Cb b] Hshared.
