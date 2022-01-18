@@ -1806,7 +1806,7 @@ Proof.
 Qed.
   
 
-Lemma starR_cur_comp_of_event_inform p s t1 e1 s1: 
+Lemma starR_next_comp_of_event_inform p s t1 e1 s1: 
   starR step (GlobalEnv.prepare_global_env p) s (seq.rcons t1 e1) s1 ->
   next_comp_of_event e1 = Pointer.component (state_pc s1).
 Proof.
