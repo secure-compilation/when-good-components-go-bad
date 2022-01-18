@@ -2971,7 +2971,7 @@ Section Definability.
 
     (* NOTE: This result could live in Common.Memory, although the current
        statement is very specific to its uses here. *)
-    Corollary initialization_correct_component_memory C mem mem':
+    Corollary initialization_correct_component_memory_old C mem mem':
       (forall C' b offset,
           C <> C' ->
           Memory.load mem (Permission.data, C', b, offset) =
@@ -2999,6 +2999,35 @@ Section Definability.
         discriminate.
       - unfold Memory.next_block in Hnext.
         specialize (Hnext C' Hneq). rewrite HmemC' Hmem'C' in Hnext.
+        discriminate.
+      - reflexivity.
+    Qed.
+
+    Corollary initialization_correct_component_memory C mem mem':
+      (forall b offset,
+          Memory.load mem (Permission.data, C, b, offset) =
+          Memory.load mem' (Permission.data, C, b, offset)) ->
+      Memory.next_block mem C = Memory.next_block mem' C ->
+      mem C = mem' C.
+    Proof.
+      intros Hload Hnext.
+      destruct (mem C) as [memC |] eqn:HmemC;
+        destruct (mem' C) as [mem'C |] eqn:Hmem'C.
+      - suffices: (memC = mem'C);
+          [congruence |].
+        apply ComponentMemory.load_next_block_eq.
+        + intros b i.
+          unfold Memory.load in Hload. simpl in Hload.
+          specialize (Hload b i). rewrite HmemC Hmem'C in Hload.
+          assumption.
+        + unfold Memory.next_block in Hnext.
+          rewrite HmemC Hmem'C in Hnext.
+          now injection Hnext.
+      - unfold Memory.next_block in Hnext.
+        rewrite HmemC Hmem'C in Hnext.
+        discriminate.
+      - unfold Memory.next_block in Hnext.
+        rewrite HmemC Hmem'C in Hnext.
         discriminate.
       - reflexivity.
     Qed.
@@ -5163,7 +5192,11 @@ Section Definability.
                                        (erewrite <- Memory.component_memory_after_store_neq;
                                         [| eassumption |];
                                         last (simpl; intros ?; subst C'; rewrite /C //= in C_ne_C')).
-                                     rewrite -(initialization_correct_component_memory Hmem2' Hblock2 (nesym HC0_C')).
+                                     assert (Hrewr : mem1 C0 = mem2 C0). {
+                                       apply initialization_correct_component_memory.
+                                       - intros b off. apply Hmem2'; now auto.
+                                       - apply Hblock2; now auto. }
+                                     rewrite -Hrewr.
                                      repeat (erewrite <- Memory.component_memory_after_store_neq;
                                              [| eassumption |];
                                              last (simpl; congruence)).
