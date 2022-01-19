@@ -192,13 +192,8 @@ forall load_at ptr,
     | Kstop => true
     end.
 
-  Definition stack_struct_invariant (s: CS.stack) (val_test: value -> Prop) : Prop :=
-    List.Forall (fun frm =>
-                   val_test (CS.f_arg frm)
-                   /\
-                   cont_struct_invariant (CS.f_cont frm) val_test
-                )
-                s.
+Definition stack_struct_invariant (s: CS.stack) (frame_test: CS.frame -> Prop) : Prop :=
+    List.Forall (fun frm => frame_test frm) s.
 
 Definition wf_expr_wrt_t_pc (e: expr) (t: trace event)
            (pc_comp: Component.id): Prop :=
@@ -218,20 +213,27 @@ Definition wf_cont_wrt_t_pc (k: cont) (t: trace event)
          Pointer.permission ptr = Permission.data ->
          wf_ptr_wrt_cid_t pc_comp t ptr).
 
-Definition wf_stack_wrt_t_pc (stk: CS.stack) (t: trace event)
-           (pc_comp: Component.id): Prop :=
-  stack_struct_invariant
-    stk
-    (fun v => forall ptr,
-         v = Ptr ptr ->
-         Pointer.permission ptr = Permission.data ->
-         wf_ptr_wrt_cid_t pc_comp t ptr).
+Definition wf_frame_wrt_t t (frm: CS.frame) :=
+  let val_test :=
+      fun v =>
+        forall ptr,
+          v = Ptr ptr ->
+          Pointer.permission ptr = Permission.data ->
+          wf_ptr_wrt_cid_t (CS.f_component frm) t ptr
+  in
+  val_test (CS.f_arg frm)
+  /\
+  cont_struct_invariant (CS.f_cont frm) val_test.
+
+
+Definition wf_stack_wrt_t_pc (stk: CS.stack) (t: trace event) : Prop :=
+  stack_struct_invariant stk (wf_frame_wrt_t t).
 
 Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
   wf_expr_wrt_t_pc (CS.s_expr s) t (CS.s_component s) /\
   wf_mem_wrt_t_pc (CS.s_memory s) t (CS.s_component s) /\
   wf_cont_wrt_t_pc (CS.s_cont s) t (CS.s_component s) /\
-  wf_stack_wrt_t_pc (CS.s_stack s) t (CS.s_component s) /\
+  wf_stack_wrt_t_pc (CS.s_stack s) t /\
   (forall ptr,
          CS.s_arg s = Ptr ptr ->
          Pointer.permission ptr = Permission.data ->
@@ -297,7 +299,98 @@ Proof.
     + apply IHexpr1; by auto.
     + apply IHexpr2; by auto.
 Qed.
-    
+
+(**Lemma wf_ptr_wrt_cid_t_rcons ptr t1 e,
+       Pointer.permission ptr = Permission.data -> wf_ptr_wrt_cid_t C t1 ptr
+  wf_ptr_wrt_cid_t C' (t1 ** [:: ECall C P v mem C']) ptr
+*)
+Lemma runtime_expr_struct_invariant_rcons re C t1 e:
+  runtime_expr_struct_invariant
+    re
+    (fun v : value =>
+       forall ptr : Pointer.t,
+         v = Ptr ptr ->
+         Pointer.permission ptr = Permission.data -> wf_ptr_wrt_cid_t C t1 ptr) ->
+  runtime_expr_struct_invariant
+    re
+    (fun v0 : value =>
+       forall ptr : Pointer.t,
+         v0 = Ptr ptr ->
+         Pointer.permission ptr = Permission.data ->
+         wf_ptr_wrt_cid_t C (t1 ** [:: e]) ptr).
+Proof.
+  intros; induction re; simpl in *; auto; intuition.
+  (* 1 goal remains *)
+  setoid_rewrite cats1.
+  destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+  destruct (classic (addr_shared_so_far
+                       (cptr, bptr)
+                       (rcons t1 e)
+           )) as [ptrshr | ptrnotshr].
+  ** eapply wf_ptr_shared; by auto.
+  ** specialize (H _ Logic.eq_refl Logic.eq_refl).
+     inversion H; [by constructor|subst].
+     exfalso.
+     eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+     constructor. by rewrite in_fset1.
+Qed.
+
+Lemma cont_struct_invariant_rcons k C t1 e:
+  cont_struct_invariant
+    k
+    (fun v : value =>
+       forall ptr : Pointer.t,
+         v = Ptr ptr -> Pointer.permission ptr = Permission.data ->
+         wf_ptr_wrt_cid_t C t1 ptr) ->
+  cont_struct_invariant
+    k
+    (fun v0 : value =>
+       forall ptr : Pointer.t,
+         v0 = Ptr ptr ->
+         Pointer.permission ptr = Permission.data ->
+         wf_ptr_wrt_cid_t C (t1 ** [:: e]) ptr).
+Proof.
+  intros; induction k; simpl in *; auto; intuition;
+    try by apply runtime_expr_struct_invariant_rcons.
+  (** Refactor the "-" subgoal as a lemma on values *)
+  - setoid_rewrite cats1.
+    destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+    destruct (classic (addr_shared_so_far
+                         (cptr, bptr)
+                         (rcons t1 e)
+             )) as [ptrshr | ptrnotshr].
+    ** eapply wf_ptr_shared; by auto.
+    ** specialize (H0 _ Logic.eq_refl Logic.eq_refl).
+       inversion H0; [by constructor|subst].
+       exfalso.
+       eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+       constructor. by rewrite in_fset1.
+  - setoid_rewrite cats1.
+    destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+    destruct (classic (addr_shared_so_far
+                         (cptr, bptr)
+                         (rcons t1 e)
+             )) as [ptrshr | ptrnotshr].
+    ** eapply wf_ptr_shared; by auto.
+    ** specialize (H0 _ Logic.eq_refl Logic.eq_refl).
+       inversion H0; [by constructor|subst].
+       exfalso.
+       eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+       constructor. by rewrite in_fset1.
+  - setoid_rewrite cats1.
+    destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+    destruct (classic (addr_shared_so_far
+                         (cptr, bptr)
+                         (rcons t1 e)
+             )) as [ptrshr | ptrnotshr].
+    ** eapply wf_ptr_shared; by auto.
+    ** specialize (H0 _ Logic.eq_refl Logic.eq_refl).
+       inversion H0; [by constructor|subst].
+       exfalso.
+       eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+       constructor. by rewrite in_fset1.
+Qed.
+
 Lemma is_prefix_wf_state_t s p t:
   closed_program p ->
   well_formed_program p ->
@@ -494,5 +587,207 @@ Proof.
         apply values_are_integers_expr_wrt_t_pc.
         destruct Hwf.
           by specialize (wfprog_well_formed_procedures0 _ _ _ H6) as [_ [? _]].
-      * 
-Admitted.
+      * intros ? ? Hload Hperm.
+        destruct ptr as [[[[] cptr] bptr] optr]; [discriminate|]. clear Hperm.
+        destruct load_at as [[[ploadat cloadat] bloadat] oloadat].
+        assert (ploadat = Permission.data).
+        { by apply Memory.load_some_permission in Hload. }
+        subst.
+        setoid_rewrite cats1.
+        destruct (classic (addr_shared_so_far (cptr, bptr)
+                                              (rcons t1 (ECall C P v mem C'))))
+          as [ptrshr|ptrnotshr].
+        -- apply shared_stuff_from_anywhere; by auto.
+        -- destruct (cptr == C') eqn:ecptr.
+           ++ assert (cptr = C'). by apply/eqP. subst.
+              destruct (classic (addr_shared_so_far (cloadat, bloadat)
+                                                    (rcons t1 (ECall C P v mem C'))))
+                as [loadatshr|loadatnotshr].
+              ** apply private_stuff_of_current_pc_from_shared_addr; auto.
+              ** apply private_stuff_from_corresp_private_addr; auto. simpl.
+                 specialize (H1 _ _ Hload Logic.eq_refl). inversion H1; subst; auto.
+                 --- exfalso. apply ptrnotshr.
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+                 --- exfalso. apply loadatnotshr.
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+           ++ apply private_stuff_from_corresp_private_addr; simpl in *; auto; subst.
+              ** intros Hshraddr.
+                 apply ptrnotshr.
+                 eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+              ** specialize (H1 _ _ Hload Logic.eq_refl). inversion H1; subst; auto.
+                 --- exfalso. apply ptrnotshr.
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+               --- exfalso. apply ptrnotshr.
+                   eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+                   +++
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+                   +++ eassumption.
+      * (** wf_cont *)
+        constructor.
+      * (** wf_stack *)
+        constructor; intuition.
+        -- constructor; simpl in *.
+           ++ intros ? Hptr Hperm.
+              destruct ptr as [[[pptr cptr] bptr] optr].
+              simpl in *; subst.
+              specialize (H4 _ Logic.eq_refl Logic.eq_refl).
+              destruct (classic (addr_shared_so_far
+                                   (cptr, bptr)
+                                   (t1 ** [:: ECall C P v mem C'])
+                       )) as [ptrshr | ptrnotshr].
+              ** eapply wf_ptr_shared; by auto.
+              ** inversion H4; [by constructor|subst].
+                 setoid_rewrite cats1 in ptrnotshr.
+                 exfalso.
+                 eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+                 constructor. by rewrite in_fset1.
+           ++ by apply cont_struct_invariant_rcons.
+        -- unfold wf_stack_wrt_t_pc, stack_struct_invariant in H2.
+           apply Forall_forall. erewrite Forall_forall in H2.
+           intros frm Hin. specialize (H2 frm Hin).
+           destruct H2 as [Hfrm1 Hfrm2].
+           split.
+           ++ intros ? Harg Hperm.
+              specialize (Hfrm1 _ Harg Hperm).
+              setoid_rewrite cats1.
+              destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+              destruct (classic (addr_shared_so_far
+                                   (cptr, bptr)
+                                   (rcons t1 (ECall C P v mem C'))
+                       )) as [ptrshr | ptrnotshr].
+              ** eapply wf_ptr_shared; by auto.
+              ** inversion Hfrm1; [by constructor|subst].
+                 exfalso.
+                 eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+                 constructor. by rewrite in_fset1.
+           ++ by apply cont_struct_invariant_rcons.
+      * (** wf_ptr *)
+        setoid_rewrite cats1.
+        destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+        assert (G: addr_shared_so_far
+                     (cptr, bptr)
+                     (rcons t1
+                            (ECall C P (Ptr (Permission.data, cptr, bptr, optr)) mem C'))
+               ).
+        {
+          eapply reachable_from_args_is_shared; simpl.
+          constructor. by rewrite in_fset1.
+        }
+        constructor; by auto.
+    + (** KS_InternalReturn *)
+      intuition.
+      * (** wf_cont *)
+        inversion H2; subst. unfold wf_frame_wrt_t in H6.
+          by intuition.
+      * (** wf_stack *)
+        inversion H2; subst. by intuition.
+      * inversion H2; subst. unfold wf_frame_wrt_t in H8.
+          by intuition.
+    + (** KS_ExternalReturn *)
+      intuition.
+      * (** wf_expr *)
+        unfold wf_expr_wrt_t_pc. simpl. intros ? Hv Hperm.
+        setoid_rewrite cats1.
+        destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+        assert (G: addr_shared_so_far
+                     (cptr, bptr)
+                     (rcons t1
+                            (ERet C (Ptr (Permission.data, cptr, bptr, optr)) mem C'))
+               ).
+        {
+          eapply reachable_from_args_is_shared; simpl.
+          constructor. by rewrite in_fset1.
+        }
+        constructor; by auto.
+      * intros ? ? Hload Hperm.
+        destruct ptr as [[[[] cptr] bptr] optr]; [discriminate|]. clear Hperm.
+        destruct load_at as [[[ploadat cloadat] bloadat] oloadat].
+        assert (ploadat = Permission.data).
+        { by apply Memory.load_some_permission in Hload. }
+        subst.
+        setoid_rewrite cats1.
+        destruct (classic (addr_shared_so_far (cptr, bptr)
+                                              (rcons t1 (ERet C v mem C'))))
+          as [ptrshr|ptrnotshr].
+        -- apply shared_stuff_from_anywhere; by auto.
+        -- destruct (cptr == C') eqn:ecptr.
+           ++ assert (cptr = C'). by apply/eqP. subst.
+              destruct (classic (addr_shared_so_far (cloadat, bloadat)
+                                                    (rcons t1 (ERet C v mem C'))))
+                as [loadatshr|loadatnotshr].
+              ** apply private_stuff_of_current_pc_from_shared_addr; auto.
+              ** apply private_stuff_from_corresp_private_addr; auto. simpl.
+                 specialize (H1 _ _ Hload Logic.eq_refl). inversion H1; subst; auto.
+                 --- exfalso. apply ptrnotshr.
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+                 --- exfalso. apply loadatnotshr.
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+           ++ apply private_stuff_from_corresp_private_addr; simpl in *; auto; subst.
+              ** intros Hshraddr.
+                 apply ptrnotshr.
+                 eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+              ** specialize (H1 _ _ Hload Logic.eq_refl). inversion H1; subst; auto.
+                 --- exfalso. apply ptrnotshr.
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+               --- exfalso. apply ptrnotshr.
+                   eapply addr_shared_so_far_load_addr_shared_so_far; simpl; eauto.
+                   +++
+                     eapply reachable_from_previously_shared; eauto. simpl.
+                     constructor. by rewrite in_fset1.
+                   +++ eassumption.
+      * (** wf_cont *)
+        inversion H2; subst. unfold wf_frame_wrt_t in H7.
+        intuition. simpl in *. unfold wf_cont_wrt_t_pc.
+        by apply cont_struct_invariant_rcons.
+      * (** w_stack *)
+        unfold wf_stack_wrt_t_pc, stack_struct_invariant, wf_frame_wrt_t in *.
+        apply Forall_forall. erewrite Forall_forall in H2.
+        intros frm Hin.
+        assert (Hin':
+                  In frm
+                     ({| CS.f_component := C';
+                         CS.f_arg := old_call_arg; CS.f_cont := k |} :: s)).
+        {
+            by apply List.in_cons.
+        }
+        specialize (H2 frm Hin').
+        destruct H2 as [Hfrm1 Hfrm2].
+        split.
+        ++ intros ? Harg Hperm.
+           specialize (Hfrm1 _ Harg Hperm).
+           setoid_rewrite cats1.
+           destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *; subst.
+           destruct (classic (addr_shared_so_far
+                                (cptr, bptr)
+                                (rcons t1 (ERet C v mem C'))
+                    )) as [ptrshr | ptrnotshr].
+           ** eapply wf_ptr_shared; by auto.
+           ** inversion Hfrm1; [by constructor|subst].
+              exfalso.
+              eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+              constructor. by rewrite in_fset1.
+        ++ by apply cont_struct_invariant_rcons.
+      * (** wf_ptr *)
+        inversion H2; subst. unfold wf_frame_wrt_t in H9.
+        intuition.
+        simpl in *.
+        specialize (H5 _ Logic.eq_refl H6).
+        destruct ptr as [[[pptr cptr] bptr] optr]. simpl in *. subst.
+        setoid_rewrite cats1.
+        destruct (classic (addr_shared_so_far
+                             (cptr, bptr)
+                             (rcons t1 (ERet C v mem C'))
+                    )) as [ptrshr | ptrnotshr].
+        ** eapply wf_ptr_shared; by auto.
+        ** inversion H5; [by constructor|].
+           subst. exfalso.
+           eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
+           constructor. by rewrite in_fset1.
+Qed.
