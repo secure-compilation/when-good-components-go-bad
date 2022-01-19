@@ -5825,8 +5825,156 @@ Section Definability.
                       -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                          inversion Hshift; eauto.
                 - intros [Cb b] Hshared.
+                  destruct b.
+                  ++ exfalso.
+                     inversion Hshared; subst; clear Hshared.
+                     { find_rcons_rcons. simpl in H1.
+                       clear -wf_mem Hmem Hmem1 wf_int_pref' Hvcom H1 C_next_e1 C_b.
+                       remember (Cb, 0) as addr. setoid_rewrite <- Heqaddr in H1.
+                       remember (addr_of_value vcom) as addr_set.
+                       generalize dependent Cb. generalize dependent vcom.
+                       induction H1.
+                       - intros vcom Hload eq_addr_set Cb eq_addr; subst.
+                         destruct vcom as [| [[[[]]]] |]; try by rewrite /= in_fset0 in H.
+                         simpl in H. rewrite in_fset1 in H.
+                         move: H => /eqP H; inversion H; subst; clear H.
+                         eapply wfmem in wf_mem; last reflexivity.
+                         destruct wf_mem as [wf_mem [_ _]].
+                         specialize (wf_mem (Machine.R_COM) _ Logic.eq_refl) as
+                           [v [v' [wf1 [wf2 wf3]]]].
+                         rewrite <- C_next_e1 in wf1.
+                         rewrite wf1 in Hload; inversion Hload; subst; clear Hload.
+                         simpl in wf2. by [].
+                         - intros vcom Hload eq_addr_set Cb eq_addr; subst.
+                           apply In_in in H0; apply ComponentMemory.load_block_load in H0.
+                           destruct H0 as [ptro [i compMem_bid_i]].
+                           assert (Memory.load mem1 (Permission.data, cid, bid, i) =
+                                     Some (Ptr (Permission.data, Cb, 0, ptro))) as Hload'.
+                           { Local Transparent Memory.load.
+                             unfold Memory.load; simpl; rewrite H compMem_bid_i.
+                             reflexivity. }
+                           eapply wfmem in wf_mem; last reflexivity.
+                           destruct wf_mem as [wf_regs [post1 post2]].
+                           specialize (IHReachable _ Hload Logic.eq_refl cid).
+                           destruct bid; first contradiction.
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1) in Hload';
+                             last (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload';
+                             last (unfold Block.local; congruence).
+                           destruct (cid == C) eqn:eqC;
+                             move: eqC => /eqP eqC; subst.
+                           + specialize (post1 _ C_b C_next_e1).
+                             destruct post1 as [_ [_ post1]].
+                             apply steadysnap_shift in post1.
+                             assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                             specialize (post1 (S bid) not_local).
+                             destruct post1 as [[cid' bid'] [G1 [G2 G3]]].
+                             specialize (G2 _ _ Hload') as [v' [_ renames]].
+                             simpl in renames. discriminate.
+                           + rewrite C_next_e1 in eqC.
+                             assert (Cid_b: component_buffer cid) by admit.
+                             specialize (post2 _ Cid_b eqC) as [post2 | post2].
+                             * destruct post2 as [_ [_ post2]].
+                               apply steadysnap_shift in post2.
+                               assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                               specialize (post2 (S bid) not_local).
+                               destruct post2 as [[cid' bid'] [G1 [G2 G3]]].
+                               specialize (G2 _ _ Hload') as [v' [_ renames]].
+                               simpl in renames. discriminate.
+                             * destruct post2 as [_ [_ [[? ?] _]]].
+                               destruct H2 as [src_compMem [mem0_cid nextblock]].
+                               unfold Memory.load in Hload'.
+                               rewrite /= mem0_cid in Hload'.
+                               apply ComponentMemory.load_next_block in Hload'.
+                               rewrite nextblock in Hload'.
+                               unfold LOCALBUF_blockid in Hload'.
+                               by []. }
+                     { find_rcons_rcons. simpl in H2.
+                       (*
+  Hshift : traces_shift_each_other_option all_zeros_shift (uniform_shift 1)
+             (project_non_inform (prefix0 ++ [:: e1])) (project_non_inform prefix_inform)
+                        *)
+                       inversion Hshift; subst.
+                       clear -wf_mem Hmem Hmem1 wf_int_pref' H0 H H2 C_next_e1 C_b.
+                       rename H2 into H1.
+                       remember (Cb, 0) as addr. setoid_rewrite <- Heqaddr in H1.
+                       remember (fset1 addr') as addr_set.
+                       generalize dependent Cb. generalize dependent addr'.
+                       induction H1.
+                       - intros vcom shared eq_addr_set Cb eq_addr; subst.
+                         destruct vcom as [].
+                         simpl in H0. rewrite in_fset1 in H0.
+                         move: H0 => /eqP H0; inversion H0; subst; clear H0.
+                         setoid_rewrite cats1 in H.
+                         inversion H.
+                         + rewrite -H2 in shared; inversion shared.
+                           * now destruct t.
+                           * now destruct t.
+                         + rewrite H0 in H3. rewrite H1 in H4.
+                           apply H4 in shared.
+                           destruct shared as [[? ?] [? [? ?]]].
+                           clear -H10.
+                           rewrite /all_zeros_shift /uniform_shift in H10.
+                           rewrite /sigma_shifting_wrap_bid_in_addr /sigma_shifting_lefttoright_addr_bid in H10.
+                           rewrite /sigma_shifting_lefttoright_option in H10.
+                           destruct i1; simpl in H10;
+                           rewrite ssrnat.subn0 ssrnat.addn1 in H10; congruence.
+                         - intros vcom shared eq_addr_set Cb eq_addr; subst.
+                           apply In_in in H2; apply ComponentMemory.load_block_load in H2.
+                           destruct H2 as [ptro [i compMem_bid_i]].
+                           assert (Memory.load mem1 (Permission.data, cid, bid, i) =
+                                     Some (Ptr (Permission.data, Cb, 0, ptro))) as Hload'.
+                           { Local Transparent Memory.load.
+                             unfold Memory.load; simpl; rewrite H0 compMem_bid_i.
+                             reflexivity.
+                             Local Opaque Memory.load.
+                           }
+                           specialize (IHReachable _ shared Logic.eq_refl cid).
+                           destruct bid; first contradiction.
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1) in Hload';
+                             last (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload';
+                             last (unfold Block.local; congruence).
+                           eapply wfmem in wf_mem; last reflexivity.
+                           destruct wf_mem as [wf_regs [post1 post2]].
+                           destruct (cid == C) eqn:eqC;
+                             move: eqC => /eqP eqC; subst.
+                           + specialize (post1 _ C_b C_next_e1).
+                             destruct post1 as [_ [_ post1]].
+                             apply steadysnap_shift in post1.
+                             assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                             specialize (post1 (S bid) not_local).
+                             destruct post1 as [[cid' bid'] [G1 [G2 G3]]].
+                             specialize (G2 _ _ Hload') as [v' [_ renames]].
+                             simpl in renames. discriminate.
+                           + rewrite C_next_e1 in eqC.
+                             assert (Cid_b: component_buffer cid) by admit.
+                             specialize (post2 _ Cid_b eqC) as [post2 | post2].
+                             * destruct post2 as [_ [_ post2]].
+                               apply steadysnap_shift in post2.
+                               assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                               specialize (post2 (S bid) not_local).
+                               destruct post2 as [[cid' bid'] [G1 [G2 G3]]].
+                               specialize (G2 _ _ Hload') as [v' [_ renames]].
+                               simpl in renames. discriminate.
+                             * destruct post2 as [_ [_ [[? ?] _]]].
+                               destruct H3 as [src_compMem [mem0_cid nextblock]].
+                               Local Transparent Memory.load.
+                               unfold Memory.load in Hload'.
+                               Local Opaque Memory.load.
+                               rewrite /= mem0_cid in Hload'.
+                               apply ComponentMemory.load_next_block in Hload'.
+                               rewrite nextblock in Hload'.
+                               unfold LOCALBUF_blockid in Hload'.
+                               by []. }
+                  ++ exists (Cb, b). split; last split.
+                     ** rewrite /all_zeros_shift /uniform_shift
+                                /sigma_shifting_wrap_bid_in_addr
+                                /sigma_shifting_lefttoright_addr_bid /=.
+                        now rewrite ssrnat.subn0 ssrnat.addn1.
+                     ** Fail eapply addr_shared_so_far_inv_2.
+                        admit.
                   (* Use [addr_shared_so_far_inv_2] that is not yet stated *)
-                  admit.
                 - easy.
                 - rewrite /all_zeros_shift /uniform_shift
                           /sigma_shifting_wrap_bid_in_addr
