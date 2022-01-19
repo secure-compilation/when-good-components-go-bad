@@ -833,13 +833,42 @@ Section Zip.
   Proof.
     induction xs; auto. simpl. by rewrite IHxs.
   Qed.
-  
+
+  Lemma in_unzip2_seq {X Y : eqType} (xys : seq (X * Y)) (y : Y) :
+    y \in unzip2 xys ->
+  exists x,
+    (x, y) \in xys.
+  Proof.
+    elim: xys => [|[x' y'] r IH]  //=.
+    rewrite in_cons => /orP [] => Hin.
+    - move: Hin => /eqP ->.
+      exists x'.
+      now rewrite in_cons eqxx.
+    - specialize (IH Hin) as [x Hin'].
+      exists x.
+      rewrite in_cons. now destruct ((x, y) == (x', y')).
+  Qed.
+
   Lemma in_unzip2 {X : eqType} x (xs : NMap X) :
     x \in unzip2 xs ->
   exists n,
     (* (n, x) \in xs. *)
     xs n = Some x.
   Proof.
+    case: xs => [s Ps].
+    rewrite /getm /=.
+    elim: s {Ps}=> [|[k v] s IH] //=.
+    rewrite in_cons => /orP [] Hin.
+    - move: Hin => /eqP ->. exists k. now rewrite eqxx.
+    - specialize (IH Hin) as [n Hget].
+      exists n. rewrite Hget.
+      destruct (n == k) eqn:Heq; rewrite Heq.
+      + (* Problem: the value [y] must have been assigned to a key [x] at some
+           point in the lifetime of the map, but a more recent binding of [x]
+           to a different value would hide it, eventually removing it from the
+           map, if not from the underlying sequence. *)
+        admit.
+      + reflexivity.
     (******************
     destruct xs. move : i. induction fmval.
     - intros Hsorted. simpl in *. by intros.
