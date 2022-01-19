@@ -5827,9 +5827,21 @@ Section Definability.
                 - intros [Cb b] Hshared.
                   destruct b.
                   ++ exfalso.
+                     Search (domm _ = domm _).
+                     (* CS.CS.comes_from_initial_state_mem_domm *)
+                     (* CS.load_some_in_domm *)
+                     assert (load_in_intf: forall ptr v,
+                                Memory.load mem0 ptr = Some v ->
+                                Pointer.component ptr \in domm intf).
+                     { eapply CS.comes_from_initial_state_mem_domm in Star0; eauto.
+                       simpl in Star0. rewrite <- Star0.
+                       now eapply CS.load_some_in_domm.
+                       eapply well_formed_events_well_formed_program; eauto.
+                       eapply closed_program_of_trace.
+                       reflexivity. }
                      inversion Hshared; subst; clear Hshared.
                      { find_rcons_rcons. simpl in H1.
-                       clear -wf_mem Hmem Hmem1 wf_int_pref' Hvcom H1 C_next_e1 C_b.
+                       clear -wf_mem Hmem Hmem1 wf_int_pref' Hvcom H1 C_next_e1 C_b load_in_intf.
                        remember (Cb, 0) as addr. setoid_rewrite <- Heqaddr in H1.
                        remember (addr_of_value vcom) as addr_set.
                        generalize dependent Cb. generalize dependent vcom.
@@ -5872,7 +5884,8 @@ Section Definability.
                              specialize (G2 _ _ Hload') as [v' [_ renames]].
                              simpl in renames. discriminate.
                            + rewrite C_next_e1 in eqC.
-                             assert (Cid_b: component_buffer cid) by admit.
+                             assert (Cid_b: component_buffer cid).
+                             { eapply load_in_intf in Hload'; eauto. }
                              specialize (post2 _ Cid_b eqC) as [post2 | post2].
                              * destruct post2 as [_ [_ post2]].
                                apply steadysnap_shift in post2.
@@ -5895,7 +5908,7 @@ Section Definability.
              (project_non_inform (prefix0 ++ [:: e1])) (project_non_inform prefix_inform)
                         *)
                        inversion Hshift; subst.
-                       clear -wf_mem Hmem Hmem1 wf_int_pref' H0 H H2 C_next_e1 C_b.
+                       clear -wf_mem Hmem Hmem1 wf_int_pref' H0 H H2 C_next_e1 C_b load_in_intf.
                        rename H2 into H1.
                        remember (Cb, 0) as addr. setoid_rewrite <- Heqaddr in H1.
                        remember (fset1 addr') as addr_set.
@@ -5948,7 +5961,8 @@ Section Definability.
                              specialize (G2 _ _ Hload') as [v' [_ renames]].
                              simpl in renames. discriminate.
                            + rewrite C_next_e1 in eqC.
-                             assert (Cid_b: component_buffer cid) by admit.
+                             assert (Cid_b: component_buffer cid).
+                             { eapply load_in_intf in Hload'; eauto. }
                              specialize (post2 _ Cid_b eqC) as [post2 | post2].
                              * destruct post2 as [_ [_ post2]].
                                apply steadysnap_shift in post2.
