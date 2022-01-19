@@ -5337,6 +5337,7 @@ Section Definability.
                   + rewrite /all_zeros_shift /uniform_shift
                             /event_renames_event_at_shared_addr //=.
                     (* destruct cs'.simpl in mem_cs'; subst s_memory. *)
+                    (* MARK 2 *)
                     inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem10 ?].
                     subst C0 stk0 mem11 arg0 k exp.
                     eapply wfmem in wf_mem10 as [wf_regs [wf_mem10 wf_mem10']];
@@ -5825,6 +5826,7 @@ Section Definability.
                       -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                          inversion Hshift; eauto.
                 - intros [Cb b] Hshared.
+
                   destruct b.
                   ++ exfalso.
                      Search (domm _ = domm _).
@@ -5981,14 +5983,267 @@ Section Definability.
                                rewrite nextblock in Hload'.
                                unfold LOCALBUF_blockid in Hload'.
                                by []. }
-                  ++ exists (Cb, b). split; last split.
+                  ++
+                  (* Use [addr_shared_so_far_inv_2] that is not yet stated *)
+                       rename Hshared into Hshared'.
+                        assert (Hshared: addr_shared_so_far (Cb, b)
+                                                            (rcons (project_non_inform prefix) (ECall (cur_comp s) P' new_arg mem' C'))).
+                       { admit. } clear Hshared'.
+                    exists (Cb, b). split; last split.
                      ** rewrite /all_zeros_shift /uniform_shift
                                 /sigma_shifting_wrap_bid_in_addr
                                 /sigma_shifting_lefttoright_addr_bid /=.
                         now rewrite ssrnat.subn0 ssrnat.addn1.
-                     ** Fail eapply addr_shared_so_far_inv_2.
-                        admit.
-                  (* Use [addr_shared_so_far_inv_2] that is not yet stated *)
+                     **
+                       {
+                  rewrite /all_zeros_shift /uniform_shift
+                            /event_renames_event_at_shared_addr //=.
+                    (* destruct cs'.simpl in mem_cs'; subst s_memory. *)
+                    (* MARK 2 *)
+                    inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem10 ?].
+                    subst C0 stk0 mem11 arg0 k exp.
+                    eapply wfmem in wf_mem10 as [wf_regs [wf_mem10 wf_mem10']];
+                      last reflexivity.
+                    simpl in wf_regs, wf_mem10, wf_mem10'.
+                    unfold postcondition_steady_state in wf_mem10.
+                    unfold postcondition_event_snapshot_steadystate in wf_mem10.
+                    case Cb_C: (Cb == C'); move: Cb_C => /eqP Cb_C; [subst Cb |].
+                    * specialize (wf_mem10 _ C'_b Logic.eq_refl) as [_ [_ [Hshift1 _]]].
+                      unfold well_formed_memory_snapshot_steadystate_shift in Hshift1.
+                      unfold memory_shifts_memory_at_shared_addr in Hshift1.
+                      unfold all_zeros_shift, uniform_shift in Hshift1.
+                      simpl in Hshift1.
+                      specialize (Hshift1 (S b)).
+                      unfold memory_renames_memory_at_shared_addr in *.
+                      eexists (C', S b).
+                      split; [| split].
+                      -- rewrite /sigma_shifting_wrap_bid_in_addr. simpl.
+                         by rewrite ssrnat.subn0 ssrnat.addn1.
+                      -- intros off v Hload; simpl in *.
+                         destruct Hshift1 as [addr' [Hshift1 [Hshift2 Hshift3]]];
+                           first easy.
+                         rewrite /sigma_shifting_wrap_bid_in_addr //= in Hshift1.
+                         rewrite ssrnat.subn1 ssrnat.addn0 in Hshift1.
+                         inversion Hshift1; subst addr'.
+                         simpl in Hshift3.
+                         specialize (Hshift3 _ _ Hload) as [? [? ?]].
+                         destruct steady_C3'' as [Hsteady | Huninit].
+                         {
+                           eexists; split.
+                           ++ repeat match goal with
+                                     | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                                       Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                                       erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                                     end.
+
+                              rewrite Hsteady_localbuf2; eauto.
+                           ++ destruct x; simpl in *; try by inversion H7; subst v.
+                              destruct t0 as [[[[|] ?] ?] ?]; simpl in *.
+                              by inversion H7.
+                              destruct i0; inversion H7; subst v.
+                              by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                         }
+                         {
+                           destruct p_gens_t as [? G].
+                           rewrite Et project_non_inform_append in G.
+                           simpl in G. unfold Eapp in G.
+                           replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                           setoid_rewrite app_assoc in G.
+                           apply star_app_inv in G as [? [G _]].
+                           setoid_rewrite cats1 in G.
+
+                           eapply CSInvariants.CSInvariants.not_executing_can_not_share in
+                               Hshared; eauto; first contradiction.
+                           + move : C_ne_C' => /eqP => ?. by auto.
+                           + rewrite Hprefix01 cats1. by destruct Huninit as [? [? [? ?]]].
+                           + apply CS.CS.singleton_traces_non_inform.
+                         }
+                      -- intros off v Hload; simpl in *.
+                         destruct Hshift1 as [addr' [Hshift1 [Hshift2 Hshift3]]];
+                           first easy.
+                         rewrite /sigma_shifting_wrap_bid_in_addr //= in Hshift1.
+                         rewrite ssrnat.subn1 ssrnat.addn0 in Hshift1.
+                         inversion Hshift1; subst addr'.
+                         simpl in Hshift2.
+                         (* *)
+                         destruct steady_C3'' as [Hsteady | Huninit].
+                         {
+                           repeat match goal with
+                                  | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                                    Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                                    erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                                  end.
+                           assert (Hload': Memory.load mem10 (Permission.data, C', S b, off) = Some v).
+                           { simplify_memory.
+                             rewrite -Hsteady_localbuf2; eauto.
+                             simplify_memory.
+                           }
+                           specialize (Hshift2 _ _ Hload') as [v' [G Hv']].
+
+                           eexists; split; first eassumption.
+                           destruct v; simpl in *; try by inversion Hv'; subst.
+                           destruct t0 as [[[[|] ?] ?] ?]; simpl in *; first by inversion Hv'.
+                           destruct i0; inversion Hv'; subst.
+                           by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                         }
+                         {
+                           destruct p_gens_t as [? G].
+                           rewrite Et project_non_inform_append in G.
+                           simpl in G. unfold Eapp in G.
+                           replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                           setoid_rewrite app_assoc in G.
+                           apply star_app_inv in G as [? [G _]].
+                           setoid_rewrite cats1 in G.
+
+                           eapply CSInvariants.CSInvariants.not_executing_can_not_share in
+                               Hshared; eauto; first contradiction.
+                           + move : C_ne_C' => /eqP => ?. by auto.
+                           + rewrite Hprefix01 cats1. by destruct Huninit as [? [? [? ?]]].
+                           + apply CS.CS.singleton_traces_non_inform.
+                         }
+
+                    * (* Prove good_trace something. Get from Hshared that there's a
+                       * load and [1 <= b]. Now we can get a contradiction to
+                       * [postcondition_uninitialized] *)
+                      (* *)
+                      exists (Cb, S b).
+                      split.
+                      -- rewrite /all_zeros_shift /uniform_shift //=.
+                         rewrite /sigma_shifting_wrap_bid_in_addr //=.
+                         by rewrite ssrnat.subn0 ssrnat.addn1.
+                      -- assert (Hwf_p: Source.well_formed_program p).
+                         {
+                           by eapply well_formed_events_well_formed_program; eauto.
+                         }
+                         assert (Hclosed_p: Source.closed_program p).
+                         {
+                           by eapply closed_program_of_trace; eauto.
+                         }
+                         split; intros ? ? Hload.
+                         ++ simpl in *.
+                            assert (HCb: component_buffer Cb).
+                            {
+                              (** This essentially follows IF we knew that the
+                          intermediate trace came from an intermediate execution.
+                          Then, we can possibly use a lemma in CSInvariants? *)
+
+                              unfold component_buffer.
+                              replace intf with (Machine.Intermediate.prog_interface p_interm).
+                              destruct p_gens_t as [? G].
+                              rewrite Et project_non_inform_append in G.
+                              simpl in G. unfold Eapp in G.
+                              replace ((ECall (cur_comp s) P' new_arg mem' C' :: project_non_inform suffix)) with ([:: ECall (cur_comp s) P' new_arg mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                              setoid_rewrite app_assoc in G.
+                              apply star_app_inv in G as [? [G _]].
+                              setoid_rewrite cats1 in G.
+                              eapply CSInvariants.CSInvariants.load_Some_component_buffer with
+                                (ptr := (Permission.data, Cb, b, offset))
+                                (e := (ECall (cur_comp s) P' new_arg mem' C')); eauto.
+                              apply CS.CS.singleton_traces_non_inform.
+                            }
+                            specialize (wf_mem10' _ HCb Cb_C) as
+                                [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
+                            ** assert (Hnoteq: S b <> Block.local).
+                               { by unfold Block.local. }
+                               specialize (steadysnap_shift0 _ Hnoteq)
+                                 as [[C_ b_] [Hb_ [mem10_mem' mem'_mem10]]].
+                               rewrite shift_S_Some in Hb_.
+                               inversion Hb_; subst C_ b_; clear Hb_.
+                               simpl in *.
+                               specialize (mem'_mem10 _ _ Hload) as [v' [Hloadv' Hv']].
+                               exists v'. split.
+                               --- simplify_memory_in_assm. rewrite Hmem2'; eauto.
+                               --- specialize (shift_value_option_symmetry
+                                                 (fun=> 1) (fun=> 0)) as Lem.
+                                   unfold shift_value_option,
+                                   sigma_shifting_wrap_bid_in_addr,
+                                   sigma_shifting_lefttoright_addr_bid,
+                                   rename_addr_option in *.
+                                   by eapply Lem.
+                            ** simpl in *. destruct HcompMem as [HcompMem [? [Hnext ?]]].
+                               (** Intuitively, there should be a contradiction. *)
+                               (** In particular, ** is the case where Cb is not *)
+                               (** initialized. What we know about Cb is that it *)
+                               (** shared an address and that this address also was *)
+                               (** loaded from memory (Hload). *)
+                               specialize (Hnot_shared b).
+                               rewrite -!cats1 project_non_inform_append /= in Hnot_shared.
+                               setoid_rewrite cats1 in Hnot_shared.
+                               apply Hnot_shared in Hshared.
+                               contradiction.
+                         ++ simpl in *.
+                            assert (Hload': Memory.load
+                                              mem10
+                                              (Permission.data, Cb, S b, offset) = Some v').
+                            { simplify_memory. rewrite -Hmem2'. eauto. eauto. }
+                            (** Need to know component_buffer Cb. *)
+                            (** Intuitively, we should know it from Hload *)
+                            (** Knowing it from Hload should be a source "CSInvariant". *)
+
+                            assert (HCb: component_buffer Cb).
+                            {
+                              unfold component_buffer.
+                              replace intf with (Machine.Intermediate.prog_interface p_interm).
+
+                              assert (starG : star CS.kstep (prepare_global_env p) (CS.initial_machine_state p)
+                                                   (rcons (project_non_inform prefix_inform) (ECall (cur_comp s) P' vcom mem1 C'))
+
+                                                   [CState C', {|
+                                                      CS.f_component := C;
+                                                      CS.f_arg := arg;
+                                                      CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
+                                                                            (Kseq
+                                                                               (invalidate_metadata;;
+                                                                                E_assign EXTCALL (E_val (Int 0));;
+                                                                                E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem10, Kstop,
+                                                   expr_of_trace C' P' (comp_subtrace C' t), vcom]
+                                     ).
+                              {
+                                rewrite -cats1.
+                                eapply star_trans; eauto.
+                                - eapply star_trans; eauto.
+                                - simpl. subst. by unfold C.
+                              }
+                              specialize (@CS.CS.load_component_prog_interface_addr
+                                            _ Hwf_p Hclosed_p _ _ _
+                                            (Permission.data, Cb, S b, offset) v'
+                                            Logic.eq_refl starG
+                                         ) as G'.
+                              simpl in *. rewrite p_interm_intf.
+                              by intuition.
+                            }
+
+                            specialize (wf_mem10' _ HCb Cb_C) as
+                                [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
+                            ** assert (Hnoteq: S b <> Block.local).
+                               { by unfold Block.local. }
+                               specialize (steadysnap_shift0 _ Hnoteq)
+                                 as [[C_ b_] [Hb_ [mem10_mem' mem'_mem10]]].
+                               rewrite shift_S_Some in Hb_.
+                               inversion Hb_; subst C_ b_; clear Hb_.
+                               simpl in *.
+                               specialize (mem10_mem' _ _ Hload') as [v'' [Hloadv' Hv']].
+                               exists v''. split.
+                               --- assumption.
+                               --- specialize (shift_value_option_symmetry
+                                                 (fun=> 1) (fun=> 0)) as Lem.
+                                   unfold shift_value_option,
+                                   sigma_shifting_wrap_bid_in_addr,
+                                   sigma_shifting_lefttoright_addr_bid,
+                                   rename_addr_option in *.
+                                   by eapply Lem.
+                            ** simpl in HcompMem.
+                               destruct H8 as [src_compMem [Hsrc_compMem Hnextblock]].
+                               assert (Memory.next_block mem10 Cb = Some LOCALBUF_blockid).
+                               unfold Memory.next_block; rewrite Hsrc_compMem Hnextblock //=.
+                               replace Cb with
+                                 (Pointer.component (Permission.data, Cb, S b, offset)) in H8 by reflexivity.
+                               apply Memory.load_next_block_None in H8. congruence.
+                               simpl. unfold LOCALBUF_blockid. apply /ssrnat.leP. lia.
+
+
+                       }
+                     ** eauto.
                 - easy.
                 - rewrite /all_zeros_shift /uniform_shift
                           /sigma_shifting_wrap_bid_in_addr
