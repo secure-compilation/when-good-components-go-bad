@@ -1841,6 +1841,8 @@ Section Definability.
 
     Lemma initialization_correct: forall C stk mem k arg prefix e,
         component_buffer C ->
+        (forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+            Memory.load mem ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local) ->
         postcondition_steady_state e mem C \/ postcondition_uninitialized prefix e mem C ->
         exists mem' i,
           star CS.kstep (prepare_global_env p)
@@ -1864,9 +1866,11 @@ Section Definability.
               b <> Block.local ->
               postcondition_steady_state e mem C ->
               Memory.load mem (Permission.data, C', b, offset) =
-              Memory.load mem' (Permission.data, C', b, offset)).
+                Memory.load mem' (Permission.data, C', b, offset)) /\
+        (forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+            Memory.load mem' ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local).
     Proof.
-      move=> C stk mem k arg prefix e C_b.
+      move=> C stk mem k arg prefix e C_b load_safe.
       case.
       - move=> [] load_initflag [] load_localbuf postcond.
         exists mem, 0%Z.
@@ -1930,7 +1934,10 @@ Section Definability.
                        Memory.load mem''' (Permission.data, C', b, offset)) /\
                    (forall C',
                        C <> C' ->
-                       Memory.next_block mem C' = Memory.next_block mem''' C')).
+                       Memory.next_block mem C' = Memory.next_block mem''' C') /\
+                 (forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+                     Memory.load mem''' ptr = Some (Ptr (Permission.data, C, b, o)) ->
+                     b <> Block.local)).
         { rewrite /init_local_buffer_expr.
           rewrite /copy_local_datum_expr /buffer_nth.
           clear buf_size_gt0.
@@ -1995,6 +2002,8 @@ Section Definability.
                          None) ->
                      (forall b o,
                          Memory.load mem'' (Permission.data, C, S (S b), o) = None) ->
+                     (forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+                         Memory.load mem'' ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local) ->
                      exists (mem''': Memory.t) (i: Z),
                        star CS.kstep (prepare_global_env p)
                             [CState C, stk, mem'', k, foldr (fun e0 : expr => [eta E_seq e0])
@@ -2046,20 +2055,22 @@ Section Definability.
                            Memory.load mem''' (Permission.data, C, S (Block.local), o) =
                            None) /\
                        (forall b o,
-                           Memory.load mem''' (Permission.data, C, S (S b), o) = None)
+                           Memory.load mem''' (Permission.data, C, S (S b), o) = None) /\
+                         (forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+                             Memory.load mem''' ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local)
                  ).
           { move=> buf_left_to_copy.
             elim: buf_left_to_copy mem'' {mem'_mem''} => //=.
             - move=> mem'' size_already_done size_lt drop_sz
                            load_localbuf' load_initflag' load_simulated'
-                           load_already_done load_oob load_S_S_b.
+                           load_already_done load_oob load_S_S_b load_safe'.
               destruct (Memory.store_after_load mem''
                                                 (Permission.data, C, Block.local, INITFLAG_offset)
                                                 (Int 0) (Int 1)) as [mem''' mem''_mem''']; simplify_memory; eauto.
               exists mem'''; exists 1%Z.
               split.
               + take_steps; eauto. eapply star_refl.
-              + split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+              + split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
                 * intros.
                   erewrite (Memory.load_after_store_neq) with
                     (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
@@ -2105,9 +2116,14 @@ Section Definability.
                     (ptr := (Permission.data, C, Block.local, INITFLAG_offset))
                     (ptr' := (Permission.data, C, S (S b), o)); eauto.
                   unfold Block.local; congruence.
+                * intros.
+                  destruct (Pointer.eq ptr (Permission.data, C, Block.local, INITFLAG_offset)) eqn:eq_ptr;
+                    move: eq_ptr => /Pointer.eqP eq_ptr; subst;
+                                   [erewrite Memory.load_after_store_eq in H; eauto; by [] |
+                                     erewrite (Memory.load_after_store_neq _ _ _ _ _ _ mem''_mem''') in H; eauto].
             - move=> v ls IH mem'' size_already_done size_lt drop_sz
                        load_localbuf' load_initflag' load_simulated
-                       load_already_done load_oob load_S_S_b.
+                       load_already_done load_oob load_S_S_b load_safe'.
               assert (drop_S_sz: ls = drop (size_already_done + 1) (unfold_buffer buf)).
               { rewrite Nat.add_1_r //=.
                 clear -size_lt drop_sz.
@@ -2219,10 +2235,42 @@ Section Definability.
                   (ptr' := (Permission.data, C, S (S b), o)); eauto.
                 unfold Block.local; congruence.
               }
+              assert (load_safe'':
+                       forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+                         Memory.load mem''' ptr = Some (Ptr (Permission.data, C, b, o)) ->
+                         b <> Block.local).
+            { intros.
+              destruct (Pointer.eq ptr (Permission.data, C, LOCALBUF_blockid, Z.of_nat size_already_done)) eqn:eq_ptr;
+                move: eq_ptr
+                       => /Pointer.eqP eq_ptr; subst;
+                         [erewrite (Memory.load_after_store_eq _ _ _ _ mem''_mem''') in H; eauto |
+                           erewrite (Memory.load_after_store_neq _ _ _ _ _ _ mem''_mem''') in H; eauto].
+              specialize (wf_buffers Hbuf).
+              clear -wf_buffers drop_sz H intf prog_buffers t T initial_memory.
+              inversion H; subst; clear H.
+              unfold Buffer.well_formed_buffer in wf_buffers.
+              unfold unfold_buffer in *.
+              destruct buf.
+              - generalize dependent size_already_done. induction n.
+                + auto.
+                + intros. simpl in *.
+                  destruct size_already_done; simpl in *; try discriminate.
+                  destruct n; first discriminate.
+                  eapply IHn; eauto.
+              - generalize dependent size_already_done. induction l.
+                + auto.
+                + intros. simpl in *.
+                  destruct size_already_done; simpl in *; try discriminate.
+                  destruct l; inversion drop_sz; subst.
+                  by simpl in wf_buffers.
+                  by simpl in wf_buffers.
+                  eapply IHl; eauto. destruct l. by []. simpl in *.
+                  move: wf_buffers => /andP [] //=.
+            }
               destruct (IH mem''' (size_already_done + 1) S_size_lt drop_S_sz
                            load_localbuf'' load_initflag'' load_simulated''
-                           load_alreadydone' load_oob' load_S_S_b') as
-                  [mem'''' [i' [star_mem'''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
+                           load_alreadydone' load_oob' load_S_S_b' load_safe'') as
+                [mem'''' [i' [star_mem'''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 [H8 H9]]]]]]]]]]].
               eexists; eexists.
               split.
               + take_steps.
@@ -2386,9 +2434,24 @@ Section Definability.
           specialize (STAR2 (unfold_buffer buf) 0
                             size_ge left_to_copy H3' H2'
                             current_sim_buff already_copied load_oob load_S_S_b)
-            as [mem''' [i' [star_mem''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]]]]].
+            as [mem''' [i' [star_mem''' [H1 [H2 [H3 [H4 [H5 [H6 [H7 [H8 H9]]]]]]]]]]].
+          { intros.
+            destruct (Pointer.eq ptr (Permission.data, C, Block.local, LOCALBUF_offset)) eqn:eq_ptr;
+              move: eq_ptr => /Pointer.eqP eq_ptr; subst;
+                             [erewrite Memory.load_after_store_eq in H; eauto |
+                               erewrite (Memory.load_after_store_neq _ _ _ _ _ _ mem'_mem'') in H; eauto].
+            by inversion H.
+            destruct ptr as [[[[]]]]; first by [].
+            destruct (i == C) eqn:iC; move: iC => /eqP iC; subst;
+            destruct (i0 == LOCALBUF_blockid) eqn:iB; move: iB => /eqP iB; subst.
+            erewrite Memory.load_after_alloc_eq in H; eauto. simpl in H.
+            move: H; case: ifP => ?. by case: ifP. by [].
+            erewrite (Memory.load_after_alloc) in H; eauto. simpl in *. by congruence.
+            erewrite (Memory.load_after_alloc) in H; eauto. simpl in *. by congruence.
+            erewrite (Memory.load_after_alloc) in H; eauto. simpl in *. by congruence.
+          }
           exists mem''', i'.
-          split; [| split; [| split; [| split]]].
+          split; [| split; [| split; [| split; [| split]]]].
           + simpl in star_mem'''. eapply star_mem'''.
           + { split; [| split].
               - eassumption.
@@ -2695,19 +2758,24 @@ Section Definability.
             rewrite (Memory.next_block_store_stable _ _ _ _ _ mem'_mem'').
             rewrite (Memory.next_block_alloc_neq _ _ _ _ _ _ mem_mem').
             reflexivity. congruence.
+          + exact H9.
         }
-        destruct STAR2 as [mem''' [i [STAR2 [POST [H1 [H2 H3]]]]]].
+        destruct STAR2 as [mem''' [i [STAR2 [POST [H1 [H2 [H3 H4]]]]]]].
         eexists; eexists.
-        split; [| split; [| split; [| split; [| split]]]].
+        split; [| split; [| split; [| split; [| split; [| split]]]]].
         + eapply star_trans; eauto.
         + assumption.
         + assumption.
         + assumption.
         + assumption.
-          Unshelve.
-          unfold Block.local; congruence.
-          unfold Block.local; congruence.
         + move=> C' b off C_C' b_not_llocal [] load_initflag'.
+          congruence.
+        + assumption.
+          Unshelve.
+          congruence.
+          unfold Block.local; congruence.
+          unfold Block.local; congruence.
+          unfold Block.local; congruence.
           congruence.
     Qed.
 
@@ -3379,13 +3447,43 @@ Section Definability.
           - intros b Hshared. simpl in Hshared.
             inversion Hshared; now destruct t0. }
 
+        assert (safe_prep_buffer: forall (ptr : Pointer.t) (C0 : Component.id) (b : Block.id) (o : Block.offset),
+                   Memory.load (Source.prepare_buffers p) ptr = Some (Ptr (Permission.data, C0, b, o)) ->
+                   b <> Block.local).
+        { intros ptr C b o Hload.
+          unfold Source.prepare_buffers in Hload.
+          simpl in Hload. unfold meta_buffer in Hload. simpl in Hload.
+          unfold Memory.load in Hload.
+          destruct ptr as [[[[]]]]; first discriminate. simpl in Hload.
+          destruct (mapm
+              (fun initial_buffer : nat + seq value =>
+               ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+              (mapm
+                 (fun=> inr
+                          [:: Int 0; Int 1; Int 0; Undef; Undef; Int 0; Undef; Undef; Undef; Undef;
+                              Undef]) intf) i) eqn:eq_memC; last discriminate.
+          rewrite mapmE in eq_memC.
+          destruct ((mapm
+                 (fun=> inr
+                          [:: Int 0; Int 1; Int 0; Undef; Undef; Int 0; Undef; Undef; Undef; Undef;
+                           Undef]) intf i)) eqn:eq_in; last discriminate.
+          rewrite mapmE in eq_in.
+          destruct (intf i) eqn:intf_i; last discriminate. simpl in eq_in.
+          inversion eq_in. subst. simpl in eq_memC. inversion eq_memC; subst.
+          rewrite ComponentMemory.load_prealloc in Hload.
+          move: Hload; case: ifP; last by [].
+          move=> _. rewrite setmE. case: ifP => //=.
+          move=> _. clear.
+          destruct (Z.to_nat o0); first by [].
+          do 10 (destruct n; first by []). simpl.
+          induction n; by []. }
         destruct (initialization_correct
                     [::]
                     (Kseq (extcall_check;;
                            expr_of_trace Component.main Procedure.main
                                          (comp_subtrace Component.main t)) Kstop)
-                    (Int 0) C_b (or_intror Hpost_ini))
-          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 [Hothercomp0 [Hotherblock0 Hsteady_localbuf]]]]]]].
+                    (Int 0) C_b safe_prep_buffer (or_intror Hpost_ini))
+          as [mem0 [arg0 [Hstar0 [Hsteady0 [Hsamecomp0 [Hothercomp0 [Hotherblock0 [Hsteady_localbuf Hsafe_ptr]]]]]]]].
 
         destruct (Memory.store_after_load
                     mem0
@@ -3702,53 +3800,43 @@ Section Definability.
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, EXTCALL_offset)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem8); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem8); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_COM)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem7); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem7); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem6); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_SP)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem5); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_RA)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem4); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_AUX2)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem3); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem2); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); eauto; clear eq_ptr].
                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)) eqn:eq_ptr;
                  move: eq_ptr =>
                           /Pointer.eqP eq_ptr; subst;
-                          [erewrite Memory.load_after_store_eq; eauto; by []
-                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-               destruct ptr as [[[[] cid] bid] off]; first by [].
-               destruct (cid == Component.main) eqn:eqC; move: eqC => /eqP eqC; subst.
-               destruct (bid == Block.local) eqn:eqB; move: eqB => /eqP eqB; subst.
-               destruct (off == INITFLAG_offset) eqn:eqO; move: eqO => /eqP eqO; subst.
-               destruct Hsteady0 as [G [? ?]]. by rewrite G.
-               destruct (off == LOCALBUF_offset) eqn:eqO'; move: eqO' => /eqP eqO'; subst.
-               destruct Hsteady0 as [? [G ?]]. rewrite G. move=> R; inversion R; by [].
-               rewrite -Hsamecomp0; eauto. admit.
-               admit.
-               rewrite -Hothercomp0; eauto. admit.
+                          [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem1); eauto; by []
+                          | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); eauto; clear eq_ptr].
           * unfold valid_procedure. now auto.
         + simpl. intros ptr [cid bid] v Hload Heq Hshift.
           injection Heq as ? ?; subst cid bid.
@@ -4001,8 +4089,23 @@ Section Definability.
               (* assert (steady_C3': postcondition_steady_state e1 mem1 C' \/ postcondition_uninitialized prefix0 e1 mem1 C'). *)
               (* { ... } *)
 
-              eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' [Hblock2 Hsteady_localbuf2]]]]]]];
-                last exact C'_b.
+              assert (Hsafe: forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+                         Memory.load mem1 ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local).
+              { intros ptr C b o Hload.
+                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                  move: eq_ptr =>
+                           /Pointer.eqP eq_ptr; subst;
+                           [erewrite Memory.load_after_store_eq in Hload; eauto; by []
+                           | erewrite Memory.load_after_store_neq in Hload; eauto; clear eq_ptr].
+                destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, 0%Z)) eqn:eq_ptr;
+                  move: eq_ptr =>
+                           /Pointer.eqP eq_ptr; subst;
+                           [erewrite Memory.load_after_store_eq in Hload; eauto; by []
+                           | erewrite Memory.load_after_store_neq in Hload; eauto; clear eq_ptr].
+                eapply wfmem_no_private_ptr; eauto.
+              }
+              eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' [Hblock2 [Hsteady_localbuf2 Hsafe2]]]]]]]];
+                try exact C'_b; last exact Hsafe.
 
               destruct (Memory.store_after_load mem2 (Permission.data, C', Block.local, reg_offset E_R_ONE)
                                                 v1 Undef) as [mem3 Hmem3];
@@ -4417,63 +4520,45 @@ Section Definability.
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, 1%Z)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem10); eauto; by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem10); eauto; clear eq_ptr].
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_COM)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem9); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem9); eauto; clear eq_ptr].
                       destruct Hregs0 as [? G].
                       rewrite G in Hvcom. now inversion Hvcom.
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem8); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem8); eauto; clear eq_ptr].
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_SP)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem7); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem7); eauto; clear eq_ptr].
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_RA)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem6); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6); eauto; clear eq_ptr].
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX2)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem5); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); eauto; clear eq_ptr].
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX1)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem4); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); eauto; clear eq_ptr].
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ONE)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                      destruct ptr as [[[[] cid] bid] off] eqn:eptr; first by [].
-                      destruct (C' == cid) eqn:eqC; move: eqC => /eqP eqC; try subst cid.
-                      admit.
-                      rewrite -Hmem2'; eauto.
-                      setoid_rewrite <- eptr.
-                      destruct (Pointer.eq ptr (Permission.data, Component.main,
-                                                 Block.local, EXTCALL_offset)) eqn:eq_ptr;
-                        move: eq_ptr =>
-                                 /Pointer.eqP eq_ptr; try rewrite eq_ptr;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                      destruct (Pointer.eq ptr (Permission.data, cur_comp s,
-                                                 Block.local, 0%Z)) eqn:eq_ptr;
-                        move: eq_ptr =>
-                                 /Pointer.eqP eq_ptr; try rewrite eq_ptr;
-                                 [erewrite Memory.load_after_store_eq; eauto; try by []
-                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                      now eapply wfmem_no_private_ptr; eauto.
+                                 [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem3); eauto; try by []
+                                 | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); eauto; clear eq_ptr].
                   }
                   { right. left. now apply closed_intf in Himport. }
                 }
@@ -4639,8 +4724,23 @@ Section Definability.
 
             assert (steady_C3'' := steady_C3').
 
-            eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' [Hblock2 Hsteady_localbuf2]]]]]]];
-              last exact C'_b.
+              assert (Hsafe: forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
+                         Memory.load mem1 ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local).
+              { intros ptr C0 b0 o0 Hload.
+                destruct (Pointer.eq ptr (Permission.data, C, Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                  move: eq_ptr =>
+                           /Pointer.eqP eq_ptr; subst;
+                           [erewrite Memory.load_after_store_eq in Hload; eauto; by []
+                           | erewrite Memory.load_after_store_neq in Hload; eauto; clear eq_ptr].
+                destruct (Pointer.eq ptr (Permission.data, C, Block.local, 0%Z)) eqn:eq_ptr;
+                  move: eq_ptr =>
+                           /Pointer.eqP eq_ptr; subst;
+                           [erewrite Memory.load_after_store_eq in Hload; eauto; by []
+                           | erewrite Memory.load_after_store_neq in Hload; eauto; clear eq_ptr].
+                eapply wfmem_no_private_ptr; eauto.
+              }
+            eapply initialization_correct in steady_C3' as [mem2 [i' [Star12 [Postcond1 [Hmem2 [Hmem2' [Hblock2 [Hsteady_localbuf2 Hsafe2]]]]]]]];
+              try exact C'_b; last exact Hsafe.
 
             destruct (Memory.store_after_load mem2 (Permission.data, C', Block.local, reg_offset E_R_ONE)
                                               v1 Undef) as [mem3 Hmem3];
@@ -5047,13 +5147,13 @@ Section Definability.
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, 1%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem10); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem10); eauto; clear eq_ptr].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_COM)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem9); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem9); eauto; clear eq_ptr].
                    specialize (steady_C1 Machine.R_COM _ Logic.eq_refl) as [v1' [v2' G]].
                    destruct G as [G1 [G2 G3]].
                    rewrite -C_next_e1 in G1. rewrite G1 in Hvcom. inversion Hvcom; subst; clear Hvcom.
@@ -5066,34 +5166,33 @@ Section Definability.
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem8); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem8); eauto; clear eq_ptr].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_SP)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem7); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem7); eauto; clear eq_ptr].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_RA)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem6); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6); eauto; clear eq_ptr].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX2)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem5); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); eauto; clear eq_ptr].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX1)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem4); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); eauto; clear eq_ptr].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ONE)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
-                              [erewrite Memory.load_after_store_eq; eauto; try by []
-                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                   admit.
+                              [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem3); eauto; try by []
+                              | erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); eauto; clear eq_ptr].
               * right. left. by apply: (closed_intf Himport). }
 
             split; last split; last split.
