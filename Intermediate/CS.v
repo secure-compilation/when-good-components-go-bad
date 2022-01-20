@@ -2132,77 +2132,6 @@ Section ProgramLink.
 End ProgramLink.
 
 
-(************************************************************
-Lemma genv_procedures_prog_procedures_in p cid fid instlst :
-  well_formed_program p ->
-  (omap (fun m => getm m fid)
-        ((genv_procedures (globalenv (sem_inform p))) cid) = Some (Some instlst)
-   <->
-   omap (fun m => getm m fid) ((prog_procedures p) cid) = Some (Some instlst)).
-Proof.
-  intros Hwfp.
-  pose (domm_domm := wfprog_defined_procedures Hwfp).
-  pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
-  unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
-  destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
-    simpl; pose proof (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
-      unfold isSome in e1;
-      (
-       destruct (@getm nat_ordType
-                        (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
-                        (prog_procedures p)
-                        cid) eqn:contra
-       ||
-       destruct (@getm nat_ordType
-                       (NMap code)
-                       (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
-                       (prog_procedures p)
-                       cid) eqn:contra;
-       idtac "ExStructures 0.1 legacy"
-      ); try discriminate.
-  
-  - assert (etmp : is_true (cid \in domm (prog_interface p))).
-    { by erewrite domm_domm. }
-    move : etmp => /dommP => e0.
-    destruct ((prog_interface p) cid) eqn:e1';
-      destruct e0 as [x H0]; rewrite -e1' in H0; rewrite e1' in H0; last discriminate.
-    inversion H0. subst. clear H0 e. simpl in *.
-    unfold reserve_component_blocks.
-    destruct (ComponentMemoryExtra.reserve_blocks
-                (ComponentMemory.prealloc
-                   match prog_buffers p cid with
-                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
-                   | None => emptym
-                   end)
-                (length (elementsm n)))
-      as [compMem bs] eqn:rsvblk.
-    split; intros H.
-    + rewrite rsvblk in H.
-      simpl in H. rewrite <- H.      
-      inversion H as [H1]. apply mkfmap_Some in H1.
-      specialize (in_zip1 H1) as Hin1.
-      specialize (in_zip2 H1) as Hin2.
-      Search ComponentMemoryExtra.reserve_blocks.
-      apply in_unzip2 in Hin2 as [].
-      Search seq.unzip2.
-      apply 
-      Search in_mem seq.zip.
-      destruct n. simpl.
-      (* Search _ bs. *)
-      (** Is there really any relationship between bs and the domain of the NMap n? *)
-      admit.
-    + rewrite rsvblk. simpl.
-      rewrite <- H.
-      rewrite mkfmapE. destruct n. simpl.
-      (* Search _ bs. *)
-      (** Is there really any relationship between bs and the domain of the NMap n? *)
-      admit.
-    
-  - split; by intros.
-
-Admitted.
-******************************************************************)
-
 Lemma genv_procedures_prog_procedures p cid proc:
   well_formed_program p ->
   (
@@ -2224,91 +2153,8 @@ Proof.
     simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
       unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
         (* rewrite contra in e1; *)
-        try discriminate; auto; clear e1;
-          unfold reserve_component_blocks; intros [procs [bid H]].
+        discriminate.
 Qed.
-
-(****************************************************************
-- assert (etmp : is_true (cid \in domm (prog_interface p))).
-    { erewrite domm_domm; rewrite e; auto. }
-    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
-    destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0];
-           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
-           discriminate).
-    destruct (ComponentMemoryExtra.reserve_blocks
-                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
-                   match prog_buffers p cid with
-                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
-                   | None => emptym
-                   end
-                )
-         (length (elementsm (odflt emptym (Some n)))))
-             as [compMem bs] eqn:rsvblk.
-    rewrite rsvblk.
-    destruct H as [H1 H2].
-    apply ComponentMemoryExtra.reserve_blocks_length in rsvblk.
-    Search wfprog_well_formed_instructions.
-    exists n. inversion H1. subst. apply mkfmap_Some in H2.
-    specialize (in_zip2 H2) as H2_2.
-    unfold elementsm in *. apply in_unzip2 in H2_2 as [? ?]. by eauto. 
-  
-***************************************************************************)
-
-
-
-    
-
-
-(*******************************************************************
-Lemma genv_procedures_prog_procedures p cid proc :
-  well_formed_program p ->
-  (genv_procedures (globalenv (sem_inform p))) cid = proc <-> (prog_procedures p) cid = proc.
-Proof.
-  intros Hwfp.
-  pose (domm_domm := wfprog_defined_procedures Hwfp).
-  pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
-  unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
-  destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
-    simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
-      unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
-        (* rewrite contra in e1; *)
-        try discriminate; split; auto; clear e1;
-          unfold reserve_component_blocks; intros H.
-  - assert (etmp : is_true (cid \in domm (prog_interface p))).
-    { erewrite domm_domm; rewrite e; auto. }
-    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
-    destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0];
-           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
-           discriminate).
-    destruct (ComponentMemoryExtra.reserve_blocks
-                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
-                   match prog_buffers p cid with
-                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
-                   | None => emptym
-                   end
-                )
-         (length (elementsm (odflt emptym (Some n)))))
-             as [compMem bs] eqn:rsvblk.
-    rewrite rsvblk in H.
-    simpl in H. rewrite <- H.
-    assert (g: n = mkfmap (T:=nat_ordType) (seq.zip bs (seq.unzip2 (elementsm n)))).
-    {
-      (* This goal is hard.
-         n is a map. So, it is better if the lemma were stated in terms of
-       equality of the contents rather than just equality.*)
-      admit.
-    }
-    rewrite <- g; auto.
-  - assert (etmp : is_true (cid \in domm (prog_interface p))).
-    { erewrite domm_domm; rewrite e; auto. }
-    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
-    destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
-
-Admitted.
-************************************************************************)
 
 
 (* RB: TODO: [DynShare] This result may not be in standard form for this file,
@@ -2317,7 +2163,7 @@ Theorem does_prefix_inform_non_inform :
   forall p m,
     does_prefix (sem_inform p) m ->
     does_prefix (sem_non_inform p) (project_finpref_behavior m).
-Admitted.
+Abort.
 
 Lemma star_final_no_more_events p t_inform sinit s':
   star step (prepare_global_env p) sinit t_inform s' ->
@@ -2578,7 +2424,7 @@ Lemma well_formed_event_inform_well_formed_event_project_non_inform t_inform t_n
   ->
   project_non_inform t_inform = t_non_inform ->
   seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t_non_inform.
-Admitted.
+Abort.
 
 Lemma intermediate_well_formed_events_non_inform st t st' :
   Star (sem_non_inform p) st t st' ->
@@ -2591,9 +2437,9 @@ Proof.
        p
        valid_program
        st t_inform st' Hstar_inform as Hwf_inform.
-  exact (well_formed_event_inform_well_formed_event_project_non_inform
-           t_inform t Hwf_inform Hproj).
-Qed.
+  (*exact (well_formed_event_inform_well_formed_event_project_non_inform
+           t_inform t Hwf_inform Hproj).*)
+Abort.
 
 Lemma well_formed_trace_inform_well_formed_trace_project_non_inform t_inform t_non_inform:
   TracesInform.well_formed_trace
@@ -2602,7 +2448,7 @@ Lemma well_formed_trace_inform_well_formed_trace_project_non_inform t_inform t_n
     t_inform ->
   project_non_inform t_inform = t_non_inform ->
   Traces.well_formed_trace (Intermediate.prog_interface p) t_non_inform.
-Admitted.
+Abort.
 
 Lemma intermediate_well_formed_trace_non_inform : forall t cs cs',
   Star (sem_non_inform p) cs t cs' ->
@@ -2617,9 +2463,9 @@ Proof.
   pose proof intermediate_well_formed_trace p valid_program
        t_inform cs cs' Hstar_inform H' H'' H'''
     as Hwf_trace_inform.
-  exact (well_formed_trace_inform_well_formed_trace_project_non_inform
-           t_inform t Hwf_trace_inform Hproj).
-Qed.
+  (*exact (well_formed_trace_inform_well_formed_trace_project_non_inform
+           t_inform t Hwf_trace_inform Hproj).*)
+Abort.
 
 End SemanticsNonInformProperties.
 
