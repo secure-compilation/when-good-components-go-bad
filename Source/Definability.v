@@ -1348,6 +1348,10 @@ Section Definability.
                 postcondition_uninitialized prefix' e mem C
               )
           );
+        wfmem_no_private_ptr:
+        forall ptr C b o,
+          Memory.load mem ptr = Some (Ptr (Permission.data, C, b, o)) ->
+          b <> Block.local;
       }.
 
     Lemma counter_value_snoc prefix C e :
@@ -3114,9 +3118,12 @@ Section Definability.
           (wf4: forall C b o v,
               Memory.load (mem_of_event e') (Permission.data, C, b, o) = Some v ->
               component_buffer C)
-          (good_trace:
-            good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
-                                   (rcons t1' e'))
+          (wf5: forall ptr C b o,
+                       Memory.load (mem_of_event e') ptr = Some (Ptr (Permission.data, C, b, o)) ->
+                       b <> Block.local)
+          (* (good_trace: *)
+          (*   good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) *)
+          (*                          (rcons t1' e')) *)
           (* (z: forall C, ~ Reachability.Reachable mem' (addr_of_value vcom) (C, 0)): *)
           (traces_rename:
             traces_rename_each_other_option (uniform_shift 1) all_zeros_shift t1' t1):
@@ -3168,8 +3175,8 @@ Section Definability.
       generalize dependent e'. generalize dependent t1'.
       generalize dependent e. generalize dependent t1.
       induction shared as [addr t0 e0 reachable | addr addr' t0 e0 shared IH reachable].
-      - intros t1 e wf3 t1' traces_rename e' eq_mem wf4 values_rename
-               eq_traces wf1 wf2 Cb b eq_addr; find_rcons_rcons.
+      - intros t1 e wf3 t1' traces_rename e' eq_mem values_rename wf4 wf5
+                wf1 wf2 eq_traces Cb b eq_addr; find_rcons_rcons.
         constructor.
         eapply addr_shared_so_far_inv_2' with (mem' := mem_of_event e'); eauto.
         + intros C C_b.
@@ -3182,15 +3189,33 @@ Section Definability.
             specialize (wf b0). eapply wf3 in wf; eauto.
             eapply wf. constructor. eauto.
         + intros C reachable'.
-          inversion good_trace; subst; clear good_trace.
-          eapply reachable_from_args_is_shared in reachable'.
-          specialize (H _ reachable'). simpl in H.
-          unfold uniform_shift in H.
-          rewrite /left_block_id_good_for_shifting in H. by [].
+          clear -reachable' wf5 values_rename.
+          remember (C, 0) as addr. generalize dependent C.
+          induction reachable'.
+          * intros C ?; subst.
+            destruct (arg_of_event e') as [| [[[[]]]] |]; try now rewrite in_fset0 in H.
+            rewrite /all_zeros_shift /uniform_shift /= in values_rename.
+            rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                    /sigma_shifting_lefttoright_addr_bid
+                    /sigma_shifting_lefttoright_option //= in values_rename.
+            destruct i0; simpl in values_rename; first discriminate.
+            rewrite in_fset1 in H. move: H => /eqP //=.
+          * intros C ?; subst.
+            eapply In_in in H0. apply ComponentMemory.load_block_load in H0 as [o1 [o2 F]].
+            assert (Memory.load (mem_of_event e') (Permission.data, cid, bid, o2) =
+                      Some (Ptr (Permission.data, C, 0, o1))).
+            Local Transparent Memory.load.
+            rewrite /Memory.load //= H F //=.
+            Local Opaque Memory.load.
+            eapply wf5; eauto.
+          (* inversion good_trace; subst; clear good_trace. *)
+          (* eapply reachable_from_args_is_shared in reachable'. *)
+          (* specialize (H _ reachable'). simpl in H. *)
+          (* unfold uniform_shift in H. *)
+          (* rewrite /left_block_id_good_for_shifting in H. by []. *)
           (* Source invariant similar to CSInvariants.CSInvariants.not_shared_diff_comp_not_shared_call *)
-      - intros t1 e wf3 t1' traces_rename e' eq_mem wf4 values_rename
-               eq_traces wf1 wf2 Cb b eq_addr; find_rcons_rcons.
-      (* - intros t1 e eq_traces wf3 wf4 t1' traces_rename e' eq_mem values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons. *)
+      - intros t1 e wf3 t1' traces_rename e' eq_mem values_rename wf4 wf5
+                wf1 wf2 eq_traces Cb b eq_addr; find_rcons_rcons.
         destruct addr' as [cid bid].
 
         replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z)))
@@ -3221,9 +3246,30 @@ Section Definability.
                right. intros b0 reach_b0.
                specialize (wf b0). eapply wf3 in wf; eauto.
                eapply wf. eapply reachable_from_previously_shared. eauto. eauto.
-          * intros C reachable'. admit.
+          * intros C reachable'.
+            clear -reachable' wf5 values_rename.
+            remember (C, 0) as addr. generalize dependent C.
+            induction reachable'.
+            -- intros C ?; subst.
+               rewrite in_fset1 in H.
+               move: H => /eqP H; inversion H; subst; clear H.
+               (* destruct (arg_of_event e') as [| [[[[]]]] |]; try now rewrite in_fset0 in H. *)
+               (* rewrite /all_zeros_shift /uniform_shift /= in values_rename. *)
+               (* rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr *)
+               (*         /sigma_shifting_lefttoright_addr_bid *)
+               (*         /sigma_shifting_lefttoright_option //= in values_rename. *)
+               (* destruct i0; simpl in values_rename; first discriminate. *)
+               (* rewrite in_fset1 in H. move: H => /eqP //=. *)
+            -- intros C ?; subst.
+               eapply In_in in H0. apply ComponentMemory.load_block_load in H0 as [o1 [o2 F]].
+               assert (Memory.load (mem_of_event e') (Permission.data, cid, bid, o2) =
+                         Some (Ptr (Permission.data, C, 0, o1))).
+               Local Transparent Memory.load.
+               rewrite /Memory.load //= H F //=.
+               Local Opaque Memory.load.
+               eapply wf5; eauto.
           * eauto.
-    Admitted.
+    Qed.
 
 
 
@@ -3264,7 +3310,7 @@ Section Definability.
           apply/dommP. rewrite mapmE.
           destruct (intf Component.main); last discriminate. simpl. eauto.
         }
-
+        Local Transparent Memory.load.
         assert (ini_mem_regs: forall reg,
                    reg <> E_R_COM ->
                    Memory.load (Source.prepare_buffers p)
@@ -3652,6 +3698,51 @@ Section Definability.
                                  move: HCmem => /dommPn.
                                  now rewrite Hdomm0.
             -- by move=> [].
+            -- move=> ptr C b o.
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_COM)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_SP)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_RA)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_AUX2)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)) eqn:eq_ptr;
+                 move: eq_ptr =>
+                          /Pointer.eqP eq_ptr; subst;
+                          [erewrite Memory.load_after_store_eq; eauto; by []
+                          | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+               destruct ptr as [[[[] cid] bid] off]; first by [].
+               destruct (cid == Component.main) eqn:eqC; move: eqC => /eqP eqC; subst.
+               admit.
+               erewrite <- Hothercomp0; eauto. admit.
           * unfold valid_procedure. now auto.
         + simpl. intros ptr [cid bid] v Hload Heq Hshift.
           injection Heq as ? ?; subst cid bid.
@@ -4316,6 +4407,66 @@ Section Definability.
                              ++ destruct t0 as [| ? [|]]; try discriminate.
                                 injection H1 as ?; subst e0.
                                 inversion H2; now destruct t0.
+                    - intros ptr C b o.
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, 1%Z)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_COM)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      admit.
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_SP)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_RA)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX2)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX1)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ONE)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; subst;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct ptr as [[[[] cid] bid] off] eqn:eptr; first by [].
+                      destruct (C' == cid) eqn:eqC; move: eqC => /eqP eqC; try subst cid.
+                      admit.
+                      rewrite -Hmem2'; eauto.
+                      setoid_rewrite <- eptr.
+                      destruct (Pointer.eq ptr (Permission.data, Component.main,
+                                                 Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; try rewrite eq_ptr;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      destruct (Pointer.eq ptr (Permission.data, cur_comp s,
+                                                 Block.local, 0%Z)) eqn:eq_ptr;
+                        move: eq_ptr =>
+                                 /Pointer.eqP eq_ptr; try rewrite eq_ptr;
+                                 [erewrite Memory.load_after_store_eq; eauto; try by []
+                                 | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                      now eapply wfmem_no_private_ptr; eauto.
                   }
                   { right. left. now apply closed_intf in Himport. }
                 }
@@ -4885,6 +5036,49 @@ Section Definability.
                                rewrite -cats1 project_non_inform_append cats1 in Hb.
                                setoid_rewrite cats1 in Hb. eauto.
                                apply CS.CS.singleton_traces_non_inform.
+                -- move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 1%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_COM)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   admit.
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_SP)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_RA)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX2)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_AUX1)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ONE)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   admit.
               * right. left. by apply: (closed_intf Himport). }
 
             split; last split; last split.
@@ -6763,7 +6957,61 @@ Section Definability.
                                                     rewrite -!cats1 project_non_inform_append in Hshared.
                                                     setoid_rewrite cats1 in Hshared.
                                                     contradiction.
-
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 1%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 10%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 9%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 8%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 7%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 6%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 4%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, C', Block.local, 5%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                  destruct (Pointer.eq ptr (Permission.data, next_comp_of_event e1,
+                                             Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  destruct (Pointer.eq ptr (Permission.data, next_comp_of_event e1,
+                                             Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                   }
 
               - intros mem1 Hmem1' Hmem1 Hmem2 arg.
@@ -8344,6 +8592,18 @@ Section Definability.
                           -- intros b Hshared.
                              rewrite -!cats1 in Hshared. simpl in Hshared.
                              inversion Hshared; now find_nil_rcons.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                   }
                 }
                 {
@@ -8677,6 +8937,18 @@ Section Definability.
                             -- intros b Hshared.
                                rewrite -!cats1 in Hshared. simpl in Hshared.
                                inversion Hshared; now find_nil_rcons.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                     }
                   }
                   {
@@ -9009,6 +9281,19 @@ Section Definability.
                             -- intros b Hshared.
                                rewrite -!cats1 in Hshared. simpl in Hshared.
                                inversion Hshared; now find_nil_rcons.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                     }
                   }
                   {
@@ -9327,6 +9612,18 @@ Section Definability.
                           -- intros b Hshared.
                              rewrite -!cats1 in Hshared. simpl in Hshared.
                              inversion Hshared; now find_nil_rcons.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                   }
                 }
                 {
@@ -9713,6 +10010,18 @@ Section Definability.
                       apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                         last by apply CS.CS.singleton_traces_non_inform.
                       exists s''. exact Hstar_prefix.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                 }
               * simpl.
                 rewrite project_non_inform_append /=.
@@ -10066,6 +10375,18 @@ Section Definability.
                         apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                           last by apply CS.CS.singleton_traces_non_inform.
                         exists s''. exact Hstar_prefix.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                   }
                 * simpl.
                   rewrite project_non_inform_append /=.
@@ -10412,6 +10733,19 @@ Section Definability.
                       apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                         last by apply CS.CS.singleton_traces_non_inform.
                       exists s''. exact Hstar_prefix.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                 }
               * simpl.
                 rewrite project_non_inform_append /=.
@@ -10751,6 +11085,18 @@ Section Definability.
                       apply star_app_inv in Hstar_prefix as [s'' [Hstar_prefix Hstar_suffix]];
                         last by apply CS.CS.singleton_traces_non_inform.
                       exists s''. exact Hstar_prefix.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset v)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                 }
               * simpl.
                 rewrite project_non_inform_append /=.
@@ -11129,6 +11475,19 @@ Section Definability.
                       * intros b Hcontra. simpl in Hcontra.
                         inversion Hcontra. now destruct t1.
                         now destruct t1.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset dst)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                 }
               }
               {
@@ -11569,6 +11928,19 @@ Section Definability.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                          ** by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset dst)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
               }
             + simpl.
               rewrite project_non_inform_append /=.
@@ -11990,6 +12362,19 @@ Section Definability.
                       * intros b Hshared.
                         rewrite -!cats1 //= in Hshared.
                         inversion Hshared; now find_nil_rcons.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset reg2)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
                 }
               }
               {
@@ -12569,6 +12954,19 @@ Section Definability.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                          ** by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset reg2)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
               }
             + simpl.
               rewrite project_non_inform_append /=.
@@ -13222,6 +13620,19 @@ Section Definability.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                       -- by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset reg1)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
               }
             + simpl.
               rewrite project_non_inform_append /=.
@@ -13914,6 +14325,19 @@ Section Definability.
                               --- by eapply component_memory_after_store_neq; eauto.
                         -- by rewrite -cats1 project_non_inform_append /= E0_right Hprefix01 cats1.
                     }
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, C0, S b0', o0)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                   destruct (Pointer.eq ptr (Permission.data, C, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
               }
             + simpl.
               rewrite project_non_inform_append /=.
@@ -14527,6 +14951,15 @@ Section Definability.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
                       -- by rewrite -cats1 project_non_inform_append /= E0_right cats1.
+                - move=> ptr cid bid off.
+                   destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, reg_offset reg0)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  admit.
+                  admit.
+                  (* by eapply wfmem_no_private_ptr; eauto. *)
               }
             + simpl.
               rewrite -cats2 project_non_inform_append /=.
