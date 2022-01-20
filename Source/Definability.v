@@ -3741,8 +3741,14 @@ Section Definability.
                           | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
                destruct ptr as [[[[] cid] bid] off]; first by [].
                destruct (cid == Component.main) eqn:eqC; move: eqC => /eqP eqC; subst.
+               destruct (bid == Block.local) eqn:eqB; move: eqB => /eqP eqB; subst.
+               destruct (off == INITFLAG_offset) eqn:eqO; move: eqO => /eqP eqO; subst.
+               destruct Hsteady0 as [G [? ?]]. by rewrite G.
+               destruct (off == LOCALBUF_offset) eqn:eqO'; move: eqO' => /eqP eqO'; subst.
+               destruct Hsteady0 as [? [G ?]]. rewrite G. move=> R; inversion R; by [].
+               rewrite -Hsamecomp0; eauto. admit.
                admit.
-               erewrite <- Hothercomp0; eauto. admit.
+               rewrite -Hothercomp0; eauto. admit.
           * unfold valid_procedure. now auto.
         + simpl. intros ptr [cid bid] v Hload Heq Hshift.
           injection Heq as ? ?; subst cid bid.
@@ -4418,7 +4424,8 @@ Section Definability.
                                  /Pointer.eqP eq_ptr; subst;
                                  [erewrite Memory.load_after_store_eq; eauto; try by []
                                  | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                      admit.
+                      destruct Hregs0 as [? G].
+                      rewrite G in Hvcom. now inversion Hvcom.
                       destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
                         move: eq_ptr =>
                                  /Pointer.eqP eq_ptr; subst;
@@ -5047,7 +5054,15 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                   admit.
+                   specialize (steady_C1 Machine.R_COM _ Logic.eq_refl) as [v1' [v2' G]].
+                   destruct G as [G1 [G2 G3]].
+                   rewrite -C_next_e1 in G1. rewrite G1 in Hvcom. inversion Hvcom; subst; clear Hvcom.
+                   destruct vcom as [| [[[[]]]] |]; try discriminate.
+                   rewrite /all_zeros_shift /uniform_shift //=
+                           /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                           /sigma_shifting_lefttoright_addr_bid
+                           /sigma_shifting_lefttoright_option in G2.
+                   destruct i0; try discriminate. simpl in G2. intros R; inversion R; by [].
                    destruct (Pointer.eq ptr (Permission.data, C', Block.local, reg_offset E_R_ARG)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -6998,7 +7013,16 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  eapply wfmem in wf_mem as [G ?]; last eauto.
+                   specialize (G Machine.R_COM _ Logic.eq_refl) as [v1' [v2' G]].
+                   destruct G as [G1 [G2 G3]].
+                   rewrite G1 in Hcom. inversion Hcom; subst; clear Hcom.
+                   destruct vcom as [| [[[[]]]] |]; try discriminate.
+                   rewrite /all_zeros_shift /uniform_shift //=
+                           /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                           /sigma_shifting_lefttoright_addr_bid
+                           /sigma_shifting_lefttoright_option in G2.
+                   destruct i0; try discriminate. simpl in G2. intros R; inversion R; by [].
                   destruct (Pointer.eq ptr (Permission.data, next_comp_of_event e1,
                                              Block.local, EXTCALL_offset)) eqn:eq_ptr;
                      move: eq_ptr =>
@@ -9287,7 +9311,7 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  unfold saved. simpl. intros R; inversion R; by [].
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -10739,7 +10763,7 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  unfold saved. simpl. intros R; inversion R; by [].
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -11481,7 +11505,23 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  unfold saved. (* unfold saved. simpl. intros R; inversion R; by []. *)
+                  destruct Hregs0 as [G1 G2].
+                  destruct (Machine.register_eqb (Ereg_to_reg src) Machine.R_COM) eqn:eqreg;
+                    move: eqreg => /Machine.registerP eq_reg.
+                  destruct src; try discriminate. rewrite G2 in Hloadmem0_vsrc. by inversion Hloadmem0_vsrc.
+                  specialize (G1 _ _ eq_reg Logic.eq_refl).
+                  destruct src; try by []; rewrite G1 in Hloadmem0_vsrc; by inversion Hloadmem0_vsrc.
+                  (* eapply wfmem in wf_mem as [G ?]; last eauto. *)
+                  (* specialize (G  _ Logic.eq_refl) as [v1' [v2' G]]. *)
+                  (* destruct G as [G1 [G2 G3]]. *)
+                  (* rewrite G1 in Hvcom. inversion Hcom; subst; clear Hcom. *)
+                  (* destruct vcom as [| [[[[]]]] |]; try discriminate. *)
+                  (* rewrite /all_zeros_shift /uniform_shift //= *)
+                  (*         /rename_addr_option /sigma_shifting_wrap_bid_in_addr *)
+                  (*         /sigma_shifting_lefttoright_addr_bid *)
+                  (*         /sigma_shifting_lefttoright_option in G2. *)
+                  (*  destruct i0; try discriminate. simpl in G2. intros R; inversion R; by []. *)
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -11934,7 +11974,25 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  unfold saved. (* unfold saved. simpl. intros R; inversion R; by []. *)
+                  (* destruct Hregs0 as [G1 G2]. *)
+                  (* destruct (Machine.register_eqb (Ereg_to_reg src) Machine.R_COM) eqn:eqreg; *)
+                  (*   move: eqreg => /Machine.registerP eq_reg. *)
+                  (* destruct src; try discriminate. rewrite G2 in Hloadmem0_vsrc. by inversion Hloadmem0_vsrc. *)
+                  (* specialize (G1 _ _ eq_reg Logic.eq_refl). *)
+                  (* destruct src; try by []; rewrite G1 in Hloadmem0_vsrc; by inversion Hloadmem0_vsrc. *)
+                  (* eapply wfmem in wf_mem as [G ?]; last eauto. *)
+                  eapply wfmem in wf_mem as [G ?]; last eauto.
+                  specialize (G (Ereg_to_reg src) _ Logic.eq_refl) as [v1' [v2' G]].
+                  destruct G as [G1 [G2 G3]]. unfold C in *.
+                  rewrite reg_to_Ereg_to_reg in G1.
+                  rewrite -Hcomp1 G1 in Hloadmem0_vsrc. inversion Hloadmem0_vsrc; subst.
+                  destruct vsrc as [| [[[[]]]] |]; try discriminate.
+                  rewrite /all_zeros_shift /uniform_shift //=
+                          /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid
+                          /sigma_shifting_lefttoright_option in G2.
+                   destruct i0; try discriminate. simpl in G2. intros R; inversion R; by [].
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -12368,7 +12426,30 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  unfold saved. (* unfold saved. simpl. intros R; inversion R; by []. *)
+                  destruct Hregs0 as [G1 G2].
+                  destruct (Machine.register_eqb (Ereg_to_reg reg0) Machine.R_COM) eqn:eqreg;
+                    move: eqreg => /Machine.registerP eq_reg.
+                  destruct reg0; try discriminate. rewrite G2 in Hreg0mem0.
+                  destruct (Machine.register_eqb (Ereg_to_reg reg1) Machine.R_COM) eqn:eqreg';
+                    move: eqreg' => /Machine.registerP eq_reg'.
+                  destruct reg1; try discriminate. rewrite G2 in Hreg1mem0.
+                  inversion Hreg0mem0; inversion Hreg1mem0; subst. by destruct op.
+                  specialize (G1 _ _ eq_reg' Logic.eq_refl). rewrite reg_to_Ereg_to_reg in G1.
+                  rewrite G1 in Hreg1mem0. by inversion Hreg0mem0; inversion Hreg1mem0; destruct op.
+                  specialize (G1 _ _ eq_reg Logic.eq_refl). rewrite reg_to_Ereg_to_reg in G1.
+                  rewrite G1 in Hreg0mem0. by inversion Hreg0mem0; destruct op.
+                  (* eapply wfmem in wf_mem as [G ?]; last eauto. *)
+                  (* specialize (G (Ereg_to_reg src) _ Logic.eq_refl) as [v1' [v2' G]]. *)
+                  (* destruct G as [G1 [G2 G3]]. unfold C in *. *)
+                  (* rewrite reg_to_Ereg_to_reg in G1. *)
+                  (* rewrite -Hcomp1 G1 in Hloadmem0_vsrc. inversion Hloadmem0_vsrc; subst. *)
+                  (* destruct vsrc as [| [[[[]]]] |]; try discriminate. *)
+                  (* rewrite /all_zeros_shift /uniform_shift //= *)
+                  (*         /rename_addr_option /sigma_shifting_wrap_bid_in_addr *)
+                  (*         /sigma_shifting_lefttoright_addr_bid *)
+                  (*         /sigma_shifting_lefttoright_option in G2. *)
+                  (*  destruct i0; try discriminate. simpl in G2. intros R; inversion R; by []. *)
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -12960,7 +13041,34 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  eapply wfmem in wf_mem as [G ?]; last eauto.
+                  assert (G' := G).
+                  specialize (G (Ereg_to_reg reg0) _ Logic.eq_refl) as [v1' [v2' G]].
+                  destruct G as [G1 [G2 G3]]. unfold C in *.
+                  specialize (G' (Ereg_to_reg reg1) _ Logic.eq_refl) as [v1'' [v2'' G']].
+                  destruct G' as [G1' [G2' G3']]. unfold C in *.
+                  rewrite reg_to_Ereg_to_reg in G1.
+                  rewrite reg_to_Ereg_to_reg in G1'.
+                  rewrite -Hcomp1 G1 in Hreg0mem0. inversion Hreg0mem0; subst.
+                  rewrite -Hcomp1 G1' in Hreg1mem0. inversion Hreg1mem0; subst.
+                  destruct v0 as [| [[[[]]]] |]; try discriminate;
+                  destruct v1 as [| [[[[]]]] |]; try discriminate;
+                  (* destruct vsrc as [| [[[[]]]] |]; try discriminate. *)
+                  rewrite /all_zeros_shift /uniform_shift //=
+                          /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid
+                          /sigma_shifting_lefttoright_option in G2;
+                  rewrite /all_zeros_shift /uniform_shift //=
+                          /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid
+                          /sigma_shifting_lefttoright_option in G2';
+                    unfold saved; try (by destruct op; intros R; inversion R; by []).
+                  destruct i0; try discriminate. simpl in G2. destruct op; intros R; inversion R; by [].
+                  destruct op; intros R; inversion R. move: H1; by case: ifP.
+                  move: H1; by case: ifP.
+                  destruct i0; try discriminate. simpl in G2. destruct op; intros R; inversion R; by [].
+                  destruct op; intros R; inversion R. move: H1; by case: ifP.
+                  move: H1; by case: ifP.
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -13626,7 +13734,10 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  erewrite Memory.load_after_store_neq in Hptr0mem; eauto.
+                  intros R. inversion R; subst.
+                  by eapply wfmem_no_private_ptr in Hptr0mem; eauto.
+                  unfold Block.local; congruence.
                    destruct (Pointer.eq ptr (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -14331,7 +14442,13 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
+                  destruct v1 as [| [[[[]]]] |]; try by [].
+                  intros R; inversion R; subst; clear R.
+                  rewrite /all_zeros_shift /uniform_shift in Hshiftv1. simpl in Hshiftv1.
+                  rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                          /sigma_shifting_lefttoright_addr_bid /sigma_shifting_lefttoright_option
+                    in Hshiftv1.
+                  destruct bid; try discriminate.
                    destruct (Pointer.eq ptr (Permission.data, C, Block.local, 0%Z)) eqn:eq_ptr;
                      move: eq_ptr =>
                               /Pointer.eqP eq_ptr; subst;
@@ -14957,9 +15074,28 @@ Section Definability.
                               /Pointer.eqP eq_ptr; subst;
                               [erewrite Memory.load_after_store_eq; eauto; try by []
                               | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
-                  admit.
-                  admit.
-                  (* by eapply wfmem_no_private_ptr; eauto. *)
+                  unfold saved. intros R; inversion R; by [].
+                  destruct ptr as [[[[]]]]; try by [].
+                  destruct (i == cur_comp s) eqn:eC; move: eC => /eqP eC; subst.
+                  destruct (i0 == S bptr) eqn:eB; move: eB => /eqP eB; subst.
+                  erewrite Memory.load_after_alloc_eq; eauto. simpl.
+                  case: ifP => ?. case: ifP => R; inversion R; by [].
+                  by [].
+                  erewrite Memory.load_after_alloc; eauto. simpl.
+                  unfold C in *.
+                  destruct (Pointer.eq (Permission.data, cur_comp s, i0, o)
+                                       (Permission.data, cur_comp s, Block.local, 0%Z)) eqn:eq_ptr;
+                     move: eq_ptr =>
+                              /Pointer.eqP eq_ptr; try inversion eq_ptr; subst;
+                              [erewrite Memory.load_after_store_eq; eauto; try by []
+                              | erewrite Memory.load_after_store_neq; eauto; clear eq_ptr].
+                  by eapply wfmem_no_private_ptr; eauto.
+                  simpl. congruence.
+                  erewrite Memory.load_after_alloc; eauto. simpl.
+                  unfold C in *.
+                  erewrite Memory.load_after_store_neq; eauto.
+                  eapply wfmem_no_private_ptr; eauto.
+                  by congruence. simpl; by congruence.
               }
             + simpl.
               rewrite -cats2 project_non_inform_append /=.
