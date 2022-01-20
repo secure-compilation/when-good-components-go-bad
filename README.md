@@ -73,7 +73,7 @@ programs as axioms because they are not really the focus of
 our novel proof techniques.
 
 Proving these axioms is typically laborious and we do not expect
-it to be particularly insightful for our chosen pair of languages.
+the proof to be particularly insightful for our chosen pair of languages.
 
 In fact, one of the key goals of our proof technique for the main 
 secure compilation theorem is to demonstrate that
