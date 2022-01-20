@@ -5986,7 +5986,18 @@ Section Definability.
                           unfold Memory.load in Hload. simpl in Hload.
                           destruct (mem1 C0) eqn:mem1_C0; last discriminate. eauto.
                           Local Opaque Memory.load.
-                    -- admit.
+                    -- intros ptr ? ? ?. simpl.
+                       destruct (Pointer.eq ptr
+                                             (Permission.data, C, Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                         move: eq_ptr => /Pointer.eqP eq_ptr; subst;
+                                        [erewrite Memory.load_after_store_eq; eauto; by [] |
+                                          erewrite Memory.load_after_store_neq; eauto].
+                       destruct (Pointer.eq ptr
+                                            (Permission.data, C, Block.local, 0%Z)) eqn:eq_ptr';
+                         move: eq_ptr' => /Pointer.eqP eq_ptr'; subst;
+                                        [erewrite Memory.load_after_store_eq; eauto; by [] |
+                                          erewrite Memory.load_after_store_neq; eauto].
+                       eapply wfmem_no_private_ptr; eauto.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
                        } clear Hshared'.
@@ -7913,7 +7924,18 @@ Section Definability.
                           unfold Memory.load in Hload. simpl in Hload.
                           destruct (mem1 C0) eqn:mem1_C0; last discriminate. eauto.
                           Local Opaque Memory.load.
-                    -- admit.
+                    -- intros ptr ? ? ?. simpl.
+                       destruct (Pointer.eq ptr
+                                             (Permission.data, C, Block.local, EXTCALL_offset)) eqn:eq_ptr;
+                         move: eq_ptr => /Pointer.eqP eq_ptr; subst;
+                                        [erewrite Memory.load_after_store_eq; eauto; by [] |
+                                          erewrite Memory.load_after_store_neq; eauto].
+                       destruct (Pointer.eq ptr
+                                            (Permission.data, C, Block.local, 0%Z)) eqn:eq_ptr';
+                         move: eq_ptr' => /Pointer.eqP eq_ptr'; subst;
+                                        [erewrite Memory.load_after_store_eq; eauto; by [] |
+                                          erewrite Memory.load_after_store_neq; eauto].
+                       eapply wfmem_no_private_ptr; eauto.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
                        } clear Hshared'.
