@@ -3112,7 +3112,7 @@ Section Definability.
               ~ addr_shared_so_far (C, b) (rcons t1 e))
           (* this comes from [CS.CS.comes_from_initial_state_mem_domm] *)
           (wf4: forall C b o v,
-              Memory.load (mem_of_event e) (Permission.data, C, b, o) = Some v ->
+              Memory.load (mem_of_event e') (Permission.data, C, b, o) = Some v ->
               component_buffer C)
           (good_trace:
             good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
@@ -3168,7 +3168,7 @@ Section Definability.
       generalize dependent e'. generalize dependent t1'.
       generalize dependent e. generalize dependent t1.
       induction shared as [addr t0 e0 reachable | addr addr' t0 e0 shared IH reachable].
-      - intros t1 e wf3 wf4 t1' traces_rename e' eq_mem values_rename
+      - intros t1 e wf3 t1' traces_rename e' eq_mem wf4 values_rename
                eq_traces wf1 wf2 Cb b eq_addr; find_rcons_rcons.
         constructor.
         eapply addr_shared_so_far_inv_2' with (mem' := mem_of_event e'); eauto.
@@ -3181,7 +3181,6 @@ Section Definability.
             right. intros b0 reach_b0.
             specialize (wf b0). eapply wf3 in wf; eauto.
             eapply wf. constructor. eauto.
-        + admit.
         + intros C reachable'.
           inversion good_trace; subst; clear good_trace.
           eapply reachable_from_args_is_shared in reachable'.
@@ -3189,7 +3188,7 @@ Section Definability.
           unfold uniform_shift in H.
           rewrite /left_block_id_good_for_shifting in H. by [].
           (* Source invariant similar to CSInvariants.CSInvariants.not_shared_diff_comp_not_shared_call *)
-      - intros t1 e wf3 wf4 t1' traces_rename e' eq_mem values_rename
+      - intros t1 e wf3 t1' traces_rename e' eq_mem wf4 values_rename
                eq_traces wf1 wf2 Cb b eq_addr; find_rcons_rcons.
       (* - intros t1 e eq_traces wf3 wf4 t1' traces_rename e' eq_mem values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons. *)
         destruct addr' as [cid bid].
@@ -3222,9 +3221,7 @@ Section Definability.
                right. intros b0 reach_b0.
                specialize (wf b0). eapply wf3 in wf; eauto.
                eapply wf. eapply reachable_from_previously_shared. eauto. eauto.
-          * admit.
-          * intros C reachable'.
-            admit.
+          * intros C reachable'. admit.
           * eauto.
     Admitted.
 
@@ -5769,31 +5766,17 @@ Section Definability.
                     -- intros C0 b0 o v Hload. unfold component_buffer.
                        (* Use p_interm and p_gens_t. *)
                        (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
-                       destruct p_gens_t_inform as [x star].
-                       rewrite Et in star.
-                       eapply star_app_inv in star as [x0 [star1 _]];
-                         last eapply CS.CS.singleton_traces_inform.
 
-                       rewrite <- (CS.CS.comes_from_initial_state_mem_domm x0 intf); eauto.
-                       Local Transparent Memory.load.
-                       unfold Memory.load in Hload. simpl in Hload.
-                       destruct (mem' C0) eqn:mem'_C0; last discriminate.
-                       erewrite <- CS.CS.starR_memory_of_event_inform.
-                       inversion wf_int_pref' as [U1 _].
-                       rewrite !cats1 in U1.
-                       inversion U1.
-                       --- now destruct prefix0.
-                       --- now destruct prefix0 as [| ? []].
-                       --- find_rcons_rcons. find_rcons_rcons.
-                           inversion H8; subst; clear H8. simpl in *.
-                           apply /dommP. eexists; eauto.
-                       --- eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
-                       --- unfold CS.CS.comes_from_initial_state.
-                           eapply Machine.Intermediate.cprog_main_existence in closed_p_interm as [? [? ?]].
-                           eexists; eexists; eexists; split. eauto.
-                           split; eauto.
-                           split; eauto.
-                           split; eauto. reflexivity.
+                       replace intf with (Source.prog_interface p) by reflexivity.
+
+                       pose proof (star_trans Star0 Star1 Logic.eq_refl) as G.
+                       erewrite <- (CS.comes_from_initial_state_mem_domm _ _ _ G); simpl.
+                       ++ rewrite (Memory.domm_store _ _ _ _ Hmem1).
+                          apply /dommP.
+                          Local Transparent Memory.load.
+                          unfold Memory.load in Hload. simpl in Hload.
+                          destruct (mem1 C0) eqn:mem1_C0; last discriminate. eauto.
+                          Local Opaque Memory.load.
                     -- admit.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
@@ -7647,31 +7630,17 @@ Section Definability.
                     -- intros C0 b0 o v Hload. unfold component_buffer.
                        (* Use p_interm and p_gens_t. *)
                        (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
-                       destruct p_gens_t_inform as [x star].
-                       rewrite Et in star.
-                       eapply star_app_inv in star as [x0 [star1 _]];
-                         last eapply CS.CS.singleton_traces_inform.
 
-                       rewrite <- (CS.CS.comes_from_initial_state_mem_domm x0 intf); eauto.
-                       Local Transparent Memory.load.
-                       unfold Memory.load in Hload. simpl in Hload.
-                       destruct (mem' C0) eqn:mem'_C0; last discriminate.
-                       erewrite <- CS.CS.starR_memory_of_event_inform.
-                       inversion wf_int_pref' as [U1 _].
-                       rewrite !cats1 in U1.
-                       inversion U1.
-                       --- now destruct prefix0.
-                       --- now destruct prefix0 as [| ? []].
-                       --- find_rcons_rcons. find_rcons_rcons.
-                           inversion H1; subst; clear H1. simpl in *.
-                           apply /dommP. eexists; eauto.
-                       --- eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
-                       --- unfold CS.CS.comes_from_initial_state.
-                           eapply Machine.Intermediate.cprog_main_existence in closed_p_interm as [? [? ?]].
-                           eexists; eexists; eexists; split. eauto.
-                           split; eauto.
-                           split; eauto.
-                           split; eauto. reflexivity.
+                       replace intf with (Source.prog_interface p) by reflexivity.
+
+                       pose proof (star_trans Star0 Star1 Logic.eq_refl) as G.
+                       erewrite <- (CS.comes_from_initial_state_mem_domm _ _ _ G); simpl.
+                       ++ rewrite (Memory.domm_store _ _ _ _ Hmem1).
+                          apply /dommP.
+                          Local Transparent Memory.load.
+                          unfold Memory.load in Hload. simpl in Hload.
+                          destruct (mem1 C0) eqn:mem1_C0; last discriminate. eauto.
+                          Local Opaque Memory.load.
                     -- admit.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
