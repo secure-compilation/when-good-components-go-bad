@@ -2994,674 +2994,241 @@ Section Definability.
           eapply wf. eapply reachable_from_previously_shared. eauto. eauto.
     Qed.
 
-    (* Lemma addr_shared_so_far_inv_1 *)
-    (*         (ret_val : value) *)
-    (*         (mem' : Memory.tt) *)
-    (*         (regs : Machine.Intermediate.Register.t) *)
-    (*         (C C' : Component.id) *)
-    (*         (C_C' : C <> C') *)
-    (*         (prefix0 : seq event_inform) *)
+    Lemma addr_shared_so_far_inv_2'
+          (v vcom: value)
+          (mem mem': Memory.t)
+          (C : Component.id)
+          (renames: shift_value_option (uniform_shift 1) all_zeros_shift vcom = Some v)
+          (* (load_component_buffer: forall C b o v, *)
+          (*     Memory.load mem (Permission.data, C, b, o) = Some v -> *)
+          (*     component_buffer C) *)
+          (* Currently, [wf] is too strong: this only holds for those components that
+           * actually are initialized, i.e. components where we can load from *)
+          (x: forall C,
+              component_buffer C ->
+              well_formed_memory_snapshot_steadystate_shift mem mem' C
+              \/ (forall b, ~ Reachability.Reachable mem (addr_of_value v) (C, b)))
+          (y: forall C b o v,
+              Memory.load mem' (Permission.data, C, b, o) = Some v ->
+              component_buffer C)
+          (z: forall C, ~ Reachability.Reachable mem' (addr_of_value vcom) (C, 0)):
+          (* (z: forall C, ~ Reachability.Reachable mem' (addr_of_value vcom) (C, 0)): *)
+          (* (wf: forall C b o v, *)
+          (*     Memory.load mem (Permission.data, C, b, o) = Some v -> *)
+          (*     well_formed_memory_snapshot_steadystate mem mem' C) : *)
+      forall Cb b,
+        Reachability.Reachable mem' (addr_of_value vcom) (Cb, S b) ->
+        Reachability.Reachable mem (addr_of_value v) (Cb, b).
+    Proof.
+      (*well_formed_memory_snapshot_steadystate*)
+      move=> Cb b reachable.
+      generalize dependent v.
+      remember (addr_of_value vcom) as init_addr. generalize dependent vcom.
+      remember (Cb, S b) as addr. generalize dependent b. generalize dependent Cb.
+      induction reachable as [addr in_addr | C' b' addr compMem reachable IH load_compMem in_compMem].
+      - move=> Cb b Heqaddr vcom Heqinit v renames x; subst.
+        destruct vcom as [| [[[[|] cid] bid] o] |]; try by inversion in_addr.
+        rewrite //= in_fset1 in in_addr.
+        move: in_addr => /eqP in_addr; inversion in_addr; subst; clear in_addr.
+        destruct v as [| [[[[|] cid'] bid'] o'] |]; try by inversion renames.
+        rewrite /all_zeros_shift /uniform_shift //=
+                /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                /sigma_shifting_lefttoright_addr_bid
+                /sigma_shifting_lefttoright_option //= in renames.
+        inversion renames; subst; clear renames.
+        rewrite ssrnat.subn1 ssrnat.addn0 //=.
+        constructor. by rewrite in_fset1.
+      - move=> Cb b Heqaddr vcom Heqinit v renames x; subst.
+        assert (exists o o',
+                   Memory.load mem' (Permission.data, C', b', o') =
+                     Some (Ptr (Permission.data, Cb, S b, o)))
+               as [o [o' load_mem']].
+        { rewrite /Memory.load //=
+                  load_compMem.
+          apply In_in in in_compMem.
+          apply ComponentMemory.load_block_load in in_compMem as [ptro [i in_compMem]].
+          exists ptro, i. by rewrite in_compMem. }
+        specialize (y _ _ _ _ load_mem').
+        assert (x' := x).
+        specialize (x C') as [wf | wf]; first exact y.
+        + rewrite /well_formed_memory_snapshot_steadystate_shift in wf.
+          destruct b' as [| b'].
+          * (* Find a contradiction *)
+            now eapply z in reachable.
+          * assert (S_b_not_local: S b' <> Block.local) by by [].
+            specialize (wf (S b') S_b_not_local) as [addr [Hshift [H1 H2]]].
+            rewrite shift_S_Some in Hshift; inversion Hshift; subst; clear Hshift.
+            specialize (H2 o'); rewrite /Memory.load //= in H2.
+            specialize (H1 o'); rewrite /Memory.load //= in H1.
+            rewrite load_compMem in H2. rewrite load_compMem in H1.
+            rewrite /Memory.load //= load_compMem in load_mem'.
+            specialize (H1 _ load_mem') as [v' [H3 H4]].
+            destruct (mem C') as [compMem'|] eqn:mem_C'; try discriminate.
+            destruct v' as [| [[[[|] cid'] bid'] off'] |]; try by inversion H3.
+            rewrite /all_zeros_shift /uniform_shift //=
+                    /rename_addr_option /sigma_shifting_wrap_bid_in_addr
+                    /sigma_shifting_lefttoright_addr_bid
+                    /sigma_shifting_lefttoright_option //= in H4.
+            (* destruct bid'; rewrite //= in H4. *)
+            inversion H4; subst; clear H4.
+            (* rewrite ssrnat.subn1 ssrnat.addn0 //=. *)
 
-    (*         (eprev ecur : event_inform) *)
-    (*         (ecur_noninf : event) *)
-    (*         (ecur_proj : project_non_inform [:: ecur] = [:: ecur_noninf]) *)
-    (*         (wf_int_pref' : well_formed_intermediate_prefix *)
-    (*                           ((prefix0 ++ [:: eprev]) ++ [:: ecur])) *)
-    (*         (n: value) *)
-    (*         (C_next_eprev: C = next_comp_of_event eprev) *)
-    (*         (mem0 mem mem1 mem1' : Memory.tt) *)
-    (*         (vcom : value) *)
-    (*         (Hmem1: forall b o, Memory.load mem0 (Permission.data, C, S b, o) = *)
-    (*                          Memory.load mem1 (Permission.data, C, S b, o)) *)
-    (*         (renames: shift_value_option (uniform_shift 1) all_zeros_shift ret_val = Some vcom) *)
-    (*         (* (Hcom : Memory.load mem0 (Permission.data, C, Block.local, 5%Z) = Some vcom) *) *)
-    (*         (* (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1) *) *)
-    (*         (* (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1') *) *)
-    (*         (Cb : Component.id) *)
-    (*         (b : Block.id) *)
-    (*         (H1 : Reachability.Reachable mem' (addr_of_value ret_val) (Cb, b)) *)
-    (*         (* NOTE: should not need that *) *)
-    (*         (* (Hshared : addr_shared_so_far (Cb, b) *) *)
-    (*         (*                               (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf)) *) *)
-    (*         (wf_mem: well_formed_memory (prefix0 ++ [:: eprev]) mem0) *)
-    (*         (Hmem : Memory.store mem0 (Permission.data, C, Block.local, 0%Z) n = *)
-    (*                   Some mem): *)
-    (*   C = cur_comp_of_event ecur_noninf -> *)
-    (*   C' = next_comp_of_event ecur -> *)
-    (*   mem' = mem_of_event_inform ecur -> *)
-    (*   ret_val = arg_of_event ecur_noninf -> *)
-    (*   component_buffer C -> *)
-    (*   component_buffer C' -> *)
-    (*   Reachability.Reachable mem1 (addr_of_value vcom) (Cb, S b). *)
-    (*   Proof. *)
-    (*     destruct wf_int_pref' as [wf_int_pref' _]. *)
-    (*     inversion wf_int_pref'. *)
-    (*     - now destruct prefix0. *)
-    (*     - now destruct prefix0 as [|? []]. *)
-    (*     - rewrite cats1 in H; apply rcons_inj in H; inversion H; subst e'; clear H. *)
-    (*       rewrite cats1 in H4; apply rcons_inj in H4; inversion H4; subst prefix0 e; clear H4. *)
-    (*       intros ? ? ? ? C_b C'_b; simpl in *; subst C C' mem' ret_val. *)
-    (*       inversion H2; subst; simpl in *; inversion ecur_proj; subst; clear ecur_proj. *)
-    (*       { *)
-    (*         eapply wfmem in wf_mem; last by reflexivity. *)
-    (*         destruct wf_mem as [Hreg [wf_mem wf_mem']]. *)
-    (*         (* specialize (Hreg Machine.R_COM _ Logic.eq_refl) as [v [v' [Hload [Hshift Hget]]]]. *) *)
-    (*         (* subst C. *) *)
-    (*         (* clear H2 (* Hshared *) H3 H4 H0. *) *)
-    (*         (* (* clear -closed_intf has_main domm_buffers wf_buffers t T t_procs domm_t_procs wf_events *) *) *)
-    (*         (* (*                    p_interm p_gens_t p init initial_memory wf_p_interm *) *) *)
-    (*         (* (*                    Hload Hshift Hget Hcom H1 wf_mem wf_mem' Hmem Hmem1 C_b C'_b. *) *) *)
-    (*         (* (* rewrite Hcom in Hload; inversion Hload; subst; clear Hload. *) *) *)
-    (*         (* destruct (Machine.Intermediate.Register.get Machine.R_COM *) *)
-    (*         (*                                             (register_file_of_event_inform eprev)) *) *)
-    (*         (*   as [| [[[[|] C'0] b'] o']|]; simpl in H1; try by apply Reachability.Reachable_fset0 in H1; *) *)
-    (*         (*   subst. *) *)
-    (*         (* destruct v as [| [[[[|] C''] b''] o'']|]; subst; try by simpl in Hshift. *) *)
-    (*         (* rewrite /all_zeros_shift /uniform_shift //= in Hshift; *) *)
-    (*         (*   rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr *) *)
-    (*         (*           /sigma_shifting_lefttoright_addr_bid *) *)
-    (*         (*           /sigma_shifting_lefttoright_option //= in Hshift. *) *)
-    (*         (* rewrite /all_zeros_shift /uniform_shift //= in renames. *) *)
-    (*         (* rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr *) *)
-    (*         (*         /sigma_shifting_lefttoright_addr_bid *) *)
-    (*         (*         /sigma_shifting_lefttoright_option //= in Hshift. *) *)
-    (*         (* rewrite /shift_value_option *) *)
-    (*         (* destruct b''; simpl in Hshift; inversion Hshift; subst. *) *)
-    (*         (* rewrite ssrnat.subn1 ssrnat.addn0 //= in H1. simpl in *. *) *)
-    (*         (* clear Hshift. *) *)
-    (*         remember (addr_of_value vcom) as addr. *)
-    (*         (* remember (C'0, b'') as addr. setoid_rewrite <- Heqaddr in H1. *) *)
-    (*         generalize dependent vcom. *)
-    (*         (* generalize dependent C'0. generalize dependent b''. *) *)
-    (*         remember (Cb, b) as addr'. *)
-    (*         generalize dependent b. generalize dependent Cb. *)
-    (*         (* remember (fset1 addr) as addr_set. *) *)
-    (*         induction H1; intros; subst; eauto. *)
-    (*         + simpl in H1. *)
-    (*           rewrite in_fset1 in H; move: H => /eqP [] ? ?; subst. *)
-    (*           constructor; by rewrite in_fset1. *)
-    (*         + apply In_in in H0. *)
-    (*           apply ComponentMemory.load_block_load in H0 as [offset0 [offset1 ?]]. *)
-    (*           (* assert (G: exists off, Memory.load (mem_of_event_inform eprev) (Permission.data, cid, S bid, off) = *) *)
-    (*           (*                     Some (Ptr (Permission.data, Cb, S b, offset0))). *) *)
-    (*           (* { unfold Memory.load. simpl. rewrite H. *) *)
-    (*           (* } *) *)
-    (*           assert (G: exists off, Memory.load mem1 (Permission.data, cid, S bid, off) *)
-    (*                             = Some (Ptr (Permission.data, Cb, S b, offset0))). *)
-    (*           { exists offset1. *)
-    (*             rewrite (Memory.load_after_store _ _ _ _ _ Hmem1). simpl. *)
-    (*             rewrite -andbA andbC //=. *)
-    (*             rewrite (Memory.load_after_store _ _ _ _ _ Hmem). simpl. *)
-    (*             rewrite -andbA andbC //=. *)
-    (*             (* clear -H H0 wf_mem wf_mem'. *) *)
-    (*             (* This seems to be doable. Use [H], [H0], [wf_mem], and/or [wf_mem'] *) *)
-    (*             (* We should be able to discard the unitialized case by arguing the address *) *)
-    (*             (* [(cid, bid)] was shared, and so its component cannot be uninitialized. *) *)
-    (*             assert (Hcid: postcondition_steady_state eprev mem0 cid). *)
-    (*             {destruct (cid == next_comp_of_event eprev) eqn:Heq; *)
-    (*                 move: Heq => /eqP /= Heq; subst. *)
-    (*               - eapply wf_mem; eauto. *)
-    (*               - assert (postcondition_steady_state eprev mem0 cid \/ postcondition_uninitialized prefix eprev mem0 cid). *)
-    (*                 { eapply wf_mem'; eauto. *)
-    (*                   unfold component_buffer. *)
-    (*                   admit. (* easy *) } *)
-    (*                 (* load_postcondition_steady_state *) *)
-    (*                 destruct H2 as [good | bad]; first exact good. *)
-    (*                 destruct bad as [bad1 [bad2 [bad3 bad4]]]. *)
-    (*                 exfalso. eapply (bad4 bid). *)
-    (*                 (* CSInvariants.CSInvariants.addr_shared_so_far_domm_partition *) *)
-    (*                 (* assert (invariant: *) *)
-    (*                 (*          Star init t state -> *) *)
-    (*                 (*          Reachability.Reachable (s_mem state) (fset1 (cid, bid)) -> *) *)
-    (*                 (*          addr_shared_so_far (cid, bid) t *) *)
-    (*                 (*        ) *) *)
-    (*                 (* well_formed_memory_snapshot_uninitialized *) *)
-    (*                 (* use [addr_shared_so_far_load_addr_shared_so_far']? *) *)
-    (*                 admit. *)
-    (*             } *)
-    (*             unfold postcondition_steady_state in Hcid. *)
-    (*             destruct Hcid as [_ [_ Hcid]]. *)
-    (*             unfold postcondition_event_snapshot_steadystate *)
-    (*               in Hcid. *)
-    (*             destruct Hcid as [Hshift' Hblock]. *)
-    (*             unfold well_formed_memory_snapshot_steadystate_shift in Hshift'. *)
-    (*             specialize (Hshift' (S bid)). *)
-    (*             destruct Hshift' as [addr [? [? ?]]]. *)
-    (*             unfold Block.local; congruence. *)
-    (*             rewrite shift_S_Some in H2. inversion H2; subst; clear H2. *)
-    (*             specialize (H4 offset1). *)
-    (*             unfold Memory.load in H4. simpl in H4. *)
-    (*             specialize (H3 offset1). *)
-    (*             unfold Memory.load in H3. simpl in H3. *)
-    (*             rewrite H in H4. specialize (H4 _ H0) as [v [? ?]]. *)
-    (*             (* setoid_rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1). *) *)
-    (*             (* setoid_rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem). *) *)
-    (*             unfold Memory.load => //=. (* eexists. *) setoid_rewrite H2. *)
-    (*             destruct v as [| [[[[|]] []]] |]; try discriminate. simpl in *. *)
-    (*             inversion H4; subst; clear H4. *)
-    (*             unfold all_zeros_shift, uniform_shift. *)
-    (*             rewrite ssrnat.subn1 ssrnat.addn0. reflexivity. *)
-    (*           } *)
-    (*           destruct G as [off Hload]. *)
-    (*           rewrite /Memory.load in Hload. *)
-    (*           simpl in Hload. *)
-    (*           destruct (mem1 cid) eqn:mem1_cid; try discriminate. *)
-    (*           eapply Reachability.Reachable_step with (cid := cid) (bid := S bid). *)
-    (*           eapply IHReachable; eauto. (* constructor. *) eauto. *)
-    (*           apply In_in. apply ComponentMemory.load_block_load. *)
-    (*           eexists; eexists; eauto. *)
-    (*       } *)
-    (*       { eapply wfmem in wf_mem; last by reflexivity. *)
-    (*         destruct wf_mem as [Hreg [wf_mem wf_mem']]. *)
-    (*         specialize (Hreg Machine.R_COM _ Logic.eq_refl) as [v [v' [Hload [Hshift Hget]]]]. *)
-    (*         subst C. *)
-    (*         clear H2 (* Hshared *) H3 H0. *)
-    (*         (* clear -closed_intf has_main domm_buffers wf_buffers t T t_procs domm_t_procs wf_events *) *)
-    (*         (*                    p_interm p_gens_t p init initial_memory wf_p_interm *) *)
-    (*         (*                    Hload Hshift Hget Hcom H1 wf_mem wf_mem' Hmem Hmem1 C_b C'_b. *) *)
-    (*         rewrite Hcom in Hload; inversion Hload; subst; clear Hload. *)
-    (*         destruct (Machine.Intermediate.Register.get Machine.R_COM *)
-    (*                                                     (register_file_of_event_inform eprev)) *)
-    (*           as [| [[[[|] C'0] b'] o']|]; simpl in H1; try by apply Reachability.Reachable_fset0 in H1; *)
-    (*           subst. *)
-    (*         destruct v as [| [[[[|] C''] b''] o'']|]; try by simpl in Hshift. *)
-    (*         rewrite /all_zeros_shift /uniform_shift //= in Hshift; *)
-    (*           rewrite /rename_addr_option /sigma_shifting_wrap_bid_in_addr *)
-    (*                   /sigma_shifting_lefttoright_addr_bid *)
-    (*                   /sigma_shifting_lefttoright_option //= in Hshift. *)
-    (*         destruct b''; simpl in Hshift; inversion Hshift; subst. *)
-    (*         rewrite ssrnat.subn1 ssrnat.addn0 //= in H1. simpl in *. *)
-    (*         (* assert (HCb: postcondition_steady_state eprev mem0 C). admit. *) *)
-    (*         clear Hshift. *)
-    (*         (* clear -closed_intf has_main domm_buffers wf_buffers t T t_procs domm_t_procs wf_events *) *)
-    (*         (*                    p_interm p_gens_t p init initial_memory wf_p_interm *) *)
-    (*         (*                    H1 wf_mem wf_mem' Hmem Hmem1 C_b C'_b. *) *)
-    (*         remember (C'0, b'') as addr. setoid_rewrite <- Heqaddr in H1. *)
-    (*         generalize dependent C'0. generalize dependent b''. *)
-    (*         remember (Cb, b) as addr'. *)
-    (*         generalize dependent b. generalize dependent Cb. *)
-    (*         induction H1; intros; subst; eauto. *)
-    (*         + rewrite in_fset1 in H; move: H => /eqP [] ? ?; subst. *)
-    (*           constructor; by rewrite in_fset1. *)
-    (*         + apply In_in in H0. *)
-    (*           apply ComponentMemory.load_block_load in H0 as [offset0 [offset1 ?]]. *)
-    (*           (* assert (G: exists off, Memory.load (mem_of_event_inform eprev) (Permission.data, cid, S bid, off) = *) *)
-    (*           (*                     Some (Ptr (Permission.data, Cb, S b, offset0))). *) *)
-    (*           (* { unfold Memory.load. simpl. rewrite H. *) *)
-    (*           (* } *) *)
-    (*           assert (G: exists off, Memory.load mem1 (Permission.data, cid, S bid, off) *)
-    (*                             = Some (Ptr (Permission.data, Cb, S b, offset0))). *)
-    (*           { exists offset1. *)
-    (*             rewrite (Memory.load_after_store _ _ _ _ _ Hmem1). simpl. *)
-    (*             rewrite -andbA andbC //=. *)
-    (*             rewrite (Memory.load_after_store _ _ _ _ _ Hmem). simpl. *)
-    (*             rewrite -andbA andbC //=. *)
-    (*             (* clear -H H0 wf_mem wf_mem'. *) *)
-    (*             (* This seems to be doable. Use [H], [H0], [wf_mem], and/or [wf_mem'] *) *)
-    (*             (* We should be able to discard the unitialized case by arguing the address *) *)
-    (*             (* [(cid, bid)] was shared, and so its component cannot be uninitialized. *) *)
-    (*             assert (Hcid: postcondition_steady_state eprev mem0 cid). *)
-    (*             {destruct (cid == next_comp_of_event eprev) eqn:Heq; *)
-    (*                 move: Heq => /eqP /= Heq; subst. *)
-    (*               - eapply wf_mem; eauto. *)
-    (*               - assert (postcondition_steady_state eprev mem0 cid \/ postcondition_uninitialized prefix eprev mem0 cid). *)
-    (*                 { eapply wf_mem'; eauto. admit. (* easy *) } *)
-    (*                 destruct H2 as [good | bad]; first exact good. *)
-    (*                 destruct bad as [bad1 [bad2 [bad3 bad4]]]. *)
-    (*                 exfalso. eapply (bad4 bid). *)
-    (*                 admit. *)
-    (*             } *)
-    (*             unfold postcondition_steady_state in Hcid. *)
-    (*             destruct Hcid as [_ [_ Hcid]]. *)
-    (*             unfold postcondition_event_snapshot_steadystate *)
-    (*               in Hcid. *)
-    (*             destruct Hcid as [Hshift' Hblock]. *)
-    (*             unfold well_formed_memory_snapshot_steadystate_shift in Hshift'. *)
-    (*             specialize (Hshift' (S bid)). *)
-    (*             destruct Hshift' as [addr [? [? ?]]]. *)
-    (*             unfold Block.local; congruence. *)
-    (*             rewrite shift_S_Some in H2. inversion H2; subst; clear H2. *)
-    (*             specialize (H4 offset1). *)
-    (*             unfold Memory.load in H4. simpl in H4. *)
-    (*             specialize (H3 offset1). *)
-    (*             unfold Memory.load in H3. simpl in H3. *)
-    (*             rewrite H in H4. specialize (H4 _ H0) as [v [? ?]]. *)
-    (*             (* setoid_rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1). *) *)
-    (*             (* setoid_rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem). *) *)
-    (*             unfold Memory.load => //=. (* eexists. *) setoid_rewrite H2. *)
-    (*             destruct v as [| [[[[|]] []]] |]; try discriminate. simpl in *. *)
-    (*             inversion H4; subst; clear H4. *)
-    (*             unfold all_zeros_shift, uniform_shift. *)
-    (*             rewrite ssrnat.subn1 ssrnat.addn0. reflexivity. *)
-    (*           } *)
-    (*           destruct G as [off Hload]. *)
-    (*           rewrite /Memory.load in Hload. *)
-    (*           simpl in Hload. *)
-    (*           destruct (mem1 cid) eqn:mem1_cid; try discriminate. *)
-    (*           eapply Reachability.Reachable_step with (cid := cid) (bid := S bid). *)
-    (*           eapply IHReachable; eauto. eauto. *)
-    (*           apply In_in. apply ComponentMemory.load_block_load. *)
-    (*           eexists; eexists; eauto. *)
-    (*       } *)
-    (*   Admitted. *)
+            (* We can now apply the constructor and use the induction hypothesis *)
+            eapply Reachability.Reachable_step.
+          -- eapply IH; eauto.
+          -- eauto.
+          -- apply In_in.
+             apply ComponentMemory.load_block_load.
+             eexists; eexists; eauto.
+             rewrite ssrnat.subn1 ssrnat.addn0 in H3. eauto.
+        + destruct b' as [| b'].
+          * (* Find a contradiction *)
+            now eapply z in reachable.
+          * specialize (IH C' b' Logic.eq_refl _ Logic.eq_refl _ renames x').
+            by eapply wf in IH.
+    Qed.
 
-    (* Lemma addr_shared_so_far_inv_1_apply *)
-    (*         (ret_val : value) *)
-    (*         (mem' : Memory.tt) *)
-    (*         (regs : Machine.Intermediate.Register.t) *)
-    (*         (C C' : Component.id) *)
-    (*         (C_C' : C <> C') *)
-    (*         (prefix prefix0 : seq event_inform) *)
-    (*         (eprev ecur : event_inform) *)
-    (*         (eq_pref: prefix = prefix0 ++ [:: eprev]) *)
-    (*         (ecur_noninf : event) *)
-    (*         (ecur_proj : project_non_inform [:: ecur] = [:: ecur_noninf]) *)
-    (*         (wf_int_pref' : well_formed_intermediate_prefix *)
-    (*                           ((prefix0 ++ [:: eprev]) ++ [:: ecur])) *)
-    (*         (n: value) *)
-    (*         (C_next_eprev: C = next_comp_of_event eprev) *)
-    (*         (mem0 mem mem1 mem1' : Memory.tt) *)
-    (*         (vcom : value) *)
-    (*         (Hcom : Memory.load mem0 (Permission.data, C, Block.local, 5%Z) = Some vcom) *)
-    (*         (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1) *)
-    (*         (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1') *)
-    (*         (Cb : Component.id) *)
-    (*         (b : Block.id) *)
-    (*         (H1 : Reachability.Reachable mem' (addr_of_value ret_val) (Cb, b)) *)
-    (*         (Hshared : addr_shared_so_far (Cb, b) *)
-    (*                                       (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf)) *)
-    (*         (wf_mem: well_formed_memory (prefix0 ++ [:: eprev]) mem0) *)
-    (*         (Hmem : Memory.store mem0 (Permission.data, C, Block.local, 0%Z) n = *)
-    (*                   Some mem): *)
-    (*   C = cur_comp_of_event ecur_noninf -> *)
-    (*   C' = next_comp_of_event ecur -> *)
-    (*   mem' = mem_of_event_inform ecur -> *)
-    (*   ret_val = arg_of_event ecur_noninf -> *)
-    (*   component_buffer C -> *)
-    (*   component_buffer C' -> *)
-    (*   exists addr : addr_t, *)
-    (*     sigma_shifting_wrap_bid_in_addr *)
-    (*       (sigma_shifting_lefttoright_addr_bid all_zeros_shift (uniform_shift 1)) (Cb, b) = *)
-    (*     Some addr /\ *)
-    (*     (* event_renames_event_at_shared_addr all_zeros_shift (uniform_shift 1) addr *) *)
-    (*     (*                                    (ERet C ret_val mem' C') (ERet C vcom mem1 C') /\ *) *)
-    (*     addr_shared_so_far addr *)
-    (*                        (rcons (project_non_inform prefix) (ERet C ret_val mem' C')). *)
-    (* Proof. *)
-    (*   intros ? ? ? ? ? ?. *)
-    (*   exists (Cb, S b). split. *)
-    (*   - rewrite /all_zeros_shift /uniform_shift //=. *)
-    (*     rewrite /sigma_shifting_wrap_bid_in_addr //=. *)
-    (*     by rewrite ssrnat.subn0 ssrnat.addn1. *)
-    (*   - subst prefix. *)
-    (*     inversion Hshared. *)
-    (*     + find_rcons_rcons. *)
-    (*       eapply reachable_from_args_is_shared. *)
-    (*       eapply addr_shared_so_far_inv_1; simpl in *; eauto. *)
-    (*       admit. (* Missing from assumptions? *) *)
-    (*       admit. *)
-    (*       admit. *)
-    (*       admit. *)
-    (*     + find_rcons_rcons. *)
-    (*       eapply reachable_from_previously_shared. *)
-    (*       eauto. *)
-    (*       simpl. destruct addr' as [cid bid]. *)
-    (*       replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z))) by reflexivity. *)
-    (*       eapply addr_shared_so_far_inv_1; eauto. *)
-    (* Admitted. *)
+    Lemma addr_shared_so_far_inv_2
+          (mem: Memory.t)
+          (e e': event)
+          (t1 t1': trace event)
+          (mem_eq: forall C b o, Memory.load (mem_of_event e') (Permission.data, C, S b, o) =
+                                 Memory.load mem (Permission.data, C, S b, o))
+          (values_rename:
+            shift_value_option (uniform_shift 1) all_zeros_shift (arg_of_event e') =
+              Some (arg_of_event e))
+          (wf1: forall C,
+              component_buffer C ->
+              C = cur_comp_of_event e ->
+              well_formed_memory_snapshot_steadystate_shift (mem_of_event e) mem C)
+          (wf2: forall C,
+              component_buffer C ->
+              well_formed_memory_snapshot_steadystate_shift (mem_of_event e) mem C \/
+                (forall b, ~ addr_shared_so_far (C, b) t1))
+          (wf3: forall C b,
+              component_buffer C ->
+              C <> cur_comp_of_event e ->
+              ~ addr_shared_so_far (C, b) t1 ->
+              ~ addr_shared_so_far (C, b) (rcons t1 e))
+          (* this comes from [CS.CS.comes_from_initial_state_mem_domm] *)
+          (wf4: forall C b o v,
+              Memory.load (mem_of_event e) (Permission.data, C, b, o) = Some v ->
+              component_buffer C)
+          (good_trace:
+            good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1))
+                                   (rcons t1' e'))
+          (* (z: forall C, ~ Reachability.Reachable mem' (addr_of_value vcom) (C, 0)): *)
+          (traces_rename:
+            traces_rename_each_other_option (uniform_shift 1) all_zeros_shift t1' t1):
+      forall Cb b,
+        addr_shared_so_far (Cb, S b) (rcons t1' e') ->
+        addr_shared_so_far (Cb, b) (rcons t1 e).
+    Proof.
+      assert (wf1': forall C,
+              component_buffer C ->
+              C = cur_comp_of_event e ->
+              well_formed_memory_snapshot_steadystate_shift (mem_of_event e) (mem_of_event e') C).
+      { intros C C_b C_cur.
+        specialize (wf1 C C_b C_cur).
+        unfold well_formed_memory_snapshot_steadystate_shift in *.
+        intros [| b] not_local; first (unfold Block.local in not_local; congruence).
+        specialize (wf1 (S b) not_local) as [addr [H1 [H2 H3]]].
+        eexists. split; last split.
+        + eauto.
+        + intros offset v Hload. rewrite mem_eq in Hload.
+          specialize (H2 _ _ Hload). eauto.
+        + intros offset v' Hload.
+          specialize (H3 _ _ Hload) as [v [Hload' Hren]].
+          rewrite -mem_eq in Hload'.
+          eauto. }
+      clear wf1. rename wf1' into wf1.
+      assert (wf2': forall C,
+              component_buffer C ->
+              well_formed_memory_snapshot_steadystate_shift (mem_of_event e) (mem_of_event e') C \/
+                (forall b, ~ addr_shared_so_far (C, b) t1)).
+      { intros C C_b.
+        specialize (wf2 C C_b) as [wf2 | wf2]; last now right.
+        left.
+        unfold well_formed_memory_snapshot_steadystate_shift in *.
+        intros [| b] not_local; first (unfold Block.local in not_local; congruence).
+        specialize (wf2 (S b) not_local) as [addr [H1 [H2 H3]]].
+        eexists. split; last split.
+        + eauto.
+        + intros offset v Hload. rewrite mem_eq in Hload.
+          specialize (H2 _ _ Hload). eauto.
+        + intros offset v' Hload.
+          specialize (H3 _ _ Hload) as [v [Hload' Hren]].
+          rewrite -mem_eq in Hload'.
+          eauto. }
+      clear wf2. rename wf2' into wf2.
+      intros Cb b shared.
+      remember (Cb, S b) as addr.
+      generalize dependent b. generalize dependent Cb.
+      remember (rcons t1' e') as t1'_e'.
+      generalize dependent e'. generalize dependent t1'.
+      generalize dependent e. generalize dependent t1.
+      induction shared as [addr t0 e0 reachable | addr addr' t0 e0 shared IH reachable].
+      - intros t1 e wf3 wf4 t1' traces_rename e' eq_mem values_rename
+               eq_traces wf1 wf2 Cb b eq_addr; find_rcons_rcons.
+        constructor.
+        eapply addr_shared_so_far_inv_2' with (mem' := mem_of_event e'); eauto.
+        + intros C C_b.
+          destruct (C == (cur_comp_of_event e)) eqn:eC.
+          * move: eC => /eqP eC; subst.
+            left; now eapply wf1.
+          * move: eC => /eqP eC.
+            specialize (wf2 C C_b) as [wf | wf]; first now left.
+            right. intros b0 reach_b0.
+            specialize (wf b0). eapply wf3 in wf; eauto.
+            eapply wf. constructor. eauto.
+        + admit.
+        + intros C reachable'.
+          inversion good_trace; subst; clear good_trace.
+          eapply reachable_from_args_is_shared in reachable'.
+          specialize (H _ reachable'). simpl in H.
+          unfold uniform_shift in H.
+          rewrite /left_block_id_good_for_shifting in H. by [].
+          (* Source invariant similar to CSInvariants.CSInvariants.not_shared_diff_comp_not_shared_call *)
+      - intros t1 e wf3 wf4 t1' traces_rename e' eq_mem values_rename
+               eq_traces wf1 wf2 Cb b eq_addr; find_rcons_rcons.
+      (* - intros t1 e eq_traces wf3 wf4 t1' traces_rename e' eq_mem values_rename wf1 wf2 Cb b eq_addr; find_rcons_rcons. *)
+        destruct addr' as [cid bid].
 
-      (* intros ? ? ? ? ? ?. *)
-      (* exists (Cb, S b). split. *)
-      (* - rewrite /all_zeros_shift /uniform_shift //=. *)
-      (*   rewrite /sigma_shifting_wrap_bid_in_addr //=. *)
-      (*   by rewrite ssrnat.subn0 ssrnat.addn1. *)
+        replace (fset1 (cid, bid)) with (addr_of_value (Ptr (Permission.data, cid, bid, 0%Z)))
+          in reachable by reflexivity.
 
-    (* Lemma addr_shared_so_far_inv_2 *)
-    (*       (ret_val : value) *)
-    (*       (mem' : Memory.tt) *)
-    (*       (regs : Machine.Intermediate.Register.t) *)
-    (*       (C C' : Component.id) *)
-    (*       (s : stack_state) *)
-    (*       (prefix0 : seq event_inform) *)
-    (*       (eprev ecur : event_inform) *)
-    (*       (ecur_noninf : event) *)
-    (*       (ecur_proj : project_non_inform [:: ecur] = [:: ecur_noninf]) *)
-    (*       (wf_int_pref' : well_formed_intermediate_prefix *)
-    (*                         ((prefix0 ++ [:: eprev]) ++ [:: ecur])) *)
-    (*       (mem0 mem mem1 mem1' mem2 mem3 mem4 mem5 mem6 mem7 mem8 mem9 : Memory.tt) *)
-    (*       (cur_comp_C : C = cur_comp s) *)
-    (*       (vcom : value) *)
-    (*       (Hcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, 5%Z) = Some vcom) *)
-    (*       (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1) *)
-    (*       (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, 5%Z) vcom = Some mem1') *)
-    (*       (Hmem2 : Memory.store mem1' (Permission.data, C', Block.local, 4%Z) Undef = Some mem2) *)
-    (*       (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, 6%Z) Undef = Some mem3) *)
-    (*       (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, 7%Z) Undef = Some mem4) *)
-    (*       (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, 8%Z) Undef = Some mem5) *)
-    (*       (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, 9%Z) Undef = Some mem6) *)
-    (*       (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, 10%Z) Undef = Some mem7) *)
-    (*       (* (t : trace event_inform) *) *)
-    (*       (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset) (Int 0) = *)
-    (*                Some mem8) *)
-    (*       (Cb : Component.id) *)
-    (*       (b : Block.id) *)
-    (*       (addr' : addr_t) *)
-    (*       (Hshared : addr_shared_so_far (Cb, b) *)
-    (*                                     (rcons (project_non_inform (prefix0 ++ [:: eprev])) ecur_noninf)) *)
-    (*       (wf_regs : postcondition_event_registers (ERetInform (cur_comp s) ret_val mem' regs C') mem9) *)
-    (*       (wf_mem8 : forall C : nat_ordType, *)
-    (*           component_buffer C -> *)
-    (*           C = next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') -> *)
-    (*           postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C) *)
-    (*       (wf_mem8' : forall C : nat_ordType, *)
-    (*           component_buffer C -> *)
-    (*           C <> next_comp_of_event (ERetInform (cur_comp s) ret_val mem' regs C') -> *)
-    (*           postcondition_steady_state (ERetInform (cur_comp s) ret_val mem' regs C') mem9 C \/ *)
-    (*           postcondition_uninitialized (prefix0 ++ [:: eprev]) ecur mem9 C) : *)
-    (*   Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) (fset1 addr') (Cb, S b). *)
-    (* Admitted. *)
+        assert (exists t2' e2', t1' = rcons t2' e2') as [t2' [e2' t2'_e2']]; subst.
+        { inversion shared; eexists; eexists; eauto. }
+        inversion traces_rename; [by destruct t2'|].
+        find_rcons_rcons.
 
-    (* Lemma addr_shared_so_far_ERet_Hsharedsrc *)
-    (*       (ret_val : value) *)
-    (*       (mem' : Memory.t) *)
-    (*       (regs : Machine.Intermediate.Register.t) *)
-    (*       (C' : Component.id) *)
-    (*       (prefix suffix : seq event_inform) *)
-    (*       (s : stack_state) *)
-    (*       (wf_int_pref' : well_formed_intermediate_prefix *)
-    (*                         (prefix ++ [:: ERetInform (cur_comp s) ret_val mem' regs C'])) *)
-    (*       (prefix' : trace event) *)
-    (*       (mem0 : Memory.tt) *)
-    (*       (mem mem1 : Memory.t) *)
-    (*       (Hmem1 : Memory.store mem (Permission.data, cur_comp s, Block.local, EXTCALL_offset) (Int 1) = Some mem1) *)
-    (*       (vcom : value) *)
-    (*       (Hcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, reg_offset E_R_COM) = *)
-    (*               Some vcom) *)
-    (*       (mem1' : Memory.t) *)
-    (*       (Hmem1' : Memory.store mem1 (Permission.data, C', Block.local, reg_offset E_R_COM) vcom = *)
-    (*                 Some mem1') *)
-    (*       (mem2 : Memory.t) *)
-    (*       (Hmem2 : Memory.store mem1' (Permission.data, C', Block.local, reg_offset E_R_ONE) Undef = *)
-    (*                Some mem2) *)
-    (*       (mem3 : Memory.t) *)
-    (*       (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, reg_offset E_R_AUX1) Undef = *)
-    (*                Some mem3) *)
-    (*       (mem4 : Memory.t) *)
-    (*       (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, reg_offset E_R_AUX2) Undef = *)
-    (*                Some mem4) *)
-    (*       (mem5 : Memory.t) *)
-    (*       (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, reg_offset E_R_RA) Undef = *)
-    (*                Some mem5) *)
-    (*       (mem6 : Memory.t) *)
-    (*       (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, reg_offset E_R_SP) Undef = *)
-    (*                Some mem6) *)
-    (*       (mem7 : Memory.t) *)
-    (*       (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, reg_offset E_R_ARG) Undef = *)
-    (*                Some mem7) *)
-    (*       (mem8 : Memory.t) *)
-    (*       (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, EXTCALL_offset) (Int 0) = *)
-    (*                Some mem8) *)
-    (*       (s' : stack_state) *)
-    (*       (cs' : CS.state) *)
-    (*       (wf_cs' : well_formed_state_r s' (prefix ++ [:: ERetInform (cur_comp s) ret_val mem' regs C']) *)
-    (*                                     suffix cs') *)
-    (*       (Cb : Component.id) *)
-    (*       (b : Block.id) *)
-    (*       (Hshared : addr_shared_so_far (Cb, b) (rcons prefix' (ERet (cur_comp s) vcom mem1 C'))): *)
-    (*   exists addr : addr_t, *)
-    (*     sigma_shifting_wrap_bid_in_addr *)
-    (*       (sigma_shifting_lefttoright_addr_bid all_zeros_shift (uniform_shift 1)) addr =  *)
-    (*     Some (Cb, b) /\ *)
-    (*     event_renames_event_at_shared_addr all_zeros_shift (uniform_shift 1) addr *)
-    (*                                        (ERet (cur_comp s) ret_val mem' C') (ERet (cur_comp s) vcom mem1 C') /\ *)
-    (*     addr_shared_so_far addr *)
-    (*                        (rcons (project_non_inform prefix) (ERet (cur_comp s) ret_val mem' C')). *)
-    (* Admitted. *)
-
-    (* Lemma addr_shared_so_far_ECall_Hshared_src *)
-
-    (*       (P' : Procedure.id) *)
-    (*       (new_arg : value) *)
-    (*       (mem' : Memory.t) *)
-    (*       (regs : Machine.Intermediate.Register.t) *)
-    (*       (C' : Component.id) *)
-    (*       (prefix suffix : seq event_inform) *)
-    (*       (s : stack_state) *)
-    (*       (wf_int_pref' : well_formed_intermediate_prefix *)
-    (*                         (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C'])) *)
-    (*       (prefix' : trace event) *)
-    (*       (stk : CS.stack) *)
-    (*       (mem0 : Memory.tt) *)
-    (*       (arg : value) *)
-    (*       (P : Procedure.id) *)
-    (*       (mem : Memory.t) *)
-    (*       (vcom : value) *)
-    (*       (Hvcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, reg_offset E_R_COM) = *)
-    (*                Some vcom) *)
-    (*       (mem1 : Memory.t) *)
-    (*       (Hmem1 : Memory.store mem (Permission.data, cur_comp s, Block.local, EXTCALL_offset) (Int 1) = Some mem1) *)
-    (*       (mem2 : Memory.t) *)
-    (*       (Hmem2 : forall offset : Z, *)
-    (*           offset <> INITFLAG_offset -> *)
-    (*           offset <> LOCALBUF_offset -> *)
-    (*           Memory.load mem1 (Permission.data, C', Block.local, offset) = *)
-    (*           Memory.load mem2 (Permission.data, C', Block.local, offset)) *)
-    (*       (mem3 : Memory.t) *)
-    (*       (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, reg_offset E_R_ONE) Undef = *)
-    (*                Some mem3) *)
-    (*       (mem4 : Memory.t) *)
-    (*       (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, reg_offset E_R_AUX1) Undef = *)
-    (*                Some mem4) *)
-    (*       (mem5 : Memory.t) *)
-    (*       (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, reg_offset E_R_AUX2) Undef = *)
-    (*                Some mem5) *)
-    (*       (mem6 : Memory.t) *)
-    (*       (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, reg_offset E_R_RA) Undef = *)
-    (*                Some mem6) *)
-    (*       (mem7 : Memory.t) *)
-    (*       (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, reg_offset E_R_SP) Undef = *)
-    (*                Some mem7) *)
-    (*       (mem8 : Memory.t) *)
-    (*       (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, reg_offset E_R_ARG) Undef = *)
-    (*                Some mem8) *)
-    (*       (mem9 : Memory.t) *)
-    (*       (Hmem9 : Memory.store mem8 (Permission.data, C', Block.local, reg_offset E_R_COM) vcom = *)
-    (*                Some mem9) *)
-    (*       (mem10 : Memory.t) *)
-    (*       (Hmem10 : Memory.store mem9 (Permission.data, C', Block.local, 1%Z) (Int 0) = Some mem10) *)
-    (*       (wf_cs' : well_formed_state_r {| cur_comp := C'; callers := (cur_comp s) :: callers s |} *)
-    (*                                     (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) suffix *)
-    (*                                     [CState C', {| *)
-    (*                                        CS.f_component := cur_comp s; *)
-    (*                                        CS.f_arg := arg; *)
-    (*                                        CS.f_cont := Kassign1 (loc_of_reg E_R_COM) *)
-    (*                                                              (Kseq *)
-    (*                                                                 (invalidate_metadata;; *)
-    (*                                                                  E_assign EXTCALL (E_val (Int 0));; *)
-    (*                                                                  E_call (cur_comp s) P (E_val (Int 0))) Kstop) |} :: stk, mem10, Kstop,  *)
-    (*                                     expr_of_trace C' P' (comp_subtrace C' t), vcom]) *)
-    (*       (Cb : Component.id) *)
-    (*       (b : Block.id) *)
-    (*       (Hshared : addr_shared_so_far (Cb, b) (rcons prefix' (ECall (cur_comp s) P' vcom mem1 C'))): *)
-    (*   exists addr : addr_t, *)
-    (*     sigma_shifting_wrap_bid_in_addr *)
-    (*       (sigma_shifting_lefttoright_addr_bid all_zeros_shift (uniform_shift 1)) addr =  *)
-    (*     Some (Cb, b) /\ *)
-    (*     event_renames_event_at_shared_addr all_zeros_shift (uniform_shift 1) addr *)
-    (*                                        (ECall (cur_comp s) P' new_arg mem' C') (ECall (cur_comp s) P' vcom mem1 C') /\ *)
-    (*     addr_shared_so_far addr *)
-    (*                        (rcons (project_non_inform prefix) (ECall (cur_comp s) P' new_arg mem' C')). *)
-    (* Admitted. *)
-
-    (*******************************************************
-    Lemma addr_shared_so_far_ECall_Hshared_interm
-          (s: stack_state)
-          (prefix' : trace event)
-          (stk : CS.stack)
-          (mem0 mem': Memory.tt)
-          (P P' : Procedure.id)
-          (C C': Component.id)
-          (arg new_arg: value)
-          e1
-          regs
-          (prefix0 prefix prefix_inform suffix: trace event_inform)
-          (prefix0_e1: prefix = rcons prefix0 e1)
-          (prefix_inform_prefix' : project_non_inform prefix_inform = prefix')
-          (Et : t = prefix ++ suffix)
-          (Hshift: traces_shift_each_other_option
-                     all_zeros_shift
-                     (uniform_shift 1) (project_non_inform prefix)
-                     prefix')
-          (Star0 : star CS.kstep (prepare_global_env p) (CS.initial_machine_state p) prefix'
-            [CState cur_comp s, stk, mem0, Kstop, expr_of_trace (cur_comp s) P
-                                                    (comp_subtrace (cur_comp s) t), arg])
-  (C_b : component_buffer (cur_comp s))
-  (C_cur_comp_s: C = cur_comp s)
-  (mem : Memory.t)
-  (Hmem : Memory.store mem0 (Permission.data, C, Block.local, 0%Z)
-           (Int
-              (counter_value C (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']))) =
-         Some mem)
-  (Star1 : Star (CS.sem p)
-            [CState C, stk, mem0, Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
-            [CState C, stk, mem, Kstop, expr_of_event C P
-                                          (ECallInform (cur_comp s) P' new_arg mem' regs C'), arg])
-  (C'_b : component_buffer C')
-  (C_next_e1 : C = next_comp_of_event e1)
-  (C'_next_e1 : C' <> next_comp_of_event e1)
-  (vcom : value)
-  (Hvcom : Memory.load mem0 (Permission.data, cur_comp s, Block.local, reg_offset E_R_COM) =
-          Some vcom)
-  (steady_C1 : postcondition_event_registers e1 mem0)
-  (steady_C3 : postcondition_steady_state e1 mem0 C' \/
-              postcondition_uninitialized prefix0 e1 mem0 C')
-  (load_initflag : Memory.load mem0 (Permission.data, C, Block.local, INITFLAG_offset) =
-                  Some (Int 1))
-  (load_localbuf : Memory.load mem0 (Permission.data, C, Block.local, LOCALBUF_offset) =
-                  Some (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)))
-  (postcond_C : postcondition_event_snapshot_steadystate e1 mem0 C)
-  (mem1 : Memory.t)
-  (Hmem1 : Memory.store mem (Permission.data, C, Block.local, EXTCALL_offset) (Int 1) = Some mem1)
-  (steady_C3'' : postcondition_steady_state e1 mem1 C' \/
-                postcondition_uninitialized prefix0 e1 mem1 C')
-  (mem2 : Memory.t)
-  (i' : Z)
-  (Star12 : star CS.kstep (prepare_global_env p)
-             [CState C', {|
-                         CS.f_component := C;
-                         CS.f_arg := arg;
-                         CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                        (Kseq
-                                           (invalidate_metadata;;
-                                            E_assign EXTCALL (E_val (Int 0));;
-                                            E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem1, 
-             Kseq (extcall_check;; expr_of_trace C' P' (comp_subtrace C' t)) Kstop, 
-             init_check C', vcom] E0
-             [CState C', {|
-                         CS.f_component := C;
-                         CS.f_arg := arg;
-                         CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                        (Kseq
-                                           (invalidate_metadata;;
-                                            E_assign EXTCALL (E_val (Int 0));;
-                                            E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem2, 
-             Kseq (extcall_check;; expr_of_trace C' P' (comp_subtrace C' t)) Kstop, 
-             E_val (Int i'), vcom])
-  (Postcond1 : postcondition_steady_state e1 mem2 C')
-  (Hmem2 : forall offset : Z,
-          offset <> INITFLAG_offset ->
-          offset <> LOCALBUF_offset ->
-          Memory.load mem1 (Permission.data, C', Block.local, offset) =
-          Memory.load mem2 (Permission.data, C', Block.local, offset))
-  (Hmem2' : forall (C'0 : nat_ordType) (b : Block.id) (offset : Block.offset),
-           C' <> C'0 ->
-           Memory.load mem1 (Permission.data, C'0, b, offset) =
-           Memory.load mem2 (Permission.data, C'0, b, offset))
-  (Hblock2 : forall C'0 : nat_ordType, C' <> C'0 -> next_block mem1 C'0 = next_block mem2 C'0)
-  (Hsteady_localbuf2 : forall (C'0 : nat_ordType) (b : Block.id) (offset : Block.offset),
-                      C' = C'0 ->
-                      b <> Block.local ->
-                      postcondition_steady_state e1 mem1 C' ->
-                      Memory.load mem1 (Permission.data, C'0, b, offset) =
-                      Memory.load mem2 (Permission.data, C'0, b, offset))
-  (mem3 : Memory.t)
-  (Hmem3 : Memory.store mem2 (Permission.data, C', Block.local, reg_offset E_R_ONE) Undef =
-          Some mem3)
-  (mem4 : Memory.t)
-  (Hmem4 : Memory.store mem3 (Permission.data, C', Block.local, reg_offset E_R_AUX1) Undef =
-          Some mem4)
-  (mem5 : Memory.t)
-  (Hmem5 : Memory.store mem4 (Permission.data, C', Block.local, reg_offset E_R_AUX2) Undef =
-          Some mem5)
-  (mem6 : Memory.t)
-  (Hmem6 : Memory.store mem5 (Permission.data, C', Block.local, reg_offset E_R_RA) Undef =
-          Some mem6)
-  (mem7 : Memory.t)
-  (Hmem7 : Memory.store mem6 (Permission.data, C', Block.local, reg_offset E_R_SP) Undef =
-          Some mem7)
-  (mem8 : Memory.t)
-  (Hmem8 : Memory.store mem7 (Permission.data, C', Block.local, reg_offset E_R_ARG) Undef =
-          Some mem8)
-  (mem9 : Memory.t)
-  (Hmem9 : Memory.store mem8 (Permission.data, C', Block.local, reg_offset E_R_COM) vcom =
-          Some mem9)
-  (mem10 : Memory.t)
-  (Hmem10 : Memory.store mem9 (Permission.data, C', Block.local, 1%Z) (Int 0) = Some mem10)
-  (Hstar : star CS.kstep (prepare_global_env p)
-            [CState C, stk, mem, Kstop, E_assign EXTCALL (E_val (Int 1));;
-                                        E_assign (loc_of_reg E_R_COM)
-                                          (E_call C' P' (E_deref (loc_of_reg E_R_COM)));;
-                                        invalidate_metadata;;
-                                        E_assign EXTCALL (E_val (Int 0));;
-                                        E_call C P (E_val (Int 0)), arg]
-            [:: ECall C P' vcom mem1 C']
-            [CState C', {|
-                        CS.f_component := C;
-                        CS.f_arg := arg;
-                        CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                       (Kseq
-                                          (invalidate_metadata;;
-                                           E_assign EXTCALL (E_val (Int 0));;
-                                           E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem10, Kstop, 
-            expr_of_trace C' P' (comp_subtrace C' t), vcom])
-  (wf_cs' : well_formed_state_r {| cur_comp := C'; callers := C :: callers s |}
-             (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) suffix
-             [CState C', {|
-                         CS.f_component := C;
-                         CS.f_arg := arg;
-                         CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                        (Kseq
-                                           (invalidate_metadata;;
-                                            E_assign EXTCALL (E_val (Int 0));;
-                                            E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem10, Kstop, 
-             expr_of_trace C' P' (comp_subtrace C' t), vcom])
-  (Cb : Component.id)
-  (b : Block.id)
-  (Hshared : addr_shared_so_far (Cb, b)
-                               (rcons (project_non_inform prefix) (ECall (cur_comp s) P' new_arg mem' C'))):
-      addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C')).
+        specialize (H1 _ shared) as [ren [[cid' bid'] [shift shar]]].
+        rewrite //= /all_zeros_shift /uniform_shift //= in shift.
+        rewrite /sigma_shifting_wrap_bid_in_addr in shift.
+        rewrite /sigma_shifting_lefttoright_addr_bid in shift.
+        rewrite /sigma_shifting_lefttoright_option in shift.
+        destruct bid; first discriminate. simpl in shift.
+        rewrite ssrnat.subn1 ssrnat.addn0 in shift; inversion shift; subst; clear shift.
+        eapply reachable_from_previously_shared; eauto.
+        + replace (fset1 (cid', bid')) with (addr_of_value (Ptr (Permission.data, cid', bid', 0%Z))).
+          eapply addr_shared_so_far_inv_2' with (mem' := mem_of_event e'); eauto.
+          * by rewrite /= ssrnat.addn0 ssrnat.subn1 //=.
+          * intros C C_b.
+            destruct (C == (cur_comp_of_event e)) eqn:eC.
+            -- move: eC => /eqP eC; subst.
+               left; now eapply wf1.
+            -- move: eC => /eqP eC.
+               specialize (wf2 C C_b) as [wf | wf]; first now left.
+               right. intros b0 reach_b0.
+               specialize (wf b0). eapply wf3 in wf; eauto.
+               eapply wf. eapply reachable_from_previously_shared. eauto. eauto.
+          * admit.
+          * intros C reachable'.
+            admit.
+          * eauto.
     Admitted.
-     ***************************************)
-    
-    (* Lemma addr_shared_so_far_ECall_Hshared_interm *)
-    (*       P P' C C' s prefix prefix' new_arg mem' regs suffix arg stk mem1 mem10 vcom  *)
-    (*       (wf_cs' : well_formed_state_r {| cur_comp := C'; callers := C :: callers s |} *)
-    (*                                     (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) suffix *)
-    (*                                     [CState C', {| *)
-    (*                                        CS.f_component := C; *)
-    (*                                        CS.f_arg := arg; *)
-    (*                                        CS.f_cont := Kassign1 (loc_of_reg E_R_COM) *)
-    (*                                                              (Kseq *)
-    (*                                                                 (invalidate_metadata;; *)
-    (*                                                                  E_assign EXTCALL (E_val (Int 0));; *)
-    (*                                                                  E_call C P (E_val (Int 0))) Kstop) |} :: stk, mem10, Kstop,  *)
-    (*                                     expr_of_trace C' P' (comp_subtrace C' t), vcom]) *)
-    (*       (Cb : Component.id) *)
-    (*       (b : Block.id) *)
-    (*       (Hshared : addr_shared_so_far (Cb, b) *)
-    (*                                     (rcons (project_non_inform prefix) (ECall (cur_comp s) P' new_arg mem' C'))): *)
-    (*   addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C')). *)
-    (* Admitted. *)
+
+
 
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
@@ -5988,7 +5555,249 @@ Section Definability.
                        rename Hshared into Hshared'.
                         assert (Hshared: addr_shared_so_far (Cb, b)
                                                             (rcons (project_non_inform prefix) (ECall (cur_comp s) P' new_arg mem' C'))).
-                       { admit. } clear Hshared'.
+                       { inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem8 ?].
+                         subst.
+                         eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
+                           last reflexivity.
+                         eapply addr_shared_so_far_inv_2 with (mem := mem0); eauto.
+                         -- intros. by simplify_memory'.
+                         -- simpl.
+                            unfold all_zeros_shift, uniform_shift.
+                            destruct (wf_regs Machine.R_COM _ Logic.eq_refl) as [vcom' [newarg' [G1 [G2 G3]]]].
+                            simpl in *.
+                            assert (vcom' = vcom).
+                            { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem10) in G1; last congruence.
+                              rewrite (Memory.load_after_store_eq _ _ _ _ Hmem9) in G1; congruence. } subst vcom'.
+                            assert (newarg' = new_arg).
+                            { apply ipref_evsteps in wf_int_pref'.
+                              rewrite cats1 in wf_int_pref'.
+                              inversion wf_int_pref'. now destruct prefix0.
+                              destruct prefix0. simpl in *. congruence.
+                              now destruct prefix0.
+                              find_rcons_rcons. inversion H8; subst; eauto.
+                            } subst.
+                            auto.
+                         -- eapply wfmem in wf_mem; last reflexivity.
+                            destruct wf_mem as [_ [wf_mem _]].
+                            intros; subst; simpl in *.
+                            unfold postcondition_steady_state, postcondition_event_snapshot_steadystate in wf_mem.
+                            specialize (wf_mem _ C_b C_next_e1) as [_ [_ [G _]]].
+                            intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                            specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                            eexists; split; last split; eauto.
+                            ++ intros offset v Hload.
+                               specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                               inversion wf_int_pref' as [U1 U2].
+                               rewrite !cats1 in U1.
+                               inversion U1.
+                               ** now destruct prefix0.
+                               ** now destruct prefix0 as [| ? []].
+                               ** find_rcons_rcons. find_rcons_rcons.
+                                  inversion H9; subst; clear H9. eauto.
+                            ++ intros offset v Hload.
+                               inversion wf_int_pref' as [U1 U2].
+                               rewrite !cats1 in U1.
+                               inversion U1.
+                               ** now destruct prefix0.
+                               ** now destruct prefix0 as [| ? []].
+                               ** find_rcons_rcons. find_rcons_rcons.
+                                  inversion H9; subst; clear H9. eauto.
+                         -- eapply wfmem in wf_mem; last reflexivity.
+                            destruct wf_mem as [_ [wf_mem1 wf_mem2]].
+                            intros C0 C0_b.
+                            destruct (C0 == next_comp_of_event e1) eqn:eC0;
+                              move: eC0 => /eqP eC0; subst.
+                            ++ left.
+                               specialize (wf_mem1 _ C0_b Logic.eq_refl) as [_ [_ [G _]]].
+                               { intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                                 specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                                 eexists; split; last split; eauto.
+                                 ++ intros offset v Hload.
+                                    specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                                    inversion wf_int_pref' as [U1 U2].
+                                    rewrite !cats1 in U1.
+                                    inversion U1.
+                                    ** now destruct prefix0.
+                                    ** now destruct prefix0 as [| ? []].
+                                    ** find_rcons_rcons. find_rcons_rcons.
+                                       inversion H8; subst; clear H8. eauto.
+                                 ++ intros offset v Hload.
+                                    inversion wf_int_pref' as [U1 U2].
+                                    rewrite !cats1 in U1.
+                                    inversion U1.
+                                    ** now destruct prefix0.
+                                    ** now destruct prefix0 as [| ? []].
+                                    ** find_rcons_rcons. find_rcons_rcons.
+                                       inversion H8; subst; clear H8. eauto. }
+                            ++ specialize (wf_mem2 C0 C0_b eC0) as [wf_mem2 | wf_mem2].
+                               ** left. destruct wf_mem2 as [_ [_ [G _]]].
+                                  { intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                               specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                               eexists; split; last split; eauto.
+                               ++ intros offset v Hload.
+                                  specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                                  inversion wf_int_pref' as [U1 U2].
+                                  rewrite !cats1 in U1.
+                                  inversion U1.
+                                  ** now destruct prefix0.
+                                  ** now destruct prefix0 as [| ? []].
+                                  ** find_rcons_rcons. find_rcons_rcons.
+                                     inversion H8; subst; clear H8. eauto.
+                               ++ intros offset v Hload.
+                                  inversion wf_int_pref' as [U1 U2].
+                                  rewrite !cats1 in U1.
+                                  inversion U1.
+                                  ** now destruct prefix0.
+                                  ** now destruct prefix0 as [| ? []].
+                                  ** find_rcons_rcons. find_rcons_rcons.
+                                     inversion H8; subst; clear H8. eauto. }
+                          ** right.
+                             destruct wf_mem2 as [_ [_ [_ G]]].
+                             now rewrite cats1.
+                    -- intros C0 b0 C0_b not_eq not_shared shared.
+                       assert (inv_mem: CSInvariants.CSInvariants.wf_mem_wrt_t_pc
+                                          (mem_of_event_inform e1)
+                                          (project_non_inform (prefix0 ++ [:: e1]))
+                                          C).
+                       { destruct p_gens_t_inform as [x star].
+                         rewrite Et in star. Search "star" "app".
+                         eapply star_app_inv in star as [x0 [star1 _]];
+                           last eapply CS.CS.singleton_traces_inform.
+                         eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
+                         eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
+                         Check CSInvariants.CSInvariants.is_prefix.
+                         eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
+                         erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                         erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       assert (inv_regs: CSInvariants.CSInvariants.wf_reg_wrt_t_pc
+                                           (register_file_of_event_inform e1)
+                                           (project_non_inform (prefix0 ++ [:: e1]))
+                                           C).
+                       { destruct p_gens_t_inform as [x star].
+                         rewrite Et in star.
+                         eapply star_app_inv in star as [x0 [star1 _]];
+                           last eapply CS.CS.singleton_traces_inform.
+                         eapply CSInvariants.CSInvariants.wf_state_wf_reg; eauto.
+                         eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
+                         eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
+                         erewrite CS.CS.starR_register_file_of_event_inform; first by reflexivity.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                         erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       clear -inv_mem inv_regs shared not_shared not_eq wf_int_pref'.
+                       inversion shared; subst; clear shared.
+                       ++ find_rcons_rcons. simpl in H1.
+                          remember (C0, b0) as addr.
+                          rewrite -Heqaddr in H1.
+                          remember (addr_of_value new_arg) as addr_set.
+                          generalize dependent b0. generalize dependent C0. generalize dependent new_arg.
+                          induction H1.
+                          ** intros new_arg wf_int_pref' eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             simpl in H. destruct new_arg as [| [[[[]]]] |]; try discriminate.
+                             simpl in H. rewrite in_fset1 in H.
+                             move: H => /eqP H. inversion H; subst; clear H.
+                             unfold CSInvariants.CSInvariants.wf_reg_wrt_t_pc in inv_regs.
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H1; subst; clear H1. simpl in *.
+                                 specialize (inv_regs _ _ H11 Logic.eq_refl).
+                                 inversion inv_regs; subst; clear inv_regs.
+                                 +++ unfold C in C0_cur. contradiction.
+                                 +++ contradiction.
+                          ** intros new_arg wf_int_pref' eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             apply In_in in H0.
+                             apply ComponentMemory.load_block_load in H0 as [? [i Hload']].
+                             assert (Hload: Memory.load mem' (Permission.data, cid, bid, i) =
+                                              Some (Ptr (Permission.data, C0, b0, x))).
+                             { Local Transparent Memory.load.
+                               unfold Memory.load. simpl. rewrite H. assumption.
+                               Local Opaque Memory.load. }
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H3; subst; clear H3. simpl in *.
+                                 specialize (inv_mem _ _ Hload Logic.eq_refl).
+                                 inversion inv_mem; subst; clear inv_mem.
+                                 (* CSInvariants.CSInvariants.wf_load *)
+                                 +++ simpl in *. subst.
+                                     specialize (IHReachable H3 _ wf_int_pref').
+                                     eapply IHReachable; eauto.
+                                 +++ simpl in *. subst. contradiction.
+                                 +++ simpl in *. subst. contradiction.
+                       ++ find_rcons_rcons. simpl in H2.
+                          remember (C0, b0) as addr.
+                          rewrite -Heqaddr in H2.
+                          remember (fset1 addr') as addr_set.
+                          generalize dependent b0. generalize dependent C0. generalize dependent addr'.
+                          induction H2.
+                          ** intros addr' shared eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             simpl in H. destruct addr' as [cid bid].
+                             simpl in H. rewrite in_fset1 in H.
+                             move: H => /eqP H. inversion H; subst; clear H.
+                             contradiction.
+                          ** intros addr' shared eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             apply In_in in H0.
+                             apply ComponentMemory.load_block_load in H0 as [? [i Hload']].
+                             assert (Hload: Memory.load mem' (Permission.data, cid, bid, i) =
+                                              Some (Ptr (Permission.data, C0, b0, x))).
+                             { Local Transparent Memory.load.
+                               unfold Memory.load. simpl. rewrite H. assumption.
+                               Local Opaque Memory.load. }
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H3; subst; clear H3. simpl in *.
+                                 specialize (inv_mem _ _ Hload Logic.eq_refl).
+                                 inversion inv_mem; subst; clear inv_mem.
+                                 (* CSInvariants.CSInvariants.wf_load *)
+                                 +++ simpl in *. subst.
+                                     eapply IHReachable; eauto.
+                                 +++ simpl in *. subst. contradiction.
+                                 +++ simpl in *. subst. contradiction.
+                    -- intros C0 b0 o v Hload. unfold component_buffer.
+                       (* Use p_interm and p_gens_t. *)
+                       (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
+                       destruct p_gens_t_inform as [x star].
+                       rewrite Et in star.
+                       eapply star_app_inv in star as [x0 [star1 _]];
+                         last eapply CS.CS.singleton_traces_inform.
+
+                       rewrite <- (CS.CS.comes_from_initial_state_mem_domm x0 intf); eauto.
+                       Local Transparent Memory.load.
+                       unfold Memory.load in Hload. simpl in Hload.
+                       destruct (mem' C0) eqn:mem'_C0; last discriminate.
+                       erewrite <- CS.CS.starR_memory_of_event_inform.
+                       inversion wf_int_pref' as [U1 _].
+                       rewrite !cats1 in U1.
+                       inversion U1.
+                       --- now destruct prefix0.
+                       --- now destruct prefix0 as [| ? []].
+                       --- find_rcons_rcons. find_rcons_rcons.
+                           inversion H8; subst; clear H8. simpl in *.
+                           apply /dommP. eexists; eauto.
+                       --- eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                       --- unfold CS.CS.comes_from_initial_state.
+                           eapply Machine.Intermediate.cprog_main_existence in closed_p_interm as [? [? ?]].
+                           eexists; eexists; eexists; split. eauto.
+                           split; eauto.
+                           split; eauto.
+                           split; eauto. reflexivity.
+                    -- admit.
+                    -- eapply traces_rename_each_other_option_symmetric. reflexivity.
+                       inversion Hshift; eauto.
+                       } clear Hshared'.
                     exists (Cb, b). split; last split.
                      ** rewrite /all_zeros_shift /uniform_shift
                                 /sigma_shifting_wrap_bid_in_addr
@@ -7454,8 +7263,630 @@ Section Definability.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
               - intros [Cb b] Hshared.
-                (*clear -wf_int_pref' wf_cs' Hmem1 Hmem1' Hmem2 Hmem3 Hmem4 Hmem5 Hmem6 Hmem7 Hmem8 Hcom Hshared.*)
-                admit.
+
+                  destruct b.
+                  ++ exfalso.
+                     Search (domm _ = domm _).
+                     (* CS.CS.comes_from_initial_state_mem_domm *)
+                     (* CS.load_some_in_domm *)
+                     assert (load_in_intf: forall ptr v,
+                                Memory.load mem0 ptr = Some v ->
+                                Pointer.component ptr \in domm intf).
+                     { eapply CS.comes_from_initial_state_mem_domm in Star0; eauto.
+                       simpl in Star0. rewrite <- Star0.
+                       now eapply CS.load_some_in_domm.
+                       eapply well_formed_events_well_formed_program; eauto.
+                       eapply closed_program_of_trace.
+                       reflexivity. }
+                     inversion Hshared; subst; clear Hshared.
+                     { find_rcons_rcons. simpl in H1.
+                       clear -wf_mem Hmem Hmem1 wf_int_pref' Hcom H1 C_next_e1 C_b load_in_intf.
+                       remember (Cb, 0) as addr. setoid_rewrite <- Heqaddr in H1.
+                       remember (addr_of_value vcom) as addr_set.
+                       generalize dependent Cb. generalize dependent vcom.
+                       induction H1.
+                       - intros vcom Hload eq_addr_set Cb eq_addr; subst.
+                         destruct vcom as [| [[[[]]]] |]; try by rewrite /= in_fset0 in H.
+                         simpl in H. rewrite in_fset1 in H.
+                         move: H => /eqP H; inversion H; subst; clear H.
+                         eapply wfmem in wf_mem; last reflexivity.
+                         destruct wf_mem as [wf_mem [_ _]].
+                         specialize (wf_mem (Machine.R_COM) _ Logic.eq_refl) as
+                           [v [v' [wf1 [wf2 wf3]]]].
+                         rewrite <- C_next_e1 in wf1.
+                         rewrite wf1 in Hload; inversion Hload; subst; clear Hload.
+                         simpl in wf2. by [].
+                         - intros vcom Hload eq_addr_set Cb eq_addr; subst.
+                           apply In_in in H0; apply ComponentMemory.load_block_load in H0.
+                           destruct H0 as [ptro [i compMem_bid_i]].
+                           assert (Memory.load mem1 (Permission.data, cid, bid, i) =
+                                     Some (Ptr (Permission.data, Cb, 0, ptro))) as Hload'.
+                           { Local Transparent Memory.load.
+                             unfold Memory.load; simpl; rewrite H compMem_bid_i.
+                             reflexivity. }
+                           eapply wfmem in wf_mem; last reflexivity.
+                           destruct wf_mem as [wf_regs [post1 post2]].
+                           specialize (IHReachable _ Hload Logic.eq_refl cid).
+                           destruct bid; first contradiction.
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1) in Hload';
+                             last (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload';
+                             last (unfold Block.local; congruence).
+                           destruct (cid == C) eqn:eqC;
+                             move: eqC => /eqP eqC; subst.
+                           + specialize (post1 _ C_b C_next_e1).
+                             destruct post1 as [_ [_ post1]].
+                             apply steadysnap_shift in post1.
+                             assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                             specialize (post1 (S bid) not_local).
+                             destruct post1 as [[cid' bid'] [G1 [G2 G3]]].
+                             specialize (G2 _ _ Hload') as [v' [_ renames]].
+                             simpl in renames. discriminate.
+                           + rewrite C_next_e1 in eqC.
+                             assert (Cid_b: component_buffer cid).
+                             { eapply load_in_intf in Hload'; eauto. }
+                             specialize (post2 _ Cid_b eqC) as [post2 | post2].
+                             * destruct post2 as [_ [_ post2]].
+                               apply steadysnap_shift in post2.
+                               assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                               specialize (post2 (S bid) not_local).
+                               destruct post2 as [[cid' bid'] [G1 [G2 G3]]].
+                               specialize (G2 _ _ Hload') as [v' [_ renames]].
+                               simpl in renames. discriminate.
+                             * destruct post2 as [_ [_ [[? ?] _]]].
+                               destruct H2 as [src_compMem [mem0_cid nextblock]].
+                               unfold Memory.load in Hload'.
+                               rewrite /= mem0_cid in Hload'.
+                               apply ComponentMemory.load_next_block in Hload'.
+                               rewrite nextblock in Hload'.
+                               unfold LOCALBUF_blockid in Hload'.
+                               by []. }
+                     { find_rcons_rcons. simpl in H2.
+                       (*
+  Hshift : traces_shift_each_other_option all_zeros_shift (uniform_shift 1)
+             (project_non_inform (prefix0 ++ [:: e1])) (project_non_inform prefix_inform)
+                        *)
+                       inversion Hshift; subst.
+                       clear -wf_mem Hmem Hmem1 wf_int_pref' H0 H H2 C_next_e1 C_b load_in_intf.
+                       rename H2 into H1.
+                       remember (Cb, 0) as addr. setoid_rewrite <- Heqaddr in H1.
+                       remember (fset1 addr') as addr_set.
+                       generalize dependent Cb. generalize dependent addr'.
+                       induction H1.
+                       - intros vcom shared eq_addr_set Cb eq_addr; subst.
+                         destruct vcom as [].
+                         simpl in H0. rewrite in_fset1 in H0.
+                         move: H0 => /eqP H0; inversion H0; subst; clear H0.
+                         setoid_rewrite cats1 in H.
+                         inversion H.
+                         + rewrite -H2 in shared; inversion shared.
+                           * now destruct t.
+                           * now destruct t.
+                         + rewrite H0 in H3. rewrite H1 in H4.
+                           apply H4 in shared.
+                           destruct shared as [[? ?] [? [? ?]]].
+                           clear -H10.
+                           rewrite /all_zeros_shift /uniform_shift in H10.
+                           rewrite /sigma_shifting_wrap_bid_in_addr /sigma_shifting_lefttoright_addr_bid in H10.
+                           rewrite /sigma_shifting_lefttoright_option in H10.
+                           destruct i1; simpl in H10;
+                           rewrite ssrnat.subn0 ssrnat.addn1 in H10; congruence.
+                         - intros vcom shared eq_addr_set Cb eq_addr; subst.
+                           apply In_in in H2; apply ComponentMemory.load_block_load in H2.
+                           destruct H2 as [ptro [i compMem_bid_i]].
+                           assert (Memory.load mem1 (Permission.data, cid, bid, i) =
+                                     Some (Ptr (Permission.data, Cb, 0, ptro))) as Hload'.
+                           { Local Transparent Memory.load.
+                             unfold Memory.load; simpl; rewrite H0 compMem_bid_i.
+                             reflexivity.
+                             Local Opaque Memory.load.
+                           }
+                           specialize (IHReachable _ shared Logic.eq_refl cid).
+                           destruct bid; first contradiction.
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1) in Hload';
+                             last (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload';
+                             last (unfold Block.local; congruence).
+                           eapply wfmem in wf_mem; last reflexivity.
+                           destruct wf_mem as [wf_regs [post1 post2]].
+                           destruct (cid == C) eqn:eqC;
+                             move: eqC => /eqP eqC; subst.
+                           + specialize (post1 _ C_b C_next_e1).
+                             destruct post1 as [_ [_ post1]].
+                             apply steadysnap_shift in post1.
+                             assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                             specialize (post1 (S bid) not_local).
+                             destruct post1 as [[cid' bid'] [G1 [G2 G3]]].
+                             specialize (G2 _ _ Hload') as [v' [_ renames]].
+                             simpl in renames. discriminate.
+                           + rewrite C_next_e1 in eqC.
+                             assert (Cid_b: component_buffer cid).
+                             { eapply load_in_intf in Hload'; eauto. }
+                             specialize (post2 _ Cid_b eqC) as [post2 | post2].
+                             * destruct post2 as [_ [_ post2]].
+                               apply steadysnap_shift in post2.
+                               assert (not_local: S bid <> Block.local) by (unfold Block.local; congruence).
+                               specialize (post2 (S bid) not_local).
+                               destruct post2 as [[cid' bid'] [G1 [G2 G3]]].
+                               specialize (G2 _ _ Hload') as [v' [_ renames]].
+                               simpl in renames. discriminate.
+                             * destruct post2 as [_ [_ [[? ?] _]]].
+                               destruct H3 as [src_compMem [mem0_cid nextblock]].
+                               Local Transparent Memory.load.
+                               unfold Memory.load in Hload'.
+                               Local Opaque Memory.load.
+                               rewrite /= mem0_cid in Hload'.
+                               apply ComponentMemory.load_next_block in Hload'.
+                               rewrite nextblock in Hload'.
+                               unfold LOCALBUF_blockid in Hload'.
+                               by []. }
+                  ++
+                  (* Use [addr_shared_so_far_inv_2] that is not yet stated *)
+                       rename Hshared into Hshared'.
+                        assert (Hshared: addr_shared_so_far (Cb, b)
+                                                            (rcons (project_non_inform prefix) (ERet (cur_comp s) ret_val mem' C'))).
+                       { inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem8 ?].
+                         subst.
+                         eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
+                           last reflexivity.
+                         eapply addr_shared_so_far_inv_2 with (mem := mem0); eauto.
+                         -- intros. by simplify_memory'.
+                         -- simpl.
+                            unfold all_zeros_shift, uniform_shift.
+                            destruct (wf_regs Machine.R_COM _ Logic.eq_refl) as [vcom' [newarg' [G1 [G2 G3]]]].
+                            simpl in *.
+                            assert (vcom' = vcom).
+                            { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem8) in G1; last (unfold EXTCALL_offset; congruence).
+                              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem7) in G1; last congruence.
+                              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6) in G1; last congruence.
+                              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5) in G1; last congruence.
+                              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4) in G1; last congruence.
+                              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3) in G1; last congruence.
+                              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2) in G1; last congruence.
+                              rewrite (Memory.load_after_store_eq _ _ _ _ Hmem1') in G1; congruence. } subst vcom'.
+                            assert (newarg' = ret_val).
+                            { apply ipref_evsteps in wf_int_pref'.
+                              rewrite cats1 in wf_int_pref'.
+                              inversion wf_int_pref'. now destruct prefix0.
+                              destruct prefix0. simpl in *. congruence.
+                              now destruct prefix0.
+                              find_rcons_rcons. rewrite cats1 in H7.
+                              find_rcons_rcons. inversion H1; subst; eauto.
+                            } subst.
+                            auto.
+                         -- eapply wfmem in wf_mem; last reflexivity.
+                            destruct wf_mem as [_ [wf_mem _]].
+                            intros; subst; simpl in *.
+                            unfold postcondition_steady_state, postcondition_event_snapshot_steadystate in wf_mem.
+                            specialize (wf_mem _ C_b C_next_e1) as [_ [_ [G _]]].
+                            intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                            specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                            eexists; split; last split; eauto.
+                            ++ intros offset v Hload.
+                               specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                               inversion wf_int_pref' as [U1 U2].
+                               rewrite !cats1 in U1.
+                               inversion U1.
+                               ** now destruct prefix0.
+                               ** now destruct prefix0 as [| ? []].
+                               ** find_rcons_rcons. find_rcons_rcons.
+                                  inversion H6; subst; clear H6. eauto.
+                            ++ intros offset v Hload.
+                               inversion wf_int_pref' as [U1 U2].
+                               rewrite !cats1 in U1.
+                               inversion U1.
+                               ** now destruct prefix0.
+                               ** now destruct prefix0 as [| ? []].
+                               ** find_rcons_rcons. find_rcons_rcons.
+                                  inversion H6; subst; clear H6. eauto.
+                         -- eapply wfmem in wf_mem; last reflexivity.
+                            destruct wf_mem as [_ [wf_mem1 wf_mem2]].
+                            intros C0 C0_b.
+                            destruct (C0 == next_comp_of_event e1) eqn:eC0;
+                              move: eC0 => /eqP eC0; subst.
+                            ++ left.
+                               specialize (wf_mem1 _ C0_b Logic.eq_refl) as [_ [_ [G _]]].
+                               { intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                                 specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                                 eexists; split; last split; eauto.
+                                 ++ intros offset v Hload.
+                                    specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                                    inversion wf_int_pref' as [U1 U2].
+                                    rewrite !cats1 in U1.
+                                    inversion U1.
+                                    ** now destruct prefix0.
+                                    ** now destruct prefix0 as [| ? []].
+                                    ** find_rcons_rcons. find_rcons_rcons.
+                                       inversion H1; subst; clear H1. eauto.
+                                 ++ intros offset v Hload.
+                                    inversion wf_int_pref' as [U1 U2].
+                                    rewrite !cats1 in U1.
+                                    inversion U1.
+                                    ** now destruct prefix0.
+                                    ** now destruct prefix0 as [| ? []].
+                                    ** find_rcons_rcons. find_rcons_rcons.
+                                       inversion H1; subst; clear H1. eauto. }
+                            ++ specialize (wf_mem2 C0 C0_b eC0) as [wf_mem2 | wf_mem2].
+                               ** left. destruct wf_mem2 as [_ [_ [G _]]].
+                                  { intros [| b'] not_local; first (unfold Block.local in not_local; congruence).
+                               specialize (G _ not_local). destruct G as [addr [G1 [G2 G3]]].
+                               eexists; split; last split; eauto.
+                               ++ intros offset v Hload.
+                                  specialize (G2 _ _ Hload) as [v' [Hload' Hren]].
+                                  inversion wf_int_pref' as [U1 U2].
+                                  rewrite !cats1 in U1.
+                                  inversion U1.
+                                  ** now destruct prefix0.
+                                  ** now destruct prefix0 as [| ? []].
+                                  ** find_rcons_rcons. find_rcons_rcons.
+                                     inversion H1; subst; clear H1. eauto.
+                               ++ intros offset v Hload.
+                                  inversion wf_int_pref' as [U1 U2].
+                                  rewrite !cats1 in U1.
+                                  inversion U1.
+                                  ** now destruct prefix0.
+                                  ** now destruct prefix0 as [| ? []].
+                                  ** find_rcons_rcons. find_rcons_rcons.
+                                     inversion H1; subst; clear H1. eauto. }
+                          ** right.
+                             destruct wf_mem2 as [_ [_ [_ G]]].
+                             now rewrite cats1.
+                    -- intros C0 b0 C0_b not_eq not_shared shared.
+                       assert (inv_mem: CSInvariants.CSInvariants.wf_mem_wrt_t_pc
+                                          (mem_of_event_inform e1)
+                                          (project_non_inform (prefix0 ++ [:: e1]))
+                                          C).
+                       { destruct p_gens_t_inform as [x star].
+                         rewrite Et in star. Search "star" "app".
+                         eapply star_app_inv in star as [x0 [star1 _]];
+                           last eapply CS.CS.singleton_traces_inform.
+                         eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
+                         eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
+                         Check CSInvariants.CSInvariants.is_prefix.
+                         eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
+                         erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                         erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       assert (inv_regs: CSInvariants.CSInvariants.wf_reg_wrt_t_pc
+                                           (register_file_of_event_inform e1)
+                                           (project_non_inform (prefix0 ++ [:: e1]))
+                                           C).
+                       { destruct p_gens_t_inform as [x star].
+                         rewrite Et in star.
+                         eapply star_app_inv in star as [x0 [star1 _]];
+                           last eapply CS.CS.singleton_traces_inform.
+                         eapply CSInvariants.CSInvariants.wf_state_wf_reg; eauto.
+                         eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
+                         eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
+                         erewrite CS.CS.starR_register_file_of_event_inform; first by reflexivity.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                         erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
+                         eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       clear -inv_mem inv_regs shared not_shared not_eq wf_int_pref'.
+                       inversion shared; subst; clear shared.
+                       ++ find_rcons_rcons. simpl in H1.
+                          remember (C0, b0) as addr.
+                          rewrite -Heqaddr in H1.
+                          remember (addr_of_value ret_val) as addr_set.
+                          generalize dependent b0. generalize dependent C0. generalize dependent ret_val.
+                          induction H1.
+                          ** intros new_arg wf_int_pref' eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             simpl in H. destruct new_arg as [| [[[[]]]] |]; try discriminate.
+                             simpl in H. rewrite in_fset1 in H.
+                             move: H => /eqP H. inversion H; subst; clear H.
+                             unfold CSInvariants.CSInvariants.wf_reg_wrt_t_pc in inv_regs.
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H1; subst; clear H1. simpl in *.
+                                 specialize (inv_regs _ _ H9 Logic.eq_refl).
+                                 inversion inv_regs; subst; clear inv_regs.
+                                 +++ unfold C in C0_cur. contradiction.
+                                 +++ contradiction.
+                          ** intros new_arg wf_int_pref' eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             apply In_in in H0.
+                             apply ComponentMemory.load_block_load in H0 as [? [i Hload']].
+                             assert (Hload: Memory.load mem' (Permission.data, cid, bid, i) =
+                                              Some (Ptr (Permission.data, C0, b0, x))).
+                             { Local Transparent Memory.load.
+                               unfold Memory.load. simpl. rewrite H. assumption.
+                               Local Opaque Memory.load. }
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H3; subst; clear H3. simpl in *.
+                                 specialize (inv_mem _ _ Hload Logic.eq_refl).
+                                 inversion inv_mem; subst; clear inv_mem.
+                                 (* CSInvariants.CSInvariants.wf_load *)
+                                 +++ simpl in *. subst.
+                                     specialize (IHReachable H3 _ wf_int_pref').
+                                     eapply IHReachable; eauto.
+                                 +++ simpl in *. subst. contradiction.
+                                 +++ simpl in *. subst. contradiction.
+
+                       ++ find_rcons_rcons. simpl in H2.
+                          remember (C0, b0) as addr.
+                          rewrite -Heqaddr in H2.
+                          remember (fset1 addr') as addr_set.
+                          generalize dependent b0. generalize dependent C0. generalize dependent addr'.
+                          induction H2.
+                          ** intros addr' shared eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             simpl in H. destruct addr' as [cid bid].
+                             simpl in H. rewrite in_fset1 in H.
+                             move: H => /eqP H. inversion H; subst; clear H.
+                             contradiction.
+                          ** intros addr' shared eq_addr_set C0 C0_cur b0 eq_addr; subst.
+                             apply In_in in H0.
+                             apply ComponentMemory.load_block_load in H0 as [? [i Hload']].
+                             assert (Hload: Memory.load mem' (Permission.data, cid, bid, i) =
+                                              Some (Ptr (Permission.data, C0, b0, x))).
+                             { Local Transparent Memory.load.
+                               unfold Memory.load. simpl. rewrite H. assumption.
+                               Local Opaque Memory.load. }
+                             inversion wf_int_pref' as [U1 _].
+                             rewrite !cats1 in U1.
+                             inversion U1.
+                             --- now destruct prefix0.
+                             --- now destruct prefix0 as [| ? []].
+                             --- find_rcons_rcons. find_rcons_rcons.
+                                 inversion H3; subst; clear H3. simpl in *.
+                                 specialize (inv_mem _ _ Hload Logic.eq_refl).
+                                 inversion inv_mem; subst; clear inv_mem.
+                                 (* CSInvariants.CSInvariants.wf_load *)
+                                 +++ simpl in *. subst.
+                                     eapply IHReachable; eauto.
+                                 +++ simpl in *. subst. contradiction.
+                                 +++ simpl in *. subst. contradiction.
+                    -- intros C0 b0 o v Hload. unfold component_buffer.
+                       (* Use p_interm and p_gens_t. *)
+                       (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
+                       destruct p_gens_t_inform as [x star].
+                       rewrite Et in star.
+                       eapply star_app_inv in star as [x0 [star1 _]];
+                         last eapply CS.CS.singleton_traces_inform.
+
+                       rewrite <- (CS.CS.comes_from_initial_state_mem_domm x0 intf); eauto.
+                       Local Transparent Memory.load.
+                       unfold Memory.load in Hload. simpl in Hload.
+                       destruct (mem' C0) eqn:mem'_C0; last discriminate.
+                       erewrite <- CS.CS.starR_memory_of_event_inform.
+                       inversion wf_int_pref' as [U1 _].
+                       rewrite !cats1 in U1.
+                       inversion U1.
+                       --- now destruct prefix0.
+                       --- now destruct prefix0 as [| ? []].
+                       --- find_rcons_rcons. find_rcons_rcons.
+                           inversion H1; subst; clear H1. simpl in *.
+                           apply /dommP. eexists; eauto.
+                       --- eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
+                       --- unfold CS.CS.comes_from_initial_state.
+                           eapply Machine.Intermediate.cprog_main_existence in closed_p_interm as [? [? ?]].
+                           eexists; eexists; eexists; split. eauto.
+                           split; eauto.
+                           split; eauto.
+                           split; eauto. reflexivity.
+                    -- admit.
+                    -- eapply traces_rename_each_other_option_symmetric. reflexivity.
+                       inversion Hshift; eauto.
+                       } clear Hshared'.
+                    exists (Cb, b). split; last split.
+                     ** rewrite /all_zeros_shift /uniform_shift
+                                /sigma_shifting_wrap_bid_in_addr
+                                /sigma_shifting_lefttoright_addr_bid /=.
+                        now rewrite ssrnat.subn0 ssrnat.addn1.
+                     **
+                       {
+                rewrite /all_zeros_shift /uniform_shift
+                          /event_renames_event_at_shared_addr //=.
+                  destruct cs'. simpl in mem_cs'; subst s_memory.
+                  inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem8 ?].
+                  subst C0 stk0 mem9 s_cont s_expr s_arg k exp s_component.
+                  eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
+                    last reflexivity.
+                  simpl in wf_regs, wf_mem8, wf_mem8'.
+                  unfold postcondition_steady_state in wf_mem8.
+                  unfold postcondition_event_snapshot_steadystate in wf_mem8.
+                  case Cb_C: (Cb == C'); move: Cb_C => /eqP Cb_C; [subst Cb |].
+                  * specialize (wf_mem8 _ C'_b Logic.eq_refl) as [_ [_ [Hshift1 _]]].
+                    unfold well_formed_memory_snapshot_steadystate_shift in Hshift1.
+                    unfold memory_shifts_memory_at_shared_addr in Hshift1.
+                    unfold all_zeros_shift, uniform_shift in Hshift1.
+                    simpl in Hshift1.
+                    specialize (Hshift1 (S b)).
+                    unfold memory_renames_memory_at_shared_addr in *.
+                    eexists (C', S b).
+                    split; [| split].
+                    -- rewrite /sigma_shifting_wrap_bid_in_addr. simpl.
+                       by rewrite ssrnat.subn0 ssrnat.addn1.
+                    -- intros off v Hload; simpl in *.
+                       destruct Hshift1 as [addr' [Hshift1 [Hshift2 Hshift3]]];
+                         first easy.
+                       rewrite /sigma_shifting_wrap_bid_in_addr //= in Hshift1.
+                       rewrite ssrnat.subn1 ssrnat.addn0 in Hshift1.
+                       inversion Hshift1; subst addr'.
+                       simpl in Hshift3.
+                       specialize (Hshift3 _ _ Hload) as [? [? ?]].
+                       eexists; split.
+                       ++ repeat match goal with
+                                 | Hload: Memory.load ?mem' ?ptr' = Some ?v',
+                                   Hstore: Memory.store ?mem ?ptr ?v = Some ?mem' |- _ =>
+                                   erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) in Hload
+                                 end.
+                          by simplify_memory.
+                       ++ destruct x; simpl in *; try by inversion H0; subst v.
+                          destruct t0 as [[[[|] ?] ?] ?]; simpl in *.
+                          by inversion H0.
+                          destruct i0; inversion H0; subst v.
+                          by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                    -- intros off v Hload; simpl in *.
+                       destruct Hshift1 as [addr' [Hshift1 [Hshift2 Hshift3]]];
+                         first easy.
+                       rewrite /sigma_shifting_wrap_bid_in_addr //= in Hshift1.
+                       rewrite ssrnat.subn1 ssrnat.addn0 in Hshift1.
+                       inversion Hshift1; subst addr'.
+                       simpl in Hshift2.
+                       assert (Hload': Memory.load mem8 (Permission.data, C', S b, off) = Some v)
+                         by simplify_memory.
+                       specialize (Hshift2 _ _ Hload') as [? [? ?]].
+                       eexists; split.
+                       ++ eassumption.
+                       ++ destruct v; simpl in *; try by inversion H0; subst x.
+                          destruct t0 as [[[[|] ?] ?] ?]; simpl in *.
+                          by inversion H0.
+                          destruct i0; inversion H0; subst x.
+                          by rewrite //= ssrnat.subn1 ssrnat.addn0 ssrnat.subn0 ssrnat.addn1.
+                  * (* Prove good_trace something. Get from Hshared that there's a
+                     * load and [1 <= b]. Now we can get a contradiction to
+                     * [postcondition_uninitialized] *)
+                    (* *)
+                    exists (Cb, S b).
+                    split.
+                    -- rewrite /all_zeros_shift /uniform_shift //=.
+                       rewrite /sigma_shifting_wrap_bid_in_addr //=.
+                       by rewrite ssrnat.subn0 ssrnat.addn1.
+                    --
+
+                       assert (Hwf_p: Source.well_formed_program p).
+                       {
+                         by eapply well_formed_events_well_formed_program; eauto.
+                       }
+                       assert (Hclosed_p: Source.closed_program p).
+                       {
+                         by eapply closed_program_of_trace; eauto.
+                       }
+
+                       assert (Star_init_ret:
+                                Star
+                                  (CS.sem p)
+                                  (CS.initial_machine_state p)
+                                  (prefix' ++ [:: ERet C vcom mem1 C'])
+                                  [CState cur_comp s',
+                                  s_stack,
+                                  mem8,
+                                  Kstop,
+                                  expr_of_trace
+                                    (cur_comp s') P0
+                                    (comp_subtrace (cur_comp s') t),
+                                  arg0]
+                              ).
+                       {
+                         eapply star_trans.
+                         - eapply Star0.
+                         - eapply star_trans; eauto.
+                           eapply star_trans; eauto.
+                         - reflexivity.
+                       }
+                       split; intros ? ? Hload.
+                       ++ simpl in *.
+                          assert (HCb: component_buffer Cb).
+                          {
+                            (** This essentially follows IF we knew that the
+                          intermediate trace came from an intermediate execution.
+                          Then, we can possibly use a lemma in CSInvariants? *)
+
+                            unfold component_buffer.
+                            replace intf with (Machine.Intermediate.prog_interface p_interm).
+                            destruct p_gens_t as [? G].
+                            rewrite Et project_non_inform_append in G.
+                            simpl in G. unfold Eapp in G.
+                            replace ((ERet (cur_comp s) ret_val mem' C' :: project_non_inform suffix)) with ([:: ERet (cur_comp s) ret_val mem' C'] ++ project_non_inform suffix) in G; last reflexivity.
+                            setoid_rewrite app_assoc in G.
+                            apply star_app_inv in G as [? [G _]].
+                            setoid_rewrite cats1 in G.
+                            eapply CSInvariants.CSInvariants.load_Some_component_buffer with
+                              (ptr := (Permission.data, Cb, b, offset))
+                              (e := (ERet (cur_comp s) ret_val mem' C')); eauto.
+                            apply CS.CS.singleton_traces_non_inform.
+                          }
+                          specialize (wf_mem8' _ HCb Cb_C) as
+                              [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
+                          ** assert (Hnoteq: S b <> Block.local).
+                             { by unfold Block.local. }
+                             specialize (steadysnap_shift0 _ Hnoteq)
+                               as [[C_ b_] [Hb_ [mem8_mem' mem'_mem8]]].
+                             rewrite shift_S_Some in Hb_.
+                             inversion Hb_; subst C_ b_; clear Hb_.
+                             simpl in *.
+                             specialize (mem'_mem8 _ _ Hload) as [v' [Hloadv' Hv']].
+                             exists v'. split.
+                             ---
+                                 simplify_memory_in_assm.
+                             --- specialize (shift_value_option_symmetry
+                                               (fun=> 1) (fun=> 0)) as Lem.
+                                 unfold shift_value_option,
+                                 sigma_shifting_wrap_bid_in_addr,
+                                 sigma_shifting_lefttoright_addr_bid,
+                                 rename_addr_option in *.
+                                 by eapply Lem.
+                          ** simpl in *. destruct HcompMem as [HcompMem [? [Hnext ?]]].
+                             (** Intuitively, there should be a contradiction. *)
+                             (** In particular, ** is the case where Cb is not *)
+                             (** initialized. What we know about Cb is that it *)
+                             (** shared an address and that this address also was *)
+                             (** loaded from memory (Hload). *)
+                             specialize (Hnot_shared b).
+                             rewrite -!cats1 project_non_inform_append /= in Hnot_shared.
+                             setoid_rewrite cats1 in Hnot_shared.
+                             apply Hnot_shared in Hshared.
+                             contradiction.
+                       ++ simpl in *.
+                          assert (Hload': Memory.load
+                                            mem8
+                                            (Permission.data, Cb, S b, offset) = Some v').
+                          {
+                            by simplify_memory.
+                          }
+                          (** Need to know component_buffer Cb. *)
+                          (** Intuitively, we should know it from Hload *)
+                          (** Knowing it from Hload should be a source "CSInvariant". *)
+
+                          assert (HCb: component_buffer Cb).
+                          {
+                            unfold component_buffer.
+                            replace intf with (Machine.Intermediate.prog_interface p_interm).
+
+                            specialize (@CS.CS.load_component_prog_interface_addr
+                                          _ Hwf_p Hclosed_p _ _ _
+                                          (Permission.data, Cb, S b, offset) v'
+                                          Logic.eq_refl Star_init_ret
+                                       ) as G'.
+                            simpl in *. rewrite p_interm_intf.
+                            by intuition.
+                          }
+
+
+                          specialize (wf_mem8' _ HCb Cb_C) as
+                              [[? [? [? ?]]] | [? [? [[[compMem [? HcompMem]] ?] Hnot_shared]]] ].
+                          ** assert (Hnoteq: S b <> Block.local).
+                             { by unfold Block.local. }
+                             specialize (steadysnap_shift0 _ Hnoteq)
+                               as [[C_ b_] [Hb_ [mem8_mem' mem'_mem8]]].
+                             rewrite shift_S_Some in Hb_.
+                             inversion Hb_; subst C_ b_; clear Hb_.
+                             simpl in *.
+                             specialize (mem8_mem' _ _ Hload') as [v'' [Hloadv' Hv']].
+                             exists v''. split.
+                             --- assumption.
+                             --- specialize (shift_value_option_symmetry
+                                               (fun=> 1) (fun=> 0)) as Lem.
+                                 unfold shift_value_option,
+                                 sigma_shifting_wrap_bid_in_addr,
+                                 sigma_shifting_lefttoright_addr_bid,
+                                 rename_addr_option in *.
+                                 by eapply Lem.
+                          ** (** Hshared =/= Hnot_shared*)
+                             rewrite -cats1 project_non_inform_append in Hnot_shared.
+                             setoid_rewrite cats1 in Hnot_shared.
+                             by apply Hnot_shared in Hshared.
+                       }
+                     ** eauto.
               - easy.
               - rewrite /all_zeros_shift /uniform_shift
                         /sigma_shifting_wrap_bid_in_addr
