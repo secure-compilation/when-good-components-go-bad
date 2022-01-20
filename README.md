@@ -75,23 +75,13 @@ The proof currently relies on the following assumptions:
 The following standard axioms are used occasionally in our proofs.
 
 ```coq
+ProofIrrelevance.proof_irrelevance : forall (P : Prop) (p1 p2 : P), p1 = p2
 FunctionalExtensionality.functional_extensionality_dep
   : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
     (forall x : A, f x = g x) -> f = g
 Classical_Prop.classic : forall P : Prop, P \/ ~ P
 ClassicalEpsilon.constructive_indefinite_description
   : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
-```
-
-#### Utility libraries ####
-
-Our proofs use a simple property which is not currently available in the map
-library that we use.
-
-```coq
-in_unzip2
-  : forall (X : eqType) (x : X) (xs : NMap X),
-    x \in unzip2 xs -> exists n : nat_ordType, xs n = Some x
 ```
 
 #### Back-translation ####
