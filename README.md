@@ -66,98 +66,22 @@ mechanized counterparts in Coq.
 
 - Lemma A.5 (lockstep simulation): `Intermediate/RecombinationRelLockstepSim.v`, Theorem `threeway_multisem_star_E0`
 
-### Assumptions ###
+### Axioms about (separate) compilation of whole programs ###
 
-The proof currently relies on the following assumptions:
+We leave some standard statements about compilation of whole
+programs as axioms because they are not really the focus of 
+our novel proof techniques.
 
-#### Logical axioms ####
+Proving these axioms is typically laborious and we do not expect
+it to be particularly insightful for our chosen pair of languages.
 
-The following standard axioms are used occasionally in our proofs.
+In fact, one of the key goals of our proof technique for the main 
+secure compilation theorem is to demonstrate that
+standard theorems about whole-program compilation can be reused
+by (rather than implicitly reproved as part of) the secure compilation 
+proof, since proving these theorems is typically a big manual effort 
+that one would wish to avoid.
 
-```coq
-ProofIrrelevance.proof_irrelevance : forall (P : Prop) (p1 p2 : P), p1 = p2
-FunctionalExtensionality.functional_extensionality_dep
-  : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
-    (forall x : A, f x = g x) -> f = g
-Classical_Prop.classic : forall P : Prop, P \/ ~ P
-ClassicalEpsilon.constructive_indefinite_description
-  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
-```
-
-#### Back-translation ####
-
-The proof of back-translation currently relies on a small number of reasonable
-assumptions. The well-formedness of the back-translated program holds by
-construction. Like similar proofs that talk more generally about all source and
-target language programs, a few simple adaptations are needed to accommodate the
-strengthened notion of program well-formedness.
-
-```coq
-well_formed_events_well_formed_program
-  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
-    all (well_formed_event intf procs) t ->
-    Source.well_formed_program (program_of_trace t)
-```
-
-A small number of renaming and reachability properties of procedure calls:
-
-```coq
-addr_shared_so_far_ECall_Hshared_src
-  : forall ... ->
-    exists addr : addr_t,
-      sigma_shifting_wrap_bid_in_addr
-        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
-           (uniform_shift 1)) addr = Some (Cb, b) /\
-      event_renames_event_at_shared_addr all_zeros_shift 
-        (uniform_shift 1) addr (ECall (cur_comp s) P' new_arg mem' C')
-        (ECall (cur_comp s) P' vcom mem1 C') /\
-      addr_shared_so_far addr
-        (rcons (project_non_inform prefix)
-           (ECall (cur_comp s) P' new_arg mem' C'))
-
-addr_shared_so_far_ECall_Hshared_interm
-  : forall ... ->
-    addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C'))
-    
-addr_shared_so_far_inv_1
-  : forall ... ->
-    exists addr : addr_t,
-      sigma_shifting_wrap_bid_in_addr
-        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
-           (uniform_shift 1)) addr = Some (Cb, b) /\
-      event_renames_event_at_shared_addr all_zeros_shift 
-        (uniform_shift 1) addr (ERet (cur_comp s) ret_val mem' C')
-        (ERet (cur_comp s) vcom mem1 C') /\
-      addr_shared_so_far addr
-        (rcons (project_non_inform prefix)
-           (ERet (cur_comp s) ret_val mem' C'))
-
-addr_shared_so_far_inv_2
-  : ... ->
-    Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) 
-      (fset1 addr') (Cb, S b)
-```
-
-Finally, we need to show that a back-translated program does not leak private
-pointers, i.e., pointers to the meta-data buffers. While this property holds by
-construction, the invariants required for its proof are quite different from
-those used by the definability theorem. For this reason, this is better served
-by an independent proof.
-
-```coq
-definability_does_not_leak
-  : CS.private_pointers_never_leak_S p (uniform_shift 1)
-```
-
-#### Top level ####
-
-We assume a certain number of top-level properties of our compilation chain.
-These properties are mostly glue lemmas that help us make the different parts of
-the proof fit together.
-
-All of these results are standard compiler results that, after careful
-inspection, we expect to hold for our compiler. For this reason, proving those
-was not a focus of this work.
 
 *Lemmas regarding compilation and well-formedness conditions*: we assume that
 every well-formed source program can be compiled (`well_formed_compilable`),
@@ -239,6 +163,87 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
     S.CS.private_pointers_never_leak_S p metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size
 ```
+
+
+### Logical axioms ###
+
+The following standard axioms are used occasionally in our proofs.
+
+```coq
+ProofIrrelevance.proof_irrelevance : forall (P : Prop) (p1 p2 : P), p1 = p2
+FunctionalExtensionality.functional_extensionality_dep
+  : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
+    (forall x : A, f x = g x) -> f = g
+Classical_Prop.classic : forall P : Prop, P \/ ~ P
+ClassicalEpsilon.constructive_indefinite_description
+  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
+```
+
+### Axioms about the Back-translation ###
+
+The proof of back-translation currently relies on a small number of reasonable
+assumptions. The well-formedness of the back-translated program holds by
+construction. Like similar proofs that talk more generally about all source and
+target language programs, a few simple adaptations are needed to accommodate the
+strengthened notion of program well-formedness.
+
+```coq
+well_formed_events_well_formed_program
+  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
+    all (well_formed_event intf procs) t ->
+    Source.well_formed_program (program_of_trace t)
+```
+
+A small number of renaming and reachability properties of procedure calls:
+
+```coq
+addr_shared_so_far_ECall_Hshared_src
+  : forall ... ->
+    exists addr : addr_t,
+      sigma_shifting_wrap_bid_in_addr
+        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
+           (uniform_shift 1)) addr = Some (Cb, b) /\
+      event_renames_event_at_shared_addr all_zeros_shift 
+        (uniform_shift 1) addr (ECall (cur_comp s) P' new_arg mem' C')
+        (ECall (cur_comp s) P' vcom mem1 C') /\
+      addr_shared_so_far addr
+        (rcons (project_non_inform prefix)
+           (ECall (cur_comp s) P' new_arg mem' C'))
+
+addr_shared_so_far_ECall_Hshared_interm
+  : forall ... ->
+    addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C'))
+    
+addr_shared_so_far_inv_1
+  : forall ... ->
+    exists addr : addr_t,
+      sigma_shifting_wrap_bid_in_addr
+        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
+           (uniform_shift 1)) addr = Some (Cb, b) /\
+      event_renames_event_at_shared_addr all_zeros_shift 
+        (uniform_shift 1) addr (ERet (cur_comp s) ret_val mem' C')
+        (ERet (cur_comp s) vcom mem1 C') /\
+      addr_shared_so_far addr
+        (rcons (project_non_inform prefix)
+           (ERet (cur_comp s) ret_val mem' C'))
+
+addr_shared_so_far_inv_2
+  : ... ->
+    Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) 
+      (fset1 addr') (Cb, S b)
+```
+
+Finally, we need to show that a back-translated program does not leak private
+pointers, i.e., pointers to the meta-data buffers. While this property holds by
+construction, the invariants required for its proof are quite different from
+those used by the definability theorem. For this reason, this is better served
+by an independent proof.
+
+```coq
+definability_does_not_leak
+  : CS.private_pointers_never_leak_S p (uniform_shift 1)
+```
+
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
