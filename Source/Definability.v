@@ -14548,7 +14548,11 @@ Section Definability.
           exact Hshift'.
         + assumption.
         + assumption.
-          Unshelve. all:  (unfold Block.local; congruence ).
+          Unshelve. all:  try (unfold Block.local; congruence ).
+          eapply well_formed_events_well_formed_program; eauto.
+          eapply closed_program_of_trace; eauto.
+          eapply well_formed_events_well_formed_program; eauto.
+          eapply closed_program_of_trace; eauto.
     (* Qed. *)
     Admitted.
 
