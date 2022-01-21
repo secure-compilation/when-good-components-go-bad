@@ -47,11 +47,11 @@ Require Import S2I.Definitions.
 (*Section MainDefinability.*)
 
 (* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
-Lemma matching_mains_backtranslated_program p c intf bufs back m:
+Lemma matching_mains_backtranslated_program p c intf m back bufs:
   Intermediate.well_formed_program p ->
   Intermediate.well_formed_program c ->
   (* intf = unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *)
-  back = program_of_trace intf m bufs ->
+  Some back = program_of_trace intf bufs m ->
   intf Component.main ->
   (* well_formed_trace intf m -> *)
   matching_mains (Source.program_unlink (domm (Intermediate.prog_interface p)) back) p.
@@ -69,11 +69,14 @@ Proof.
       done.
     + rewrite Hcase in Hinterm. done.
   - (* -> *) (* maybe can be done with more finesse *)
-    unfold Source.prog_main. unfold Source.program_unlink. rewrite Hback. simpl. rewrite Source.find_procedure_filter_comp.
+    unfold Source.prog_main. unfold Source.program_unlink.
+    simpl. rewrite Source.find_procedure_filter_comp.
     destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain_comp ; rewrite Hmain_comp.
     + intros Hprog_main.
-      rewrite find_procedures_of_trace_main. done.
-      assumption.
+      symmetry in Hback. unfold program_of_trace in Hback.
+      destruct (procedures_of_trace intf bufs m) eqn:eprocs; [|discriminate]. inversion Hback.
+      subst. simpl in *.
+      eapply find_procedures_of_trace_main in eprocs; eauto. by rewrite eprocs.
     + intros Hcontra.
       apply (Intermediate.wfprog_main_component wf_p) in Hcontra.
       rewrite Hmain_comp in Hcontra. done.
@@ -323,15 +326,29 @@ Proof.
              Star (CS.sem_inform (Intermediate.program_link p c)) (CS.initial_machine_state (Intermediate.program_link p c)) t s).
   { by exists s. }
   have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hclosed Hstar.
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
-                       H_is_prefix wf_p_c Hclosed Logic.eq_refl wf_t wf_i_t.
+  assert (Hdomm_exported_procs: domm (exported_procedures_of_trace intf bufs t) = domm intf).
+  {
+    by rewrite domm_exported_procedures_of_trace_interface.
+  }
+  
+  assert (Hrewr_: domm procs = domm intf).
+  {
+    unfold procs. by erewrite <- Intermediate.wfprog_defined_procedures.
+  }
+  rewrite -Hrewr_ in Hdomm_exported_procs.
+  symmetry in Hdomm_exported_procs.
+  specialize (well_formed_events_well_formed_program
+                Hclosed_intf intf_main wf_buf Hdomm_exported_procs wf_events)
+    as [back [Hback wf_back]].
+
+  
+  have Hback_trans := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
+                       H_is_prefix Hback wf_p_c Hclosed Logic.eq_refl wf_t wf_i_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
-  set back := (program_of_trace intf bufs t) => Hback.
-  assert (domm_procs: domm procs = domm intf).
-  { unfold procs, intf.
-    by rewrite -Intermediate.wfprog_defined_procedures. }
-  specialize (Hback procs domm_procs wf_events (*all_zeros_shift*)) as
+  assert (domm_procs: domm procs = domm intf) by assumption.
+
+  specialize (Hback_trans procs domm_procs wf_events (*all_zeros_shift*)) as
       [s' [t' [const_map [Hstar' [Hshift Hconst_map]]]]].
   subst const_map.
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
@@ -357,28 +374,33 @@ Proof.
   (* simpl in Hinit. unfold Source.CS.CS.initial_state in *. subst. *)
   (* exists s', const_map. *)
 
+  assert (Hback_intf: Source.prog_interface back = intf).
+  {
+    unfold program_of_trace in *.
+    destruct (procedures_of_trace intf bufs t); [|discriminate].
+      by inversion Hback.
+  }
+  
   split=> /=; last split.
   - rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
-      by apply/eq_filterm=> ??; rewrite mem_domm.
-  - rewrite /intf unionmC; last by case: Hlinkable.
+    rewrite Hback_intf.
+    apply/eq_filterm => ??; by rewrite mem_domm.
+  - rewrite Hback_intf /intf unionmC; last by case: Hlinkable.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   (* have wf_back : Source.well_formed_program back by exact: well_formed_events_well_formed_program. *)
-  - have wf_back : Source.well_formed_program back.
-    {
-      eapply well_formed_events_well_formed_program; auto.
-      (* by exact: well_formed_events_well_formed_program. *)
-      eassumption.
-    }
+  -
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
-    split; first exact: matching_mains_backtranslated_program
-                          wf_p wf_c Logic.eq_refl intf_main.
-    split; first exact: matching_mains_backtranslated_program
-                          wf_c wf_p Logic.eq_refl intf_main.
+    split; first (symmetry in Hback;
+                  exact: matching_mains_backtranslated_program
+                           wf_p wf_c Hback intf_main).
+    split; first (symmetry in Hback;
+                  exact: matching_mains_backtranslated_program
+                           wf_c wf_p Hback intf_main).
 
   split; first exact: Source.well_formed_program_unlink.
   split; first exact: Source.well_formed_program_unlink.
-  rewrite Source.program_unlinkK //; split; first exact: closed_program_of_trace.
+  rewrite Source.program_unlinkK //; split; first (by eapply closed_program_of_trace; eauto).
   (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
   split; auto.
   split.
