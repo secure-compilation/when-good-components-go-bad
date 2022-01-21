@@ -15240,6 +15240,7 @@ Section Definability.
         + assumption.
         + assumption.
           Unshelve. all:  try (unfold Block.local; congruence ).
+          all: try congruence.
           eapply well_formed_events_well_formed_program; eauto.
           eapply closed_program_of_trace; eauto.
           eapply well_formed_events_well_formed_program; eauto.
