@@ -653,6 +653,95 @@ Section Definability.
   Definition procedure_ids_of_trace (C: Component.id) (t: trace event_inform) :=
     procedure_ids_of_subtrace (comp_subtrace C t).
 
+  Definition code_pointer_of_event (e: event_inform) :
+    option (Component.id * Procedure.id) :=
+    match e with
+    | EConst _ (Ptr (Permission.code, cid, bid, off)) _ _ _ => Some (cid, bid)
+    | _ => None
+    end.
+
+  Definition exported_procedures_of_trace (t: trace event_inform)
+    : NMap (NMap expr) :=
+    mapim
+      (
+        fun C Ciface =>
+          let exported_procs := Component.export Ciface in
+          let exported_procs_with_main :=
+              if C == Component.main then
+                Procedure.main |: exported_procs
+              else
+                exported_procs
+          in
+          mkfmapf (fun P => procedure_of_trace C P t) exported_procs_with_main
+      )
+      intf.
+
+  Fixpoint procedures_of_trace_recursive
+           (whole_trace: trace event_inform)
+           (suffix: trace event_inform)
+           (procs_init: NMap (NMap expr))
+    (** Pass the exported procedures as procs_init.                    *)
+    (** Return None when a code pointer points to a cid that is not in *)
+    (** the domain of procs_accum.                                     *)
+    : option (NMap (NMap expr)) :=
+    match suffix with
+    | nil => Some procs_init
+    | e :: suffix' =>
+      match code_pointer_of_event e with
+      | Some (cid, pid) =>
+        if cid == cur_comp_of_event e
+        then
+          match procedures_of_trace_recursive
+                  whole_trace
+                  suffix'
+                  procs_init
+          with
+          | Some res_suffix' =>
+            (* Look up the code pointer in the result of the recursive call *)
+            match res_suffix' cid with
+            | Some procs_of_cid =>
+              (* cid found. Update the procs_of_cid map by adding the code of pid *)
+              let updated_procs :=
+                  setm
+                    procs_of_cid
+                    pid
+                    (procedure_of_trace cid pid whole_trace)
+              in
+              Some (setm res_suffix' 
+                         cid
+                         updated_procs)
+            | None => 
+              (*****************************************
+              (* cid not found. Start from an empty procedures map for cid. *)
+              let singleton_procs_map :=
+                  setm
+                    emptym
+                    pid
+                    (procedure_of_trace cid pid whole_trace)
+              in
+              Some (setm res_suffix' 
+                         cid
+                         singleton_procs_map)
+               ********************************)
+              None
+            end
+          | None =>
+            (* Recursive call is None *)
+            None
+          end
+        else None
+      | None =>
+        (* No code pointer extracted from event e -- proceed to suffix'. *)
+        procedures_of_trace_recursive whole_trace suffix' procs_init
+      end
+    end.
+
+  Definition procedures_of_trace t : option (NMap (NMap expr)) :=
+    (** Can return None but only if the trace is not well formed. *)
+    let initial_procs := exported_procedures_of_trace t in
+    procedures_of_trace_recursive t t initial_procs.
+  
+  (***********************************
   Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
              let procs_no_main :=
@@ -663,6 +752,7 @@ Section Definability.
                  else procs_no_main in
              mkfmapf (fun P => procedure_of_trace C P t) procs)
           intf.
+   ******************************)
 
   (* FIXME *)
   Definition valid_procedure C P t :=
@@ -670,52 +760,311 @@ Section Definability.
     \/ exported_procedure intf C P
     \/ P \in procedure_ids_of_trace C t.
 
-  Lemma find_procedures_of_trace_exp (t: trace event_inform) C P :
+  Lemma find_procedure_exported_procedures_of_trace_case1 t C P:
     exported_procedure intf C P ->
-    Source.find_procedure (procedures_of_trace t) C P
+    Source.find_procedure (exported_procedures_of_trace t) C P
     = Some (procedure_of_trace C P t).
   Proof.
+    unfold Source.find_procedure, exported_procedures_of_trace.
     intros [CI [C_CI CI_P]].
-    unfold Source.find_procedure, procedures_of_trace.
     rewrite mapimE C_CI /= mkfmapfE.
-    case: eqP=> _.
-    - by rewrite in_fsetU1 in_fsetU CI_P !orbT.
-    - by rewrite in_fsetU CI_P !orbT.
+    case: eqP=> _; unfold Component.is_exporting in *.
+    - by rewrite in_fsetU1 CI_P !orbT.
+    - by rewrite CI_P.
   Qed.
 
-  Lemma find_procedures_of_trace_main (t: trace event_inform) :
-    Source.find_procedure (procedures_of_trace t) Component.main Procedure.main
+  Lemma find_procedure_exported_procedures_of_trace_case2 t:
+    Source.find_procedure (exported_procedures_of_trace t)
+                          Component.main
+                          Procedure.main
     = Some (procedure_of_trace Component.main Procedure.main t).
   Proof.
-    rewrite /Source.find_procedure /procedures_of_trace.
-    rewrite mapimE eqxx.
-    case: (intf Component.main) (has_main)=> [Cint|] //= _.
-    by rewrite mkfmapfE in_fsetU1 eqxx.
+    unfold Source.find_procedure, exported_procedures_of_trace.
+    rewrite mapimE /=. unfold omap, obind, oapp.
+    destruct (intf Component.main); [|discriminate].
+    by rewrite mkfmapfE in_fsetU1 eqxx orTb.
   Qed.
 
-  Lemma find_procedures_of_trace (t: trace event_inform) C P :
-    C \in domm intf ->
-          valid_procedure C P t ->
-          Source.find_procedure (procedures_of_trace t) C P
-          = Some (procedure_of_trace C P t).
+  Lemma find_procedure_Some_preserved_by_procedures_of_trace_recursive 
+        (whole_trace t: trace event_inform) procs_map procs_map':
+    (forall C' P' exp',
+      Source.find_procedure procs_map C' P' = Some exp' ->
+      exp' = procedure_of_trace C' P' whole_trace
+    )
+    ->
+    procedures_of_trace_recursive
+      whole_trace t procs_map = Some procs_map' ->
+    (forall C P exp,
+        Source.find_procedure procs_map C P = Some exp ->
+        Source.find_procedure procs_map' C P = Some exp
+    ).
   Proof.
-    move=> /dommP [CI C_CI] [[-> ->]|[?|H]];
-           [by apply: find_procedures_of_trace_main | by apply: find_procedures_of_trace_exp|].
-    move: H.
-    rewrite /Source.find_procedure /procedures_of_trace
-            /procedure_ids_of_trace.
-    rewrite mapimE C_CI //= mkfmapfE.
-    case: eqP=> _ //= H.
-    - by rewrite in_fsetU in_fsetU H !orbT.
-    - by rewrite in_fsetU H.
+    revert procs_map'.
+    induction t as [|e t']; intros ? Hassm HSome ? ? ? Hfind; simpl in *;
+      [by inversion HSome as [H]; subst; auto|].
+    destruct (code_pointer_of_event e) as [[cid pid]|] eqn:ecode_pointer;
+      last first.
+    - by eapply IHt'; eauto.
+    - destruct (cid == cur_comp_of_event e) eqn:ecid; rewrite ecid in HSome;
+        [|discriminate].
+      destruct (procedures_of_trace_recursive whole_trace t' procs_map)
+        as [procs_of_cid|] eqn:eprocs_of_cid; [|discriminate].
+      destruct (procs_of_cid cid) as [procscid|] eqn:eprocscid; [|discriminate];
+        inversion HSome; subst; clear HSome; unfold Source.find_procedure;
+          rewrite setmE.
+      + find_if_inside_goal.
+        * rewrite setmE. move : e0 => /eqP => ?; subst.
+          find_if_inside_goal.
+          -- specialize (Hassm _ _ _ Hfind). subst. move : e0 => /eqP => ?; by subst.
+          -- specialize (IHt' _ Hassm Logic.eq_refl _ _ _ Hfind).
+             unfold Source.find_procedure in IHt'. by rewrite eprocscid in IHt'.
+        * specialize (IHt' _ Hassm Logic.eq_refl _ _ _ Hfind).
+          by unfold Source.find_procedure in IHt'.             
+  Qed.
+  
+  Lemma find_procedures_of_trace_exp_helper
+        (whole_trace t: trace event_inform) procs_map:
+    (
+      forall C' P' exp',
+        Source.find_procedure procs_map C' P' = Some exp' ->
+        exp' = procedure_of_trace C' P' whole_trace
+    )
+    ->
+    forall C P exp procs_map',
+    procedures_of_trace_recursive
+      whole_trace t procs_map = Some procs_map' ->
+    Source.find_procedure procs_map' C P = Some exp ->
+    exp = procedure_of_trace C P whole_trace.
+  Proof.
+    unfold Source.find_procedure. revert procs_map.
+    induction t as [|e t']; intros ? Hprocs_map ? ? ? ? HSome H; subst;
+      simpl in *; inversion HSome; subst.
+    - by eapply Hprocs_map; eauto.
+    - destruct (code_pointer_of_event e) as [[cid pid]|] eqn:ecode_pointer;
+        last first.
+      + by apply (IHt' procs_map Hprocs_map C P exp _ HSome).
+      + destruct (cid == cur_comp_of_event e) eqn:ecid; rewrite ecid in HSome;
+          [|discriminate].
+        destruct (procedures_of_trace_recursive whole_trace t' procs_map)
+          as [procs_of_cid|] eqn:eprocs_of_cid; [|discriminate].
+        destruct (procs_of_cid cid) as [procscid|] eqn:eprocscid; [|discriminate].
+        * rewrite ecid in H1.
+          inversion H1; subst. clear H1 HSome.
+          rewrite setmE in H.
+          destruct (C == cid) eqn:eC_cid; [move : eC_cid => /eqP => ?; subst|].
+          -- rewrite eqxx in H. rewrite setmE in H.
+             destruct (P == pid) eqn:eP_pid;
+               [move:eP_pid=> /eqP=> ?; subst; rewrite eqxx in H; by inversion H
+               |rewrite eP_pid in H].
+             eapply (IHt' procs_map Hprocs_map cid P exp _ eprocs_of_cid);
+               eauto. by rewrite eprocscid.
+          -- rewrite eC_cid in H.
+               by apply (IHt' procs_map Hprocs_map C P exp _ eprocs_of_cid).
   Qed.
 
+  Lemma exported_procedures_of_trace_Some_find_procedure t:
+    forall C' P' exp',
+      Source.find_procedure (exported_procedures_of_trace t) C' P' =
+      Some exp' ->
+      exp' = procedure_of_trace C' P' t.
+  Proof.
+    unfold Source.find_procedure, exported_procedures_of_trace. intros ? ? ?.
+    rewrite mapimE. unfold omap, obind, oapp.
+    destruct (intf C') as [C'i|] eqn:eintf; [|discriminate].
+    rewrite mkfmapfE.
+    find_if_inside_goal; [|discriminate].
+    find_if_inside_hyp e; (by intros H; inversion H; subst).
+  Qed.
+  
+  Lemma find_procedures_of_trace_exp (t: trace event_inform) C P procs_map:
+    procedures_of_trace t = Some procs_map ->
+    exported_procedure intf C P ->
+    Source.find_procedure procs_map C P
+    = Some (procedure_of_trace C P t).
+  Proof.
+    unfold procedures_of_trace.
+    intros HSome Hexport.
+    specialize (@exported_procedures_of_trace_Some_find_procedure t) as Hassm.
+    specialize (@find_procedures_of_trace_exp_helper t t _ Hassm) as G.
+    eapply find_procedure_Some_preserved_by_procedures_of_trace_recursive.
+    2 : { exact HSome. }
+    - exact Hassm.
+    - by apply find_procedure_exported_procedures_of_trace_case1; auto.
+  Qed.
+    
+  Lemma find_procedures_of_trace_main (t: trace event_inform) procs_map:
+    procedures_of_trace t = Some procs_map ->
+    Source.find_procedure procs_map Component.main Procedure.main
+    = Some (procedure_of_trace Component.main Procedure.main t).
+  Proof.
+    unfold procedures_of_trace.
+    intros HSome.
+    specialize (@exported_procedures_of_trace_Some_find_procedure t) as Hassm.
+    specialize (@find_procedures_of_trace_exp_helper t t _ Hassm) as G.
+    eapply find_procedure_Some_preserved_by_procedures_of_trace_recursive.
+    2 : { exact HSome. }
+    - exact Hassm.
+    - by apply find_procedure_exported_procedures_of_trace_case2; auto.
+  Qed.
 
-  Definition program_of_trace (t: trace event_inform) : Source.program :=
-    {| Source.prog_interface  := intf;
-      Source.prog_procedures := procedures_of_trace t;
-      Source.prog_buffers    :=
-      mapm (fun _ => inr meta_buffer) intf |}.
+  Lemma find_procedures_of_trace (t: trace event_inform) C P procs_map:
+    procedures_of_trace t = Some procs_map ->
+    C \in domm intf ->
+    valid_procedure C P t ->
+    Source.find_procedure procs_map C P = Some (procedure_of_trace C P t).
+  Proof.
+    intros HSome.
+    move=> /dommP [CI C_CI] [[-> ->]|[?|H]]; [auto|auto|].
+    - eapply find_procedures_of_trace_main; eauto.
+    - eapply find_procedures_of_trace_exp; eauto.
+    - move: H HSome.
+      rewrite /Source.find_procedure /procedures_of_trace
+              /procedure_ids_of_trace.
+      intros H HSome.
+      assert (LEMMA:
+                forall wholet,
+                  procedures_of_trace_recursive wholet t
+                                                (exported_procedures_of_trace wholet)
+                  = Some procs_map ->
+                  match procs_map C with
+                  | Some C_procs => C_procs P
+                  | None => None
+                  end = Some (procedure_of_trace C P wholet)
+             ).
+      {
+        clear HSome.
+        generalize dependent procs_map.
+        induction t; intros ? ? HSome.
+        + by rewrite in_fset0 in H.
+        + simpl in H.
+          destruct (C == cur_comp_of_event a) eqn:eC; rewrite eC in H.
+          * rewrite in_fsetU in H.
+            move : H => /orP => [[H1 | H2]].
+            -- destruct a; try by rewrite in_fset0 in H1.
+               destruct v as [| [[[[] c] b] o] |]; try by rewrite in_fset0 in H1.
+               rewrite in_fset1 in H1. move : H1 => /eqP => H1; subst.
+               (** HSome should solve the goal. by simpl and rewriting setmE somehow*)
+               simpl in HSome. simpl in eC.
+               move : eC => /eqP => eC; subst.
+               destruct (c == i) eqn:ei'; [|discriminate].
+               move : ei' => /eqP => ?; subst.
+               destruct (procedures_of_trace_recursive
+                           wholet t (exported_procedures_of_trace wholet))
+                        as [procs_map'|] eqn:eprocs_map';
+                 [|discriminate].
+               destruct (procs_map' i) as [entry|] eqn:eentry; [|discriminate].
+               ++ inversion HSome as [H0]. rewrite setmE eqxx. 
+                    by rewrite setmE eqxx; eauto.
+                    
+            -- specialize (IHt H2).
+               simpl in HSome.
+               destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecodeptr.
+               ++ destruct (cid == cur_comp_of_event a) eqn:ecid;
+                    rewrite ecid in HSome; [|discriminate].
+                 destruct (procedures_of_trace_recursive
+                              wholet t (exported_procedures_of_trace wholet))
+                   as [procs_map'|] eqn:eprocs_map';
+                    [|discriminate].
+                 destruct (procs_map' cid) as [procs_map_entry|] eqn:eentry;
+                   [|discriminate].
+                  ** specialize (IHt _ _ eprocs_map').
+                     inversion HSome as [H0]. clear HSome. rewrite setmE.
+                     destruct (C == cid) eqn:eC2; [|assumption].
+                     assert (HTrue: cid = cur_comp_of_event a).
+                     {
+                       move : eC => /eqP => eC. subst.
+                       move : eC2 => /eqP => eC2. by subst.
+                     }
+                     subst. rewrite setmE.
+                     destruct (P == pid) eqn:eP; rewrite eP.
+                     --- move : eP => /eqP => ?; subst.
+                         move : eC2 => /eqP => ?; by subst.
+                     --- move : eC => /eqP => ?; subst. by rewrite eentry in IHt.
+                  
+               ++ by specialize (IHt _ _ HSome).
+          * specialize (IHt H).
+            simpl in HSome.
+            destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecodeptr.
+            ++ destruct (cid == cur_comp_of_event a) eqn:ecid;
+                 rewrite ecid in HSome; [|discriminate].
+               destruct (procedures_of_trace_recursive
+                            wholet t (exported_procedures_of_trace wholet))
+                 as [procs_map'|] eqn:eprocs_map';
+                 [|discriminate].
+               destruct (procs_map' cid) as [procs_map_entry|] eqn:eentry;
+                 [|discriminate].
+               ** specialize (IHt _ _ eprocs_map').
+                  inversion HSome as [H0]. clear HSome. rewrite setmE.
+                  destruct (C == cid) eqn:eC2; [|assumption].
+                  move : eC2 => /eqP => ?; subst.
+                  rewrite setmE.
+                  destruct (P == pid) eqn:eP; rewrite eP.
+                  --- move : eP => /eqP => ?; by subst.
+                  --- by rewrite eentry in IHt.
+            ++ by specialize (IHt _ _ HSome).
+      }
+      eapply LEMMA; eauto.
+  Qed.    
+
+  Search valid_procedure.
+  
+  Lemma find_procedures_of_trace_Some_procedure_of_trace
+        (t: trace event_inform) C P procs_map Pexpr:
+    procedures_of_trace t = Some procs_map ->
+    C \in domm intf ->
+    Source.find_procedure procs_map C P = Some Pexpr ->
+    Pexpr = procedure_of_trace C P t.
+  Proof.
+    rewrite /procedures_of_trace /procedure_ids_of_trace.
+    intros HSome Hdomm Hfind.
+    assert (LEMMA:
+              forall wholet procs_map Pexpr,
+                procedures_of_trace_recursive wholet t
+                                              (exported_procedures_of_trace wholet)
+                  = Some procs_map ->
+                Source.find_procedure procs_map C P = Some Pexpr ->
+                Pexpr = procedure_of_trace C P wholet
+           ).
+    {
+      clear HSome Hfind procs_map Pexpr.
+      induction t; auto; simpl in *; intros ? ? ? HSome Hfind; auto.
+      - inversion HSome; subst. clear HSome.
+        eapply exported_procedures_of_trace_Some_find_procedure; eauto.
+      - destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecodeptr.
+        + destruct (cid == cur_comp_of_event a) eqn:ecid;
+            rewrite ecid in HSome; [|discriminate].
+          move : ecid => /eqP => ?; subst.
+          destruct (procedures_of_trace_recursive
+                      wholet t (exported_procedures_of_trace wholet))
+            as [procs_map'|] eqn:eprocs_map';
+            [|discriminate].
+          destruct (procs_map' (cur_comp_of_event a)) as [procs_map_entry|] eqn:eentry;
+            [|discriminate].
+          specialize (IHt _ _ Pexpr eprocs_map').
+          inversion HSome as [H0]. clear HSome. subst.
+          destruct a eqn:ea; try discriminate. simpl in *.
+          unfold Source.find_procedure in *.
+          rewrite setmE in Hfind.
+          find_if_inside_hyp Hfind.
+          * move : e0 => /eqP => ?; subst. rewrite eentry in IHt.
+            rewrite setmE in Hfind. find_if_inside_hyp Hfind.
+            -- move : e0 => /eqP => ?; subst. by inversion Hfind.
+            -- by eapply IHt.
+          * by eapply IHt.
+        + by eapply IHt; eauto.
+    }
+    by eapply LEMMA; eauto.
+  Qed.
+  
+  Definition program_of_trace (t: trace event_inform) : option Source.program :=
+    match procedures_of_trace t with
+    | Some procs_map => Some
+                          {| Source.prog_interface  := intf;
+                             Source.prog_procedures := procs_map;
+                             Source.prog_buffers    :=
+                               mapm (fun _ => inr meta_buffer) intf |}
+    | None => None
+    end.
   (* mapm (fun b => inr (meta_buffer ++ (unfold_buffer b))) prog_buffers |}. *)
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
@@ -765,18 +1114,406 @@ Section Definability.
      Internal functions are back-translated but never called; their bodies are
      generated by the same procedure as exported functions, but this distinction
      is not really important. *)
-  Lemma well_formed_events_well_formed_program T (procs: NMap (NMap T)) t:
+  
+  Lemma well_formed_events_procedures_of_trace_Some T (procs: NMap (NMap T)) t:
+    domm procs = domm (exported_procedures_of_trace t) ->
     all (well_formed_event intf procs) t ->
-    Source.well_formed_program (program_of_trace t).
+    exists procs_map, procedures_of_trace t = Some procs_map
+                      /\ domm procs_map = domm procs.
   Proof.
-  Admitted.
-
-  Lemma closed_program_of_trace t :
-    Source.closed_program (program_of_trace t).
-  Proof.
-    split=> //=; by rewrite /Source.prog_main find_procedures_of_trace_main.
+    Local Opaque cur_comp_of_event.
+    intros Hdomm Ht.
+    unfold procedures_of_trace.
+    assert (LEMMA: forall wholet,
+               domm procs = domm (exported_procedures_of_trace wholet) ->
+               all (well_formed_event intf procs) t ->
+               exists procs_map,
+                 procedures_of_trace_recursive wholet t
+                                               (exported_procedures_of_trace wholet)
+                 = Some procs_map
+                 /\
+                 domm procs_map = domm procs
+           ).
+    {
+      clear Hdomm Ht. induction t; intros ? Hdomm Ht.
+      - by simpl; eauto.
+      - unfold well_formed_event in Ht. simpl in Ht. move : Ht => /andP => [[Ht1 Ht2]].
+        simpl.
+        specialize (IHt wholet Hdomm Ht2) as [procs_mapIH [Hprocs_mapIH HdommIH]].
+        rewrite Hprocs_mapIH.
+        destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecidpid; [|by eauto].
+        assert (H: cid == cur_comp_of_event a).
+        {
+          Local Transparent cur_comp_of_event.
+          destruct a; simpl in *; try discriminate; auto.
+          unfold well_formed_constant_value in Ht1.
+          destruct v as [| [[[[] c] b] o] |]; try discriminate.
+          inversion ecidpid; subst.
+          destruct (procs i); auto. move : Ht1 => /andP => [[G ?]].
+          by auto.
+        }
+        rewrite H.
+        destruct (procs_mapIH cid) eqn:ecid; eauto.
+        + destruct a; simpl in *; try discriminate.
+          move : H => /eqP => ?; subst.
+          destruct v as [| [[[[] ?] ?] ? ]|]; try discriminate.
+          inversion ecidpid; subst. simpl in Ht1.
+          eexists; split; [reflexivity|].
+          rewrite domm_set. rewrite fsetU1in; auto. apply/dommP; eauto.
+        + destruct a; simpl in *; try discriminate.
+          move : H => /eqP => ?; subst.
+          destruct v as [| [[[[] ?] ?] ? ]|]; try discriminate.
+          inversion ecidpid; subst. simpl in Ht1.
+          destruct (procs i) eqn:eprocs; [|discriminate].
+          assert (contra: i \in domm (procs_mapIH)).
+          {
+            rewrite HdommIH. by apply/dommP; eauto.
+          }
+          move : contra => /dommP => [[? Hrewr]]. by rewrite Hrewr in ecid. 
+    }
+    specialize (LEMMA _ Hdomm Ht) as [? [? ?]]. by eauto.
   Qed.
 
+  Lemma domm_exported_procedures_of_trace_interface t:
+    domm (exported_procedures_of_trace t) = domm intf.
+  Proof. unfold exported_procedures_of_trace. by rewrite domm_mapi. Qed.
+
+  Lemma well_formed_events_bigger_map
+        T t (procs: NMap (NMap T)) cid pid old_inner_procs (newT: T):
+    all (well_formed_event intf procs) t ->
+    procs cid = Some old_inner_procs ->
+    all (well_formed_event intf
+                           (setm procs cid (setm old_inner_procs pid newT))
+        ) t.
+  Proof.
+    induction t; intros Hwf HSome; auto; simpl in *.
+    move : Hwf => /andP => [[Hwf1 Hwf2]].
+    specialize (IHt Hwf2 HSome).
+    apply/andP; split; [|assumption].
+    destruct a; auto; simpl in *.
+    destruct v as [| [[[ [] ?] ?] ?] |]; auto; simpl in *; try discriminate.
+    rewrite setmE.
+    destruct (procs i) as [procs_i|] eqn:eprocsi; [|discriminate].
+    find_if_inside_goal; auto. rewrite setmE.
+    move : Hwf1 => /andP => [[G ?]]. 
+    find_if_inside_goal; auto; simpl.
+    - by rewrite G.
+    - rewrite G. move : e0 => /eqP => ?; subst.
+      rewrite HSome in eprocsi. inversion eprocsi; subst. by auto.
+  Qed.
+    
+  Lemma well_formed_events_procs_procedures_of_trace
+        T (procs: NMap (NMap T)) procs_map t:
+    all (well_formed_event intf procs) t ->
+    procedures_of_trace t = Some procs_map ->
+    all (well_formed_event intf procs_map) t.
+  Proof.
+    unfold procedures_of_trace.
+    assert (LEMMA:
+              forall wholet procs_map,
+                all (well_formed_event intf procs) t ->
+                procedures_of_trace_recursive
+                  wholet t (exported_procedures_of_trace wholet) = Some procs_map ->
+                all (well_formed_event intf procs_map) t
+           ).
+    {
+      clear procs_map.
+      induction t; intros ? ? Hwfprocs HSome; auto.
+      simpl in *.
+      destruct (code_pointer_of_event a) as [[cid pid]|] eqn:ecode_ptr; last first;
+        move : Hwfprocs => /andP => [[Hwfprocs1 Hwfprocs2]].        
+      - specialize (IHt _ _ Hwfprocs2 HSome).
+        apply/andP; split; [|assumption].
+        destruct a eqn:ea; auto.
+        destruct v as [| [[[ [] ?] ?] ?] |]; auto; simpl in *; discriminate.
+      - find_if_inside_hyp HSome; [|discriminate].
+        destruct (procedures_of_trace_recursive
+                    wholet t (exported_procedures_of_trace wholet))
+          as [res_suffix'|] eqn:eprocs; [|discriminate].
+        destruct (res_suffix' cid) as [procs_of_cid|] eqn:ecid; [|discriminate].
+        inversion HSome; subst; clear HSome.
+        specialize (IHt _ _ Hwfprocs2 eprocs).
+        destruct a; try discriminate. move : e => /eqP => ?; subst. simpl in *.
+        destruct v as [| [[[ [] ?] ?] ?] |]; auto; try discriminate.
+        inversion ecode_ptr; subst; clear ecode_ptr.
+        simpl in *. rewrite setmE eqxx setmE eqxx. simpl.
+        rewrite Nat.eqb_refl !andTb.
+        destruct (procs i) as [procs_i|] eqn:eprocsi; [|discriminate].
+        eapply well_formed_events_bigger_map; eauto.
+    }
+    eapply LEMMA; by eauto.
+  Qed.
+  
+  Lemma well_formed_events_well_formed_program T (procs: NMap (NMap T)) t :
+    domm procs = domm (exported_procedures_of_trace t) ->
+    all (well_formed_event intf procs) t ->
+    exists p, program_of_trace t = Some p
+              /\
+              Source.well_formed_program p.
+  Proof.
+    Local Opaque loc_of_reg binop_of_Ebinop expr_of_const_val.
+    move=> Hdomm Ht.
+    assert (exists procs_map, procedures_of_trace t = Some procs_map /\
+                              domm procs_map = domm procs)
+      as [procs_map [Hprocs_map Hprocs_map_domm]].
+    {
+      eapply well_formed_events_procedures_of_trace_Some; by eauto.
+    }
+    unfold program_of_trace. rewrite Hprocs_map. eexists; split; eauto.
+    split=> //=.
+    - exact: closed_interface_is_sound.
+    - erewrite Hprocs_map_domm, <- domm_exported_procedures_of_trace_interface.
+      symmetry. eassumption.
+    - move=> C P.
+      rewrite /exported_procedure /Program.has_component /Component.is_exporting.
+      case=> CI [C_CI P_CI].
+      erewrite find_procedures_of_trace_exp; eauto. exists CI; split; by eauto.
+    - move=> C P Pexpr Hfind.
+      assert (HCintf: C \in domm intf).
+      {
+        erewrite <- domm_exported_procedures_of_trace_interface,
+        <- Hdomm, <- Hprocs_map_domm.
+        unfold Source.find_procedure in *.
+        destruct (procs_map C) as [Cmap|] eqn:eC; [|discriminate].
+          by apply/dommP; eauto.
+      }
+      case intf_C: (intf C)=> [CI|] //=; last first.
+      {
+        move : HCintf => /dommP => [[? contra]]. by rewrite contra in intf_C.
+      }
+      unfold Source.well_formed_expr; simpl.
+      assert (H_: Pexpr = procedure_of_trace C P t).
+      {
+        by eapply find_procedures_of_trace_Some_procedure_of_trace; eauto.
+      }
+      subst.
+      (*rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr};*)
+      split; last first.
+      + split.
+        * rewrite /procedure_of_trace /expr_of_trace /switch.
+          simpl. repeat (rewrite <- andbA; simpl).
+          rewrite !values_are_integers_loc_of_reg; simpl.
+          apply /andP. split.
+          { rewrite /init_local_buffer_expr /buffer_size.
+            case eq_buf: (prog_buffers C) => [buf|] //=.
+            generalize dependent 0.
+            elim: (unfold_buffer buf).
+            - by [].
+            - move=> v ls IH n //=.
+              rewrite IH.
+              move: (wf_buffers eq_buf).
+              rewrite /Buffer.well_formed_buffer /buffer_nth eq_buf
+                      /unfold_buffer.
+              case: buf {eq_buf} => [p | buf] //=.
+              + move=> _.
+                elim: p n => [| p IH' n].
+                * by destruct n.
+                * case n => //=.
+              + move=> /andP [] _ all_wf.
+                elim: buf all_wf n.
+                * destruct n; auto.
+                * move=> v' buf IH' /andP [] [] wf_v' all_wf.
+                  destruct n => //=.
+                  -- simpl. destruct v'; try reflexivity.
+                     by simpl in wf_v'.
+                  -- by rewrite IH'.
+          }
+          elim: {t Ht intf_C Hdomm Hprocs_map Hfind} (comp_subtrace C t) (length _) => [|e t IH] n //=.
+          by case: e=> /=; intros;
+                       try rewrite values_are_integers_expr_of_const_val;
+                       apply IH.
+        *
+          rewrite /procedure_of_trace /expr_of_trace /switch
+                  /program_of_trace.
+          Local Transparent loc_of_reg. simpl. Local Opaque loc_of_reg.
+          rewrite andbT.
+          apply /andP. split.
+          { rewrite /init_local_buffer_expr /buffer_size.
+            case eq_buf: (prog_buffers C) => [buf|] //=.
+            generalize dependent 0.
+            elim: (unfold_buffer buf).
+            - by [].
+            - move=> v ls IH n //=.
+              rewrite IH.
+              move: (wf_buffers eq_buf).
+              rewrite /Buffer.well_formed_buffer /buffer_nth eq_buf
+                      /unfold_buffer.
+              case: buf {eq_buf} => [p | buf] //=.
+              + move=> _.
+                elim: p n => [| p IH' n].
+                * by destruct n.
+                * case n => //=.
+              + move=> /andP [] _ all_wf.
+                elim: buf all_wf n.
+                * destruct n; auto.
+                * move=> v' buf IH' /andP [] [] wf_v' all_wf.
+                  destruct n => //=.
+                  -- simpl. destruct v'; try reflexivity.
+                  -- by rewrite IH'.
+          }
+          unfold program_of_trace in *.
+          (* remember (procedures_of_trace t) as ps. *)
+
+          specialize (well_formed_events_procs_procedures_of_trace Ht Hprocs_map)
+            as Ht_procs_map. 
+
+          assert (Ht': all (well_formed_event intf procs_map) (comp_subtrace C t)).
+          {
+            clear -Ht_procs_map.
+            induction t; auto. simpl in Ht_procs_map.
+            move : Ht_procs_map => /andP [[G1 G2]].
+            specialize (IHt G2).
+            simpl in *.
+            find_if_inside_goal; auto. simpl in *. by rewrite G1 IHt.
+          }
+          assert (Ht'': all (fun e => cur_comp_of_event e == C) (comp_subtrace C t)).
+          { clear -Ht.
+            elim: t Ht => //= e t IH /andP [] wf /IH all_eq.
+            case: ifP=> /eqP eq //=. subst C. by apply /andP. }
+          elim: {Ht intf_C} (comp_subtrace C t) (length _) Ht' Ht'' =>
+              //= e t' IH n /andP [] wf_e wf_all /andP [] eq_e eq_all //=.
+          Local Transparent loc_of_reg.
+          destruct e => //=; intros; try by rewrite IH.
+          (* Local Transparent expr_of_const_val. *)
+          rewrite IH; try assumption.
+          destruct v as [| [[[[]]]] |] => //=.
+          simpl in *. move: eq_e => /eqP eq_e; subst i.
+          Local Transparent expr_of_const_val. simpl.
+          rewrite /Source.find_procedure.
+          destruct (procs_map C); last congruence.
+          move: wf_e => /andP [] /eqP ? wf_e; subst.
+          by rewrite wf_e.
+      + pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
+        have /fsubsetP sub :
+          fsubset (called_procedures (procedure_of_trace C P t))
+                  ((C, P) |: fset (pmap call_of_event (project_non_inform (comp_subtrace C t)))).
+        {
+          rewrite /procedure_of_trace /expr_of_trace /switch.
+          simpl. rewrite !fsetU0 !fset0U.
+          rewrite fsubUset.
+          apply /andP; split.
+          - rewrite /init_local_buffer_expr /buffer_size.
+            case eq_buf: (prog_buffers C) => [buf|] //=; [| by rewrite !fsetU0 fsub0set].
+            generalize dependent 0.
+            elim: (unfold_buffer buf).
+            + by rewrite /= !fsetU0 fsub0set.
+            + move=> v ls IH n /=.
+              rewrite !fsetU0 !fset0U fsubUset; apply /andP; split.
+              * suff: (called_procedures (buffer_nth C n) = fset0) => [->|].
+                now eapply fsub0set.
+                clear -wf_buffers.
+                rewrite /buffer_nth.
+                destruct (prog_buffers C) eqn:Hbuf => //=; last by rewrite fsetU0.
+                specialize (wf_buffers Hbuf).
+                unfold Buffer.well_formed_buffer in *. clear Hbuf.
+                destruct s; simpl in *.
+                -- clear wf_buffers; revert n; induction n0.
+                   destruct n; simpl; by rewrite fsetU0.
+                   destruct n; simpl; first by rewrite fsetU0.
+                   rewrite IHn0; eauto.
+                -- revert n. clear wf_buffers. induction l.
+                   destruct n; simpl; by rewrite fsetU0.
+                   destruct n; simpl. destruct a; simpl; by (try rewrite fsetU0); reflexivity.
+                   by rewrite IHl.
+              * eapply IH.
+          - remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n.
+            clear Heqn.
+            elim: (comp_subtrace C t) n.
+            + move=> n //=. eapply fsub0set.
+            + move=> e ls //=; rewrite !fsetU0 !fset0U => IH.
+              move=> n. rewrite fsubUset.
+              apply /andP; split.
+              * destruct e; simpl.
+                -- rewrite !fset0U !fsetU0 fsetUC.
+                   rewrite fset_cons. rewrite fsetUA fsubsetU. reflexivity.
+                   apply /orP. left. by rewrite fsubsetxx.
+                -- by rewrite !fset0U fsub0set.
+                -- destruct v as [| [[[[]]]] |]; rewrite //= !fset0U !fsetU0 fsubsetU //=
+                                                         fsubset1 eqxx //=.
+                -- rewrite //= !fset0U !fsetU0 fsubsetU //= fsubset1 eqxx //=.
+                -- rewrite //= !fset0U !fsetU0 fsubsetU //= fsubset1 eqxx //=.
+                -- rewrite //= !fset0U !fsetU0 fsubsetU //= fsubset1 eqxx //=.
+                -- rewrite //= !fset0U !fsetU0 fsubsetU //= fsubset1 eqxx //=.
+                -- rewrite //= !fset0U !fsetU0 fsubsetU //= fsubset1 eqxx //=.
+              * destruct e; simpl; try now apply IH.
+                rewrite fset_cons.
+                rewrite fsetUC -fsetUA fsubsetU. reflexivity.
+                apply /orP. right. rewrite fsetUC. eauto.
+        }
+        move: sub.
+        simpl. rewrite !fsetU0 !fset0U => sub.
+        move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
+        * rewrite eqxx. by rewrite Hfind.
+        * rewrite in_fset /= => C'_P'.
+          subst call_of_event.
+          unfold program_of_trace in *.
+          specialize (well_formed_events_procs_procedures_of_trace Ht Hprocs_map)
+            as Ht_procs_map. 
+
+          assert (Ht': all (well_formed_event intf procs_map) (comp_subtrace C t)).
+          {
+            clear -Ht_procs_map.
+            induction t; auto. simpl in Ht_procs_map.
+            move : Ht_procs_map => /andP [[G1 G2]].
+            specialize (IHt G2).
+            simpl in *.
+            find_if_inside_goal; auto. simpl in *. by rewrite G1 IHt.
+          }
+          assert (Ht'': all (fun e => cur_comp_of_event e == C) (comp_subtrace C t)).
+          { clear -Ht.
+            elim: t Ht => //= e t IH /andP [] wf /IH all_eq.
+            case: ifP=> /eqP eq //=. subst C. by apply /andP. }
+          elim: {P intf_C Hfind} (comp_subtrace C t) C'_P' Ht' Ht'' => [| e t' IH] //=.
+          destruct e; try by apply IH.
+          rewrite inE => /orP [].
+          -- move=> /eqP [] ? ?; subst.
+             move=> /andP [] /andP [] /eqP i_i1 imported all_wf /andP [] /eqP ? all_C.
+             subst. Locate "==".
+             case: ifP => //= /eqP ?; subst; auto.
+             now apply imported_procedure_iff.
+          -- move=> /IH IH' /andP [] /andP i_i1 all_wf /andP [] /eqP ? all_C.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' /andP [] i_i1 all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' /andP [] i_i1 all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+          -- move=> //= /IH IH' all_wf /andP [] /eqP ? all_C. subst.
+             eapply IH'. eauto. eauto.
+    - by rewrite domm_map.
+    - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
+      split.
+      + rewrite /Source.has_required_local_buffers. eexists.
+        * rewrite mapmE C_CI. reflexivity.
+        * simpl. lia.
+      + by rewrite /Buffer.well_formed_buffer_opt mapmE C_CI.
+    - rewrite /Source.prog_main //=. split; intros H.
+      + by erewrite find_procedures_of_trace_main; eauto.
+      + erewrite <- domm_exported_procedures_of_trace_interface,
+        <-Hdomm, <-Hprocs_map_domm.
+        unfold Source.find_procedure in *. apply/dommP.
+        destruct (procs_map Component.main) eqn:G; [|discriminate]. by eauto.
+  Qed.
+
+  Print Assumptions well_formed_events_well_formed_program.
+  
+  Lemma closed_program_of_trace t p:
+    program_of_trace t = Some p ->
+    Source.closed_program p.
+  Proof.
+    unfold program_of_trace.
+    destruct (procedures_of_trace t) eqn:ept; [|discriminate]; intros H; inversion H.
+    split=> //=.
+    - rewrite /Source.prog_main. simpl. erewrite find_procedures_of_trace_main; eauto.
+  Qed.
+  
   Arguments Memory.load  : simpl nomatch.
   Arguments Memory.store : simpl nomatch.
 
@@ -805,11 +1542,25 @@ Section Definability.
     (* [DynShare]: This should be the projection of t_inform.
        This projection function may be defined in the Intermedicate/CS.v *)
 
-    Let p    := program_of_trace t.
+    Variable p : Source.program.
+    Hypothesis Hprog_of_trace : program_of_trace t = Some p.
+    
+    (**********
+     Let p    := program_of_trace t.
+     *********)
+    
     Let init := Source.prepare_buffers p.
 
     Local Definition component_buffer C := C \in domm intf.
 
+    Hypothesis wf_p_interm: Machine.Intermediate.well_formed_program p_interm.
+    Hypothesis closed_p_interm: Machine.Intermediate.closed_program p_interm.
+    Hypothesis p_interm_intf: Machine.Intermediate.prog_interface p_interm = intf.
+
+    Lemma domm_t_procs_exported_procedures_of_trace:
+      domm t_procs = domm (exported_procedures_of_trace t).
+    Proof. by rewrite domm_exported_procedures_of_trace_interface. Qed.
+    
     Lemma valid_procedure_has_block C P :
       valid_procedure C P t ->
       component_buffer C.
@@ -1542,11 +2293,6 @@ Section Definability.
        NOTE: Propositional and not boolean conjunction in the conclusion at the
        moment. *)
 
-    (* TODO: Move these hypotheses up *)
-    Hypothesis wf_p_interm: Machine.Intermediate.well_formed_program p_interm.
-    Hypothesis closed_p_interm: Machine.Intermediate.closed_program p_interm.
-    Hypothesis p_interm_intf: Machine.Intermediate.prog_interface p_interm = intf.
-
     (* Cf. event_non_inform_of_nil_or_singleton *)
     Lemma project_non_inform_singleton e:
       project_non_inform [:: e] = [::] \/
@@ -1665,7 +2411,10 @@ Section Definability.
       component_buffer C ->
       Source.prepare_buffers p C = Some (ComponentMemory.prealloc [fmap (0, (inr meta_buffer))]).
     Proof.
-      rewrite /Source.prepare_buffers /p /program_of_trace
+      unfold program_of_trace in Hprog_of_trace.
+      destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace; subst.
+      rewrite /Source.prepare_buffers
               mapmE /omap /obind /oapp /=
               mapmE /omap /obind /oapp /=.
       destruct (intf C) as [CI |] eqn:H_CI;
@@ -1678,12 +2427,16 @@ Section Definability.
       component_buffer C ->
       Memory.next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
     Proof.
+      unfold program_of_trace in Hprog_of_trace.
+      destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace.
+      rewrite H0.
       rewrite /component_buffer /Memory.next_block /Source.prepare_buffers => C_b.
-      rewrite mapmE /omap /obind /oapp.
+      rewrite mapmE /omap /obind /oapp. 
       destruct (Source.prog_buffers p C) as [buf |] eqn:Hbuf.
-      - rewrite ComponentMemory.nextblock_prealloc.
+      - simpl. rewrite ComponentMemory.nextblock_prealloc.
         now rewrite domm_set domm0 fsetU0.
-      - rewrite /p /program_of_trace /= in Hbuf.
+      - subst. simpl in Hbuf. 
         rewrite mapmE /omap /obind /oapp in Hbuf.
         move: C_b => /dommP => [[CI H_CI]].
         now rewrite H_CI in Hbuf.
@@ -1718,9 +2471,16 @@ Section Definability.
       (* Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, o) = nth_error meta_buffer (Z.to_nat o). *)
       Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, Z.of_nat o) = nth_error meta_buffer o.
     Proof.
+      unfold program_of_trace in Hprog_of_trace.
+      destruct (procedures_of_trace t) eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace as [Hprog_of_trace'].
+      rewrite Hprog_of_trace'.
+
       rewrite /component_buffer => /dommP [CI Hint].
+
+      subst p.
       rewrite /Memory.load /=
-              /Source.prepare_buffers /p /program_of_trace /=
+              /Source.prepare_buffers /=
               mapmE /omap /obind /oapp
               mapmE /omap /obind /oapp
               Hint
@@ -1913,7 +2673,13 @@ Section Definability.
         (forall (ptr : Pointer.t) (C : Component.id) (b : Block.id) (o : Block.offset),
             Memory.load mem' ptr = Some (Ptr (Permission.data, C, b, o)) -> b <> Block.local).
     Proof.
+      unfold program_of_trace in Hprog_of_trace.
+      destruct (procedures_of_trace t) as [procs_map|] eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace as [Hprog_of_trace'].
+      rewrite Hprog_of_trace'.
+
       move=> C stk mem k arg prefix e C_b load_safe.
+            
       case.
       - move=> [] load_initflag [] load_localbuf postcond.
         exists mem, 0%Z.
@@ -3424,7 +4190,7 @@ Section Definability.
       inversion H; subst; clear H.
     Abort.
 
-    Lemma definability_does_not_leak :
+    Lemma definability_does_not_leak:
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Admitted.
 
@@ -3442,9 +4208,29 @@ Section Definability.
         traces_shift_each_other_option all_zeros_shift (uniform_shift 1) (project_non_inform prefix) prefix' /\
         well_formed_state_r s prefix suffix cs.
     Proof.
-      have Eintf : genv_interface (prepare_global_env p) = intf by [].
+      assert (Hprog_of_trace_copy: program_of_trace t = Some p) by auto.
+      unfold program_of_trace in Hprog_of_trace_copy.
+      destruct (procedures_of_trace t) as [procs_map|] eqn:eprocst; [|discriminate].
+      inversion Hprog_of_trace_copy as [Hprog_of_trace'].
+      rewrite Hprog_of_trace'.
+
+      assert (Hload_prepare_buffers: forall C o,
+      component_buffer C ->
+      Memory.load (Source.prepare_buffers
+                     {|
+                          Source.prog_interface := intf;
+                          Source.prog_procedures := procs_map;
+                          Source.prog_buffers := mapm (fun=> inr meta_buffer) intf |}
+                  )
+                  (Permission.data, C, Block.local, Z.of_nat o) =
+      nth_error meta_buffer o).
+      {
+        rewrite Hprog_of_trace'. by eapply load_prepare_buffers.
+      }
+      
+      have Eintf : genv_interface (prepare_global_env p) = intf by subst p.
       have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p
-        by [].
+        by subst p.
 
       (* Proof by induction on the prefix. Prior to inducting, generalize on
          the suffix. *)
@@ -3455,7 +4241,7 @@ Section Definability.
 
         assert (Hmain_buffers_p: Component.main \in domm (Source.prog_buffers p)).
         {
-          unfold p, program_of_trace. simpl.
+          subst p. simpl.
           apply/dommP. rewrite mapmE.
           destruct (intf Component.main); last discriminate. simpl. eauto.
         }
@@ -3467,7 +4253,7 @@ Section Definability.
                                Block.local, reg_offset reg) = Some Undef).
         {
           (** Follows from the definition of meta_buffer. *)
-          intros. unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+          intros. subst p. unfold Source.prepare_buffers, Memory.load.
           simpl. rewrite !mapmE.
           destruct (intf Component.main); last discriminate; auto.
           simpl. by destruct reg; rewrite ComponentMemory.load_prealloc setmE.
@@ -3481,7 +4267,7 @@ Section Definability.
                ).
         {
           (** Follows from the definition of meta_buffer. *)
-          unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+          subst p. unfold Source.prepare_buffers, Memory.load.
           simpl. rewrite !mapmE.
           destruct (intf Component.main); last discriminate; auto.
           simpl. by rewrite ComponentMemory.load_prealloc setmE.
@@ -3518,7 +4304,7 @@ Section Definability.
             + assumption.
             + rewrite ComponentMemory.nextblock_prealloc.
               by rewrite domm_set domm0 fsetU0.
-          - rewrite /Source.prepare_buffers
+          - subst p. rewrite /Source.prepare_buffers
                     mapmE /omap /obind /oapp /=
                     mapmE /omap /obind /oapp /=.
             destruct (intf Component.main); last discriminate.
@@ -3536,25 +4322,15 @@ Section Definability.
           simpl in Hload. unfold meta_buffer in Hload. simpl in Hload.
           unfold Memory.load in Hload.
           destruct ptr as [[[[]]]]; first discriminate. simpl in Hload.
-          destruct (mapm
-              (fun initial_buffer : nat + seq value =>
-               ComponentMemory.prealloc (setm emptym 0 initial_buffer))
-              (mapm
-                 (fun=> inr
-                          [:: Int 0; Int 1; Int 0; Undef; Undef; Int 0; Undef; Undef; Undef; Undef;
-                              Undef]) intf) i) eqn:eq_memC; last discriminate.
-          rewrite mapmE in eq_memC.
-          destruct ((mapm
-                 (fun=> inr
-                          [:: Int 0; Int 1; Int 0; Undef; Undef; Int 0; Undef; Undef; Undef; Undef;
-                           Undef]) intf i)) eqn:eq_in; last discriminate.
-          rewrite mapmE in eq_in.
-          destruct (intf i) eqn:intf_i; last discriminate. simpl in eq_in.
-          inversion eq_in. subst. simpl in eq_memC. inversion eq_memC; subst.
+          rewrite mapmE in Hload.
+          destruct ((Source.prog_buffers p i)) eqn:ebuf; [|discriminate].
+          simpl in Hload.
           rewrite ComponentMemory.load_prealloc in Hload.
           move: Hload; case: ifP; last by [].
           move=> _. rewrite setmE. case: ifP => //=.
-          move=> _. clear.
+          move=> _. subst p. simpl in *. unfold meta_buffer in *.
+          rewrite mapmE in ebuf. destruct (intf i) eqn:eintf; [|discriminate].
+          simpl in *. inversion ebuf. 
           destruct (Z.to_nat o0); first by [].
           do 10 (destruct n; first by []). simpl.
           induction n; by []. }
@@ -3619,7 +4395,7 @@ Section Definability.
                     (Int 0%Z) (Int 0%Z)) as [mem7 Hmem7].
         simplify_memory.
         rewrite -Hsamecomp0; try discriminate.
-        unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+        subst p. unfold Source.prepare_buffers, Memory.load.
         simpl. rewrite !mapmE.
         destruct (intf Component.main); last discriminate; auto.
         simpl. by rewrite ComponentMemory.load_prealloc setmE.
@@ -3642,9 +4418,9 @@ Section Definability.
                          (Int 0%Z)).
 
         exists (StackState Component.main []), E0, E0.
-        split; [| split; [| split]].
-        + rewrite /CS.initial_machine_state /Source.prog_main
-                  find_procedures_of_trace_main.
+        split; [| split; [| split ]].
+        + rewrite /CS.initial_machine_state /Source.prog_main.
+          erewrite find_procedures_of_trace_main; last (subst p; by eauto).
           take_step.
           eapply star_trans with (t2 := E0);
             first exact Hstar0;
@@ -3656,7 +4432,7 @@ Section Definability.
             instantiate (1 := Int 1%Z).
             (** Follows from the definition of meta_buffer. *)
             rewrite -Hsamecomp0; try discriminate.
-            unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+            subst p. unfold Source.prepare_buffers, Memory.load.
             simpl. rewrite !mapmE.
             destruct (intf Component.main); last discriminate; auto.
             simpl. by rewrite ComponentMemory.load_prealloc setmE.
@@ -3703,7 +4479,7 @@ Section Definability.
                   simplify_memory.
                   rewrite -(Z2Nat.id EXTCALL_offset) /EXTCALL_offset; [| lia].
                   rewrite -Hothercomp0; try congruence.
-                  now rewrite load_prepare_buffers.
+                  now rewrite Hload_prepare_buffers.
             -- by move=> [].
             -- move=> C r H.
                destruct (Nat.eqb_spec C Component.main) as [| Heq].
@@ -3832,7 +4608,8 @@ Section Definability.
                                  unfold Memory.next_block in Hotherblock0.
                                  specialize (Hotherblock0 _ (nesym Heq)).
                                  rewrite HCmem in Hotherblock0.
-                                 rewrite /Source.prepare_buffers
+                                  
+                                 rewrite -Hprog_of_trace' /Source.prepare_buffers
                                          mapmE /omap /obind /oapp /=
                                          mapmE /omap /obind /oapp /=
                                    in Hotherblock0.
@@ -3843,7 +4620,7 @@ Section Definability.
                                  now rewrite domm_set domm0 fsetU0.
                              *** exfalso.
                                  assert (Hdomm_bufs : C \in domm (Source.prepare_buffers p)). {
-                                 rewrite /Source.prepare_buffers /=.
+                                 rewrite -Hprog_of_trace' /Source.prepare_buffers /=.
                                  rewrite mem_domm
                                          mapmE /omap /obind /oapp
                                          mapmE /omap /obind /oapp.
@@ -3855,7 +4632,7 @@ Section Definability.
                                }
                                assert (Hdomm0 : C \in domm mem0). {
                                  assert (Hdomm_p : domm (Source.prepare_buffers p) = domm (Source.prog_interface p))
-                                   by (by rewrite /Source.prepare_buffers
+                                   by (by rewrite -Hprog_of_trace' /Source.prepare_buffers
                                                   /p /program_of_trace
                                                   !domm_map).
                                  rewrite Hdomm_p in Hdomm_bufs.
@@ -3863,12 +4640,17 @@ Section Definability.
                                    last first;
                                    try reflexivity.
                                  - simpl.
-                                   rewrite /CS.initial_machine_state /Source.prog_main
-                                           find_procedures_of_trace_main.
+                                   rewrite /CS.initial_machine_state /Source.prog_main.
+                                   erewrite find_procedures_of_trace_main;
+                                     last (by subst; eauto).
                                    take_step.
                                    exact Hstar0.
-                                 - now apply closed_program_of_trace.
-                                 - eapply well_formed_events_well_formed_program; eauto.
+                                 - eapply closed_program_of_trace; eauto.
+                                 - eapply well_formed_events_well_formed_program
+                                     in wf_events as [? [? ?]]; eauto.
+                                   + erewrite Hprog_of_trace in H. inversion H.
+                                       by subst x.
+                                   + by eapply domm_t_procs_exported_procedures_of_trace.
                                  - exact Hdomm_bufs.
                                }
                                repeat
@@ -4215,9 +4997,12 @@ Section Definability.
                 eapply star_step. simpl.
                 apply CS.eval_kstep_sound. simpl.
                 rewrite (negbTE C_ne_C').
-                rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+                rewrite -> imported_procedure_iff in Himport.
+                rewrite <- Hprog_of_trace' at 1.
+                rewrite Himport.
                 rewrite <- imported_procedure_iff in Himport.
-                now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+                rewrite <- Hprog_of_trace' at 1. simpl.
+                now rewrite (find_procedures_of_trace_exp eprocst (closed_intf Himport)).
                 take_step.
                 eapply star_trans.
                 eapply Star12.
@@ -4876,9 +5661,13 @@ Section Definability.
               eapply star_step. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
-              rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+              rewrite -> imported_procedure_iff in Himport.
+              rewrite <- Hprog_of_trace' at 1.
+              rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              rewrite <- Hprog_of_trace' at 1. simpl.
+              now rewrite (find_procedures_of_trace_exp eprocst (closed_intf Himport)).
+
               take_step.
               eapply star_trans.
               eapply Star12.
@@ -5402,7 +6191,11 @@ Section Definability.
                          by rewrite ssrnat.subn0 ssrnat.addn1.
                       -- assert (Hwf_p: Source.well_formed_program p).
                          {
-                           by eapply well_formed_events_well_formed_program; eauto.
+                           eapply well_formed_events_well_formed_program
+                             in wf_events as [? [? ?]]; eauto.
+                           + erewrite Hprog_of_trace in H6. inversion H6.
+                               by subst x.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
                          }
                          assert (Hclosed_p: Source.closed_program p).
                          {
@@ -5499,7 +6292,8 @@ Section Definability.
                                             Logic.eq_refl starG
                                          ) as G'.
                               simpl in *. rewrite p_interm_intf.
-                              by intuition.
+                              subst p. simpl in *.
+                              eapply G'; eauto.
                             }
 
                             specialize (wf_mem10' _ HCb Cb_C) as
@@ -5783,11 +6577,16 @@ Section Definability.
                                 Memory.load mem0 ptr = Some v ->
                                 Pointer.component ptr \in domm intf).
                      { eapply CS.comes_from_initial_state_mem_domm in Star0; eauto.
-                       simpl in Star0. rewrite <- Star0.
-                       now eapply CS.load_some_in_domm.
-                       eapply well_formed_events_well_formed_program; eauto.
-                       eapply closed_program_of_trace.
-                       reflexivity. }
+                       - subst p. simpl in Star0.  rewrite <- Star0.
+                         now eapply CS.load_some_in_domm.
+                       - eapply well_formed_events_well_formed_program
+                             in wf_events as [p_wf [Hp_wf1 Hp_wf2]]; eauto.
+                           + erewrite Hprog_of_trace in Hp_wf1. inversion Hp_wf1.
+                               by subst p_wf.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
+                       - eapply closed_program_of_trace.
+                         subst p. by erewrite Hprog_of_trace.
+                       - reflexivity. }
                      inversion Hshared; subst; clear Hshared.
                      { find_rcons_rcons. simpl in H1.
                        clear -wf_mem Hmem Hmem1 wf_int_pref' Hvcom H1 C_next_e1 C_b load_in_intf.
@@ -6148,17 +6947,27 @@ Section Definability.
                     -- intros C0 b0 o v Hload. unfold component_buffer.
                        (* Use p_interm and p_gens_t. *)
                        (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
-
-                       replace intf with (Source.prog_interface p) by reflexivity.
-
+                       
+                       (*replace intf with (Source.prog_interface ) by reflexivity.*)
+                       
                        pose proof (star_trans Star0 Star1 Logic.eq_refl) as G.
-                       erewrite <- (CS.comes_from_initial_state_mem_domm _ _ _ G); simpl.
-                       ++ rewrite (Memory.domm_store _ _ _ _ Hmem1).
+                       eapply CS.comes_from_initial_state_mem_domm in G; simpl in *; eauto.
+                       ++ rewrite -G.
+                          rewrite (Memory.domm_store _ _ _ _ Hmem1).
                           apply /dommP.
                           Local Transparent Memory.load.
                           unfold Memory.load in Hload. simpl in Hload.
-                          destruct (mem1 C0) eqn:mem1_C0; last discriminate. eauto.
+                          destruct (mem1 C0) eqn:mem1_C0; last discriminate. by eauto.
                           Local Opaque Memory.load.
+                       ++ {
+                           eapply well_formed_events_well_formed_program
+                             in wf_events as [theprog [Hrewr ?]]; eauto.
+                           + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                               by subst theprog.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
+                         }
+                       ++ by apply closed_program_of_trace in Hprog_of_trace.
+                       ++ by simpl.
                     -- intros ptr ? ? ?. simpl.
                        destruct (Pointer.eq ptr
                                              (Permission.data, C, Block.local, EXTCALL_offset)) eqn:eq_ptr;
@@ -6298,7 +7107,11 @@ Section Definability.
                          by rewrite ssrnat.subn0 ssrnat.addn1.
                       -- assert (Hwf_p: Source.well_formed_program p).
                          {
-                           by eapply well_formed_events_well_formed_program; eauto.
+                           eapply well_formed_events_well_formed_program
+                             in wf_events as [p_wf [Hp_wf1 Hp_wf2]]; eauto.
+                           + erewrite Hprog_of_trace in Hp_wf1. inversion Hp_wf1.
+                               by subst p_wf.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
                          }
                          assert (Hclosed_p: Source.closed_program p).
                          {
@@ -6395,7 +7208,7 @@ Section Definability.
                                             Logic.eq_refl starG
                                          ) as G'.
                               simpl in *. rewrite p_interm_intf.
-                              by intuition.
+                              by subst p; intuition.
                             }
 
                             specialize (wf_mem10' _ HCb Cb_C) as
@@ -6699,7 +7512,7 @@ Section Definability.
                     take_steps; eauto.
                     take_steps; eauto.
                     take_steps; eauto.
-                    take_steps. simpl. by rewrite find_procedures_of_trace.
+                    take_steps. simpl. erewrite find_procedures_of_trace; eauto; by subst p.
                     take_steps. simplify_memory.
                     take_steps; simplify_memory.
                     take_steps.
@@ -7326,7 +8139,11 @@ Section Definability.
 
                        assert (Hwf_p: Source.well_formed_program p).
                        {
-                         by eapply well_formed_events_well_formed_program; eauto.
+                         eapply well_formed_events_well_formed_program
+                           in wf_events as [p_wf [Hp_wf1 Hp_wf2]]; eauto.
+                         + erewrite Hprog_of_trace in Hp_wf1. inversion Hp_wf1.
+                             by subst p_wf.
+                         + by eapply domm_t_procs_exported_procedures_of_trace.
                        }
                        assert (Hclosed_p: Source.closed_program p).
                        {
@@ -7429,7 +8246,7 @@ Section Definability.
                                           Logic.eq_refl Star_init_ret
                                        ) as G'.
                             simpl in *. rewrite p_interm_intf.
-                            by intuition.
+                            by subst p; intuition.
                           }
 
 
@@ -7462,7 +8279,7 @@ Section Definability.
                     rewrite /sigma_shifting_wrap_bid_in_addr //=.
                     by rewrite ssrnat.subn0 ssrnat.addn1.
                   * inversion wf_cs' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? wf_mem8 ?].
-                    subst.
+                    subst C0 k exp cs'.
                     eapply wfmem in wf_mem8 as [wf_regs [wf_mem8 wf_mem8']];
                       last reflexivity.
                     eapply addr_shared_so_far_inv_1 with (mem := mem0); eauto.
@@ -7472,7 +8289,8 @@ Section Definability.
                        destruct (wf_regs Machine.R_COM _ Logic.eq_refl) as [vcom' [newarg' [G1 [G2 G3]]]].
                        simpl in *.
                        assert (vcom' = vcom).
-                       { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem8) in G1; last (unfold EXTCALL_offset; congruence).
+                       { subst.
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem8) in G1; last (unfold EXTCALL_offset; congruence).
                          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem7) in G1; last congruence.
                          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6) in G1; last congruence.
                          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5) in G1; last congruence.
@@ -7481,15 +8299,17 @@ Section Definability.
                          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2) in G1; last congruence.
                          rewrite (Memory.load_after_store_eq _ _ _ _ Hmem1') in G1; congruence. } subst vcom'.
                        assert (newarg' = ret_val).
-                       { apply ipref_evsteps in wf_int_pref'.
+                       { subst.
+                         apply ipref_evsteps in wf_int_pref'.
                          rewrite cats1 in wf_int_pref'.
                          inversion wf_int_pref'. now destruct prefix0.
-                         destruct prefix0. simpl in *. congruence.
+                         destruct prefix0. simpl in *. subst. congruence.
                          now destruct prefix0.
                          find_rcons_rcons. inversion H1; subst; eauto.
                        } subst.
                        auto.
-                    -- eapply wfmem in wf_mem; last reflexivity.
+                    -- subst.
+                       eapply wfmem in wf_mem; last reflexivity.
                        destruct wf_mem as [_ [wf_mem _]].
                        intros; subst; simpl in *.
                        unfold postcondition_steady_state, postcondition_event_snapshot_steadystate in wf_mem.
@@ -7514,7 +8334,8 @@ Section Definability.
                           ** now destruct prefix0 as [| ? []].
                           ** find_rcons_rcons. find_rcons_rcons.
                              inversion H6; subst; clear H6. eauto.
-                    -- eapply wfmem in wf_mem; last reflexivity.
+                    -- subst.
+                       eapply wfmem in wf_mem; last reflexivity.
                        destruct wf_mem as [_ [wf_mem1 wf_mem2]].
                        intros C0 C0_b.
                        destruct (C0 == next_comp_of_event e1) eqn:eC0;
@@ -7573,6 +8394,7 @@ Section Definability.
                                           C).
                        { destruct p_gens_t_inform as [x star].
                          rewrite Et in star.
+                         subst.
                          eapply star_app_inv in star as [x0 [star1 _]];
                            last eapply CS.CS.singleton_traces_inform.
                          eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
@@ -7588,6 +8410,7 @@ Section Definability.
                                            C).
                        { destruct p_gens_t_inform as [x star].
                          rewrite Et in star.
+                         subst.
                          eapply star_app_inv in star as [x0 [star1 _]];
                            last eapply CS.CS.singleton_traces_inform.
                          eapply CSInvariants.CSInvariants.wf_state_wf_reg; eauto.
@@ -7597,6 +8420,7 @@ Section Definability.
                          eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
                          erewrite <- CS.CS.starR_next_comp_of_event_inform. eauto.
                          eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto. }
+                       subst.
                        clear -inv_mem inv_regs shared not_shared not_eq wf_int_pref'.
                        inversion shared; subst; clear shared.
                        ++ find_rcons_rcons. simpl in H1.
@@ -7682,6 +8506,7 @@ Section Definability.
                        (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
                        destruct p_gens_t_inform as [x star].
                        rewrite Et in star.
+                       subst.
                        eapply star_app_inv in star as [x0 [star1 _]];
                          last eapply CS.CS.singleton_traces_inform.
 
@@ -7714,12 +8539,19 @@ Section Definability.
                      assert (load_in_intf: forall ptr v,
                                 Memory.load mem0 ptr = Some v ->
                                 Pointer.component ptr \in domm intf).
-                     { eapply CS.comes_from_initial_state_mem_domm in Star0; eauto.
-                       simpl in Star0. rewrite <- Star0.
-                       now eapply CS.load_some_in_domm.
-                       eapply well_formed_events_well_formed_program; eauto.
-                       eapply closed_program_of_trace.
-                       reflexivity. }
+                     {
+                       eapply CS.comes_from_initial_state_mem_domm in Star0; eauto.
+                       - subst p. simpl in Star0.  rewrite <- Star0.
+                         now eapply CS.load_some_in_domm.
+                       - eapply well_formed_events_well_formed_program
+                             in wf_events as [p_wf [Hp_wf1 Hp_wf2]]; eauto.
+                           + erewrite Hprog_of_trace in Hp_wf1. inversion Hp_wf1.
+                               by subst p_wf.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
+                       - eapply closed_program_of_trace.
+                         subst p. by erewrite Hprog_of_trace.
+                       - reflexivity.
+                     }
                      inversion Hshared; subst; clear Hshared.
                      { find_rcons_rcons. simpl in H1.
                        clear -wf_mem Hmem Hmem1 wf_int_pref' Hcom H1 C_next_e1 C_b load_in_intf.
@@ -8089,16 +8921,26 @@ Section Definability.
                        (* Use p_interm and p_gens_t. *)
                        (* and (CS.CS.comes_from_initial_state_mem_domm _ intf). *)
 
-                       replace intf with (Source.prog_interface p) by reflexivity.
 
                        pose proof (star_trans Star0 Star1 Logic.eq_refl) as G.
-                       erewrite <- (CS.comes_from_initial_state_mem_domm _ _ _ G); simpl.
-                       ++ rewrite (Memory.domm_store _ _ _ _ Hmem1).
+                       eapply CS.comes_from_initial_state_mem_domm in G; simpl in *; eauto.
+                       ++ rewrite -G.
+                          rewrite (Memory.domm_store _ _ _ _ Hmem1).
                           apply /dommP.
                           Local Transparent Memory.load.
                           unfold Memory.load in Hload. simpl in Hload.
-                          destruct (mem1 C0) eqn:mem1_C0; last discriminate. eauto.
+                          destruct (mem1 C0) eqn:mem1_C0; last discriminate. by eauto.
                           Local Opaque Memory.load.
+                       ++ {
+                           eapply well_formed_events_well_formed_program
+                             in wf_events as [theprog [Hrewr ?]]; eauto.
+                           + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                               by subst theprog.
+                           + by eapply domm_t_procs_exported_procedures_of_trace.
+                         }
+                       ++ by apply closed_program_of_trace in Hprog_of_trace.
+                       ++ by simpl.
+
                     -- intros ptr ? ? ?. simpl.
                        destruct (Pointer.eq ptr
                                              (Permission.data, C, Block.local, EXTCALL_offset)) eqn:eq_ptr;
@@ -8193,7 +9035,11 @@ Section Definability.
 
                        assert (Hwf_p: Source.well_formed_program p).
                        {
-                         by eapply well_formed_events_well_formed_program; eauto.
+                         eapply well_formed_events_well_formed_program
+                           in wf_events as [theprog [Hrewr ?]]; eauto.
+                         + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                             by subst theprog.
+                         + by eapply domm_t_procs_exported_procedures_of_trace.
                        }
                        assert (Hclosed_p: Source.closed_program p).
                        {
@@ -8296,7 +9142,8 @@ Section Definability.
                                           Logic.eq_refl Star_init_ret
                                        ) as G'.
                             simpl in *. rewrite p_interm_intf.
-                            by intuition.
+                            subst p. simpl in *.
+                            eapply G'; eauto.
                           }
 
 
@@ -8518,7 +9365,7 @@ Section Definability.
                   take_steps;
                     first exact Hstore2.
                   take_steps; (* Do recursive call. *)
-                    first now apply find_procedures_of_trace.
+                    [eapply find_procedures_of_trace; eauto; by subst p|].
                   (* Done with the event. *)
                   take_steps; (* Process external call check. *)
                     first (simplify_memory'; exact Hload0init).
@@ -8853,9 +9700,8 @@ Section Definability.
                   { (** star steps *)
                     Local Transparent expr_of_const_val loc_of_reg.
                     take_steps.
-                    { rewrite find_procedures_of_trace.
-                      - reflexivity.
-                      - assumption.
+                    { eapply find_procedures_of_trace; eauto.
+                      - erewrite eprocst. by subst p.
                       - right. right. rewrite Et /=.
                         (* NOTE: Inlined proof, refactor lemma later. *)
                         by rewrite /procedure_ids_of_trace /comp_subtrace
@@ -8863,7 +9709,7 @@ Section Definability.
                     take_steps;
                       first exact Hstore2.
                     take_steps; (* Do recursive call. *)
-                      first now apply find_procedures_of_trace.
+                    [eapply find_procedures_of_trace; eauto; by subst p|].
                     (* Done with the event. *)
                     take_steps; (* Process external call check. *)
                       first (simplify_memory'; exact Hload0init).
@@ -9185,7 +10031,7 @@ Section Definability.
                     take_steps;
                       first exact Hstore2.
                     take_steps; (* Do recursive call. *)
-                      first now apply find_procedures_of_trace.
+                    [eapply find_procedures_of_trace; eauto; by subst p|].
                     (* Done with the event. *)
                     take_steps; (* Process external call check. *)
                       first (simplify_memory'; exact Hload0init).
@@ -9512,7 +10358,7 @@ Section Definability.
                   take_steps;
                     first exact Hstore2.
                   take_steps; (* Do recursive call. *)
-                    first now apply find_procedures_of_trace.
+                    [eapply find_procedures_of_trace; eauto; by subst p|].
                   (* Done with the event. *)
                   take_steps; (* Process external call check. *)
                     first (simplify_memory'; exact Hload0init).
@@ -9882,7 +10728,8 @@ Section Definability.
                 -- exact Hstore'.
                 -- (* Do recursive call. *)
                    take_steps.
-                   ++ now apply find_procedures_of_trace.
+                   ++ eapply find_procedures_of_trace; eauto.
+                      { erewrite eprocst. by subst p. } 
                    ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
                       take_steps.
@@ -10223,9 +11070,9 @@ Section Definability.
                 * (* Evaluate steps of back-translated event first. *)
                   Local Transparent expr_of_const_val loc_of_reg.
                   take_steps.
-                  { rewrite find_procedures_of_trace.
-                    - reflexivity.
-                    - exact C_b.
+                  {
+                    eapply find_procedures_of_trace; eauto.
+                    { erewrite eprocst. by subst p. }
                     - right. right. rewrite Et /=.
                       (* NOTE: Inlined proof, refactor lemma later. *)
                       clear. elim:prefix => [| e t IH].
@@ -10240,7 +11087,7 @@ Section Definability.
                   take_steps;
                     first exact Hstore'.
                   take_steps;
-                    first now rewrite find_procedures_of_trace.
+                    [eapply find_procedures_of_trace; eauto; by subst p|].
                   take_steps;
                     first (simplify_memory'; exact Hinitflag).
                   take_steps;
@@ -10571,7 +11418,7 @@ Section Definability.
                 -- take_steps.
                    ++ exact Hstore'.
                    ++ take_steps.
-                      ** now apply find_procedures_of_trace.
+                      ** eapply find_procedures_of_trace; eauto; by subst p. 
                       ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                          take_steps.
@@ -10912,7 +11759,7 @@ Section Definability.
                 -- exact Hstore'.
                 -- (* Do recursive call. *)
                    take_steps.
-                   ++ now apply find_procedures_of_trace.
+                   ++ eapply find_procedures_of_trace; eauto; by subst p.
                    ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
                       take_steps.
@@ -11290,7 +12137,7 @@ Section Definability.
                 take_steps;
                   first exact Hstore'.
                 take_steps; (* Do recursive call. *)
-                  first now apply find_procedures_of_trace.
+                  [eapply find_procedures_of_trace; eauto; by subst p|].
                 (* Done with the event. *)
                 take_steps; (* Process external call check. *)
                   first (simplify_memory'; exact Hload0init).
@@ -11716,7 +12563,7 @@ Section Definability.
               * take_steps; first exact Hstore'.
                 (* Do recursive call. *)
                 take_steps.
-                -- now apply find_procedures_of_trace.
+                -- eapply find_procedures_of_trace; eauto; by subst p.
                 -- (* Now we are done with the event.
                     We still need to process the external call check. *)
                    take_steps.
@@ -12146,7 +12993,7 @@ Section Definability.
                 take_steps;
                   first exact Hstore'.
                 take_steps; (* Do recursive call. *)
-                  first now apply find_procedures_of_trace.
+                  [eapply find_procedures_of_trace; eauto; by subst p|].
                 (* Done with the event. *)
                 take_steps; (* Process external call check. *)
                   first (simplify_memory'; exact Hload0init).
@@ -12611,7 +13458,7 @@ Section Definability.
                    ++ exact Hstore'.
                    ++ (* Do recursive call. *)
                       take_steps.
-                      ** now apply find_procedures_of_trace.
+                      ** eapply find_procedures_of_trace; eauto; by subst p.
                       ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                          take_steps.
@@ -13275,10 +14122,20 @@ Section Definability.
                 {
                   unfold component_buffer.
                   change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
-                  change intf with (Source.prog_interface p).
+                  (* change intf with (Source.prog_interface p). *)
+                  assert (Hrewr: intf = Source.prog_interface p).
+                  { by subst p. }
+                  rewrite Hrewr. clear Hrewr.                                                
                   eapply CS.load_component_prog_interface; try exact Star0; eauto.
-                  - now eapply well_formed_events_well_formed_program; eauto.
-                  - now apply closed_program_of_trace.
+                  -
+                    {
+                      eapply well_formed_events_well_formed_program
+                        in wf_events as [theprog [Hrewr ?]]; eauto.
+                      + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                          by subst theprog.
+                      + by eapply domm_t_procs_exported_procedures_of_trace.
+                    }
+                  - eapply closed_program_of_trace; by eauto.
                   - reflexivity.
                 }
                 unfold C in Hneq.
@@ -13302,10 +14159,18 @@ Section Definability.
                     as [[Cmem0 [buf0 [HCmem0 [Hbuf0 [Hnext0 Hprealloc0]]]]]
                           [Cmem0' [HCmem0' Hblock0']]].
                   subst Cmem0.
-                  assert (wf_p : Source.well_formed_program p)
-                    by (now eapply well_formed_events_well_formed_program; eauto).
+                  assert (wf_p : Source.well_formed_program p).
+                  {
+                    eapply well_formed_events_well_formed_program
+                      in wf_events as [theprog [Hrewr ?]]; eauto.
+                    + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                        by subst theprog.
+                    + by eapply domm_t_procs_exported_procedures_of_trace.
+                  }
+                  assert (Hclosed_: Source.closed_program p).
+                  { by eapply closed_program_of_trace; eauto. }
                   destruct (CS.load_data_next_block
-                              wf_p (closed_program_of_trace t) Logic.eq_refl
+                              wf_p Hclosed_ Logic.eq_refl
                               Star0 Hreg0mem0)
                     as [Cmem0'' [HCmem0'' Hcontra]].
                   rewrite HCmem0' in HCmem0''.
@@ -13328,7 +14193,7 @@ Section Definability.
                    ++ exact Hstore'.
                    ++ (* Do recursive call. *)
                       take_steps.
-                      ** now apply find_procedures_of_trace.
+                      ** eapply find_procedures_of_trace; by subst; eauto.
                       ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                          take_steps.
@@ -13353,6 +14218,7 @@ Section Definability.
                                  apply star_refl.
             + (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
+              { rewrite Et. by subst. }
               { destruct s. exact wb. }
               { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
                 eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
@@ -13516,10 +14382,20 @@ Section Definability.
                         {
                           unfold component_buffer.
                           change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
-                          change intf with (Source.prog_interface p).
+                          (* change intf with (Source.prog_interface p). *)
+                          assert (Hrewr: intf = Source.prog_interface p).
+                          { by subst p. }
+                          rewrite Hrewr. clear Hrewr.                                                
                           eapply CS.load_component_prog_interface; try exact Star0; eauto.
-                          - now eapply well_formed_events_well_formed_program; eauto.
-                          - now apply closed_program_of_trace.
+                          -
+                            {
+                              eapply well_formed_events_well_formed_program
+                                in wf_events as [theprog [Hrewr ?]]; eauto.
+                              + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                                  by subst theprog.
+                              + by eapply domm_t_procs_exported_procedures_of_trace.
+                            }
+                          - eapply closed_program_of_trace; by eauto.
                           - reflexivity.
                         }
                         unfold C in HC0neq.
@@ -13958,10 +14834,20 @@ Section Definability.
                 {
                   unfold component_buffer.
                   change C0 with (Pointer.component (Permission.data, C0, S b0', o0)).
-                  change intf with (Source.prog_interface p).
+                  (* change intf with (Source.prog_interface p). *)
+                  assert (Hrewr: intf = Source.prog_interface p).
+                  { by subst p. }
+                  rewrite Hrewr. clear Hrewr.                                                
                   eapply CS.load_component_prog_interface; try exact Star0; eauto.
-                  - now eapply well_formed_events_well_formed_program; eauto.
-                  - now apply closed_program_of_trace.
+                  -
+                    {
+                      eapply well_formed_events_well_formed_program
+                        in wf_events as [theprog [Hrewr ?]]; eauto.
+                      + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                          by subst theprog.
+                      + by eapply domm_t_procs_exported_procedures_of_trace.
+                    }
+                  - eapply closed_program_of_trace; by eauto.
                   - reflexivity.
                 }
                 apply nesym in Hneq.
@@ -13986,10 +14872,19 @@ Section Definability.
                     as [Hinitialflag [Hlocalbuf [[Hprealloc Hnextblock] Hnot_shared]]].
                   destruct Hprealloc as [Cmem [buf [HCmem [Hbuf [Hnext Hprealloc]]]]].
                   destruct Hnextblock as [mem0C0 [Hmem0C0 Hnext0]].
-                  assert (wf_p : Source.well_formed_program p)
-                    by (now eapply well_formed_events_well_formed_program; eauto).
+                  assert (wf_p : Source.well_formed_program p).
+                  {
+                    eapply well_formed_events_well_formed_program
+                      in wf_events as [theprog [Hrewr ?]]; eauto.
+                    + erewrite Hprog_of_trace in Hrewr. inversion Hrewr.
+                        by subst theprog.
+                    + by eapply domm_t_procs_exported_procedures_of_trace.
+                  }
+                  assert (Hclosed_: Source.closed_program p).
+                  { by eapply closed_program_of_trace; eauto. }
+
                   destruct (CS.load_data_next_block
-                              wf_p (closed_program_of_trace t) Logic.eq_refl
+                              wf_p Hclosed_ Logic.eq_refl
                               Star0 Hreg0mem0)
                     as [Cmem0'' [HCmem0'' Hcontra]].
                   rewrite Hmem0C0 in HCmem0''.
@@ -14018,7 +14913,7 @@ Section Definability.
                    ++ exact Hstore'.
                    ++ (* Do recursive call. *)
                       take_steps.
-                      ** now apply find_procedures_of_trace.
+                      ** eapply find_procedures_of_trace; by subst; eauto.
                       ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                          take_steps.
@@ -14043,6 +14938,7 @@ Section Definability.
                                  apply star_refl.
             + (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
+              { by rewrite Et; subst. }
               { destruct s. exact wb. }
               { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
                 eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
@@ -14631,7 +15527,7 @@ Section Definability.
                    ++ exact Hstore'.
                    ++ (* Do recursive call. *)
                       take_steps.
-                      ** now apply find_procedures_of_trace.
+                      ** by eapply find_procedures_of_trace; subst; eauto.
                       ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                          take_steps.
@@ -14661,6 +15557,7 @@ Section Definability.
                                  apply star_refl.
             + (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
+              { by rewrite Et; subst. }
               { destruct s. exact wb. }
               { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
                 eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
@@ -15133,10 +16030,6 @@ Section Definability.
         + assumption.
           Unshelve. all:(unfold Block.local; try congruence).
           all: auto.
-          eapply well_formed_events_well_formed_program; eauto.
-          eapply closed_program_of_trace; eauto.
-          eapply well_formed_events_well_formed_program; eauto.
-          eapply closed_program_of_trace; eauto.
     Qed.
 
     Print Assumptions definability_gen_rel_right.

@@ -82,7 +82,6 @@ by (rather than implicitly reproved as part of) the secure compilation
 proof, since proving these theorems is typically a big manual effort 
 that one would wish to avoid.
 
-
 *Lemmas regarding compilation and well-formedness conditions*: we assume that
 every well-formed source program can be compiled (`well_formed_compilable`),
 and that compiling preserves certain well-formedness conditions 
@@ -181,20 +180,7 @@ ClassicalEpsilon.constructive_indefinite_description
 
 ### Axioms about the Back-translation ###
 
-The proof of back-translation currently relies on a small number of reasonable
-assumptions. The well-formedness of the back-translated program holds by
-construction. Like similar proofs that talk more generally about all source and
-target language programs, a few simple adaptations are needed to accommodate the
-strengthened notion of program well-formedness.
-
-```coq
-well_formed_events_well_formed_program
-  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
-    all (well_formed_event intf procs) t ->
-    Source.well_formed_program (program_of_trace t)
-```
-
-Finally, we need to show that a back-translated program does not leak private
+We need to show that a back-translated program does not leak private
 pointers, i.e., pointers to the meta-data buffers. While this property holds by
 construction, the invariants required for its proof are quite different from
 those used by the definability theorem. For this reason, this is better served
