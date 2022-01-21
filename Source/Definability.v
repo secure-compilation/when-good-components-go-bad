@@ -5640,12 +5640,11 @@ Section Definability.
                                             (project_non_inform (prefix0 ++ [:: e1]))
                                             C).
                          { destruct p_gens_t_inform as [x star].
-                           rewrite Et in star. Search "star" "app".
+                           rewrite Et in star.
                            eapply star_app_inv in star as [x0 [star1 _]];
                              last eapply CS.CS.singleton_traces_inform.
                            eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
                            eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
-                           Check CSInvariants.CSInvariants.is_prefix.
                            eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
                            erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
                            eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
@@ -5780,9 +5779,6 @@ Section Definability.
 
                   destruct b.
                   ++ exfalso.
-                     Search (domm _ = domm _).
-                     (* CS.CS.comes_from_initial_state_mem_domm *)
-                     (* CS.load_some_in_domm *)
                      assert (load_in_intf: forall ptr v,
                                 Memory.load mem0 ptr = Some v ->
                                 Pointer.component ptr \in domm intf).
@@ -6044,12 +6040,11 @@ Section Definability.
                                           (project_non_inform (prefix0 ++ [:: e1]))
                                           C).
                        { destruct p_gens_t_inform as [x star].
-                         rewrite Et in star. Search "star" "app".
+                         rewrite Et in star.
                          eapply star_app_inv in star as [x0 [star1 _]];
                            last eapply CS.CS.singleton_traces_inform.
                          eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
                          eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
-                         Check CSInvariants.CSInvariants.is_prefix.
                          eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
                          erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
                          eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
@@ -7577,12 +7572,11 @@ Section Definability.
                                           (project_non_inform (prefix0 ++ [:: e1]))
                                           C).
                        { destruct p_gens_t_inform as [x star].
-                         rewrite Et in star. Search "star" "app".
+                         rewrite Et in star.
                          eapply star_app_inv in star as [x0 [star1 _]];
                            last eapply CS.CS.singleton_traces_inform.
                          eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
                          eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
-                         Check CSInvariants.CSInvariants.is_prefix.
                          eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
                          erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
                          eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
@@ -7717,9 +7711,6 @@ Section Definability.
 
                   destruct b.
                   ++ exfalso.
-                     Search (domm _ = domm _).
-                     (* CS.CS.comes_from_initial_state_mem_domm *)
-                     (* CS.load_some_in_domm *)
                      assert (load_in_intf: forall ptr v,
                                 Memory.load mem0 ptr = Some v ->
                                 Pointer.component ptr \in domm intf).
@@ -7988,12 +7979,11 @@ Section Definability.
                                           (project_non_inform (prefix0 ++ [:: e1]))
                                           C).
                        { destruct p_gens_t_inform as [x star].
-                         rewrite Et in star. Search "star" "app".
+                         rewrite Et in star.
                          eapply star_app_inv in star as [x0 [star1 _]];
                            last eapply CS.CS.singleton_traces_inform.
                          eapply CSInvariants.CSInvariants.wf_state_wf_mem; eauto.
                          eapply CSInvariants.CSInvariants.is_prefix_wf_state_t; eauto.
-                         Check CSInvariants.CSInvariants.is_prefix.
                          eapply CS.CS.star_sem_inform_star_sem_non_inform. eauto.
                          erewrite CS.CS.starR_memory_of_event_inform; first by reflexivity.
                          eapply star_iff_starR. rewrite cats1 in star1. simpl in star1. eauto.
@@ -8720,7 +8710,6 @@ Section Definability.
                           eexists. split; [| split].
                           -- rewrite shift_S_Some. reflexivity.
                           -- simpl. intros off v' Hload.
-                             (* Check next_block_prepare_buffers C_b. *)
                              pose proof Hblock0 _ (next_block_initial_memory C_b)
                                as Hnext0.
                              erewrite Memory.load_after_store_neq in Hload;
@@ -9052,7 +9041,6 @@ Section Definability.
                             eexists. split; [| split].
                             -- rewrite shift_S_Some. reflexivity.
                             -- simpl. intros off v' Hload.
-                               (* Check next_block_prepare_buffers C_b. *)
                                pose proof Hblock0 _ (next_block_initial_memory C_b)
                                  as Hnext0.
                                erewrite Memory.load_after_store_neq in Hload;
@@ -9383,7 +9371,6 @@ Section Definability.
                             eexists. split; [| split].
                             -- rewrite shift_S_Some. reflexivity.
                             -- simpl. intros off v' Hload.
-                               (* Check next_block_prepare_buffers C_b. *)
                                pose proof Hblock0 _ (next_block_initial_memory C_b)
                                  as Hnext0.
                                erewrite Memory.load_after_store_neq in Hload;
@@ -9704,7 +9691,6 @@ Section Definability.
                           eexists. split; [| split].
                           -- rewrite shift_S_Some. reflexivity.
                           -- simpl. intros off v' Hload.
-                             (* Check next_block_prepare_buffers C_b. *)
                              pose proof Hblock0 _ (next_block_initial_memory C_b)
                                as Hnext0.
                              erewrite Memory.load_after_store_neq in Hload;
