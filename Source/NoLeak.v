@@ -153,6 +153,8 @@ Inductive safe_cont_expr: cont -> expr -> Prop :=
 | safe_cont_expr_E_arg: forall k,
     (forall v, safe_value v -> safe_cont_expr k (E_val v)) ->
     safe_cont_expr k E_arg
+| safe_cont_expr_E_exit: forall k,
+    safe_cont_expr k E_exit
 | safe_cont_expr_E_funptr: forall k P,
     (forall v, safe_value v -> safe_cont_expr k (E_val v)) ->
     safe_cont_expr k (E_funptr P)

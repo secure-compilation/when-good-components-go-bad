@@ -3330,100 +3330,88 @@ Section Definability.
           * eauto.
     Qed.
 
-    Lemma shareable_eassign_extcall_lt :
-      forall s,
-        CS.s_expr s = E_assign EXTCALL (E_val (Int 1)) ->
-        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
-      forall n t s',
-        n < 8 ->
-        starN CS.kstep (prepare_global_env p) n s t s' ->
-        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1).
+    Theorem definability_does_not_leak:
+      forall (s: CS.state) (t: trace event),
+        Star (CS.sem p) (CS.initial_machine_state p) t s ->
+        forall (mem: Memory.t), CS.s_memory s = mem -> shared_locations_have_only_shared_values mem (uniform_shift 1).
     Proof.
-      intros s Hexpr Hshared n t' s' Hn HstarN.
-      destruct s. simpl in *. subst s_expr.
-      match goal with
-      | HstarN : starN _ _ _ _ _ _ |- _ =>
-        inversion HstarN; subst; clear HstarN
-      end.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H0; subst; clear H0.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H1; subst; clear H1.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H0; subst; clear H0.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H1; subst; clear H1.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H0; subst; clear H0.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H1; subst; clear H1.
-      assumption.
-      inversion H; subst; clear H.
-      inversion H0; subst; clear H0.
-      simpl.
-      intros ptr [cid bid] v Hload Haddr Hshift.
-      inversion Haddr; subst; clear Haddr.
-      destruct (Pointer.eqP (Permission.data, s_component, Block.local, EXTCALL_offset) ptr).
-      { subst. simpl in *.
-        unfold left_block_id_good_for_shifting, uniform_shift, Block.local in Hshift.
-          by []. }
-      { eapply Memory.load_after_store_neq in H13; last eassumption.
-        unfold shared_locations_have_only_shared_values in Hshared.
-        rewrite H13 in Hload.
-        eapply Hshared; try eassumption. reflexivity. }
-      lia.
-    Qed.
-    Lemma shareable_eassign_extcall_eq :
-      forall s e k,
-        CS.s_expr s = E_assign EXTCALL (E_val (Int 1)) ->
-        CS.s_cont s = Kseq e k ->
-        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
-      forall t s',
-        starN CS.kstep (prepare_global_env p) 8 s t s' ->
-        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1) /\
-        CS.s_expr s' = e /\ CS.s_cont s' = k.
-        (* s'.memory changes, but exactly how is ideally of no interest;
-           other parts remain unchanged *)
-    Proof.
-      (* Merge with lemma above? *)
+      intros s t0 Hstar mem Hmem.
+      eapply star_never_leaks in Hstar; eauto.
+      - subst p. simpl.
+        intros C P expr.
+        rewrite /Source.find_procedure /procedures_of_trace mapimE.
+        case: (intf C); last by []. simpl. intros i.
+        rewrite mkfmapfE. case: ifP; last by [].
+        move=> _ [] <-.
+        rewrite /procedure_of_trace.
+        assert (H: safe_cont_expr Kstop (expr_of_trace C P (comp_subtrace C t))).
+        { unfold expr_of_trace. unfold switch.
+          remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n. clear Heqn.
+          revert n.
+          elim: (comp_subtrace C t); intros e.
+          - simpl. unfold switch. simpl. constructor.
+          - intros ? H n.
+            simpl. unfold switch. simpl.
+            repeat constructor; eauto; try now destruct v0 as [| [[[[]]]] |]; eauto.
+            destruct e; subst; eauto.
+            + repeat constructor; eauto.
+            + repeat constructor; eauto.
+            + repeat constructor; eauto.
+              destruct v1.
+              * repeat constructor; eauto.
+              * destruct t2 as [[[[]]]]; repeat constructor; eauto. simpl in *.
+                destruct v1 as [| [[[[]]]] |]; eauto.
+                destruct v1 as [| [[[[]]]] |]; eauto.
+                destruct v1 as [| [[[[]]]] |]; eauto.
+                destruct v1 as [| [[[[]]]] |]; eauto.
+              * repeat constructor; eauto.
+            + repeat constructor; eauto.
+            + repeat constructor; eauto.
+              destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
+                by case: ifP.
+              destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
+                by case: ifP.
+            + repeat constructor; eauto.
+            + repeat constructor; eauto.
+            + repeat constructor; eauto.
+        }
+        repeat (constructor; eauto).
+        unfold init_local_buffer_expr. unfold copy_local_datum_expr. unfold buffer_nth.
+        assert (H': safe_cont_expr (Kseq (extcall_check;;
+                                          expr_of_trace C P (comp_subtrace C t)) Kstop) (E_assign INITFLAG (E_val (Int 1)))).
+        { repeat econstructor; eauto. }
+        unfold buffer_size.
+        destruct (prog_buffers C); last eauto.
+        unfold unfold_buffer. destruct s0; eauto.
+        + admit.
+        + admit.
+      - intros ptr v.
+        Local Transparent Memory.load.
+        rewrite /Memory.load.
+        Local Opaque Memory.load.
+        destruct ptr as [[[[]]]]; first by [].
+        simpl.
+        unfold Source.prepare_buffers; rewrite mapmE.
+        destruct (Source.prog_buffers p i) eqn:prog_i; last by [].
+        simpl. rewrite ComponentMemory.load_prealloc.
+        destruct (0 <=? o)%Z eqn:o_lt; last discriminate.
+        rewrite setmE.
+        case: ifP => ?; last by [].
+        destruct s0 eqn:eqs0.
+        + case: ifP => _ []; last by [].
+          move=> <- //=.
+        + subst. unfold p in *. simpl in *.
+          unfold meta_buffer in prog_i.
+          rewrite mapmE in prog_i. destruct (intf i) eqn:intf_i; last discriminate.
+          simpl in prog_i. inversion prog_i; subst.
+          clear.
+          remember (Z.to_nat o) as n; clear Heqn.
+          do 11 (destruct n; first by move=> [] <- //=).
+          simpl. by induction n.
     Admitted.
 
-    Lemma shareable_ederef_loc_of_reg :
-      forall s,
-        CS.s_expr s = E_deref (loc_of_reg E_R_COM) ->
-        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
-      forall n t s',
-        n < 5 ->
-        starN CS.kstep (prepare_global_env p) n s t s' ->
-      (* exists t s', *)
-        (* starN CS.kstep (prepare_global_env p) n s t s' /\ *)
-        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1).
-    Admitted.
 
-    Lemma shareable_ereturn :
-      forall s,
-        CS.s_expr s = (E_assign EXTCALL (E_val (Int 1));; E_deref (loc_of_reg E_R_COM)) ->
-        shared_locations_have_only_shared_values (CS.s_memory s) (uniform_shift 1) ->
-      forall n t s',
-        n < 13 ->
-        starN CS.kstep (prepare_global_env p) n s t s' ->
-      (* exists t s', *)
-        (* starN CS.kstep (prepare_global_env p) n s t s' /\ *)
-        shared_locations_have_only_shared_values (CS.s_memory s') (uniform_shift 1).
-    Proof.
-      intros s Hexpr Hshared n t' s' Hn HstarN.
-      destruct s. simpl in *. subst s_expr.
 
-      inversion HstarN; subst; clear HstarN.
-      assumption.
-      inversion H; subst; clear H.
-    Abort.
 
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
