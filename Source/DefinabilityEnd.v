@@ -173,7 +173,7 @@ Proof.
           }
           by rewrite Hrewr.
         }
-        by rewrite Hassert.
+        by rewrite -Hassert.
       }
       assert (regs0 = Intermediate.Register.init).
       {
@@ -319,15 +319,9 @@ Proof.
     intros ? ? Hsome.
     by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
   }
-  assert (H_is_prefix: exists s : CS.state,
-             CSInvariants.CSInvariants.is_prefix
-               s
-               (Intermediate.program_link p c)
-               (project_non_inform t)).
-  {
-    unfold CSInvariants.CSInvariants.is_prefix.
-    exists s. by eapply I.CS.star_sem_inform_star_sem_non_inform.
-  }
+  assert (H_is_prefix: exists s : state (CS.sem_inform (Intermediate.program_link p c)),
+             Star (CS.sem_inform (Intermediate.program_link p c)) (CS.initial_machine_state (Intermediate.program_link p c)) t s).
+  { by exists s. }
   have wf_i_t := star_well_formed_intermediate_prefix wf_p_c Hclosed Hstar.
   have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ _
                        H_is_prefix wf_p_c Hclosed Logic.eq_refl wf_t wf_i_t.

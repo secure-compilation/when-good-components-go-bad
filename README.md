@@ -66,153 +66,22 @@ mechanized counterparts in Coq.
 
 - Lemma A.5 (lockstep simulation): `Intermediate/RecombinationRelLockstepSim.v`, Theorem `threeway_multisem_star_E0`
 
-### Assumptions ###
+### Axioms about (separate) compilation of whole programs ###
 
-The proof currently relies on the following assumptions:
+We leave some standard statements about compilation of whole
+programs as axioms because they are not really the focus of 
+our novel proof techniques.
 
-#### Logical axioms ####
+Proving these axioms is typically laborious and we do not expect
+the proof to be particularly insightful for our chosen pair of languages.
 
-The following standard axioms are used occasionally in our proofs.
+In fact, one of the key goals of our proof technique for the main 
+secure compilation theorem is to demonstrate that
+standard theorems about whole-program compilation can be reused
+by (rather than implicitly reproved as part of) the secure compilation 
+proof, since proving these theorems is typically a big manual effort 
+that one would wish to avoid.
 
-```coq
-FunctionalExtensionality.functional_extensionality_dep
-  : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
-    (forall x : A, f x = g x) -> f = g
-Classical_Prop.classic : forall P : Prop, P \/ ~ P
-ClassicalEpsilon.constructive_indefinite_description
-  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
-```
-
-#### Utility libraries ####
-
-Our proofs use a simple property which is not currently available in the map
-library that we use.
-
-```coq
-in_unzip2
-  : forall (X : eqType) (x : X) (xs : NMap X),
-    x \in unzip2 xs -> exists n : nat_ordType, xs n = Some x
-```
-
-#### Memory model ####
-
-We have made small extensions to the CompCert memory model. Perhaps the most
-significant is that we expose the strategy used by the allocator to assign new
-block identifiers, as well as expose a bit more information about the shape of
-allocated pointers. This is done in order to reason about memory layouts and
-relate the contents of the memories in a trace and those of its
-back-translation. In addition, for simplicity, some results that apply only to
-individual component memories are lifted to operate on whole memories.
-Completing these proofs simply requires us to extend module signatures and
-implementations, and derive the desired easy facts in this enriched setting.
-
-```coq
-load_next_block_None
-  : forall (mem : Memory.t) (ptr : Pointer.t) (b : Block.id),
-    next_block mem (Pointer.component ptr) = Some b ->
-    Pointer.block ptr >= b -> Memory.load mem ptr = None
-
-ComponentMemory.load_next_block
-
-component_memory_after_store_neq
-  : forall (mem : Memory.t) (ptr : Pointer.t) (v : value) 
-      (mem' : Memory.t) (C : Component.id),
-    Memory.store mem ptr v = Some mem' ->
-    Pointer.component ptr <> C -> mem C = mem' C
-
-component_memory_after_alloc_neq
-  : forall (mem : Memory.t) (C : Component.id) (sz : nat) 
-      (mem' : Memory.t) (ptr : Pointer.t) (C' : Component.id),
-    Memory.alloc mem C sz = Some (mem', ptr) -> C' <> C -> mem C' = mem' C'
-
-initialization_correct_component_memory
-  : forall (C : Component.id) (mem mem' : Memory.t),
-    (forall (C' : Component.id) (b : Block.id) (offset : Block.offset),
-     C <> C' ->
-     Memory.load mem (Permission.data, C', b, offset) =
-     Memory.load mem' (Permission.data, C', b, offset)) ->
-    (forall C' : Component.id,
-     C <> C' -> next_block mem C' = next_block mem' C') ->
-    forall C' : Component.id, C <> C' -> mem C' = mem' C'
-```
-
-Despite its name, this last assumption is, like the others, trivial provided
-that we expose a reasoning principle for equality of component memories.
-
-#### Back-translation ####
-
-The proof of back-translation currently relies on a small number of reasonable
-assumptions. The well-formedness of the back-translated program holds by
-construction. Like similar proofs that talk more generally about all source and
-target language programs, a few simple adaptations are needed to accommodate the
-strengthened notion of program well-formedness.
-
-```coq
-well_formed_events_well_formed_program
-  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
-    all (well_formed_event intf procs) t ->
-    Source.well_formed_program (program_of_trace t)
-```
-
-A small number of renaming and reachability properties of procedure calls:
-
-```coq
-addr_shared_so_far_ECall_Hshared_src
-  : forall ... ->
-    exists addr : addr_t,
-      sigma_shifting_wrap_bid_in_addr
-        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
-           (uniform_shift 1)) addr = Some (Cb, b) /\
-      event_renames_event_at_shared_addr all_zeros_shift 
-        (uniform_shift 1) addr (ECall (cur_comp s) P' new_arg mem' C')
-        (ECall (cur_comp s) P' vcom mem1 C') /\
-      addr_shared_so_far addr
-        (rcons (project_non_inform prefix)
-           (ECall (cur_comp s) P' new_arg mem' C'))
-
-addr_shared_so_far_ECall_Hshared_interm
-  : forall ... ->
-    addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C'))
-    
-addr_shared_so_far_inv_1
-  : forall ... ->
-    exists addr : addr_t,
-      sigma_shifting_wrap_bid_in_addr
-        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
-           (uniform_shift 1)) addr = Some (Cb, b) /\
-      event_renames_event_at_shared_addr all_zeros_shift 
-        (uniform_shift 1) addr (ERet (cur_comp s) ret_val mem' C')
-        (ERet (cur_comp s) vcom mem1 C') /\
-      addr_shared_so_far addr
-        (rcons (project_non_inform prefix)
-           (ERet (cur_comp s) ret_val mem' C'))
-
-addr_shared_so_far_inv_2
-  : ... ->
-    Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) 
-      (fset1 addr') (Cb, S b)
-```
-
-Finally, we need to show that a back-translated program does not leak private
-pointers, i.e., pointers to the meta-data buffers. While this property holds by
-construction, the invariants required for its proof are quite different from
-those used by the definability theorem. For this reason, this is better served
-by an independent proof.
-
-```coq
-definability_does_not_leak
-  : CS.private_pointers_never_leak_S p (uniform_shift 1)
-```
-
-#### Top level ####
-
-We assume a certain number of top-level properties of our compilation chain.
-These properties are mostly glue lemmas that help us make the different parts of
-the proof fit together.
-
-All of these results are standard compiler results that, after careful
-inspection, we expect to hold for our compiler. For this reason, proving those
-was not a focus of this work.
 
 *Lemmas regarding compilation and well-formedness conditions*: we assume that
 every well-formed source program can be compiled (`well_formed_compilable`),
@@ -294,6 +163,48 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
     S.CS.private_pointers_never_leak_S p metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size
 ```
+
+
+### Logical axioms ###
+
+The following standard axioms are used occasionally in our proofs.
+
+```coq
+ProofIrrelevance.proof_irrelevance : forall (P : Prop) (p1 p2 : P), p1 = p2
+FunctionalExtensionality.functional_extensionality_dep
+  : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
+    (forall x : A, f x = g x) -> f = g
+Classical_Prop.classic : forall P : Prop, P \/ ~ P
+ClassicalEpsilon.constructive_indefinite_description
+  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
+```
+
+### Axioms about the Back-translation ###
+
+The proof of back-translation currently relies on a small number of reasonable
+assumptions. The well-formedness of the back-translated program holds by
+construction. Like similar proofs that talk more generally about all source and
+target language programs, a few simple adaptations are needed to accommodate the
+strengthened notion of program well-formedness.
+
+```coq
+well_formed_events_well_formed_program
+  : forall (T : Type) (procs : NMap (NMap T)) (t : seq event_inform),
+    all (well_formed_event intf procs) t ->
+    Source.well_formed_program (program_of_trace t)
+```
+
+Finally, we need to show that a back-translated program does not leak private
+pointers, i.e., pointers to the meta-data buffers. While this property holds by
+construction, the invariants required for its proof are quite different from
+those used by the definability theorem. For this reason, this is better served
+by an independent proof.
+
+```coq
+definability_does_not_leak
+  : CS.private_pointers_never_leak_S p (uniform_shift 1)
+```
+
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)

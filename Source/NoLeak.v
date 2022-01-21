@@ -390,10 +390,8 @@ Proof.
       eapply nextblock_mem in G1.
       destruct ptr as [[[[]] b]]; first by [].
       now destruct b.
-  - intuition. eapply H1.
-    eapply safe_mem; eauto.
   - intuition.
-    by eapply H1.
+  - intuition. by eapply H1.
   - (* Store *)
     intuition.
     + intros ptr' v' Hload.
@@ -405,10 +403,8 @@ Proof.
     + erewrite Memory.next_block_store_stable in H; eauto.
   - (* Calls *)
     intuition.
-    + by eapply ge_good; eauto.
     + constructor; intuition.
   - intuition. (* Same case as previously *)
-    + by eapply ge_good; eauto.
     + constructor; intuition.
   - inversion safe_stk; intuition.
   - inversion safe_stk; intuition.

@@ -41,6 +41,7 @@ Source/CS.v
 Source/Definability.v
 Source/DefinabilityEnd.v
 Source/NoLeak.v
+Source/CSInvariants.v
 
 S2I/Definitions.v
 S2I/CompMonad.v
