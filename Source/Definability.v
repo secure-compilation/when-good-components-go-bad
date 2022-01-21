@@ -4103,12 +4103,30 @@ Section Definability.
     Proof.
       intros s t0 Hstar mem Hmem.
       eapply star_never_leaks in Hstar; eauto.
-      - subst p. simpl.
-        intros C P expr.
-        rewrite /Source.find_procedure /procedures_of_trace mapimE.
-        case: (intf C); last by []. simpl. intros i.
-        rewrite mkfmapfE. case: ifP; last by [].
-        move=> _ [] <-.
+      - unfold program_of_trace in *.
+        destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
+        inversion Hprog_of_trace.
+        subst p. simpl.
+        intros C P expr Hprocs.
+        eapply find_procedures_of_trace_Some_procedure_of_trace in Hprocs; eauto;
+          last first.
+        {
+          (* C \in domm intf *)
+          eapply Source.find_procedure_prog_interface with
+              (p :=
+                 {|
+                  Source.prog_interface := intf;
+                  Source.prog_procedures := procs;
+                  Source.prog_buffers := mapm (fun=> inr meta_buffer) intf |}
+              ); eauto.
+          eapply well_formed_events_well_formed_program
+            in wf_events as [theprog [Hrewr ?]]; eauto.
+          + unfold program_of_trace in Hrewr.
+            rewrite eprocs in Hrewr. inversion Hrewr.
+              by subst theprog.
+          + by eapply domm_t_procs_exported_procedures_of_trace.
+        }
+        subst.
         rewrite /procedure_of_trace.
         assert (H: safe_cont_expr Kstop (expr_of_trace C P (comp_subtrace C t))).
         { unfold expr_of_trace. unfold switch.
