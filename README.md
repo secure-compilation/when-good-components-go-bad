@@ -194,45 +194,6 @@ well_formed_events_well_formed_program
     Source.well_formed_program (program_of_trace t)
 ```
 
-A small number of renaming and reachability properties of procedure calls:
-
-```coq
-addr_shared_so_far_ECall_Hshared_src
-  : forall ... ->
-    exists addr : addr_t,
-      sigma_shifting_wrap_bid_in_addr
-        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
-           (uniform_shift 1)) addr = Some (Cb, b) /\
-      event_renames_event_at_shared_addr all_zeros_shift 
-        (uniform_shift 1) addr (ECall (cur_comp s) P' new_arg mem' C')
-        (ECall (cur_comp s) P' vcom mem1 C') /\
-      addr_shared_so_far addr
-        (rcons (project_non_inform prefix)
-           (ECall (cur_comp s) P' new_arg mem' C'))
-
-addr_shared_so_far_ECall_Hshared_interm
-  : forall ... ->
-    addr_shared_so_far (Cb, S b) (rcons prefix' (ECall C P' vcom mem1 C'))
-    
-addr_shared_so_far_inv_1
-  : forall ... ->
-    exists addr : addr_t,
-      sigma_shifting_wrap_bid_in_addr
-        (sigma_shifting_lefttoright_addr_bid all_zeros_shift
-           (uniform_shift 1)) addr = Some (Cb, b) /\
-      event_renames_event_at_shared_addr all_zeros_shift 
-        (uniform_shift 1) addr (ERet (cur_comp s) ret_val mem' C')
-        (ERet (cur_comp s) vcom mem1 C') /\
-      addr_shared_so_far addr
-        (rcons (project_non_inform prefix)
-           (ERet (cur_comp s) ret_val mem' C'))
-
-addr_shared_so_far_inv_2
-  : ... ->
-    Reachability.Reachable (mem_of_event (ERet C vcom mem1 C')) 
-      (fset1 addr') (Cb, S b)
-```
-
 Finally, we need to show that a back-translated program does not leak private
 pointers, i.e., pointers to the meta-data buffers. While this property holds by
 construction, the invariants required for its proof are quite different from
