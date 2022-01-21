@@ -3330,7 +3330,7 @@ Section Definability.
           * eauto.
     Qed.
 
-    Theorem definability_does_not_leak:
+    Theorem definability_does_not_leak':
       forall (s: CS.state) (t: trace event),
         Star (CS.sem p) (CS.initial_machine_state p) t s ->
         forall (mem: Memory.t), CS.s_memory s = mem -> shared_locations_have_only_shared_values mem (uniform_shift 1).
@@ -3381,10 +3381,47 @@ Section Definability.
                                           expr_of_trace C P (comp_subtrace C t)) Kstop) (E_assign INITFLAG (E_val (Int 1)))).
         { repeat econstructor; eauto. }
         unfold buffer_size.
-        destruct (prog_buffers C); last eauto.
-        unfold unfold_buffer. destruct s0; eauto.
-        + admit.
-        + admit.
+        destruct (prog_buffers C) eqn:prog_buffersC; last eauto.
+        unfold unfold_buffer. destruct s0 eqn:eqs0; eauto.
+        + clear prog_buffersC eqs0. rewrite foldr_map. simpl in *.
+          remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
+          remember 0 as p; clear Heqp. rewrite size_nseq.
+          remember (nseq n Undef) as L.
+          assert (G: forall i, match nth_error L i with
+                          | Some v => v = Undef
+                          | None => True
+                          end).
+          { subst. induction n. by destruct i0. destruct i0; simpl; eauto. eapply IHn. }
+          clear HeqL.
+          revert p.
+          induction n.
+          * eauto.
+          * simpl in *. repeat constructor; eauto.
+            specialize (G p). destruct (nth_error L p); subst; repeat constructor; eauto.
+        + rewrite foldr_map. simpl in *.
+          remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
+          remember 0 as p; clear Heqp.
+          remember (size l) as sz; clear Heqsz.
+          assert (G: forall i, match nth_error l i with
+                          | Some v => forall ptr, v <> Ptr ptr
+                          | None => True
+                          end).
+          { subst. eapply wf_buffers in prog_buffersC.
+            simpl in prog_buffersC.
+            move: prog_buffersC => /andP [] _ noptr.
+            induction l.
+            - destruct i0; simpl; eauto.
+            - move: noptr => /andP [] noptr1 noptr2.
+              destruct i0; simpl in *; eauto.
+              + intros ? ?; subst; by [].
+              + eapply IHl. eauto. }
+          clear eqs0 prog_buffersC.
+          revert p.
+          induction sz.
+          * eauto.
+          * simpl in *. repeat constructor; eauto.
+            specialize (G p). destruct (nth_error l p); subst; repeat constructor; eauto.
+            destruct v1 as [| |]; subst; repeat constructor; eauto; now specialize (G t1).
       - intros ptr v.
         Local Transparent Memory.load.
         rewrite /Memory.load.
@@ -3408,10 +3445,7 @@ Section Definability.
           remember (Z.to_nat o) as n; clear Heqn.
           do 11 (destruct n; first by move=> [] <- //=).
           simpl. by induction n.
-    Admitted.
-
-
-
+    Qed.
 
     Lemma definability_does_not_leak :
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
