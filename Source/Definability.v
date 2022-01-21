@@ -4097,6 +4097,7 @@ Section Definability.
                            /Pointer.eqP eq_ptr; subst;
                            [erewrite Memory.load_after_store_eq in Hload; eauto; by []
                            | erewrite Memory.load_after_store_neq in Hload; eauto; clear eq_ptr].
+                rewrite Hmain in Hmem.
                 destruct (Pointer.eq ptr (Permission.data, Component.main, Block.local, 0%Z)) eqn:eq_ptr;
                   move: eq_ptr =>
                            /Pointer.eqP eq_ptr; subst;
@@ -6089,13 +6090,13 @@ Section Definability.
                        destruct (Pointer.eq ptr
                                              (Permission.data, C, Block.local, EXTCALL_offset)) eqn:eq_ptr;
                          move: eq_ptr => /Pointer.eqP eq_ptr; subst;
-                                        [erewrite Memory.load_after_store_eq; eauto; by [] |
-                                          erewrite Memory.load_after_store_neq; eauto].
+                                        [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem1); eauto; by [] |
+                                          erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); eauto].
                        destruct (Pointer.eq ptr
                                             (Permission.data, C, Block.local, 0%Z)) eqn:eq_ptr';
                          move: eq_ptr' => /Pointer.eqP eq_ptr'; subst;
-                                        [erewrite Memory.load_after_store_eq; eauto; by [] |
-                                          erewrite Memory.load_after_store_neq; eauto].
+                                        [erewrite (Memory.load_after_store_eq _ _ _ _ Hmem); eauto; by [] |
+                                          erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); eauto].
                        eapply wfmem_no_private_ptr; eauto.
                     -- eapply traces_rename_each_other_option_symmetric. reflexivity.
                        inversion Hshift; eauto.
