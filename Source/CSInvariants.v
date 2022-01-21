@@ -791,3 +791,5 @@ Proof.
            eapply ptrnotshr, reachable_from_previously_shared; [eassumption|].
            constructor. by rewrite in_fset1.
 Qed.
+
+End CSInvariants.
