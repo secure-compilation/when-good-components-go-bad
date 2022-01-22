@@ -4152,11 +4152,12 @@ Section Definability.
               * repeat constructor; eauto.
             + repeat constructor; eauto.
             + repeat constructor; eauto.
-              (************************* BROKEN NOW *************************)
+              Local Transparent binop_of_Ebinop.
               destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
-                by (*case: ifP*) admit.
+                by case: ifP.
               destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
-                by (*case: ifP*) admit.
+                by case: ifP.
+              Local Opaque binop_of_Ebinop.
             + repeat constructor; eauto.
             + repeat constructor; eauto.
             + repeat constructor; eauto.
@@ -4177,7 +4178,9 @@ Section Definability.
                           | Some v => v = Undef
                           | None => True
                           end).
-          { subst. induction n. by (*destruct i0*) admit. (*destruct i0; simpl; eauto. eapply IHn.*) admit. }
+          { subst. induction n.
+            by destruct i.
+            destruct i; simpl; eauto. eapply IHn. }
           clear HeqL.
           revert p.
           induction n.
@@ -4196,14 +4199,11 @@ Section Definability.
             simpl in prog_buffersC.
             move: prog_buffersC => /andP [] _ noptr.
             induction l.
-            - (*destruct i0; simpl; eauto.*) admit.
+            - destruct i; simpl; eauto.
             - move: noptr => /andP [] noptr1 noptr2.
-              (*destruct i0; simpl in *; eauto.
+              destruct i; simpl in *; eauto.
               + intros ? ?; subst; by [].
-              + eapply IHl. eauto.
-               *)
-              admit.
-               }
+              + eapply IHl. eauto. }
           clear eqs0 prog_buffersC.
           revert p.
           induction sz.
@@ -4235,8 +4235,7 @@ Section Definability.
           remember (Z.to_nat o) as n; clear Heqn.
           do 11 (destruct n; first by move=> [] <- //=).
           simpl. by induction n.
-    Admitted.
-    (* Qed *)
+    Qed.
 
     Lemma definability_does_not_leak:
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
