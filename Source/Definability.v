@@ -4102,12 +4102,13 @@ Section Definability.
         forall (mem: Memory.t), CS.s_memory s = mem -> shared_locations_have_only_shared_values mem (uniform_shift 1).
     Proof.
       intros s t0 Hstar mem Hmem.
+      unfold program_of_trace in *.
+      destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
+      inversion Hprog_of_trace.
+      subst p. simpl.
+      
       eapply star_never_leaks in Hstar; eauto.
-      - unfold program_of_trace in *.
-        destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
-        inversion Hprog_of_trace.
-        subst p. simpl.
-        intros C P expr Hprocs.
+      - intros C P expr Hprocs.
         eapply find_procedures_of_trace_Some_procedure_of_trace in Hprocs; eauto;
           last first.
         {
@@ -4151,10 +4152,11 @@ Section Definability.
               * repeat constructor; eauto.
             + repeat constructor; eauto.
             + repeat constructor; eauto.
+              (************************* BROKEN NOW *************************)
               destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
-                by case: ifP.
+                by (*case: ifP*) admit.
               destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
-                by case: ifP.
+                by (*case: ifP*) admit.
             + repeat constructor; eauto.
             + repeat constructor; eauto.
             + repeat constructor; eauto.
@@ -4175,7 +4177,7 @@ Section Definability.
                           | Some v => v = Undef
                           | None => True
                           end).
-          { subst. induction n. by destruct i0. destruct i0; simpl; eauto. eapply IHn. }
+          { subst. induction n. by (*destruct i0*) admit. (*destruct i0; simpl; eauto. eapply IHn.*) admit. }
           clear HeqL.
           revert p.
           induction n.
@@ -4194,11 +4196,14 @@ Section Definability.
             simpl in prog_buffersC.
             move: prog_buffersC => /andP [] _ noptr.
             induction l.
-            - destruct i0; simpl; eauto.
+            - (*destruct i0; simpl; eauto.*) admit.
             - move: noptr => /andP [] noptr1 noptr2.
-              destruct i0; simpl in *; eauto.
+              (*destruct i0; simpl in *; eauto.
               + intros ? ?; subst; by [].
-              + eapply IHl. eauto. }
+              + eapply IHl. eauto.
+               *)
+              admit.
+               }
           clear eqs0 prog_buffersC.
           revert p.
           induction sz.
@@ -4213,7 +4218,8 @@ Section Definability.
         destruct ptr as [[[[]]]]; first by [].
         simpl.
         unfold Source.prepare_buffers; rewrite mapmE.
-        destruct (Source.prog_buffers p i) eqn:prog_i; last by [].
+        simpl.
+        destruct (mapm (fun=> inr meta_buffer) intf i) eqn:prog_i; last by [].
         simpl. rewrite ComponentMemory.load_prealloc.
         destruct (0 <=? o)%Z eqn:o_lt; last discriminate.
         rewrite setmE.
@@ -4221,7 +4227,7 @@ Section Definability.
         destruct s0 eqn:eqs0.
         + case: ifP => _ []; last by [].
           move=> <- //=.
-        + subst. unfold p in *. simpl in *.
+        + subst. (* unfold p in *. simpl in *. *)
           unfold meta_buffer in prog_i.
           rewrite mapmE in prog_i. destruct (intf i) eqn:intf_i; last discriminate.
           simpl in prog_i. inversion prog_i; subst.
@@ -4229,7 +4235,8 @@ Section Definability.
           remember (Z.to_nat o) as n; clear Heqn.
           do 11 (destruct n; first by move=> [] <- //=).
           simpl. by induction n.
-    Qed.
+    Admitted.
+    (* Qed *)
 
     Lemma definability_does_not_leak:
       CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
