@@ -343,28 +343,31 @@ Lemma safe_preserved_by_step (ge: global_env)
       (ge_good: forall C P expr,
           Source.find_procedure (genv_procedures ge) C P = Some expr ->
           safe_cont_expr Kstop expr):
-  forall s1 s2 t,
+  forall s1 s2 t0 t,
     safe_memory (CS.s_memory s1) ->
     (forall C n, Memory.next_block (CS.s_memory s1) C = Some n ->
             n > 0) ->
     safe_cont_expr (CS.s_cont s1) (CS.s_expr s1)->
     safe_stack (CS.s_stack s1) ->
     safe_value (CS.s_arg s1) ->
+    good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) t0 ->
     CS.kstep ge s1 t s2 ->
     safe_memory (CS.s_memory s2) /\
       (forall C n, Memory.next_block (CS.s_memory s2) C = Some n ->
               n > 0) /\
       safe_cont_expr (CS.s_cont s2) (CS.s_expr s2) /\
       safe_stack (CS.s_stack s2) /\
-      safe_value (CS.s_arg s2).
+      safe_value (CS.s_arg s2) /\
+    good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) (t0 ** t).
 Proof.
-  intros s1 s2 t0 safe_mem nextblock_mem
-         safe_k_e safe_stk safe_arg step.
+  intros s1 s2 t0' t0 safe_mem nextblock_mem
+         safe_k_e safe_stk safe_arg good_trace step.
   destruct s1, s2; subst; simpl in *.
   inversion step; subst;
-    try (inversion safe_k_e; subst; eauto).
-  - destruct (i != 0%Z); eauto.
-  - intuition.
+    (try rewrite E0_right);
+    try (inversion safe_k_e; subst; eauto);
+    try now intuition.
+  - destruct (i != 0%Z); intuition.
   - (* Alloc *)
     intuition.
     + intros ptr' v Hload.
@@ -392,7 +395,7 @@ Proof.
       eapply nextblock_mem in G1.
       destruct ptr as [[[[]] b]]; first by [].
       now destruct b.
-  - intuition.
+  (* - intuition. *)
   - intuition. by eapply H1.
   - (* Store *)
     intuition.
@@ -408,8 +411,68 @@ Proof.
     + constructor; intuition.
   - intuition. (* Same case as previously *)
     + constructor; intuition.
+    + constructor. unfold Eapp.
+      replace (t0' ++ [:: ECall s_component P s_arg0 s_memory0 s_component0])%list
+        with (t0' ++ [:: ECall s_component P s_arg0 s_memory0 s_component0]) by reflexivity.
+      rewrite cats1.
+      intros a shared.
+      inversion shared; subst; clear shared.
+      * find_rcons_rcons.
+        inversion H2.
+        -- inversion good_trace; subst; clear good_trace.
+           simpl in H. destruct s_arg0 as [| [[[[]]]] |]; try by rewrite in_fset0 in H.
+           destruct a; rewrite in_fset1 in H; move: H => /eqP ->.
+           simpl in H1. now destruct i0.
+        -- subst.
+           destruct a as [cid' bid'].
+           apply In_in in H3; apply ComponentMemory.load_block_load in H3 as [off' [off load]].
+           assert (load': Memory.load s_memory0 (Permission.data, cid, bid, off) = Some (Ptr (Permission.data, cid', bid', off'))).
+           { unfold Memory.load => //=.
+             by rewrite H0. }
+           eapply safe_mem in load'. simpl in *. now destruct bid'.
+      * find_rcons_rcons.
+        inversion H3.
+        -- inversion good_trace; subst; clear good_trace.
+           eapply H5; eauto. by rewrite in_fset1 in H; move: H => /eqP ->.
+        -- subst.
+           destruct a as [cid' bid'].
+           apply In_in in H5; apply ComponentMemory.load_block_load in H5 as [off' [off load]].
+           assert (load': Memory.load s_memory0 (Permission.data, cid, bid, off) = Some (Ptr (Permission.data, cid', bid', off'))).
+           { unfold Memory.load => //=.
+             by rewrite H2. }
+           eapply safe_mem in load'. simpl in *. now destruct bid'.
   - inversion safe_stk; intuition.
   - inversion safe_stk; intuition.
+    constructor. unfold Eapp.
+    replace (t0' ++ [:: ERet s_component v s_memory0 s_component0])%list
+      with (t0' ++ [:: ERet s_component v s_memory0 s_component0]) by reflexivity.
+    rewrite cats1.
+    intros a shared.
+    inversion shared; subst; clear shared.
+    + find_rcons_rcons.
+      inversion H8.
+      * inversion good_trace; subst; clear good_trace.
+        simpl in H. destruct v as [| [[[[]]]] |]; try by rewrite in_fset0 in H.
+        destruct a; rewrite in_fset1 in H; move: H => /eqP ->.
+        simpl in H0. now destruct i0.
+      * subst.
+        destruct a as [cid' bid'].
+        apply In_in in H2; apply ComponentMemory.load_block_load in H2 as [off' [off load]].
+        assert (load': Memory.load s_memory0 (Permission.data, cid, bid, off) = Some (Ptr (Permission.data, cid', bid', off'))).
+        { unfold Memory.load => //=.
+          by rewrite H1. }
+        eapply safe_mem in load'. simpl in *. now destruct bid'.
+      + find_rcons_rcons.
+        inversion H9.
+        * inversion good_trace; subst; clear good_trace.
+          eapply H2; eauto. by rewrite in_fset1 in H; move: H => /eqP ->.
+        * subst.
+          destruct a as [cid' bid'].
+          apply In_in in H2; apply ComponentMemory.load_block_load in H2 as [off' [off load]].
+           assert (load': Memory.load s_memory0 (Permission.data, cid, bid, off) = Some (Ptr (Permission.data, cid', bid', off'))).
+           { unfold Memory.load => //=.
+             by rewrite H1. }
+           eapply safe_mem in load'. simpl in *. now destruct bid'.
 Qed.
 
 Lemma safe_preserved_by_star: forall (p: Source.program) (s : CS.state) (t : trace event),
@@ -418,7 +481,8 @@ Lemma safe_preserved_by_star: forall (p: Source.program) (s : CS.state) (t : tra
         safe_cont_expr Kstop expr) ->
     safe_memory (Source.prepare_buffers p) ->
     Star (CS.sem p) (CS.initial_machine_state p) t s ->
-    safe_memory (CS.s_memory s).
+    safe_memory (CS.s_memory s) /\
+    good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) t.
 Proof.
   intros p s t p_good safe_mem_prep star.
   unfold CS.initial_machine_state in star.
@@ -440,35 +504,42 @@ Proof.
       case: (Source.prog_buffers p C) => //= ? [].
       rewrite ComponentMemory.nextblock_prealloc.
       case: n; [by [] | lia]. }
-    clear Heqs0.
-    induction star.
-    + auto.
-    + subst.
-      apply safe_preserved_by_step in H as [? [? [? [? ?]]]]; auto.
+    assert (good_empty: good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) [::]).
+    { constructor. intros ? shared. inversion shared; now destruct t0. }
+    clear Heqs0. apply star_iff_starR in star.
+    assert (safe_memory (CS.s_memory s) /\
+              (forall (C : Component.id) (n : Block.id), Memory.next_block (CS.s_memory s) C = Some n -> n > 0) /\
+              safe_cont_expr (CS.s_cont s) (CS.s_expr s) /\
+              safe_stack (CS.s_stack s) /\
+              safe_value (CS.s_arg s) /\ good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) t).
+    { induction star.
+      + intuition.
+      + subst.
+        specialize (IHstar safe_mem safe_k_e safe_stk safe_arg nextblock_mem) as [? [? [? [? [? ?]]]]].
+        eapply safe_preserved_by_step in H as [? [? [? [? [? ?]]]]]; intuition. }
+    intuition.
   - inversion star as [| ? ? ? ? ? ? step];
       last inversion step.
-    subst.
-    intros [[[[]]]] v; first by [].
-    rewrite /Memory.load //=.
+    subst. split.
+    + intros [[[[]]]] v; first by [].
+      rewrite /Memory.load //=.
+    + constructor; intros ? shared; inversion shared; now destruct t.
 Qed.
-
-Lemma star_never_leaks: forall (p: Source.program) (s : CS.state) (t : trace event),
+Lemma star_never_leaks: forall (p: Source.program),
     (forall C P expr,
         Source.find_procedure (Source.prog_procedures p) C P = Some expr ->
         safe_cont_expr Kstop expr) ->
     safe_memory (Source.prepare_buffers p) ->
-    Star (CS.sem p) (CS.initial_machine_state p) t s ->
-    (forall mem : Memory.t, CS.s_memory s = mem -> shared_locations_have_only_shared_values mem (uniform_shift 1)).
+    CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
 Proof.
-  intros p s t p_good safe_mem star.
-  eapply safe_preserved_by_star in star; eauto.
-  intros mem ?; subst.
+  intros p p_good safe_mem s t star. (* p_good. safe_mem star. *)
+  eapply safe_preserved_by_star in star as [G1 G2]; subst; intuition.
   rewrite /shared_locations_have_only_shared_values.
   intros ptr [cid bid] v load_ptr eq_addr; inversion eq_addr; subst; clear eq_addr.
-  specialize (star _ _ load_ptr).
+  specialize (G1 _ _ load_ptr).
   destruct v as [| [[[[]] b]] |]; auto.
   rewrite /left_value_good_for_shifting /left_addr_good_for_shifting
           /left_block_id_good_for_shifting //=.
-  simpl in star; destruct b; first contradiction.
+  simpl in G1; destruct b; first contradiction.
   unfold uniform_shift; by [].
 Qed.

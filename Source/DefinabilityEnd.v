@@ -274,7 +274,7 @@ Lemma definability_with_linking:
       /\
       traces_shift_each_other_option
         metadata_size all_zeros_shift t' (project_non_inform t) /\
-      metadata_size = uniform_shift 1 /\
+        metadata_size = uniform_shift 1 /\
       Source.CS.CS.private_pointers_never_leak_S
         (Source.program_link p' c')
         (uniform_shift 1).
@@ -398,16 +398,16 @@ Proof.
                   exact: matching_mains_backtranslated_program
                            wf_c wf_p Hback intf_main).
 
-  split; first exact: Source.well_formed_program_unlink.
-  split; first exact: Source.well_formed_program_unlink.
-  rewrite Source.program_unlinkK //; split; first (by eapply closed_program_of_trace; eauto).
-  (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
-  split; auto.
-  split.
-  by apply traces_shift_each_other_option_symmetric.
-  split.
-  reflexivity.
-  eapply Definability.definability_does_not_leak; try eassumption; reflexivity.
+    split; first exact: Source.well_formed_program_unlink.
+    split; first exact: Source.well_formed_program_unlink.
+    rewrite Source.program_unlinkK //; split; first (by eapply closed_program_of_trace; eauto).
+    (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
+    split; auto.
+    split.
+    by apply traces_shift_each_other_option_symmetric.
+    split.
+    reflexivity.
+    eapply Definability.definability_does_not_leak; subst; eauto.
 Qed.
 
 Print Assumptions definability_with_linking.

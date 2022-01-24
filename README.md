@@ -163,7 +163,6 @@ Compiler.compiler_preserves_non_leakage_of_private_pointers
     private_pointers_never_leak_I p_compiled metadata_size
 ```
 
-
 ### Logical axioms ###
 
 The following standard axioms are used occasionally in our proofs.
@@ -176,19 +175,6 @@ FunctionalExtensionality.functional_extensionality_dep
 Classical_Prop.classic : forall P : Prop, P \/ ~ P
 ClassicalEpsilon.constructive_indefinite_description
   : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
-```
-
-### Axioms about the Back-translation ###
-
-We need to show that a back-translated program does not leak private
-pointers, i.e., pointers to the meta-data buffers. While this property holds by
-construction, the invariants required for its proof are quite different from
-those used by the definability theorem. For this reason, this is better served
-by an independent proof.
-
-```coq
-definability_does_not_leak
-  : CS.private_pointers_never_leak_S p (uniform_shift 1)
 ```
 
 

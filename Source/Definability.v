@@ -4096,18 +4096,13 @@ Section Definability.
           * eauto.
     Qed.
 
-    Theorem definability_does_not_leak':
-      forall (s: CS.state) (t: trace event),
-        Star (CS.sem p) (CS.initial_machine_state p) t s ->
-        forall (mem: Memory.t), CS.s_memory s = mem -> shared_locations_have_only_shared_values mem (uniform_shift 1).
+    Theorem definability_does_not_leak:
+      CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
     Proof.
-      intros s t0 Hstar mem Hmem.
       unfold program_of_trace in *.
       destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
-      inversion Hprog_of_trace.
-      subst p. simpl.
-      
-      eapply star_never_leaks in Hstar; eauto.
+      inversion Hprog_of_trace; subst; clear Hprog_of_trace.
+      eapply star_never_leaks.
       - intros C P expr Hprocs.
         eapply find_procedures_of_trace_Some_procedure_of_trace in Hprocs; eauto;
           last first.
@@ -4144,7 +4139,7 @@ Section Definability.
             + repeat constructor; eauto.
               destruct v1.
               * repeat constructor; eauto.
-              * destruct t2 as [[[[]]]]; repeat constructor; eauto. simpl in *.
+              * destruct t1 as [[[[]]]]; repeat constructor; eauto. simpl in *.
                 destruct v1 as [| [[[[]]]] |]; eauto.
                 destruct v1 as [| [[[[]]]] |]; eauto.
                 destruct v1 as [| [[[[]]]] |]; eauto.
@@ -4169,7 +4164,7 @@ Section Definability.
         { repeat econstructor; eauto. }
         unfold buffer_size.
         destruct (prog_buffers C) eqn:prog_buffersC; last eauto.
-        unfold unfold_buffer. destruct s0 eqn:eqs0; eauto.
+        unfold unfold_buffer. destruct s eqn:eqs0; eauto.
         + clear prog_buffersC eqs0. rewrite foldr_map. simpl in *.
           remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
           remember 0 as p; clear Heqp. rewrite size_nseq.
@@ -4210,7 +4205,7 @@ Section Definability.
           * eauto.
           * simpl in *. repeat constructor; eauto.
             specialize (G p). destruct (nth_error l p); subst; repeat constructor; eauto.
-            destruct v1 as [| |]; subst; repeat constructor; eauto; now specialize (G t1).
+            destruct v1 as [| |]; subst; repeat constructor; eauto; now specialize (G t0).
       - intros ptr v.
         Local Transparent Memory.load.
         rewrite /Memory.load.
@@ -4224,7 +4219,7 @@ Section Definability.
         destruct (0 <=? o)%Z eqn:o_lt; last discriminate.
         rewrite setmE.
         case: ifP => ?; last by [].
-        destruct s0 eqn:eqs0.
+        destruct s eqn:eqs0.
         + case: ifP => _ []; last by [].
           move=> <- //=.
         + subst. (* unfold p in *. simpl in *. *)
@@ -4236,10 +4231,6 @@ Section Definability.
           do 11 (destruct n; first by move=> [] <- //=).
           simpl. by induction n.
     Qed.
-
-    Lemma definability_does_not_leak:
-      CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
-    Admitted.
 
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
@@ -7385,41 +7376,54 @@ Section Definability.
                   constructor.
                 - constructor.
                   intros [Cb b] Hshared.
-                  specialize definability_does_not_leak as Hno_leaks.
-                  assert (Hstar0_ret:
-                           star CS.kstep (prepare_global_env p)
-                                (CS.initial_machine_state p)
-                                (prefix' ++ [:: ECall C P' vcom mem1 C'])
-                                [CState C', {|
-                                   CS.f_component := C;
-                                   CS.f_arg := arg;
-                                   CS.f_cont := Kassign1 (loc_of_reg E_R_COM)
-                                                         (Kseq
-                                                            (invalidate_metadata;;
-                                                             E_assign EXTCALL (E_val (Int 0));;
-                                                             E_call C P (E_val (Int 0))) Kstop) |}
-                                              :: stk, mem10, Kstop,
-                                expr_of_trace C' P' (comp_subtrace C' t), vcom]).
-                  {
-                    eapply star_trans; try eassumption; last reflexivity.
-                    eapply star_trans; try eassumption; last reflexivity. }
-                  (* specialize (Hno_leaks _ _ Hstar0_ret) as [Hcontra ?]. *)
-                  specialize (Hno_leaks _ _ Hstar0_ret) as [Hno_leaks _].
-                  (* assert (H : good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) *)
-                  (*                                    (prefix' ++ [:: ECall C P' vcom mem1 C']) *)
-                  (*        ). *)
-                  (* { *)
-                  (*   admit. (* This is the only part of the theorem that we need here. *) *)
-                  (* } *)
-                  (* inversion Hshift. subst t0 t'. inversion H0. admit. subst. clear H3 H4 H9. Check Hcontra. *)
-                  rewrite cats1 in Hno_leaks.
-                  inversion Hno_leaks; subst t0.
-                  (* apply H0 in Hshared. simpl in Hshared. *)
-                  apply H in Hshared. simpl in Hshared.
-                  destruct b as [| b']; last reflexivity.
-                  rewrite /uniform_shift
-                          /left_block_id_good_for_shifting in Hshared.
-                  assumption.
+                  (* rewrite /right_addr_good_for_shifting. *)
+                  (* rewrite /right_block_id_good_for_shifting /uniform_shift. *)
+                  inversion Hshared; subst; clear Hshared.
+                  + find_rcons_rcons. simpl in *.
+                    remember (Cb, b) as addr. generalize dependent b. generalize dependent Cb.
+                    inversion H1; intros; subst.
+                    * destruct vcom as [| [[[[]]]] |]; try by rewrite in_fset0 in H.
+                      rewrite in_fset1 in H. move: H => /eqP H; inversion H; subst.
+                      specialize (steady_C1 Machine.R_COM _ Logic.eq_refl) as [vcom1 [vcom2 [G1 [G2 _]]]].
+                      simpl in G1. unfold C in C_next_e1; rewrite C_next_e1 in Hvcom. rewrite G1 in Hvcom.
+                      inversion Hvcom; subst.
+                      rewrite /all_zeros_shift /uniform_shift //= in G2.
+                      destruct i0; try discriminate. constructor.
+                    * apply In_in in H2. apply ComponentMemory.load_block_load in H2 as [off' [off Hload]].
+                      assert (load: Memory.load mem1 (Permission.data, cid, bid, off) =
+                                                Some (Ptr (Permission.data, Cb, b, off'))).
+                      { Local Transparent Memory.load.
+                        unfold Memory.load. simpl.
+                        rewrite H0. assumption.
+                        Local Opaque Memory.load.
+                      }
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem1) in load.
+                      move: load; case: ifP => //= _ load.
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem) in load.
+                      move: load; case: ifP => //= _ load.
+                      eapply wfmem_no_private_ptr in load; eauto.
+                      now destruct b.
+                  + find_rcons_rcons.
+                    inversion H2; intros; subst.
+                    * inversion Hshift; subst; clear Hshift.
+                      inversion H1; subst; clear H1. rewrite <- H5 in H0; inversion H0; try now destruct t0.
+                      rewrite H4 in H12.
+                      inversion H12; subst; clear H12.
+                      eapply H1 in H0. by rewrite in_fset1 in H; move: H => /eqP ->.
+                    * apply In_in in H3. apply ComponentMemory.load_block_load in H3 as [off' [off Hload]].
+                      assert (load: Memory.load mem1 (Permission.data, cid, bid, off) =
+                                                Some (Ptr (Permission.data, Cb, b, off'))).
+                      { Local Transparent Memory.load.
+                        unfold Memory.load. simpl.
+                        rewrite H1. assumption.
+                        Local Opaque Memory.load.
+                      }
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem1) in load.
+                      move: load; case: ifP => //= _ load.
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem) in load.
+                      move: load; case: ifP => //= _ load.
+                      eapply wfmem_no_private_ptr in load; eauto.
+                      now destruct b.
               }
           (* END CASE: CALL *)
 
@@ -9313,37 +9317,58 @@ Section Definability.
               - constructor.
                 intros [Cb b] Hshared.
                 constructor.
-              - constructor.
-                intros [Cb b] Hshared.
-                specialize definability_does_not_leak as Hno_leaks.
-                assert (Hstar0_ret:
-                         star CS.kstep (prepare_global_env p)
-                              (CS.initial_machine_state p)
-                              (prefix' ++ [:: ERet C vcom mem1 C'])
-                              cs').
-                {
-                  eapply star_trans; try eassumption; last reflexivity.
-                  eapply star_trans; try eassumption; last reflexivity.
-                  eapply star_trans; try eassumption; reflexivity.
-                }
-                (* specialize (Hno_leaks _ _ Hstar0_ret) as [? Hcontra]. *)
-                (* rewrite cats1 in Hcontra. *)
-                (* inversion Hcontra; subst t0. *)
-                specialize (Hno_leaks _ _ Hstar0_ret) as [Hno_leaks _]. inversion Hno_leaks. subst t0.
-                rewrite cats1 in Hno_leaks.
-                (* assert (H0 : good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) *)
-                (*                                    (prefix' ++ [:: ERet C vcom mem1 C'])). *)
-                (* { *)
-                (*   admit. (* Only part of the theorem being used here. *) *)
-                (* } *)
-                (* inversion H0; subst t0. *)
-                rewrite -cats1 in Hshared.
-                apply H in Hshared. simpl in Hshared.
-                destruct b as [| b']; last reflexivity.
-                rewrite /uniform_shift
-                        /left_block_id_good_for_shifting in Hshared.
-                assumption.
-            }
+                - constructor.
+                  intros [Cb b] Hshared.
+                  (* rewrite /right_addr_good_for_shifting. *)
+                  (* rewrite /right_block_id_good_for_shifting /uniform_shift. *)
+                  inversion Hshared; subst; clear Hshared.
+                  + find_rcons_rcons. simpl in *.
+                    remember (Cb, b) as addr. generalize dependent b. generalize dependent Cb.
+                    inversion H1; intros; subst.
+                    * destruct vcom as [| [[[[]]]] |]; try by rewrite in_fset0 in H.
+                      rewrite in_fset1 in H. move: H => /eqP H; inversion H; subst.
+                      pose proof (wfmem wf_mem Logic.eq_refl) as [steady_C1 [? ?]].
+                      specialize (steady_C1 Machine.R_COM _ Logic.eq_refl) as [vcom1 [vcom2 [G1 [G2 _]]]].
+                      simpl in G1. unfold C in C_next_e1; rewrite C_next_e1 in Hcom. rewrite G1 in Hcom.
+                      inversion Hcom; subst.
+                      rewrite /all_zeros_shift /uniform_shift //= in G2.
+                      destruct i0; try discriminate. constructor.
+                    * apply In_in in H2. apply ComponentMemory.load_block_load in H2 as [off' [off Hload]].
+                      assert (load: Memory.load mem1 (Permission.data, cid, bid, off) =
+                                                Some (Ptr (Permission.data, Cb, b, off'))).
+                      { Local Transparent Memory.load.
+                        unfold Memory.load. simpl.
+                        rewrite H0. assumption.
+                        Local Opaque Memory.load.
+                      }
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem1) in load.
+                      move: load; case: ifP => //= _ load.
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem) in load.
+                      move: load; case: ifP => //= _ load.
+                      eapply wfmem_no_private_ptr in load; eauto.
+                      now destruct b.
+                  + find_rcons_rcons.
+                    inversion H2; intros; subst.
+                    * inversion Hshift; subst; clear Hshift.
+                      inversion H1; subst; clear H1. rewrite <- H5 in H0; inversion H0; try now destruct t0.
+                      rewrite H4 in H12.
+                      inversion H12; subst; clear H12.
+                      eapply H1 in H0. by rewrite in_fset1 in H; move: H => /eqP ->.
+                    * apply In_in in H3. apply ComponentMemory.load_block_load in H3 as [off' [off Hload]].
+                      assert (load: Memory.load mem1 (Permission.data, cid, bid, off) =
+                                                Some (Ptr (Permission.data, Cb, b, off'))).
+                      { Local Transparent Memory.load.
+                        unfold Memory.load. simpl.
+                        rewrite H1. assumption.
+                        Local Opaque Memory.load.
+                      }
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem1) in load.
+                      move: load; case: ifP => //= _ load.
+                      rewrite (Memory.load_after_store _ _ _ _ _ Hmem) in load.
+                      move: load; case: ifP => //= _ load.
+                      eapply wfmem_no_private_ptr in load; eauto.
+                      now destruct b.
+              }
 
           (* NOTE: ... And there is a series of new events to consider. *)
 
