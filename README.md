@@ -15,15 +15,16 @@ and versioned libraries:
 Coq 8.12.2
 - Mathematical Components 1.11.0
 - Extensional Structures 0.2.2
+- Equations 1.2.4
 
 Dependencies can be installed through the OCaml package manager, OPAM.
 
 - Coq (package `coq`) is available through the official
   [Ocaml OPAM repository](http://opam.ocaml.org/).
 - Stable releases of Mathematical Components (packages `coq-mathcomp-ssreflect`,
-  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`) and Extensional Structures
-  (package `coq-extructures`) are available through the
-  [Coq OPAM repository](https://coq.inria.fr/opam/released/).
+  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`), Extensional Structures
+  (package `coq-extructures`), and Equations (package `coq-equations`)
+  are available through the [Coq OPAM repository](https://coq.inria.fr/opam/released/).
 
 ### Build ###
 
