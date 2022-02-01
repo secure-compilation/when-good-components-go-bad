@@ -1666,6 +1666,19 @@ Proof.
     apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
 Qed.
 
+Lemma star_memory_of_trace p s t1 s1: 
+  star step (GlobalEnv.prepare_global_env p) s t1 s1 ->
+  mem_of_trace (state_mem s) t1 = state_mem s1.
+Proof.
+  intros Hstar.
+  induction Hstar.
+  - by rewrite //=.
+  - subst t. rewrite -IHHstar.
+    rewrite /mem_of_trace.
+    inversion H; subst; try by [];
+      try by (simpl; rewrite /last_event_inform seq.rev_cons //=; case: (seq.rev t2) => //=).
+Qed.
+
 
 Lemma starR_register_file_of_event_inform p s t1 e1 s1: 
   starR step (GlobalEnv.prepare_global_env p) s (seq.rcons t1 e1) s1 ->
@@ -1686,6 +1699,19 @@ Proof.
     rewrite Hrewr. eapply epsilon_star_preserves_registers. apply Hstar2.
   + unfold Eapp in *. rewrite app_comm_cons in Hrewr.
     apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
+Qed.
+
+Lemma star_register_file_of_trace p s t1 s1: 
+  star step (GlobalEnv.prepare_global_env p) s t1 s1 ->
+  register_file_of_trace (state_regs s) t1 = state_regs s1.
+Proof.
+  intros Hstar.
+  induction Hstar.
+  - by rewrite //=.
+  - subst t. rewrite -IHHstar.
+    rewrite /register_file_of_trace.
+    inversion H; subst; try by [];
+      try by (simpl; rewrite /last_event_inform seq.rev_cons //=; case: (seq.rev t2) => //=).
 Qed.
 
 Lemma silent_step_preserves_component G s s' :
@@ -1827,6 +1853,27 @@ rewrite -seq.cats1. intros Hstar. apply star_iff_starR in Hstar.
     rewrite Hrewr. eapply epsilon_star_inform_preserves_component. apply Hstar2.
   + unfold Eapp in *. rewrite app_comm_cons in Hrewr.
     apply app_eq_unit in Hrewr as [[? _]|[_ ?]]; discriminate.
+Qed.
+
+Lemma star_next_comp_of_trace p s t1 s1:
+  star step (GlobalEnv.prepare_global_env p) s t1 s1 ->
+  next_comp_of_trace (Pointer.component (state_pc s)) t1 = Pointer.component (state_pc s1).
+Proof.
+  intros Hstar.
+  induction Hstar.
+  - by rewrite //=.
+  - subst t. rewrite -IHHstar.
+    rewrite /next_comp_of_trace.
+    inversion H; subst; try by rewrite Pointer.inc_preserves_component;
+      try by (simpl; rewrite /last_event_inform seq.rev_cons //=; case: (seq.rev t2) => //=).
+    + simpl; rewrite /last_event_inform seq.rev_cons //=; case: (seq.rev t2) => //=.
+      by eapply find_label_in_component_1 in H1.
+    + by case: (last_event_inform t2).
+    + by case: (last_event_inform t2).
+    + case: (last_event_inform t2); first by [].
+      simpl. by eapply find_label_in_procedure_1 in H3.
+    + simpl; rewrite /last_event_inform seq.rev_cons //=; case: (seq.rev t2) => //=.
+    + simpl; rewrite /last_event_inform seq.rev_cons //=; case: (seq.rev t2) => //=.
 Qed.
 
 Lemma epsilon_star_non_inform_preserves_program_component p c s1 s2 :

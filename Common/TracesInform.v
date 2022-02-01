@@ -316,7 +316,7 @@ Fixpoint well_bracketed_trace s t : bool :=
   end.
 
 (* [DynShare] TODO *)
-Fixpoint well_bracketed_trace_rev (s : stack_state) (t : seq event_inform) : bool :=
+Definition well_bracketed_trace_rev (s : stack_state) (t : seq event_inform) : bool :=
   let fix aux (acc t : seq event_inform) : bool :=
       match t with
       (* Process trace events in reverse order.  *)
@@ -351,7 +351,7 @@ Fixpoint well_bracketed_trace_rev (s : stack_state) (t : seq event_inform) : boo
   in
   aux [] (rev t).
 
-Fixpoint well_bracketed_trace_r (t : seq event_inform) : bool :=
+Definition well_bracketed_trace_r (t : seq event_inform) : bool :=
   let fix aux (acc t : seq event_inform) : bool :=
       match t with
       (* Process trace events in reverse order.  *)
@@ -549,5 +549,58 @@ Admitted.
       case/imported_procedure_iff/clos: (imp)=> ? [-> _] /=.
         by move: imp; rewrite /imported_procedure_b; case: getm.
 Qed.
-*)
+ *)
+
+
+
+Definition last_event_inform (pref: trace event_inform) :=
+  match rev pref with
+  | [] => None
+  | e :: pref' => Some e
+  end.
+
+Lemma last_event_inform_rcons (pref: trace event_inform) (e: event_inform) :
+  last_event_inform (rcons pref e) = Some e.
+Proof.
+  by rewrite /last_event_inform rev_rcons.
+Qed.
+
+Definition next_comp_of_trace (C0: Component.id) (pref: trace event_inform) :=
+  match last_event_inform pref with
+  | None => C0
+  | Some e => next_comp_of_event e
+  end.
+
+Lemma next_comp_of_trace_rcons C0 (pref: trace event_inform) (e: event_inform) :
+  next_comp_of_trace C0 (rcons pref e) = next_comp_of_event e.
+Proof.
+  by rewrite /next_comp_of_trace last_event_inform_rcons.
+Qed.
+
+Definition register_file_of_trace (regs0: Intermediate.Register.t) (pref: trace event_inform) :=
+  match last_event_inform pref with
+  (* | None => Machine.Intermediate.Register.init *)
+  | None => regs0
+  | Some e => register_file_of_event_inform e
+  end.
+
+Lemma register_file_of_trace_rcons regs0 (pref: trace event_inform) (e: event_inform) :
+  register_file_of_trace regs0 (rcons pref e) = register_file_of_event_inform e.
+Proof.
+  by rewrite /register_file_of_trace last_event_inform_rcons.
+Qed.
+
+Definition mem_of_trace (initial_memory: Memory.t) (pref: trace event_inform) :=
+  match last_event_inform pref with
+  | None => initial_memory
+  | Some e => mem_of_event_inform e
+  end.
+
+Lemma mem_of_trace_rcons (initial_memory: Memory.t) (pref: trace event_inform) (e: event_inform) :
+  mem_of_trace initial_memory (rcons pref e) = mem_of_event_inform e.
+Proof.
+  by rewrite /mem_of_trace last_event_inform_rcons.
+Qed.
+
+
 End Traces.
