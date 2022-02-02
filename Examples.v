@@ -6,6 +6,7 @@ Require Import Common.CompCertExtensions.
 Require Import Common.TracesInform.
 Require Import Common.RenamingOption.
 Require Import Common.Memory.
+Require Import Common.Values.
 
 Require Import Source.DefinabilityEnd.
 Require Import Source.Language.
@@ -57,4 +58,15 @@ Definition tP : Events.trace event_inform.
     + exact (Int 700).
     + exact E_R_ONE.
     + exact (setm emptym c1 c1mem).
-    + 
+    + exact (setm Intermediate.Register.init (Intermediate.Register.to_nat R_ONE) (Int 700)).
+  - exact nil.
+Defined.
+
+Compute match (Definability.program_of_trace Pintf Pbuffers tP) with
+        | Some p =>
+          match getm (Source.prog_procedures p) 1 with
+          | Some c1procs => getm c1procs 1
+          | _ => None
+          end
+        | _ => None
+        end.
