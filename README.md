@@ -55,6 +55,10 @@ mechanized counterparts in Coq.
 
 - Definition 3.10 (relation on interaction traces): `Common/RenamingOption.v`, Inductive proposition `traces_shift_each_other_option`
 
+- Rule `Jump`: `Intermediate/CS.v`, case `Jump` of inductive `step`
+
+- Rule `Store`: `Intermediate/CS.v`, case `Store` of inductive `step`
+
 - Theorem 4.1 (RSP~): Theorem `RSC` in `RSC.v`
 
 - Lemma 5.1 (trace prefix mimicking): `Source/Definability.v`, Lemma `definability_gen_rel_right`
@@ -195,6 +199,8 @@ The source language `SafeP` corresponds to `Source` in the code. The target lang
 - Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
 - Data-flow events `E`: inductive `event_inform` in `Common/Definitions.v`
 - Memory projection `proj_P(Mem)`: implicit in definitions `mem_of_part_executing_rel_original_and_recombined` and `mem_of_part_not_executing_rel_original_and_recombined_at_internal` in `RecombinationRelCommon.v`
+- Value renaming `valren`: function `rename_value_template_option` in `RenamingOption.v`
+- The +1 block id renaming: Implemented by instantiating `shift_value_option` with `uniform_shift 0` and `uniform_shift 1`, in `RenamingOption.v`
 - Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
 - Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
 - Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
@@ -206,9 +212,11 @@ The source language `SafeP` corresponds to `Source` in the code. The target lang
 - Compilation function `↓`: function `compile_program` in `S2I/Compiler.v`
 - Step relation `⇝`: definitions `kstep` in `Source/CS.v`; `step_non_inform` for non-data-flow semantics and `step` for data-flow semantics in `Intermediate/CS.v`
 - Reflexive transitive closure `^*`: inductive `star` in `CompCert/Smallstep.v`
-- Non-data-flow events `e`: definition `event` in `CompCert/Events.v`
-- Source expressions `exp`: definition `expr` in `Source/Language.v`
-- Interm instructions `instr`: definition `instr` in `Intermediate/Machine.v`
+- Interaction (non-data-flow) events `e`: definition `event` in `CompCert/Events.v`
+- Memory `Mem` or `mem`: Module `Memory` in `Common/Memory.v`
+- Component memory `cMem`: Module `ComponentMemory` in `Common/Memory.v`
+- Source (SafeP) expressions `exp`: definition `expr` in `Source/Language.v`
+- Target (Mach) instructions `instr`: definition `instr` in `Intermediate/Machine.v`
 - Values `v`: definition `value` in `Common/Values.v`
 - Removal of all internal data-flow events `remove_df`: function `project_non_inform` in `Common/TracesInform.v`
 - Back-translation `mimicking_state` invariant: definition `well_formed_state` in `Source/Definability.v`
