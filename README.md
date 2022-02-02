@@ -190,10 +190,11 @@ ClassicalEpsilon.constructive_indefinite_description
 
 ### Index of definitions ###
 
-The source language `SafeP` corresponds to `Source` in the code. The target language `Mach` corresponds to `Interm` in the code.
+The source language `SafeP` corresponds to `Source` in the code. The target language `Mach` corresponds to `Intermediate` in the code.
 
 - Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
 - Data-flow events `E`: inductive `event_inform` in `Common/Definitions.v`
+- Memory projection `proj_P(Mem)`: implicit in definitions `mem_of_part_executing_rel_original_and_recombined` and `mem_of_part_not_executing_rel_original_and_recombined_at_internal` in `RecombinationRelCommon.v`
 - Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
 - Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
 - Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
