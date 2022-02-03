@@ -431,27 +431,6 @@ Section ThreewayMultisem1.
                            sigma_shifting_lefttoright_option_n_n_id in ebid;
                          subst.
                    --- right. split; auto; split; auto.
-                       (**************************************************
-                       split; intros ? Ha; rewrite in_fset1 in Ha;
-                         specialize (eqP Ha) as rewr; subst; clear Ha;
-                           intros contra.
-                       +++
-                         inversion Hgood_t as [? Hcontra]; subst.
-                         specialize (Hcontra _ contra).
-                         unfold left_addr_good_for_shifting in *.
-                         erewrite sigma_lefttoright_Some_spec in Hcontra.
-                         destruct Hcontra as [? G].
-                         by erewrite ebid in G.
-                       +++
-                         inversion Hgood_t' as [? Hcontra]; subst.
-                         specialize (Hcontra _ contra).
-                         unfold left_addr_good_for_shifting in *.
-
-                         rewrite Hpc_p in Hcontra.
-                         erewrite sigma_lefttoright_Some_spec in Hcontra.
-                         destruct Hcontra as [? G].
-                         by erewrite ebid in G.
-                        ******************************************************)
 
              ++ rewrite setmE Hreg. assumption.
       + simpl in *. subst.
@@ -1019,12 +998,6 @@ Section ThreewayMultisem1.
                                 later or adjust dependencies. *)
                              destruct contra as [? G].
                                by erewrite G in rel_r2_eq2.
-                               (********************************
-                               setoid_rewrite in_fset1 in rel_r2_shr_t1'.
-                               pose proof rel_r2_shr_t1' (cid2', bid2') as Hcontra.
-                               rewrite eqxx in Hcontra. unfold not in Hcontra.
-                               by intuition.
-                               ***************************************)
                            ****
                              by left.
                        *** rewrite !andFb. by left.
@@ -1144,12 +1117,6 @@ Section ThreewayMultisem1.
                              erewrite sigma_lefttoright_Some_spec in contra.
                              destruct contra as [? G].
                                by erewrite G in rel_r1_eq2.
-                               (************************************
-                               setoid_rewrite in_fset1 in rel_r1_shr_t1'.
-                               pose proof rel_r1_shr_t1' (cid2', bid2') as Hcontra.
-                               rewrite eqxx in Hcontra. unfold not in Hcontra.
-                               by intuition.
-                               ***************************************)
                            ****
                              by left.
                        *** rewrite !andFb. by left.
@@ -1474,12 +1441,6 @@ Section ThreewayMultisem1.
                              erewrite sigma_lefttoright_Some_spec in contra.
                              destruct contra as [? G].
                                by erewrite G in rel_r2_eq2.
-                               (**********************************
-                               setoid_rewrite in_fset1 in rel_r2_shr_t1'.
-                               pose proof rel_r2_shr_t1' (cid2', bid2') as Hcontra.
-                               rewrite eqxx in Hcontra. unfold not in Hcontra.
-                               by intuition.
-                               ************************************)
                          ****
                              by left.
                      *** rewrite !andFb. by left.
@@ -1582,12 +1543,6 @@ Section ThreewayMultisem1.
                              erewrite sigma_lefttoright_Some_spec in contra.
                              destruct contra as [? G].
                                by erewrite G in rel_r1_eq2.
-                               (**********************************
-                               setoid_rewrite in_fset1 in rel_r1_shr_t1'.
-                               pose proof rel_r1_shr_t1' (cid2', bid2') as Hcontra.
-                               rewrite eqxx in Hcontra. unfold not in Hcontra.
-                               by intuition.
-                               ***********************************)
                            ****
                              by left.
                        *** rewrite !andFb. by left.
@@ -1849,12 +1804,6 @@ Section ThreewayMultisem1.
                                erewrite sigma_lefttoright_Some_spec in contra.
                                destruct contra as [? G].
                                  by erewrite G in rel_r2_eq2.
-                               (**********************************
-                               setoid_rewrite in_fset1 in rel_r2_shr_t1'.
-                             pose proof rel_r2_shr_t1' (cid2', bid2') as Hcontra.
-                             rewrite eqxx in Hcontra. unfold not in Hcontra.
-                               by intuition.
-                               **************************************)
                          ****
                              by left.
                      *** rewrite !andFb. by left.
@@ -1957,12 +1906,6 @@ Section ThreewayMultisem1.
                              erewrite sigma_lefttoright_Some_spec in contra.
                              destruct contra as [? G].
                                by erewrite G in rel_r1_eq2.
-                               (**********************************
-                               setoid_rewrite in_fset1 in rel_r1_shr_t1'.
-                               pose proof rel_r1_shr_t1' (cid2', bid2') as Hcontra.
-                               rewrite eqxx in Hcontra. unfold not in Hcontra.
-                               by intuition.
-                               ***********************************)
                            ****
                              by left.
                        *** rewrite !andFb. by left.
@@ -2337,11 +2280,6 @@ Section ThreewayMultisem1.
               erewrite sigma_lefttoright_Some_spec in Hcontra.
               destruct Hcontra as [? G].
               by erewrite G in ebidl_shift.
-              (*************************
-              specialize (Hnotshrt1 (cidl, bidl)). 
-              rewrite in_fset1 eqxx in Hnotshrt1.
-              exfalso. by apply Hnotshrt1.
-              ****************************)
         }
 
         

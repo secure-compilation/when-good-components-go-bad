@@ -786,28 +786,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
           (*Locate apply_load_block_seq_fin.*)
   Admitted.
 
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
   (* Taking inspiration from mathcomp.ssreflect.path, make path be the type of
      non-empty sequences.
      A path is thus a head and a tail. The head is of type node_t, and the tail of type
@@ -1035,23 +1013,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
              ++ pose (dlea := Nat.le_max_l d a). erewrite T in dlea. exact dlea.
              ++ pose (alemx := Nat.le_max_l a mx). erewrite IHlinst in alemx. exact alemx.
   Qed.
- (* 
-  Lemma foldl_max_cons_foldl :
-    forall a l d,
-      a = foldl max d (a :: l) ->
-      foldl max a l = a.
-  Proof.
-    unfold foldl. simpl
-    intros a l d H.
-    pose (maxda := foldl_max_default (a :: l) a d H).
-    unfold foldl in H.
-    erewrite maxda in H.
-    rewrite <- cat1s in H.
-    rewrite foldl_cat in H.
-    simpl in H.
-    SearchAbout foldl.
-    SearchAbout cons.
-  *)
+
   Lemma max_in_seq_has :
     forall l default mx,
       mx = foldl max default l ->

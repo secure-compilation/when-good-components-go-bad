@@ -57,38 +57,7 @@ Section ThreewayMultisem1.
   exists s2' e',
     mergeable_states p c p' c' n n'' s2 s2' s2''
                      (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).*)
-  (* Proof. *)
-  (*   intros Hcomp1 Hmerge1 Hstep12 Hstep12''. inversion Hmerge1. *)
-  (*   apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t ** [e]); *)
-  (*     try assumption. *)
-  (*   - eapply star_right; try eassumption; reflexivity. *)
-  (*   - eapply star_right; try eassumption; reflexivity. *)
-  (* Qed. *)
   (*Admitted.*) (* RB: TODO: Fix statement as needed, prove later. *)
-
-  (* Ltac t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1 := *)
-  (*   apply CS.Call; try assumption; *)
-  (*   [ *)
-  (*   | now apply (imported_procedure_recombination Hcomp1) *)
-  (*   | (   (now apply (@genv_entrypoints_recombination_left _ c)) *)
-  (*      || (now eapply (@genv_entrypoints_recombination_right _ c p'))) *)
-  (*   ]; *)
-  (*   (* Apply linking invariance and solve side goals (very similar to the *)
-  (*      silent case, but slightly different setup). *) *)
-  (*   [eapply execution_invariant_to_linking; try eassumption; *)
-  (*     [ congruence *)
-  (*     | apply linkable_implies_linkable_mains; congruence *)
-  (*     | exact (is_program_component_in_domm Hcomp1 Hmerge1) *)
-  (*     ] *)
-  (*   ]. *)
-
-  (* Ltac t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1 := *)
-  (*   apply CS.Return; try congruence; (* [congruence] to cover context case. *) *)
-  (*   eapply execution_invariant_to_linking; try eassumption; *)
-  (*   [ congruence *)
-  (*   | apply linkable_implies_linkable_mains; congruence *)
-  (*   | exact (is_program_component_in_domm Hcomp1 Hmerge1) *)
-  (*   ]. *)
 
   Lemma Reachable_memrel_Reachable ev mem0 regs t1 s1'mem s1'reg addrl:
     good_trace_extensional (left_addr_good_for_shifting n)
@@ -3029,9 +2998,6 @@ Section ThreewayMultisem1.
                     rewrite e in Hptr'_pc'; by erewrite <- Hptr'_pc'.
                ** (** here, use the register relation (Hrel_R_COM) **)
                  reflexivity.
-                 (* destruct Hrel_R_COM as [G|[? [? ?]]].
-                 --- intuition.
-                 --- refl *)
             ++ simpl in *.
                destruct (Pointer.component pc' \in domm (prog_interface p)) eqn:e;
                  rewrite e in Hptr'_pc'; erewrite Hptr'_pc'; by erewrite Hpc. 

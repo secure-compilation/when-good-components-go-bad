@@ -47,22 +47,6 @@ Section ThreewayMultisem1.
   (* Given a silent star driven by the "program" side p, the "context" side c
      remains unaltered. *)
 
-  (* Ltac t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' := *)
-  (*   inversion Hmerge1 *)
-  (*     as [_ s0'' t01'' _ _ Hwfp' Hwfc' Hmergeable_ifaces *)
-  (*         Hifacep Hifacec _ Hprog_is_closed' _ Hini0'' _ Hstar01'']; *)
-  (*   pose proof mergeable_states_program_to_program Hmerge1 Hcomp as Hcomp1''; *)
-  (*   rewrite Hifacec in Hcomp1''; *)
-  (*   assert (Hmergeable_ifaces' := Hmergeable_ifaces); *)
-  (*     rewrite Hifacep Hifacec in Hmergeable_ifaces'; *)
-  (*   pose proof CS.epsilon_star_preserves_program_component _ _ _ _ Hcomp1'' Hstar12'' as Hcomp2''; *)
-  (*   destruct (CS.star_pc_domm _ _ *)
-  (*               Hwfp' Hwfc' Hmergeable_ifaces' Hprog_is_closed' Hini0'' *)
-  (*               (star_trans Hstar01'' Hstar12'' eq_refl)) as [Hgoal | Hcontra]; *)
-  (*   [ now rewrite Hifacep *)
-  (*   | CS.simplify_turn; now rewrite Hcontra in Hcomp2'' *)
-  (*   ]. *)
-
   (* [DynShare]
 
      This lemma is false in the existence of dynamic memory sharing.
@@ -77,41 +61,7 @@ Section ThreewayMultisem1.
   (*   Step sem'' s2'' E0 s3'' -> *)
   (*   to_partial_memory (CS.state_mem s2'') (domm ip) = *)
   (*   to_partial_memory (CS.state_mem s3'') (domm ip). *)
-  (* Proof. *)
-  (*   intros Hmerge1 Hcomp Hstar12'' Hstep23''. *)
-  (*   destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addr2'']. *)
-  (*   destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addr3'']. *)
-  (*   pose proof CS.step_non_inform_step_inform prog'' *)
-  (*        (gps2'', mem2'', regs2'', pc2'', addr2'') _ _ Hstep23'' as *)
-  (*       [t_inform [Hstep_inform _]]. *)
-  (*   inversion Hstep_inform; subst; *)
-  (*     (* Most cases do not touch the memory. *) *)
-  (*     try reflexivity. *)
-  (*     (* *)
-  (*       [DynShare] *)
-
-  (*       The proof below no longer holds. The proof is looking for the assumption *)
-  (*       Heq that ensures that the store is not touching any non-pc-owned memory. *)
-  (*       However, no such assumption exists anymore for the store instruction. *)
-  (*      *) *)
   (* Abort. *)
-
-  (* [DynShare] DEPRECATED ARGUMENT BELOW
-
-      (* Rewrite memory goals, discharge side goals and homogenize shape. *)
-      match goal with
-      | Hstore : Memory.store _ _ _ = _,
-        Heq : Pointer.component _ = Pointer.component _ |- _ =>
-        erewrite Memory.program_store_to_partialized_memory; eauto 1; rewrite Heq
-      | Halloc : Memory.alloc _ _ _ = _ |- _ =>
-        erewrite program_allocation_to_partialized_memory; eauto 1
-      end.
-      (* Prove the PC is in the program in both cases. *)
-      unfold ip;
-      t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12''.
-  Qed.
-
-   *)
 
   Ltac t_merge_states_silent_star :=
     inversion IHstar''; subst;
