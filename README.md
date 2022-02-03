@@ -73,26 +73,28 @@ mechanized counterparts in Coq.
 
 - Lemma 5.6 (symmetry of the turn-taking state simulation relation): `Intermediate/RecombinationRelCommon.v`, Lemma `mergeable_internal_states_sym`
 
+### How to find axioms/admits ###
+
 All our results are admit-free and only rely, at most, on some of the axioms
 specified below; any other axioms or admitted theorems found in the development
 are not used in our proofs. To verify this, the Coq command `Print Assumptions`
 can be used to examine the theorems of interest.
 
-### Axioms about (separate) compilation of whole programs ###
+### Axioms about correct (separate) compilation of whole programs ###
 
-We leave some standard statements about compilation of whole
+We leave some standard statements about the *correct* compilation of whole
 programs as axioms because they are not really the focus of 
-our novel proof techniques.
+our novel *secure* compilation proof techniques.
 
-Proving these axioms is typically laborious and we do not expect
+Proving these kind of correctness results is typically laborious and we do not expect
 the proof to be particularly insightful for our chosen pair of languages.
 
-In fact, one of the key goals of our proof technique for the main 
+In fact, one of the key goals of the proof technique for the main 
 secure compilation theorem is to demonstrate that
-standard theorems about whole-program compilation can be reused
+standard results about correct compilation can be reused
 by (rather than implicitly reproved as part of) the secure compilation 
 proof, since proving these theorems is typically a big manual effort 
-that one would wish to avoid.
+that one would wish to avoid duplicating.
 
 *Lemmas regarding compilation and well-formedness conditions*: we assume that
 every well-formed source program can be compiled (`well_formed_compilable`),
@@ -121,7 +123,7 @@ compilation_has_matching_mains
     compile_program p = Some p_compiled -> matching_mains p p_compiled
 ```
 
-*Lemmas regarding linking:* we assume that he compiler satisfies
+*Separate compilation:* We assume that he compiler satisfies
 `separate_compilation`: compilation and linking commute.
 ```coq
 separate_compilation
@@ -135,13 +137,8 @@ separate_compilation
     Some (Intermediate.program_link p_comp c_comp)
 ```
 
-*Compiler correctness:* we also assume compiler correctness, under the form of a CompCert-style
-forward simulation `Compiler.fsim_record`. We also assume the existence
-of a backward simulation `backward_simulation_star`.
-Finally, we assume `Compiler.compiler_preserves_non_leakage_of_private_pointers`,
-that states that our compiler preserves the privacy of the local buffer.
-Such a result could likely be proved by stating fine grained simulation invariants
-in the compiler correctness proof.
+*Compiler correctness:* We also assume CompCert-style compiler correctness, under the form of a
+forward simulation `Compiler.fsim_record` and a backward simulation `backward_simulation_star`.
 ```
 Compiler.order : Compiler.index -> Compiler.index -> Prop
 Compiler.match_states
@@ -165,6 +162,14 @@ backward_simulation_star
     exists (s' : state (S.CS.sem p)) (i : Compiler.index),
       Star (S.CS.sem p) (S.CS.initial_machine_state p) t s' /\
       Compiler.match_states i s' s
+```
+
+*Compiler preserves the privacy of the local buffer:*
+Finally, we assume `Compiler.compiler_preserves_non_leakage_of_private_pointers`,
+which states that our compiler preserves the privacy of the local buffer.
+Such a result can likely be proved by using the fine-grained simulation invariants
+in an actual compiler correctness proof.
+```
 Compiler.compiler_preserves_non_leakage_of_private_pointers
   : forall (p : Source.program) (p_compiled : Intermediate.program)
       (metadata_size : Component.id -> nat),
