@@ -96,8 +96,9 @@ by (rather than implicitly reproved as part of) the secure compilation
 proof, since proving these theorems is typically a big manual effort 
 that one would wish to avoid duplicating.
 
-*Lemmas regarding compilation and well-formedness conditions*: we assume that
-every well-formed source program can be compiled (`well_formed_compilable`),
+#### Compilation and well-formedness ####
+We assume that every well-formed source program can be compiled
+(`well_formed_compilable`),
 and that compiling preserves certain well-formedness conditions 
 (`Compiler.compilation_preserves_well_formedness`,
 ` compilation_preserves_main`, `compilation_has_matching_mains`).
@@ -123,8 +124,9 @@ compilation_has_matching_mains
     compile_program p = Some p_compiled -> matching_mains p p_compiled
 ```
 
-*Separate compilation:* We assume that he compiler satisfies
-`separate_compilation`: compilation and linking commute.
+#### Separate compilation ####
+We assume that he compiler satisfies `separate_compilation`:
+compilation and linking commute.
 ```coq
 separate_compilation
   : forall (p c : Source.program) (p_comp c_comp : Intermediate.program),
@@ -137,8 +139,10 @@ separate_compilation
     Some (Intermediate.program_link p_comp c_comp)
 ```
 
-*Compiler correctness:* We also assume CompCert-style compiler correctness, under the form of a
-forward simulation `Compiler.fsim_record` and a backward simulation `backward_simulation_star`.
+#### Compiler correctness ####
+We also assume CompCert-style compiler correctness, under the form of a
+forward simulation `Compiler.fsim_record`
+and a backward simulation `backward_simulation_star`:
 ```
 Compiler.order : Compiler.index -> Compiler.index -> Prop
 Compiler.match_states
@@ -164,7 +168,7 @@ backward_simulation_star
       Compiler.match_states i s' s
 ```
 
-*Compiler preserves the privacy of the local buffer:*
+#### Compiler preserves the privacy of the local buffer ####
 Finally, we assume `Compiler.compiler_preserves_non_leakage_of_private_pointers`,
 which states that our compiler preserves the privacy of the local buffer.
 Such a result can likely be proved by using the fine-grained simulation invariants
