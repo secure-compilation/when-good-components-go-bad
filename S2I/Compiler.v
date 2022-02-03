@@ -507,6 +507,7 @@ Lemma compilation_has_matching_mains :
     matching_mains p p_compiled.
 Admitted.
 
+(****************************************
 Axiom separate_compilation:
   forall p c pcsz pc_compiled t s,
     Source.well_formed_program p ->
@@ -525,8 +526,8 @@ Axiom separate_compilation:
            t' s'
       /\
       traces_shift_each_other_option size_meta size_meta' t t'.
+***********************************************)
 
-(*********************************************************
 Axiom separate_compilation:
   forall p psz c csz p_comp c_comp,
     Source.well_formed_program p ->
@@ -534,10 +535,8 @@ Axiom separate_compilation:
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
     compile_program p psz = Some p_comp ->
     compile_program c csz = Some c_comp ->
-    exists pcsz,
-      compile_program (Source.program_link p c) pcsz
-      = Some (Intermediate.program_link p_comp c_comp).
-************************************************************)
+    compile_program (Source.program_link p c) (unionm psz csz)
+    = Some (Intermediate.program_link p_comp c_comp).
 
 (* We can currently do with a weaker notion of separate compilation *)
 (*************************************************
@@ -568,27 +567,32 @@ Local Axiom compilation_preserves_well_formedness:
 
 (* FCC *)
 
+Axiom metadata_size_transformer: (Component.id -> nat) -> (Component.id -> nat).
+
 Local Axiom forward_simulation_star:
-  forall p t s,
+  forall p t s size_meta,
     Source.closed_program p ->
     Source.well_formed_program p ->
     Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
-    exists s' psz p_compiled t' size_meta size_meta',
+    exists s' psz p_compiled t',
+      domm psz = domm (Source.prog_interface p) /\
       compile_program p psz = Some p_compiled /\
       Star (I.CS.sem_non_inform p_compiled)
            (I.CS.initial_machine_state p_compiled) t' s' /\
-      traces_shift_each_other_option size_meta size_meta' t t'.
+      traces_shift_each_other_option
+        size_meta (metadata_size_transformer size_meta) t t'.
 
 Local Axiom backward_simulation_star:
-  forall p psz p_compiled t s,
+  forall p psz p_compiled t s size_meta,
     Source.closed_program p ->
     Source.well_formed_program p ->
     compile_program p psz = Some p_compiled ->
     Star (I.CS.sem_non_inform p_compiled)
          (I.CS.initial_machine_state p_compiled) t s ->
-    exists s' t' size_meta size_meta',
+    exists s' t',
       Star (S.CS.sem p) (S.CS.initial_machine_state p) t' s' /\
-      traces_shift_each_other_option size_meta size_meta' t t'.
+      traces_shift_each_other_option
+        (metadata_size_transformer size_meta) size_meta t t'.
 
 Local Axiom well_formed_compilable :
   forall p psz,
@@ -611,7 +615,7 @@ Local Axiom compiler_preserves_non_leakage_of_private_pointers:
     Source.well_formed_program p ->
     compile_program p psz = Some p_compiled ->
     S.CS.private_pointers_never_leak_S p          metadata_size ->
-    private_pointers_never_leak_I p_compiled metadata_size.
+    private_pointers_never_leak_I p_compiled (metadata_size_transformer metadata_size).
 
 (***********************************************
 Local Axiom non_leakage_of_private_pointers_compatible_with_separate_compilation:

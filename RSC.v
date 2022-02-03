@@ -26,12 +26,13 @@ Set Bullet Behavior "Strict Subproofs".
 
 Section RSC_Section.
   Variable p: Source.program.
-  Variable psz: nat.
+  Variable psz: {fmap Component.id -> nat}.
   Variable p_compiled: Intermediate.program.
   Variable Ct: Intermediate.program.
 
   (* Some reasonable assumptions about our programs *)
 
+  Hypothesis domm_psz_intf: domm psz = domm (Source.prog_interface p).
   Hypothesis well_formed_p : Source.well_formed_program p.
   Hypothesis successful_compilation : Compiler.compile_program p psz = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
@@ -162,30 +163,33 @@ Section RSC_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-    assert (exists s' P'Cs_sz P'_Cs_compiled t'compiled size_meta size_meta',
-               Compiler.compile_program (Source.program_link P' Cs) P'Cs_sz =
-               Some P'_Cs_compiled
-               /\
-               Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
-                    (I.CS.initial_machine_state P'_Cs_compiled)
-                    t'compiled s'
-               /\
-               traces_shift_each_other_option size_meta size_meta' t' t'compiled
-           )
-      as [s'_compiled [P'Cs_sz [P'_Cs_compiled
-                                  [t'compiled
-                                     [size_meta
-                                        [size_meta'
-                                           [HP'_Cs_compiles
-                                              [HP'_Cs_compiled_star
-                                                 [Ht'_rel_t'compiled
-         ]]]]]]]]].
-    {
-      eapply Compiler.forward_simulation_star.
-      - assumption.
-      - assumption.
-      - exact Hstar'.
-    }
+      assert (exists s' P'Cs_sz P'_Cs_compiled t'compiled,
+                 domm P'Cs_sz = domm (Source.prog_interface (Source.program_link P' Cs))
+                 /\
+                 Compiler.compile_program (Source.program_link P' Cs) P'Cs_sz =
+                 Some P'_Cs_compiled
+                 /\
+                 Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
+                      (I.CS.initial_machine_state P'_Cs_compiled)
+                      t'compiled s'
+                 /\
+                 traces_shift_each_other_option
+                   (uniform_shift 1)
+                   (Compiler.metadata_size_transformer (uniform_shift 1)) t' t'compiled
+             )
+        as [s'_compiled [P'Cs_sz [P'_Cs_compiled
+                                    [t'compiled
+                                       [Hdomm_P'Cs_sz
+                                          [HP'_Cs_compiles
+                                             [HP'_Cs_compiled_star
+                                                Ht'_rel_t'compiled
+           ]]]]]]].
+      {
+        eapply Compiler.forward_simulation_star.
+        - assumption.
+        - assumption.
+        - exact Hstar'.
+      }
 
     (******************
     destruct (Compiler.well_formed_compilable P' dummy_sz well_formed_P') as [P'_compiled HP'_compiles].
@@ -227,6 +231,29 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
       admit.
     }
 
+    assert (exists P'sz Cssz, unionm P'sz Cssz = P'Cs_sz /\
+                            domm P'sz = domm (Source.prog_interface P') /\
+                            domm Cssz = domm (Source.prog_interface Cs)
+                            
+           ) as [P'sz [Cssz [Hunion [HdommP'sz HdommCssz]]]].
+    { admit. }
+
+    specialize (Compiler.well_formed_compilable _ P'sz well_formed_P') as
+        [P'_compiled HP'_compiles].
+
+    specialize (Compiler.well_formed_compilable _ Cssz well_formed_Cs) as
+        [Cs_compiled HCs_compiles].
+    rewrite -Hunion in HP'_Cs_compiles.
+
+    assert (Hrewr: compile_program (Source.program_link P' Cs) (unionm P'sz Cssz) =
+                   Some (Intermediate.program_link P'_compiled Cs_compiled)).
+    { by eapply Compiler.separate_compilation; eauto. }
+
+    rewrite HP'_Cs_compiles in Hrewr.
+    inversion Hrewr. subst.
+      
+    
+    (*********************************************************
     assert (exists
                (t'compiled_sep: Events.trace Events.event)
                (s'_compiled_sep : I.CS.state) (psz csz : nat) 
@@ -258,8 +285,7 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
       by eapply Compiler.separate_compilation; eauto.
     }
 
-    (** Should not be needed anymore. *)
-    clear HP'_Cs_compiled_star.
+     ********************************************)
     
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
@@ -280,7 +306,7 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
       apply linkability_pcomp_Ct.
     }
     
-    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star_sep;
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star;
        [| assumption |assumption | apply linkable_sym in linkability'; assumption].
 
     (* intermediate composition *)
@@ -364,14 +390,8 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
       eapply Compiler.compilation_has_matching_mains; eauto.
     }
 
-    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star_sep; try assumption.
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star; try assumption.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
-
-    assert (t_rel_t': traces_shift_each_other_option
-                        all_zeros_shift metadata_size
-                        (project_non_inform t_inform) t').
-    
-    { by apply traces_shift_each_other_option_symmetric. }
 
     assert (H_p_Ct_good: forall (ss : CS.state) (tt : Events.trace Events.event),
                CSInvariants.CSInvariants.is_prefix
@@ -409,15 +429,19 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
                CSInvariants.CSInvariants.is_prefix
                  ss''
                  (Intermediate.program_link P'_compiled Cs_compiled) tt'' ->
-               good_trace_extensional (left_addr_good_for_shifting (uniform_shift 1)) tt''
+               good_trace_extensional
+                 (left_addr_good_for_shifting
+                    (Compiler.metadata_size_transformer (uniform_shift 1))) tt''
                /\
                (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
                        (addr : Component.id * Block.id) (v : value),
                    CS.state_mem ss'' = mem ->
                    Memory.Memory.load mem ptr = Some v ->
                    addr = (Pointer.component ptr, Pointer.block ptr) ->
-                   left_addr_good_for_shifting (uniform_shift 1) addr ->
-                   left_value_good_for_shifting (uniform_shift 1) v)).
+                   left_addr_good_for_shifting
+                     (Compiler.metadata_size_transformer (uniform_shift 1)) addr ->
+                   left_value_good_for_shifting
+                     (Compiler.metadata_size_transformer (uniform_shift 1)) v)).
     {
       assert (P'_Cs_closed: Source.closed_program (Source.program_link P' Cs)).
       {
@@ -443,6 +467,17 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
       eapply G2; eauto.
     }
 
+    assert (t_rel_t': traces_shift_each_other_option
+                        all_zeros_shift
+                        (Compiler.metadata_size_transformer (uniform_shift 1))
+                        (project_non_inform t_inform) t'compiled).
+    {
+      eapply traces_shift_each_other_option_transitive.
+      - eapply traces_shift_each_other_option_symmetric, Ht_rel_t'.
+      - assumption.
+    }
+
+    
     pose proof Intermediate.RecombinationRel.recombination_trace_rel
     well_formed_p_compiled
     well_formed_Ct
@@ -463,21 +498,30 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
     
     (* BCC *)
     assert (exists pCs_compiled,
-               Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
+               Compiler.compile_program (Source.program_link p Cs)
+                                        (unionm psz Cssz)
+               = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles].
       by now apply Compiler.well_formed_compilable.
       
-      eapply Compiler.backward_simulation_star in Hstar_recomb;
-        eauto; last
-        (by rewrite HpCs_compiles;
+      eapply Compiler.backward_simulation_star
+        in Hstar_recomb
+      ;
+        eauto;
+        last by
+        (erewrite HpCs_compiles;
          erewrite Compiler.separate_compilation in HpCs_compiles; eauto
         ).
       
       destruct Hstar_recomb as [s'_pCs HpCs_star].
-      
+      destruct HpCs_star as [? [? ?]]; eauto.
       do 5 eexists; split; last split; last split; last split; last split;
-        last exact trel_recomb; eauto.
-      destruct HpCs_star as [_ [HpCs_star _]]; eauto.
+        eauto.
+      eapply traces_shift_each_other_option_transitive; eauto.
+    - exact trel_recomb.
+    - 
+      last exact trel_recomb. eauto.
+      
 Qed.
 
 Print Assumptions RSC.
