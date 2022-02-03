@@ -142,7 +142,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          push R_COM ++ (* compute right operand, store it on the stack*)
          c1 ++ (* compute left operand, /don't/ store it on the stack *)
          pop R_AUX1 ++ (* get back the operand from the stack *)
-         IBinoOp bop R_AUX1 R_COM R_COM :: nil) (* do the operation *)
+         IBinOp bop R_AUX1 R_COM R_COM :: nil) (* do the operation *)
   | E_seq e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
@@ -175,7 +175,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          push R_COM ++ (* compute argument first, store it in the stack. *)
          c1 ++ (* then compute ptr, /don't/ store it in the stack *)
          pop R_AUX1 ++ (* pop the stack into R_AUX to get back the argument *)
-         IStore R_COM R_AUX1 ++
+         IStore R_COM R_AUX1 ::
          IMov R_AUX1 R_COM :: (* write back the argument into R_COM *)
          nil)
   | E_call C' P' e =>
