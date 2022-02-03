@@ -15,15 +15,16 @@ and versioned libraries:
 Coq 8.12.2
 - Mathematical Components 1.11.0
 - Extensional Structures 0.2.2
+- Equations 1.2.4
 
 Dependencies can be installed through the OCaml package manager, OPAM.
 
 - Coq (package `coq`) is available through the official
   [Ocaml OPAM repository](http://opam.ocaml.org/).
 - Stable releases of Mathematical Components (packages `coq-mathcomp-ssreflect`,
-  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`) and Extensional Structures
-  (package `coq-extructures`) are available through the
-  [Coq OPAM repository](https://coq.inria.fr/opam/released/).
+  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`), Extensional Structures
+  (package `coq-extructures`), and Equations (package `coq-equations`)
+  are available through the [Coq OPAM repository](https://coq.inria.fr/opam/released/).
 
 ### Build ###
 
@@ -54,17 +55,23 @@ mechanized counterparts in Coq.
 
 - Definition 3.10 (relation on interaction traces): `Common/RenamingOption.v`, Inductive proposition `traces_shift_each_other_option`
 
+- Rule `Jump`: `Intermediate/CS.v`, case `Jump` of inductive `step`
+
+- Rule `Store`: `Intermediate/CS.v`, case `Store` of inductive `step`
+
 - Theorem 4.1 (RSP~): Theorem `RSC` in `RSC.v`
 
 - Lemma 5.1 (trace prefix mimicking): `Source/Definability.v`, Lemma `definability_gen_rel_right`
 
-- Definition A.2 (memory relation at observable events): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_border_states`
+- Definition 5.2 (memory relation at observable events): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_border_states`
 
-- Lemma A.3 (strengthening at observable events): `Intermediate/RecombinationRelStrengthening.v`, Theorem `threeway_multisem_event_lockstep_program_step`
+- Lemma 5.3 (strengthening at interaction events): `Intermediate/RecombinationRelStrengthening.v`, Theorem `threeway_multisem_event_lockstep_program_step`
 
-- Lemma A.4 (option simulation): `Intermediate/RecombinationRelOptionSim.v`, Lemma `merge_states_silent_star`
+- Lemma 5.4 (option simulation): `Intermediate/RecombinationRelOptionSim.v`, Lemma `merge_states_silent_star`
 
-- Lemma A.5 (lockstep simulation): `Intermediate/RecombinationRelLockstepSim.v`, Theorem `threeway_multisem_star_E0`
+- Lemma 5.5 (lockstep simulation): `Intermediate/RecombinationRelLockstepSim.v`, Theorem `threeway_multisem_star_E0`
+
+- Lemma 5.6 (symmetry of the turn-taking state simulation relation): `Intermediate/RecombinationRelCommon.v`, Lemma `mergeable_internal_states_sym`
 
 ### Axioms about (separate) compilation of whole programs ###
 
@@ -187,10 +194,13 @@ ClassicalEpsilon.constructive_indefinite_description
 
 ### Index of definitions ###
 
-The source language `SafeP` corresponds to `Source` in the code. The target language `Mach` corresponds to `Interm` in the code.
+The source language `SafeP` corresponds to `Source` in the code. The target language `Mach` corresponds to `Intermediate` in the code.
 
 - Backtranslation function `↑`: function `procedures_of_trace` in `Source/Definability.v`
 - Data-flow events `E`: inductive `event_inform` in `Common/Definitions.v`
+- Memory projection `proj_P(Mem)`: implicit in definitions `mem_of_part_executing_rel_original_and_recombined` and `mem_of_part_not_executing_rel_original_and_recombined_at_internal` in `RecombinationRelCommon.v`
+- Value renaming `valren`: function `rename_value_template_option` in `RenamingOption.v`
+- The +1 block id renaming: Implemented by instantiating `shift_value_option` with `uniform_shift 0` and `uniform_shift 1`, in `RenamingOption.v`
 - Turn-taking simulation invariant `state_rel_tt`: definition `mergeable_internal_states` in `RecombinationRelCommon.v`
 - Turn-taking simulation relation `mem_rel_tt`: memory part of the `mergeable_internal_states` definition in `Intermediate/RecombinationRelCommon.v`
 - Strong memory relation holding at all locations of the executing part `mem_rel_exec`: definition `mem_of_part_executing_rel_original_and_recombined` in `Intermediate/RecombinationRelCommon.v`
@@ -202,9 +212,11 @@ The source language `SafeP` corresponds to `Source` in the code. The target lang
 - Compilation function `↓`: function `compile_program` in `S2I/Compiler.v`
 - Step relation `⇝`: definitions `kstep` in `Source/CS.v`; `step_non_inform` for non-data-flow semantics and `step` for data-flow semantics in `Intermediate/CS.v`
 - Reflexive transitive closure `^*`: inductive `star` in `CompCert/Smallstep.v`
-- Non-data-flow events `e`: definition `event` in `CompCert/Events.v`
-- Source expressions `exp`: definition `expr` in `Source/Language.v`
-- Interm instructions `instr`: definition `instr` in `Intermediate/Machine.v`
+- Interaction (non-data-flow) events `e`: definition `event` in `CompCert/Events.v`
+- Memory `Mem` or `mem`: Module `Memory` in `Common/Memory.v`
+- Component memory `cMem`: Module `ComponentMemory` in `Common/Memory.v`
+- Source (SafeP) expressions `exp`: definition `expr` in `Source/Language.v`
+- Target (Mach) instructions `instr`: definition `instr` in `Intermediate/Machine.v`
 - Values `v`: definition `value` in `Common/Values.v`
 - Removal of all internal data-flow events `remove_df`: function `project_non_inform` in `Common/TracesInform.v`
 - Back-translation `mimicking_state` invariant: definition `well_formed_state` in `Source/Definability.v`
