@@ -80,7 +80,7 @@ specified below; any other axioms or admitted theorems found in the development
 are not used in our proofs. To verify this, the Coq command `Print Assumptions`
 can be used to examine the theorems of interest.
 
-### Axioms about correct (separate) compilation of whole programs ###
+### Axioms about correct compilation of whole programs ###
 
 We leave some standard statements about the *correct* compilation of whole
 programs as axioms because they are not really the focus of 
@@ -125,7 +125,7 @@ compilation_has_matching_mains
 ```
 
 #### Separate compilation ####
-We assume that he compiler satisfies `separate_compilation`:
+We assume that the compiler satisfies `separate_compilation`:
 compilation and linking commute.
 ```coq
 separate_compilation
