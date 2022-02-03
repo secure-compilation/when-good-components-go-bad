@@ -360,7 +360,8 @@ Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program)
   end.
 
 Definition compile_program
-           (p: Source.program) (stksize: nat) : option Intermediate.program :=
+           (p: Source.program) (stksize: {fmap Component.id -> nat})
+  : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
   (* let localbuf := *) 
   let bufs := Source.prog_buffers p in
@@ -507,6 +508,26 @@ Lemma compilation_has_matching_mains :
 Admitted.
 
 Axiom separate_compilation:
+  forall p c pcsz pc_compiled t s,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program (Source.program_link p c) pcsz = Some pc_compiled ->
+    Star (I.CS.sem_non_inform pc_compiled)
+         (I.CS.initial_machine_state pc_compiled) t s ->
+    exists t' s' psz csz p_comp c_comp size_meta size_meta',
+      compile_program p psz = Some p_comp
+      /\
+      compile_program c csz = Some c_comp
+      /\
+      Star (I.CS.sem_non_inform (Intermediate.program_link p_comp c_comp))
+           (I.CS.initial_machine_state (Intermediate.program_link p_comp c_comp))
+           t' s'
+      /\
+      traces_shift_each_other_option size_meta size_meta' t t'.
+
+(*********************************************************
+Axiom separate_compilation:
   forall p psz c csz p_comp c_comp,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
@@ -516,6 +537,7 @@ Axiom separate_compilation:
     exists pcsz,
       compile_program (Source.program_link p c) pcsz
       = Some (Intermediate.program_link p_comp c_comp).
+************************************************************)
 
 (* We can currently do with a weaker notion of separate compilation *)
 (*************************************************
@@ -590,3 +612,22 @@ Local Axiom compiler_preserves_non_leakage_of_private_pointers:
     compile_program p psz = Some p_compiled ->
     S.CS.private_pointers_never_leak_S p          metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size.
+
+(***********************************************
+Local Axiom non_leakage_of_private_pointers_compatible_with_separate_compilation:
+  forall p p_compiled c c_compiled pcsz pc_compiled,
+    Source.closed_program (Source.program_link p c) ->
+    Source.well_formed_program p ->
+    compile_program p psz = Some p_compiled ->
+    compile_program c csz = Some c_compiled ->
+    pcsz = unionm psz csz
+    compile_program (Source.program_link p c) pcsz = Some pc_compiled -> 
+    private_pointers_never_leak_I (pc_compiled) metadata_size ->
+    forall s t,
+      CSInvariants.CSInvariants.is_prefix
+        s
+        (Intermediate.program_link p_compiled c_compiled) t ->
+      
+      private_pointers_never_leak_I (pc_compiled) metadata_size.
+    
+************************************************)

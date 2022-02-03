@@ -187,14 +187,19 @@ Section RSC_Section.
       - exact Hstar'.
     }
 
-    set (dummy_sz := 0).
-    
+    (******************
     destruct (Compiler.well_formed_compilable P' dummy_sz well_formed_P') as [P'_compiled HP'_compiles].
-    pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
-      as well_formed_P'_compiled.
     destruct (Compiler.well_formed_compilable Cs dummy_sz well_formed_Cs) as [Cs_compiled HCs_compiles].
+    *******************)
+
+    (***************************************
+pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
+      as well_formed_P'_compiled.
+    
     pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
       as well_formed_Cs_compiled.
+  
+
     assert
       (linkable
          (Intermediate.prog_interface Cs_compiled)
@@ -206,7 +211,7 @@ Section RSC_Section.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       apply linkability_pcomp_Ct.
     }
-    
+    *************************************)
 
     (************************************************
       rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
@@ -222,24 +227,60 @@ Section RSC_Section.
       admit.
     }
 
-    
-      assert (P'_Cs_compiled = Intermediate.program_link P'_compiled Cs_compiled).
+    assert (exists
+               (t'compiled_sep: Events.trace Events.event)
+               (s'_compiled_sep : I.CS.state) (psz csz : nat) 
+               (P'_compiled Cs_compiled : Intermediate.program)
+               (size_meta size_meta' : Component.id -> nat),
+               compile_program P' psz = Some P'_compiled /\
+               compile_program Cs csz = Some Cs_compiled /\
+               Star (CS.sem_non_inform
+                        (Intermediate.program_link P'_compiled Cs_compiled))
+                    (I.CS.initial_machine_state
+                       (Intermediate.program_link P'_compiled Cs_compiled)
+                    ) t'compiled_sep s'_compiled_sep /\
+               traces_shift_each_other_option size_meta size_meta'
+                                              t'compiled t'compiled_sep
+           )
+      as [t'compiled_sep [s'_compiled_sep
+                            [P'sz
+                               [Cssz
+                                  [P'_compiled
+                                     [Cs_compiled
+                                        [P'Cs_size_meta
+                                           [P'Cs_size_meta'
+                                              [HP'_compiles
+                                                 [HCs_compiles
+                                                    [HP'_Cs_compiled_star_sep
+                                                       [Ht'compiled_rel_t'compiled_sep
+         ]]]]]]]]]]]].
     {
-      specialize (Compiler.separate_compilation _ _ _ _ _ _
-                                                well_formed_P'
-                                                well_formed_Cs
-                                                P'_Cs_linkable
-                                                HP'_compiles
-                                                HCs_compiles
-                 ) as [P'Cs_sz_separate ?].
-        erewrite Compiler.separate_compilation in HP'_Cs_compiles; eauto;
-          last (by rewrite Hsame_iface1 Hsame_iface2).
-        
-          by inversion HP'_Cs_compiles.
-      }
-      subst.
+      by eapply Compiler.separate_compilation; eauto.
+    }
 
-    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star;
+    (** Should not be needed anymore. *)
+    clear HP'_Cs_compiled_star.
+    
+    pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
+      as well_formed_P'_compiled.
+    
+    pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
+      as well_formed_Cs_compiled.
+
+
+    assert
+      (linkable
+         (Intermediate.prog_interface Cs_compiled)
+         (Intermediate.prog_interface P'_compiled))
+      as linkability'. {
+      eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
+      apply linkable_sym.
+      rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
+      rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
+      apply linkability_pcomp_Ct.
+    }
+    
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star_sep;
        [| assumption |assumption | apply linkable_sym in linkability'; assumption].
 
     (* intermediate composition *)
@@ -281,7 +322,7 @@ Section RSC_Section.
 
     assert (Intermediate.linkable_mains p_compiled Cs_compiled) as linkable_mains.
     {
-      eapply (@Compiler.compilation_preserves_linkable_mains p _ Cs);
+      eapply (@Compiler.compilation_preserves_linkable_mains p _ _ Cs);
         try assumption.
       - rewrite <- Hsame_iface2 in linkability.
         eapply Source.linkable_disjoint_mains; assumption.
@@ -320,14 +361,16 @@ Section RSC_Section.
       apply linkable_sym; eauto.
       apply Intermediate.linkable_mains_sym; eauto.
       eapply S2I.Definitions.matching_mains_equiv; eauto.
-      apply Compiler.compilation_has_matching_mains; eauto.
+      eapply Compiler.compilation_has_matching_mains; eauto.
     }
 
-    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star; try assumption.
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_star_sep; try assumption.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
 
     assert (t_rel_t': traces_shift_each_other_option
-                        all_zeros_shift (uniform_shift 1) (project_non_inform t_inform) t').
+                        all_zeros_shift metadata_size
+                        (project_non_inform t_inform) t').
+    
     { by apply traces_shift_each_other_option_symmetric. }
 
     assert (H_p_Ct_good: forall (ss : CS.state) (tt : Events.trace Events.event),
@@ -386,12 +429,10 @@ Section RSC_Section.
       assert (P'_Cs_wf: Source.well_formed_program (Source.program_link P' Cs)).
       {
         eapply Source.linking_well_formedness; eauto.
-        rewrite Hsame_iface1.
-        erewrite compilation_preserves_interface; eauto.
       }
       
       specialize (Compiler.compiler_preserves_non_leakage_of_private_pointers
-                    _ _ _ P'_Cs_closed P'_Cs_wf HP'_Cs_compiles good_P'_Cs
+                    _ _ _ _ P'_Cs_closed P'_Cs_wf HP'_Cs_compiles good_P'_Cs
                  ) as G.
       unfold CSInvariants.CSInvariants.is_prefix.
       intros ? ? Hpref.
