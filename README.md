@@ -73,6 +73,11 @@ mechanized counterparts in Coq.
 
 - Lemma 5.6 (symmetry of the turn-taking state simulation relation): `Intermediate/RecombinationRelCommon.v`, Lemma `mergeable_internal_states_sym`
 
+All our results are admit-free and only rely, at most, on some of the axioms
+specified below; any other axioms or admitted theorems found in the development
+are not used in our proofs. To verify this, the Coq command `Print Assumptions`
+can be used to examine the theorems of interest.
+
 ### Axioms about (separate) compilation of whole programs ###
 
 We leave some standard statements about compilation of whole
@@ -183,7 +188,6 @@ Classical_Prop.classic : forall P : Prop, P \/ ~ P
 ClassicalEpsilon.constructive_indefinite_description
   : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
 ```
-
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
