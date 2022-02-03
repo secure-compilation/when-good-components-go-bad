@@ -358,8 +358,9 @@ Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program)
   end.
 
 Definition compile_program
-           (p: Source.program) : option Intermediate.program :=
+           (p: Source.program) (stksize: nat) : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
+  (* let localbuf := *) 
   let bufs := Source.prog_buffers p in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
@@ -372,11 +373,11 @@ Definition compile_program
    wrap_main procs_labels p).
 
 Lemma compilation_preserves_interface:
-  forall p p_compiled,
-    compile_program p = Some p_compiled ->
+  forall p p_compiled stksize,
+    compile_program p stksize = Some p_compiled ->
     Intermediate.prog_interface p_compiled = Source.prog_interface p.
 Proof.
-  intros p p_compiled Hcompile.
+  intros p p_compiled ? Hcompile.
   unfold compile_program, run, wrap_main in Hcompile.
   simpl in Hcompile. unfold Comp.bind in Hcompile.
 
@@ -401,12 +402,12 @@ Proof.
 Qed.
 
 Lemma compilation_preserves_linkability:
-  forall {p p_compiled c c_compiled},
+  forall {p pstksize p_compiled c cstksize c_compiled},
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_compiled ->
-    compile_program c = Some c_compiled ->
+    compile_program p pstksize = Some p_compiled ->
+    compile_program c cstksize = Some c_compiled ->
     linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
 Proof.
   intros.
@@ -416,9 +417,9 @@ Qed.
 (* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).
    Try to get rid of unnecessary clutter in statement and propagate. *)
 Lemma compilation_preserves_main :
-  forall {p p_compiled},
+  forall {p pstksize p_compiled},
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p pstksize = Some p_compiled ->
     (exists main, Source.prog_main p = Some main) <->
     Intermediate.prog_main p_compiled.
 Proof.
@@ -428,16 +429,16 @@ Proof.
   - admit.
 Admitted.
 
-Lemma compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
+Lemma compilation_preserves_linkable_mains : forall p1 p1sz p1' p2 p2sz p2',
   Source.well_formed_program p1 ->
   Source.well_formed_program p2 ->
   Source.linkable_mains p1 p2 ->
-  compile_program p1 = Some p1' ->
-  compile_program p2 = Some p2' ->
+  compile_program p1 p1sz = Some p1' ->
+  compile_program p2 p2sz = Some p2' ->
   Intermediate.linkable_mains p1' p2'.
 Proof.
   unfold Source.linkable_mains, Intermediate.linkable_mains.
-  intros p1 p1' p2 p2' Hwf1 Hwf2 Hmains Hcomp1 Hcomp2.
+  intros p1 ? p1' p2 ? p2' Hwf1 Hwf2 Hmains Hcomp1 Hcomp2.
   pose proof compilation_preserves_main Hwf1 Hcomp1 as Hmain1.
   pose proof compilation_preserves_main Hwf2 Hcomp2 as Hmain2.
   destruct (Source.prog_main p1) as [mainp1 |];
@@ -458,13 +459,13 @@ Proof.
     destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
 Qed.
 
-Remark mains_without_source : forall p pc pc',
+Remark mains_without_source : forall p psz pc pc',
   Source.well_formed_program p ->
-  compile_program p = Some pc ->
+  compile_program p psz = Some pc ->
   Source.prog_main p = None ->
   Intermediate.linkable_mains pc pc'.
 Proof.
-  intros p pc pc' Hwf Hcomp Hmain.
+  intros p ? pc pc' Hwf Hcomp Hmain.
   pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
   rewrite Hmain in Hpreserve2.
   destruct (Intermediate.prog_main pc) as [|] eqn: Hpc.
@@ -473,15 +474,15 @@ Proof.
 Qed.
 
 Lemma compilation_preserves_main_linkability :
-  forall {p p_compiled c c_compiled},
+  forall {p psz p_compiled c csz c_compiled},
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_compiled ->
-    compile_program c = Some c_compiled ->
+    compile_program p psz = Some p_compiled ->
+    compile_program c csz = Some c_compiled ->
     Intermediate.linkable_mains p_compiled c_compiled.
 Proof.
-  intros p p_compiled c c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
+  intros p psz p_compiled c csz c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
   pose proof Source.linkable_disjoint_mains Hwfp Hwfc Hlinkable as Hmains.
   destruct (Source.prog_main p) as [mp |] eqn:Hmainp;
     destruct (Source.prog_main c) as [mc |] eqn:Hmainc.
@@ -493,36 +494,40 @@ Proof.
     now eapply (mains_without_source c).
   - now eapply (mains_without_source p).
   - now eapply (mains_without_source p).
+    Unshelve. all: eauto.
 Qed.
 
 Lemma compilation_has_matching_mains :
-  forall {p p_compiled},
+  forall {p psz p_compiled},
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p psz = Some p_compiled ->
     matching_mains p p_compiled.
 Admitted.
 
 Axiom separate_compilation:
-  forall p c p_comp c_comp,
+  forall p psz c csz p_comp c_comp,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_comp ->
-    compile_program c = Some c_comp ->
-    compile_program (Source.program_link p c)
-    = Some (Intermediate.program_link p_comp c_comp).
+    compile_program p psz = Some p_comp ->
+    compile_program c csz = Some c_comp ->
+    exists pcsz,
+      compile_program (Source.program_link p c) pcsz
+      = Some (Intermediate.program_link p_comp c_comp).
 
 (* We can currently do with a weaker notion of separate compilation *)
+(*************************************************
 Local Axiom separate_compilation_weaker:
-  forall p c pc_comp p_comp c_comp,
+  forall p psz c csz pc_comp p_comp c_comp pcsz,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_comp ->
-    compile_program c = Some c_comp ->
-    compile_program (Source.program_link p c) = Some pc_comp ->
+    compile_program p psz = Some p_comp ->
+    compile_program c csz = Some c_comp ->
+    compile_program (Source.program_link p c) pcsz = Some pc_comp ->
     forall b, program_behaves (I.CS.sem_inform pc_comp) b <->
               program_behaves (I.CS.sem_inform (Intermediate.program_link p_comp c_comp)) b.
+*******************************************************)
 (* Proof. *)
 (*   intros p c pc_comp p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c Hcomp_link b. *)
 (*   pose proof separate_compilation p c p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c as Hsc. *)
@@ -532,181 +537,40 @@ Local Axiom separate_compilation_weaker:
 (* Qed. *)
 
 Local Axiom compilation_preserves_well_formedness:
-  forall {p p_compiled},
+  forall {p psz p_compiled},
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p psz = Some p_compiled ->
     Intermediate.well_formed_program p_compiled.
 
 (* FCC *)
 
-Section Simulation.
-
-  Context {p: Source.program}.
-  Variable p_closed: Source.closed_program p.
-  Variable p_wf: Source.well_formed_program p.
-  Context {tp: Intermediate.program}.
-  Variable p_tp: compile_program p = Some tp.
-
-  Let L1 := S.CS.sem p.
-  Let L2 := I.CS.sem_non_inform tp.
-  
-  Local Axiom index: Type.
-  Local Axiom order: index -> index -> Prop.
-  Local Axiom match_states : index -> state L1 -> state L2 -> Prop.
-  Local Axiom fsim_record : fsim_properties _ _ _ index order match_states.
-
-  Local Axiom no_refinement_of_undef:
-    forall (i: index) (s1 : state L1) (s2 : state L2),
-      match_states i s1 s2 ->
-      safe (I.CS.sem_non_inform tp) s2 ->
-      safe (S.CS.sem p) s1.
-  
-End Simulation.
-
-Lemma I_simulates_S:
-  forall {p},
-    Source.closed_program p ->
-    Source.well_formed_program p ->
-  forall {tp},
-    compile_program p = Some tp ->
-    forward_simulation (S.CS.sem p) (I.CS.sem_non_inform tp).
-Proof.
-  intros ? ? ? ? ?.
-  econstructor. exact fsim_record.
-Qed.
-
-(* BCC *)
-(* We derive BCC from FCC as in CompCert *)
-Corollary S_simulates_I:
-  forall {p},
-    Source.closed_program p ->
-    Source.well_formed_program p ->
-  forall {tp},
-    compile_program p = Some tp ->
-    backward_simulation (S.CS.sem p) (I.CS.sem_non_inform tp).
-Proof.
-  intros.
-  apply forward_to_backward_simulation.
-  - apply I_simulates_S; auto.
-  - apply S.CS.receptiveness.
-  - apply I.CS.determinacy_non_inform.
-Qed.
-
-Theorem well_formed_compilable :
-  forall p,
-    Source.well_formed_program p ->
-  exists pc,
-    compile_program p = Some pc.
-Admitted.
-
-Lemma forward_simulation_star:
-  forall p p_compiled t s,
+Local Axiom forward_simulation_star:
+  forall p t s,
     Source.closed_program p ->
     Source.well_formed_program p ->
     Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
-    compile_program p = Some p_compiled -> 
-    exists s',
+    exists s' psz p_compiled t' size_meta size_meta',
+      compile_program p psz = Some p_compiled /\
       Star (I.CS.sem_non_inform p_compiled)
-           (I.CS.initial_machine_state p_compiled) t s'.
-Proof.
-  intros ? ? ? ? Hcp Hwfp Hstar Hcmp.
-  assert(Hbs : forward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
-  { apply I_simulates_S; assumption. }
-  destruct Hbs.
-  specialize (simulation_star props Hstar) as G.
-  destruct props as [? ? ? ?].
-  specialize (fsim_match_initial_states _ Logic.eq_refl) as [i [s' [? Hmatch]]].
-  specialize (G _ _ Hmatch).
-  inversion H; subst.
-  destruct G as [? [? [? ?]]].
-  eauto.
-Qed.
+           (I.CS.initial_machine_state p_compiled) t' s' /\
+      traces_shift_each_other_option size_meta size_meta' t t'.
 
-(** TODO: Prove this by relying on the Axioms fsim_record and no_refinement_of_undef *)
-(** together with lemma S_simulates_I. *)
-Lemma backward_simulation_star:
-  forall p p_compiled t s,
+Local Axiom backward_simulation_star:
+  forall p psz p_compiled t s,
     Source.closed_program p ->
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p psz = Some p_compiled ->
     Star (I.CS.sem_non_inform p_compiled)
          (I.CS.initial_machine_state p_compiled) t s ->
-    exists s' i,
-      Star (S.CS.sem p) (S.CS.initial_machine_state p) t s'
-      /\
-      match_states i s' s.
-Proof.
-  intros ? ? ? ? Hcp Hwfp Hcmp Hstar.
-(*********************************  
-  Search _ "sim" "b".
-  assert(Hbs : backward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
-  { apply S_simulates_I; assumption. }
-  destruct Hbs.
-  
-  specialize (bsim_match_initial_states _ _ Logic.eq_refl Logic.eq_refl)
-    as [i [s' [? Hmatch]]].
-  specialize (backward_simulation_star props Hstar) as G.
-  destruct props as [? ? ? ?].
+    exists s' t' size_meta size_meta',
+      Star (S.CS.sem p) (S.CS.initial_machine_state p) t' s' /\
+      traces_shift_each_other_option size_meta size_meta' t t'.
 
-  specialize (G _ _ (Terminates nil) Hmatch).
-  inversion H; subst.
-  destruct G as [? [? [? ?]]]; eauto.
-  intros ? ? ? ? Hinv.
-  simpl in Hinv. Search _ "safe". safe Source.CS.CS.final_state.
-  Search _ behavior_app.
-Qed.
-***********************************)
-Admitted.
-
-    
-Lemma forward_simulation_same_safe_prefix:
-  forall p p_compiled m,
-    Source.closed_program p ->
+Local Axiom well_formed_compilable :
+  forall p psz,
     Source.well_formed_program p ->
-    does_prefix (S.CS.sem p) m ->
-    not_wrong_finpref m ->
-    compile_program p = Some p_compiled ->
-    does_prefix (I.CS.sem_non_inform p_compiled) m.
-Proof.
-  intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp.
-  assert(Hbs : forward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
-    apply I_simulates_S; assumption.
-  apply (forward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
-  destruct Hb as [b' [Hb' [Hbb' | [t [H1 H2]]]]]; unfold does_prefix.
-  - exists b. split; [| tauto]. subst. assumption.
-  - exists b'. split. assumption. subst.
-    destruct m as [| | t']; simpl in Hmb, Hsafem. tauto. tauto.
-    simpl. eapply behavior_prefix_goes_wrong_trans; eassumption.
-Qed.
-
-Lemma backward_simulation_behavior_improves_prefix :
-  forall p p_compiled m,
-    Source.closed_program p ->
-    Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
-    does_prefix (I.CS.sem_non_inform p_compiled) m ->
-  exists b,
-    program_behaves (S.CS.sem p) b /\
-    (prefix m b \/ behavior_improves_finpref b m).
-Proof.
-  intros p p_compiled m Hcp Hwfp Hcmp [b [Hb Hmb]].
-  assert(Hbs : backward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
-    apply S_simulates_I; assumption.
-  apply (backward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
-  destruct Hb as [b' [Hb' Hb'b]]. exists b'. split. assumption.
-  destruct Hb'b as [Hb'b | [t [Hb't Htb]]].
-  - left. now subst.
-  - unfold behavior_improves_finpref. subst b'.
-    (* right. exists t. split. assumption. -- committing too early *)
-    (* we start by combining behavior_prefix t b and prefix m b to get
-       that t and m must be in the prefix relation one way or the other *)
-    eapply behavior_prefix_comp' in Htb; [| exact Hmb].
-    destruct Htb.
-    + left. destruct m as [| |t']; simpl in H. tauto. tauto. simpl.
-      destruct H as [t'' ?]. subst.
-      exists (Goes_wrong t''). reflexivity.
-    + right. exists t. split. reflexivity. assumption.
-Qed.
+  exists pc,
+    compile_program p psz = Some pc.
 
 Definition private_pointers_never_leak_I p metadata_size :=
   forall (s : I.CS.state) (t : Events.trace Events.event),
@@ -718,9 +582,9 @@ Definition private_pointers_never_leak_I p metadata_size :=
     ).
 
 Local Axiom compiler_preserves_non_leakage_of_private_pointers:
-  forall p p_compiled metadata_size,
+  forall p psz p_compiled metadata_size,
     Source.closed_program p ->
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p psz = Some p_compiled ->
     S.CS.private_pointers_never_leak_S p          metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size.

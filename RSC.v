@@ -26,13 +26,14 @@ Set Bullet Behavior "Strict Subproofs".
 
 Section RSC_Section.
   Variable p: Source.program.
+  Variable psz: nat.
   Variable p_compiled: Intermediate.program.
   Variable Ct: Intermediate.program.
 
   (* Some reasonable assumptions about our programs *)
 
   Hypothesis well_formed_p : Source.well_formed_program p.
-  Hypothesis successful_compilation : Compiler.compile_program p = Some p_compiled.
+  Hypothesis successful_compilation : Compiler.compile_program p psz = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
   Hypothesis closedness :
@@ -138,6 +139,7 @@ Section RSC_Section.
     (* probably need partialize to obtain them *)
 
     (* At this point, we compile P' and Cs and establish their basic properties. *)
+    (*************************************************************************
     destruct (Compiler.well_formed_compilable P' well_formed_P') as [P'_compiled HP'_compiles].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
@@ -155,31 +157,81 @@ Section RSC_Section.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       apply linkability_pcomp_Ct.
     }
-    assert (exists P'_Cs_compiled,
-              Compiler.compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
-      as [P'_Cs_compiled HP'_Cs_compiles]. {
+     *******************************************************)
+    
+    have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
+      rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
+      exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
+    assert (exists s' P'Cs_sz P'_Cs_compiled t'compiled size_meta size_meta',
+               Compiler.compile_program (Source.program_link P' Cs) P'Cs_sz =
+               Some P'_Cs_compiled
+               /\
+               Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
+                    (I.CS.initial_machine_state P'_Cs_compiled)
+                    t'compiled s'
+               /\
+               traces_shift_each_other_option size_meta size_meta' t' t'compiled
+           )
+      as [s'_compiled [P'Cs_sz [P'_Cs_compiled
+                                  [t'compiled
+                                     [size_meta
+                                        [size_meta'
+                                           [HP'_Cs_compiles
+                                              [HP'_Cs_compiled_star
+                                                 [Ht'_rel_t'compiled
+         ]]]]]]]]].
+    {
+      eapply Compiler.forward_simulation_star.
+      - assumption.
+      - assumption.
+      - exact Hstar'.
+    }
+
+    set (dummy_sz := 0).
+    
+    destruct (Compiler.well_formed_compilable P' dummy_sz well_formed_P') as [P'_compiled HP'_compiles].
+    pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
+      as well_formed_P'_compiled.
+    destruct (Compiler.well_formed_compilable Cs dummy_sz well_formed_Cs) as [Cs_compiled HCs_compiles].
+    pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
+      as well_formed_Cs_compiled.
+    assert
+      (linkable
+         (Intermediate.prog_interface Cs_compiled)
+         (Intermediate.prog_interface P'_compiled))
+      as linkability'. {
+      eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
+      apply linkable_sym.
+      rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
+      rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
+      apply linkability_pcomp_Ct.
+    }
+    
+
+    (************************************************
       rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       pose proof Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct
         as Hlinking_wf.
       apply Compiler.well_formed_compilable; assumption.
+     **********************************)
+
+    assert (P'_Cs_linkable:
+              linkable (Source.prog_interface P') (Source.prog_interface Cs)).
+    {
+      admit.
     }
 
-    have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
-      rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
-      exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-
-      assert(
-          exists s',
-            Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
-               (I.CS.initial_machine_state P'_Cs_compiled)
-               t' s') as [s'_compiled HP'_Cs_compiled_star].
-      {
-        by eapply forward_simulation_star; eauto.
-      }
-
+    
       assert (P'_Cs_compiled = Intermediate.program_link P'_compiled Cs_compiled).
-      {
+    {
+      specialize (Compiler.separate_compilation _ _ _ _ _ _
+                                                well_formed_P'
+                                                well_formed_Cs
+                                                P'_Cs_linkable
+                                                HP'_compiles
+                                                HCs_compiles
+                 ) as [P'Cs_sz_separate ?].
         erewrite Compiler.separate_compilation in HP'_Cs_compiles; eauto;
           last (by rewrite Hsame_iface1 Hsame_iface2).
         
