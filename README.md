@@ -190,7 +190,7 @@ ClassicalEpsilon.constructive_indefinite_description
 - The code in the `CompCert` dir is adapted based on files in the
   `common` and `lib` dirs of CompCert and is thus dual-licensed under
   the INRIA Non-Commercial License Agreement and the GNU General
-  Public License version 2 or later (see `Compcert/LICENSE`)
+  Public License version 2 or later (see `CompCert/LICENSE`)
 
 ### Index of definitions ###
 
