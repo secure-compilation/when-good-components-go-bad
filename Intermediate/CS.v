@@ -2046,36 +2046,11 @@ Proof.
         congruence.
 Qed.
 
-(*Print program_behavior.
-SearchAbout traceinf.
-Print project_non_inform.
-Print project_non_inform.
-
-CoFixpoint project_non_inform_traceinf (tinf: traceinf event_inform) :=
-  match tinf with
-  | Econsinf e_inform tinf' =>
-    match e_inform with
-    | ECall C P call_arg C' => Econsinf
-                                 _ (Events.ECall C P call_arg C')
-                                 (project_non_inform_traceinf tinf')
-    | ERet C v C' => Econsinf
-                       _ (Events.ERet C v C')
-                       (project_non_inform_traceinf tinf')
-    | _ => Eappinf E0 (project_non_inform_traceinf tinf')
-    end
-  end.
-
-Definition project_non_inform_program_behavior (b: @program_behavior event_inform) :=
-  match b with
-  | Terminates t -> Terminates (project_non_inform t)
-  | Diverges t -> Diverges (project_non_inform t)
-  | Reacts tinf
-
+(*
 Lemma program_behaves_non_inform_program_behaves_inform {p b} :
   program_behaves (CS.sem_non_inform p) b ->
   exists b_inform, program_behaves (CS.sem_inform p) b_inform /\
 .
-  
 
 Theorem behavior_prefix_star_non_inform {p b m} :
   program_behaves (CS.sem_non_inform p) b ->
@@ -2083,10 +2058,8 @@ Theorem behavior_prefix_star_non_inform {p b m} :
 exists s1 s2,
   CS.initial_state p s1 /\
   Star (CS.sem_non_inform p) s1 (finpref_trace m) s2.
-Proof.
-  intros Hbeh Hpref.
-  pose proof program_behaves_non_inform_program_behaves_inform
 *)
+
 (* RB: TODO: These domain lemmas should now be renamed to reflect their
    operation on linked programs. *)
 Section ProgramLink.

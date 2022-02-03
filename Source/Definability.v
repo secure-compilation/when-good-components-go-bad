@@ -741,19 +741,6 @@ Section Definability.
     (** Can return None but only if the trace is not well formed. *)
     let initial_procs := exported_procedures_of_trace t in
     procedures_of_trace_recursive t t initial_procs.
-  
-  (***********************************
-  Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
-    mapim (fun C Ciface =>
-             let procs_no_main :=
-                 (procedure_ids_of_trace C t) :|: (Component.export Ciface) in
-             let procs :=
-                 if C == Component.main then
-                   Procedure.main |: procs_no_main
-                 else procs_no_main in
-             mkfmapf (fun P => procedure_of_trace C P t) procs)
-          intf.
-   ******************************)
 
   (* FIXME *)
   Definition valid_procedure C P t :=
