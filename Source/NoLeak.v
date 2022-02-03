@@ -525,6 +525,7 @@ Proof.
       rewrite /Memory.load //=.
     + constructor; intros ? shared; inversion shared; now destruct t.
 Qed.
+
 Lemma star_never_leaks: forall (p: Source.program),
     (forall C P expr,
         Source.find_procedure (Source.prog_procedures p) C P = Some expr ->
