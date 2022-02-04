@@ -4083,116 +4083,129 @@ Section Definability.
           * eauto.
     Qed.
 
-    Theorem definability_does_not_leak:
-      CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
+    Lemma definability_disciplined_program:
+      forall (C : Component.id) (P : Procedure.id) (expr : expr),
+        Source.find_procedure
+          (Source.prog_procedures p) C P = 
+        Some expr -> safe_cont_expr Kstop expr.
     Proof.
       unfold program_of_trace in *.
       destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
       inversion Hprog_of_trace; subst; clear Hprog_of_trace.
-      eapply star_never_leaks.
-      - intros C P expr Hprocs.
-        eapply find_procedures_of_trace_Some_procedure_of_trace in Hprocs; eauto;
-          last first.
-        {
-          (* C \in domm intf *)
-          eapply Source.find_procedure_prog_interface with
+      intros C P expr Hprocs.
+      eapply find_procedures_of_trace_Some_procedure_of_trace in Hprocs; eauto;
+        last first.
+      {
+        (* C \in domm intf *)
+        eapply Source.find_procedure_prog_interface with
             (p :=
                {|
-                 Source.prog_interface := intf;
-                 Source.prog_procedures := procs;
-                 Source.prog_buffers := mapm (fun=> inr meta_buffer) intf |}
+                Source.prog_interface := intf;
+                Source.prog_procedures := procs;
+                Source.prog_buffers := mapm (fun=> inr meta_buffer) intf |}
             ); eauto.
-          eapply well_formed_events_well_formed_program
-            in wf_events as [theprog [Hrewr ?]]; eauto.
-          + unfold program_of_trace in Hrewr.
-            rewrite eprocs in Hrewr. inversion Hrewr.
+        eapply well_formed_events_well_formed_program
+          in wf_events as [theprog [Hrewr ?]]; eauto.
+        + unfold program_of_trace in Hrewr.
+          rewrite eprocs in Hrewr. inversion Hrewr.
             by subst theprog.
-          + by eapply domm_t_procs_exported_procedures_of_trace.
-        }
-        subst.
-        rewrite /procedure_of_trace.
-        assert (H: safe_cont_expr Kstop (expr_of_trace C P (comp_subtrace C t))).
-        { unfold expr_of_trace. unfold switch.
-          remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n. clear Heqn.
-          revert n.
-          elim: (comp_subtrace C t); intros e.
-          - simpl. unfold switch. simpl. constructor.
-          - intros ? H n.
-            simpl. unfold switch. simpl.
-            repeat constructor; eauto; try now destruct v0 as [| [[[[]]]] |]; eauto.
-            destruct e; subst; eauto.
-            + repeat constructor; eauto.
-            + repeat constructor; eauto.
-            + repeat constructor; eauto.
-              destruct v1.
-              * repeat constructor; eauto.
-              * destruct t1 as [[[[]]]]; repeat constructor; eauto. simpl in *.
-                destruct v1 as [| [[[[]]]] |]; eauto.
-                destruct v1 as [| [[[[]]]] |]; eauto.
-                destruct v1 as [| [[[[]]]] |]; eauto.
-                destruct v1 as [| [[[[]]]] |]; eauto.
-              * repeat constructor; eauto.
-            + repeat constructor; eauto.
-            + repeat constructor; eauto.
-              Local Transparent binop_of_Ebinop.
-              destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
-                by case: ifP.
-              destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
-                by case: ifP.
-              Local Opaque binop_of_Ebinop.
-            + repeat constructor; eauto.
-            + repeat constructor; eauto.
-            + repeat constructor; eauto.
-        }
-        repeat (constructor; eauto).
-        unfold init_local_buffer_expr. unfold copy_local_datum_expr. unfold buffer_nth.
-        assert (H': safe_cont_expr (Kseq (extcall_check;;
-                                          expr_of_trace C P (comp_subtrace C t)) Kstop) (E_assign INITFLAG (E_val (Int 1)))).
-        { repeat econstructor; eauto. }
-        unfold buffer_size.
-        destruct (prog_buffers C) eqn:prog_buffersC; last eauto.
-        unfold unfold_buffer. destruct s eqn:eqs0; eauto.
-        + clear prog_buffersC eqs0. rewrite foldr_map. simpl in *.
-          remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
-          remember 0 as p; clear Heqp. rewrite size_nseq.
-          remember (nseq n Undef) as L.
-          assert (G: forall i, match nth_error L i with
-                          | Some v => v = Undef
-                          | None => True
-                          end).
-          { subst. induction n.
+        + by eapply domm_t_procs_exported_procedures_of_trace.
+      }
+      subst.
+      rewrite /procedure_of_trace.
+      assert (H: safe_cont_expr Kstop (expr_of_trace C P (comp_subtrace C t))).
+      { unfold expr_of_trace. unfold switch.
+        remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n. clear Heqn.
+        revert n.
+        elim: (comp_subtrace C t); intros e.
+        - simpl. unfold switch. simpl. constructor.
+        - intros ? H n.
+          simpl. unfold switch. simpl.
+          repeat constructor; eauto; try now destruct v0 as [| [[[[]]]] |]; eauto.
+          destruct e; subst; eauto.
+          + repeat constructor; eauto.
+          + repeat constructor; eauto.
+          + repeat constructor; eauto.
+            destruct v1.
+            * repeat constructor; eauto.
+            * destruct t1 as [[[[]]]]; repeat constructor; eauto. simpl in *.
+              destruct v1 as [| [[[[]]]] |]; eauto.
+              destruct v1 as [| [[[[]]]] |]; eauto.
+              destruct v1 as [| [[[[]]]] |]; eauto.
+              destruct v1 as [| [[[[]]]] |]; eauto.
+            * repeat constructor; eauto.
+          + repeat constructor; eauto.
+          + repeat constructor; eauto.
+            Local Transparent binop_of_Ebinop.
+            destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
+              by case: ifP.
+            destruct v1 as [| [[[[]]]] |]; destruct v2 as [| [[[[]]]] |]; destruct e; eauto; simpl in *; eauto;
+              by case: ifP.
+            Local Opaque binop_of_Ebinop.
+          + repeat constructor; eauto.
+          + repeat constructor; eauto.
+          + repeat constructor; eauto.
+      }
+      repeat (constructor; eauto).
+      unfold init_local_buffer_expr. unfold copy_local_datum_expr. unfold buffer_nth.
+      assert (H': safe_cont_expr (Kseq (extcall_check;;
+                                        expr_of_trace C P (comp_subtrace C t)) Kstop) (E_assign INITFLAG (E_val (Int 1)))).
+      { repeat econstructor; eauto. }
+      unfold buffer_size.
+      destruct (prog_buffers C) eqn:prog_buffersC; last eauto.
+      unfold unfold_buffer. destruct s eqn:eqs0; eauto.
+      + clear prog_buffersC eqs0. rewrite foldr_map. simpl in *.
+        remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
+        remember 0 as p; clear Heqp. rewrite size_nseq.
+        remember (nseq n Undef) as L.
+        assert (G: forall i, match nth_error L i with
+                             | Some v => v = Undef
+                             | None => True
+                             end).
+        { subst. induction n.
             by destruct i.
             destruct i; simpl; eauto. eapply IHn. }
-          clear HeqL.
-          revert p.
-          induction n.
-          * eauto.
-          * simpl in *. repeat constructor; eauto.
-            specialize (G p). destruct (nth_error L p); subst; repeat constructor; eauto.
-        + rewrite foldr_map. simpl in *.
-          remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
-          remember 0 as p; clear Heqp.
-          remember (size l) as sz; clear Heqsz.
-          assert (G: forall i, match nth_error l i with
-                          | Some v => forall ptr, v <> Ptr ptr
-                          | None => True
-                          end).
-          { subst. eapply wf_buffers in prog_buffersC.
-            simpl in prog_buffersC.
-            move: prog_buffersC => /andP [] _ noptr.
-            induction l.
-            - destruct i; simpl; eauto.
-            - move: noptr => /andP [] noptr1 noptr2.
-              destruct i; simpl in *; eauto.
-              + intros ? ?; subst; by [].
-              + eapply IHl. eauto. }
-          clear eqs0 prog_buffersC.
-          revert p.
-          induction sz.
-          * eauto.
-          * simpl in *. repeat constructor; eauto.
-            specialize (G p). destruct (nth_error l p); subst; repeat constructor; eauto.
-            destruct v1 as [| |]; subst; repeat constructor; eauto; now specialize (G t0).
+        clear HeqL.
+        revert p.
+        induction n.
+        * eauto.
+        * simpl in *. repeat constructor; eauto.
+          specialize (G p). destruct (nth_error L p); subst; repeat constructor; eauto.
+      + rewrite foldr_map. simpl in *.
+        remember (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) as k; clear Heqk.
+        remember 0 as p; clear Heqp.
+        remember (size l) as sz; clear Heqsz.
+        assert (G: forall i, match nth_error l i with
+                             | Some v => forall ptr, v <> Ptr ptr
+                             | None => True
+                             end).
+        { subst. eapply wf_buffers in prog_buffersC.
+          simpl in prog_buffersC.
+          move: prog_buffersC => /andP [] _ noptr.
+          induction l.
+          - destruct i; simpl; eauto.
+          - move: noptr => /andP [] noptr1 noptr2.
+            destruct i; simpl in *; eauto.
+            + intros ? ?; subst; by [].
+            + eapply IHl. eauto. }
+        clear eqs0 prog_buffersC.
+        revert p.
+        induction sz.
+        * eauto.
+        * simpl in *. repeat constructor; eauto.
+          specialize (G p). destruct (nth_error l p); subst; repeat constructor; eauto.
+          destruct v1 as [| |]; subst; repeat constructor; eauto; now specialize (G t0).
+    Qed.
+    
+    Theorem definability_does_not_leak:
+      CS.CS.private_pointers_never_leak_S p (uniform_shift 1).
+    Proof.
+      pose proof (definability_disciplined_program) as G_.
+      unfold program_of_trace in *.
+      destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
+      inversion Hprog_of_trace; subst; clear Hprog_of_trace.
+      eapply star_never_leaks.
+      - exact G_.
       - intros ptr v.
         Local Transparent Memory.load.
         rewrite /Memory.load.

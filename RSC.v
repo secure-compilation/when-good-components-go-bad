@@ -6,6 +6,7 @@ Require Import Common.CompCertExtensions.
 Require Import Common.TracesInform.
 Require Import Common.RenamingOption.
 
+Require Import Source.Definability.
 Require Import Source.DefinabilityEnd.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
@@ -129,7 +130,7 @@ Section RSC_Section.
       as [P' [Cs [t' [s' [metadata_size
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
-                                           [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' [Ht_rel_t' [Hconst_map good_P'_Cs]]]]]]]]]]]]]]].
+                                           [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' [Ht_rel_t' [Hconst_map [good_P'_Cs P'_Cs_disciplined]]]]]]]]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
@@ -147,7 +148,10 @@ Section RSC_Section.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
 
       assert (P'Cs_disciplined: disciplined_program (Source.program_link P' Cs)).
-      { admit. }
+      {
+        intros ? ? ? Hfind.
+        eapply P'_Cs_disciplined; eauto.
+      }
       
       assert (exists s' t'compiled P'Cs_sz P'_Cs_compiled,
                  domm P'Cs_sz = domm (Source.prog_interface (Source.program_link P' Cs))

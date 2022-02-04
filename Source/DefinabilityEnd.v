@@ -277,7 +277,15 @@ Lemma definability_with_linking:
         metadata_size = uniform_shift 1 /\
       Source.CS.CS.private_pointers_never_leak_S
         (Source.program_link p' c')
-        (uniform_shift 1).
+        (uniform_shift 1)
+      /\
+      (
+        forall C P expr,
+          Source.find_procedure (Source.prog_procedures (Source.program_link p' c')) C P =
+          Some expr
+          ->
+          NoLeak.safe_cont_expr Kstop expr
+      ).
 Proof.
   move=> p c t s wf_p wf_c Hlinkable Hclosed Hstar.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -403,11 +411,39 @@ Proof.
     rewrite Source.program_unlinkK //; split; first (by eapply closed_program_of_trace; eauto).
     (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
     split; auto.
+    split; [by apply traces_shift_each_other_option_symmetric | split; [reflexivity| ]].
     split.
-    by apply traces_shift_each_other_option_symmetric.
-    split.
-    reflexivity.
-    eapply Definability.definability_does_not_leak; subst; eauto.
+    + by eapply Definability.definability_does_not_leak; subst; eauto.
+    + intros ? ? ? Hfind.
+      assert (Hback2: program_of_trace intf bufs t = Some back) by auto.
+      unfold program_of_trace in Hback.
+      change ((filterm (fun C : nat => fun=> C \in domm (Intermediate.prog_interface p))
+                       (Source.prog_procedures back)))
+        with (Source.prog_procedures
+                (Source.program_unlink (domm (Intermediate.prog_interface p)) back)) in Hfind.
+
+      
+      change ((filterm (fun C : nat => fun=> C \in domm (Intermediate.prog_interface c))
+                       (Source.prog_procedures back)))
+        with (Source.prog_procedures
+                (Source.program_unlink (domm (Intermediate.prog_interface c)) back)) in Hfind.
+
+      change ((unionm
+               (Source.prog_procedures
+                  (Source.program_unlink (domm (Intermediate.prog_interface p)) back))
+               (Source.prog_procedures
+                  (Source.program_unlink (domm (Intermediate.prog_interface c)) back))))
+        with
+          (Source.prog_procedures
+             (Source.program_link
+                (Source.program_unlink (domm (Intermediate.prog_interface p)) back)
+                (Source.program_unlink (domm (Intermediate.prog_interface c)) back)
+             )
+          ) in Hfind.
+      rewrite Source.program_unlinkK in Hfind; auto.
+      
+      eapply Definability.definability_disciplined_program; eauto.
+      
 Qed.
 
 Print Assumptions definability_with_linking.
