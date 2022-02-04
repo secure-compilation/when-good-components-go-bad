@@ -125,6 +125,7 @@ Section WithComponent.
 Variable C: Component.id. (* the current component *)
 Variable local_buf_ptr : Pointer.t. (* pointer to the local buffer for current component *)
 Variable P_labels : NMap label.  (* map from procedure id's to start labels for current component *)
+Variable base_stack_ptr: Pointer.t.
 
 Definition find_proc_label P : COMP label :=
   lift (getm P_labels P).
@@ -139,7 +140,9 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_arg =>
     ret [IMov R_ARG R_COM]
   | E_local =>
-    ret [IConst (IPtr local_buf_ptr) R_COM]
+      ret [ IConst (IInt 1) R_AUX1;
+            IConst (IPtr local_buf_ptr) R_COM;
+            IBinOp Add R_COM R_AUX1 R_COM]
   | E_binop bop e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
@@ -199,10 +202,18 @@ Fixpoint compile_expr (e: expr) : COMP code :=
       ret (call_arg_code ++
            push R_RA ++
            push R_ARG ++
+           [IConst (IPtr base_stack_ptr) R_AUX1] ++
+           (* Temporarily violating the stack pointer invariant: we're storing
+            an offset instead of a pointer in R_SP. But this is fine because it
+            gets restored when we get back control *)
+           [IBinOp Minus R_SP R_AUX1 R_SP] ++
            store_arg local_buf_ptr R_SP R_AUX2 ++
            [ICall C' P'] ++
            [IConst (IInt 1) R_ONE] ++
            load_arg local_buf_ptr R_SP ++
+           [IConst (IPtr base_stack_ptr) R_AUX1] ++
+           [IBinOp Add R_AUX1 R_SP R_SP] ++
+           (* Now, the invariant is restored! *)
            pop R_ARG ++
            pop R_RA
           )
@@ -227,6 +238,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_exit => ret [IHalt]
   end.
 
+
 Definition compile_proc (P: Procedure.id) (e: expr)
   : COMP code :=
   do proc_label <- find_proc_label P;
@@ -239,11 +251,15 @@ Definition compile_proc (P: Procedure.id) (e: expr)
         IConst (IInt 1) R_ONE;
         IJal proc_label;
         IReturn;
-        ILabel proc_label;
-        IMov R_SP R_AUX1;
-        IConst (IInt stack_frame_size) R_SP;
-        IAlloc R_SP R_SP] ++
-        push R_AUX1 ++
+        ILabel proc_label]
+         ++ [IMov R_SP R_AUX1] ++
+             load_arg local_buf_ptr R_AUX2 ++
+             [IConst (IPtr base_stack_ptr) R_SP;
+             IBinOp Add R_SP R_AUX2 R_SP]
+         ++
+        (* IConst (IInt stack_frame_size) R_SP; *)
+        (* IAlloc R_SP R_SP] ++ *)
+        push R_SP ++
         load_arg local_buf_ptr R_AUX1 ++
         push R_AUX1 ++
         (** The callee saves R_ARG *)
@@ -305,9 +321,13 @@ Definition gen_buffers
   : NMap {fmap Block.id -> nat + list value} := bufs.
 *******************************************)
 
+Definition initial_offset_stack_pointer (n: nat) :=
+  (Z.of_nat n + 1)%Z.
+
 Definition compile_components
          (procs_labels : NMap (NMap label))
          (comps: list (Component.id * NMap expr))
+         (p: Source.program)
   : COMP (list (Component.id * NMap code)) :=
   let fix compile acc cs :=
       match cs with
@@ -322,6 +342,8 @@ Definition compile_components
               is used in section WithComponent.
             *)
            P_labels
+           (Permission.data, C, local_buffer_block_id, initial_offset_stack_pointer
+           (buffer_size p C))
            (elementsm procs);
         let acc' := (C, mkfmap procs_code) :: acc in
         compile acc' cs'
@@ -364,23 +386,37 @@ Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program)
   | false => ret p
   end.
 
-Definition compile_program_
+Definition allocate_stack (stksize: {fmap Component.id -> nat})
+           (bufs: NMap (nat + seq value)): NMap (nat + seq value) :=
+  mapim (fun (C: Component.id) (x : nat + seq value) =>
+          match x with
+          | inl n => inr ([Int (initial_offset_stack_pointer n)]
+                           ++ nseq (match stksize C with
+                                    | Some n' => n'
+                                    | None => 0
+                                    end + n) Undef)
+          | inr vs => inr ([Int (initial_offset_stack_pointer (size vs))]
+                            ++ vs ++ nseq (match stksize C with
+                                 | Some n' => n'
+                                 | None => 0
+                                 end) Undef)
+          end) bufs.
+
+Definition compile_program
            (p: Source.program) (stksize: {fmap Component.id -> nat})
   : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
-  (* let localbuf := *) 
-  let bufs := Source.prog_buffers p in
+  let bufs := allocate_stack stksize (Source.prog_buffers p) in
+  (* let bufs := Source.prog_buffers p in *)
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
-    do code <- compile_components procs_labels comps;
+    do code <- compile_components procs_labels comps p;
     let p :=
         {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
            Intermediate.prog_buffers := bufs;
            Intermediate.prog_main := Some Procedure.main |} in
    wrap_main procs_labels p).
-
-(****************************************************************************
 
 Lemma compilation_preserves_interface:
   forall p p_compiled stksize,
@@ -395,7 +431,7 @@ Proof.
     as [[labels cenv1]|] eqn:Hlabs;
     try discriminate.
   destruct (compile_components  labels
-                                (elementsm (Source.prog_procedures p)) cenv1)
+                                (elementsm (Source.prog_procedures p)) p cenv1)
     as [[code cenv2]|] eqn:Hcompiled_comps;
     try discriminate.
   simpl in Hcompile.
@@ -425,110 +461,12 @@ Proof.
 Qed.
 
 
-Lemma compilation_preserves_linkable_mains : forall p1 p1sz p1' p2 p2sz p2',
-  Source.well_formed_program p1 ->
-  Source.well_formed_program p2 ->
-  Source.linkable_mains p1 p2 ->
-  compile_program p1 p1sz = Some p1' ->
-  compile_program p2 p2sz = Some p2' ->
-  Intermediate.linkable_mains p1' p2'.
-Proof.
-  unfold Source.linkable_mains, Intermediate.linkable_mains.
-  intros p1 ? p1' p2 ? p2' Hwf1 Hwf2 Hmains Hcomp1 Hcomp2.
-  pose proof compilation_preserves_main Hwf1 Hcomp1 as Hmain1.
-  pose proof compilation_preserves_main Hwf2 Hcomp2 as Hmain2.
-  destruct (Source.prog_main p1) as [mainp1 |];
-    destruct (Source.prog_main p2) as [mainp2 |];
-    destruct (Intermediate.prog_main p1') as [|];
-    destruct (Intermediate.prog_main p2') as [|];
-    try reflexivity.
-  - inversion Hmains.
-    Ltac some_eq_none_contra Hcontra id :=
-      destruct Hcontra as [_ Hcontra];
-      specialize (Hcontra (ex_intro (fun x => Some id = Some x) id eq_refl));
-      now destruct Hcontra.
-  - destruct Hmain2 as [Hmain2 Hmain2'].
-    destruct (Hmain2' eq_refl) as [? Hcontra]; inversion Hcontra.
-  - destruct Hmain1 as [Hmain1 Hmain1'].
-    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
-  - destruct Hmain1 as [Hmain1 Hmain1'].
-    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
-Qed.
-
-Remark mains_without_source : forall p psz pc pc',
-  Source.well_formed_program p ->
-  compile_program p psz = Some pc ->
-  Source.prog_main p = None ->
-  Intermediate.linkable_mains pc pc'.
-Proof.
-  intros p ? pc pc' Hwf Hcomp Hmain.
-  pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
-  rewrite Hmain in Hpreserve2.
-  destruct (Intermediate.prog_main pc) as [|] eqn: Hpc.
-  - specialize (Hpreserve2 eq_refl) as [? Hcontra]; inversion Hcontra.
-  - unfold Intermediate.linkable_mains. rewrite Hpc. reflexivity.
-Qed.
-
-Lemma compilation_preserves_main_linkability :
-  forall {p psz p_compiled c csz c_compiled},
-    Source.well_formed_program p ->
-    Source.well_formed_program c ->
-    linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p psz = Some p_compiled ->
-    compile_program c csz = Some c_compiled ->
-    Intermediate.linkable_mains p_compiled c_compiled.
-Proof.
-  intros p psz p_compiled c csz c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
-  pose proof Source.linkable_disjoint_mains Hwfp Hwfc Hlinkable as Hmains.
-  destruct (Source.prog_main p) as [mp |] eqn:Hmainp;
-    destruct (Source.prog_main c) as [mc |] eqn:Hmainc.
-  - unfold Source.linkable_mains in Hmains.
-    rewrite Hmainp in Hmains.
-    rewrite Hmainc in Hmains.
-    inversion Hmains.
-  - apply Intermediate.linkable_mains_sym.
-    now eapply (mains_without_source c).
-  - now eapply (mains_without_source p).
-  - now eapply (mains_without_source p).
-    Unshelve. all: eauto.
-Qed.
-
-Lemma compilation_has_matching_mains :
-  forall {p psz p_compiled},
-    Source.well_formed_program p ->
-    compile_program p psz = Some p_compiled ->
-    matching_mains p p_compiled.
-Admitted.
-
-***************************************************************)
-
-Axiom compile_program :
-  Source.program ->
-  {fmap Component.id -> nat} ->
-  option Intermediate.program.
-
-Axiom compilation_preserves_interface:
-  forall p p_compiled stksize,
-    compile_program p stksize = Some p_compiled ->
-    Intermediate.prog_interface p_compiled = Source.prog_interface p.
-
-Axiom compilation_preserves_linkability:
-  forall {p pstksize p_compiled c cstksize c_compiled},
-    Source.well_formed_program p ->
-    Source.well_formed_program c ->
-    linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p pstksize = Some p_compiled ->
-    compile_program c cstksize = Some c_compiled ->
-    linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
-
-
 Axiom compilation_preserves_main :
   forall {p pstksize p_compiled},
     Source.well_formed_program p ->
     compile_program p pstksize = Some p_compiled ->
     (exists main, Source.prog_main p = Some main) <->
     Intermediate.prog_main p_compiled.
-
 
 Lemma compilation_preserves_linkable_mains : forall p1 p1sz p1' p2 p2sz p2',
   Source.well_formed_program p1 ->
@@ -593,8 +531,8 @@ Proof.
     inversion Hmains.
   - apply Intermediate.linkable_mains_sym.
     eapply (mains_without_source c); eauto.
-  - eapply (mains_without_source p); eauto.
-  - eapply (mains_without_source p); eauto.
+  - now eapply (mains_without_source p); eauto.
+  - now eapply (mains_without_source p); eauto.
 Qed.
 
 Lemma compilation_has_matching_mains :
