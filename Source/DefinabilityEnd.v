@@ -285,7 +285,9 @@ Lemma definability_with_linking:
           Some expr
           ->
           NoLeak.safe_cont_expr Kstop expr
-      ).
+      )
+      /\
+        NoLeak.good_Elocal_usage_program (Source.program_link p' c').
 Proof.
   move=> p c t s wf_p wf_c Hlinkable Hclosed Hstar.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -412,7 +414,7 @@ Proof.
     (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
     split; auto.
     split; [by apply traces_shift_each_other_option_symmetric | split; [reflexivity| ]].
-    split.
+    split; last split.
     + by eapply Definability.definability_does_not_leak; subst; eauto.
     + intros ? ? ? Hfind.
       assert (Hback2: program_of_trace intf bufs t = Some back) by auto.
@@ -443,7 +445,7 @@ Proof.
       rewrite Source.program_unlinkK in Hfind; auto.
       
       eapply Definability.definability_disciplined_program; eauto.
-      
+    + eapply definability_good_Elocal_usage; eauto.
 Qed.
 
 Print Assumptions definability_with_linking.

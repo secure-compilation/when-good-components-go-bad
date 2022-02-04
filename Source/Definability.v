@@ -4233,6 +4233,74 @@ Section Definability.
     Qed.
 
     Theorem definability_good_Elocal_usage: good_Elocal_usage_program p.
+    Proof.
+      unfold good_Elocal_usage_program.
+      unfold program_of_trace in *.
+      destruct (procedures_of_trace t) as [procs|] eqn:eprocs; [|discriminate].
+      inversion Hprog_of_trace; subst; clear Hprog_of_trace. simpl.
+      unfold NoLeak.buffer_size. simpl.
+      intros C P expr Hprocs.
+      assert (intf_C: C \in domm intf).
+      {(* C \in domm intf *)
+        eapply Source.find_procedure_prog_interface with
+            (p :=
+               {|
+                Source.prog_interface := intf;
+                Source.prog_procedures := procs;
+                Source.prog_buffers := mapm (fun=> inr meta_buffer) intf |}
+            ); eauto.
+        eapply well_formed_events_well_formed_program
+          in wf_events as [theprog [Hrewr ?]]; eauto.
+        + unfold program_of_trace in Hrewr.
+          rewrite eprocs in Hrewr. inversion Hrewr.
+            by subst theprog.
+        + by eapply domm_t_procs_exported_procedures_of_trace. }
+      eapply find_procedures_of_trace_Some_procedure_of_trace in Hprocs; eauto.
+      assert (exists Cintf, intf C = Some Cintf) as [Cintf eq_Cintf] by now apply /dommP.
+      subst.
+      rewrite /procedure_of_trace.
+      simpl; repeat split; auto;
+        try by rewrite mapmE eq_Cintf //=.
+      - unfold init_local_buffer_expr.
+        unfold copy_local_datum_expr.
+        unfold buffer_size.
+        assert (exists buf, prog_buffers C = Some buf) as [buf eq_buf].
+        { apply /dommP. by rewrite -domm_buffers intf_C. }
+        rewrite eq_buf.
+        unfold buffer_nth. rewrite eq_buf. admit.
+      - unfold expr_of_trace. unfold switch.
+        remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n.
+        clear Heqn.
+        elim: (comp_subtrace C t) n.
+        + by [].
+        + move=> e t' IHt' //=.
+          repeat split; auto.
+          case: e; repeat split; auto;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct v as [| [[[[]]]] |];
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e0;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e2;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e; destruct e0; destruct e1;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e0;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e0;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e;
+            try by rewrite mapmE eq_Cintf //=.
+          destruct e0;
+            try by rewrite mapmE eq_Cintf //=.
     Admitted.
 
     (* A proof of relational definability on the right. Existential

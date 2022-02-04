@@ -426,6 +426,7 @@ Fixpoint good_user_of_Elocal_expr (sz: Z) (e: expr): Prop :=
   | E_assign (E_binop Add E_local (E_val (Int n))) e' =>
       (n < sz)%Z /\ good_user_of_Elocal_expr sz e'
   | E_val _ | E_arg | E_exit => True
+  | E_binop Mul (E_val (Int 0)) E_local => True (* this evaluates to error, so this is good! *)
   | E_binop _ e1 e2 => good_user_of_Elocal_expr sz e1 /\
                         good_user_of_Elocal_expr sz e2
   | E_seq e1 e2 => good_user_of_Elocal_expr sz e1 /\

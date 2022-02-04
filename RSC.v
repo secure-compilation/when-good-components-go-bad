@@ -36,6 +36,7 @@ Section RSC_Section.
   Hypothesis domm_psz_intf: domm psz = domm (Source.prog_interface p).
   Hypothesis well_formed_p : Source.well_formed_program p.
   Hypothesis disciplined_p: Compiler.disciplined_program p.
+  Hypothesis good_Elocal_p: NoLeak.good_Elocal_usage_program p.
   Hypothesis successful_compilation : Compiler.compile_program p psz = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
@@ -130,7 +131,7 @@ Section RSC_Section.
       as [P' [Cs [t' [s' [metadata_size
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
-                                           [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' [Ht_rel_t' [Hconst_map [good_P'_Cs P'_Cs_disciplined]]]]]]]]]]]]]]]].
+                                           [well_formed_P' [well_formed_Cs [HP'Cs_closed [Hstar' [Ht_rel_t' [Hconst_map [good_P'_Cs [P'_Cs_disciplined P'_CS_good_Elocal]]]]]]]]]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
@@ -180,7 +181,8 @@ Section RSC_Section.
         eapply Compiler.forward_simulation_star with (metasize := uniform_shift 1).
         - assumption.
         - assumption.
-        - exact P'Cs_disciplined. 
+        - exact P'Cs_disciplined.
+        - exact P'_CS_good_Elocal.
         - exact Hstar'.
       }
 
@@ -490,8 +492,12 @@ Section RSC_Section.
       eapply disciplined_program_unlink with (c := P'); eauto.
       - eapply linkable_sym. eauto.
       - rewrite Source.link_sym; auto.
-          by apply linkable_sym.
-         
+        by apply linkable_sym.
+      - eapply NoLeak.good_Elocal_usage_program_link; auto.
+        eapply NoLeak.good_Elocal_usage_program_unlink with (c := P'); eauto.
+        eapply linkable_sym; eauto.
+        rewrite Source.link_sym; auto.
+        by apply linkable_sym.
 Qed.
 
 Print Assumptions RSC.
