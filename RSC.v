@@ -34,6 +34,7 @@ Section RSC_Section.
 
   Hypothesis domm_psz_intf: domm psz = domm (Source.prog_interface p).
   Hypothesis well_formed_p : Source.well_formed_program p.
+  Hypothesis disciplined_p: Compiler.disciplined_program p.
   Hypothesis successful_compilation : Compiler.compile_program p psz = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
@@ -163,7 +164,11 @@ Section RSC_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-      assert (exists s' P'Cs_sz P'_Cs_compiled t'compiled,
+
+      assert (P'Cs_disciplined: disciplined_program (Source.program_link P' Cs)).
+      { admit. }
+      
+      assert (exists s' P'Cs_sz P'_Cs_compiled,
                  domm P'Cs_sz = domm (Source.prog_interface (Source.program_link P' Cs))
                  /\
                  Compiler.compile_program (Source.program_link P' Cs) P'Cs_sz =
@@ -171,23 +176,18 @@ Section RSC_Section.
                  /\
                  Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
                       (I.CS.initial_machine_state P'_Cs_compiled)
-                      t'compiled s'
-                 /\
-                 traces_shift_each_other_option
-                   (uniform_shift 1)
-                   (Compiler.metadata_size_transformer (uniform_shift 1)) t' t'compiled
+                      t' s'
              )
         as [s'_compiled [P'Cs_sz [P'_Cs_compiled
-                                    [t'compiled
                                        [Hdomm_P'Cs_sz
                                           [HP'_Cs_compiles
-                                             [HP'_Cs_compiled_star
-                                                Ht'_rel_t'compiled
-           ]]]]]]].
+                                             HP'_Cs_compiled_star
+                                             ]]]]].
       {
         eapply Compiler.forward_simulation_star.
         - assumption.
         - assumption.
+        - exact P'Cs_disciplined. 
         - exact Hstar'.
       }
 
@@ -431,7 +431,7 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
                  (Intermediate.program_link P'_compiled Cs_compiled) tt'' ->
                good_trace_extensional
                  (left_addr_good_for_shifting
-                    (Compiler.metadata_size_transformer (uniform_shift 1))) tt''
+                    (uniform_shift 1)) tt''
                /\
                (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
                        (addr : Component.id * Block.id) (v : value),
@@ -439,9 +439,9 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
                    Memory.Memory.load mem ptr = Some v ->
                    addr = (Pointer.component ptr, Pointer.block ptr) ->
                    left_addr_good_for_shifting
-                     (Compiler.metadata_size_transformer (uniform_shift 1)) addr ->
+                     (uniform_shift 1) addr ->
                    left_value_good_for_shifting
-                     (Compiler.metadata_size_transformer (uniform_shift 1)) v)).
+                     (uniform_shift 1) v)).
     {
       assert (P'_Cs_closed: Source.closed_program (Source.program_link P' Cs)).
       {
@@ -469,12 +469,10 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
 
     assert (t_rel_t': traces_shift_each_other_option
                         all_zeros_shift
-                        (Compiler.metadata_size_transformer (uniform_shift 1))
-                        (project_non_inform t_inform) t'compiled).
+                        (uniform_shift 1)
+                        (project_non_inform t_inform) t').
     {
-      eapply traces_shift_each_other_option_transitive.
-      - eapply traces_shift_each_other_option_symmetric, Ht_rel_t'.
-      - assumption.
+      by eapply traces_shift_each_other_option_symmetric, Ht_rel_t'.
     }
 
     
@@ -514,13 +512,10 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
         ).
       
       destruct Hstar_recomb as [s'_pCs HpCs_star].
-      destruct HpCs_star as [? [? ?]]; eauto.
       do 5 eexists; split; last split; last split; last split; last split;
         eauto.
-      eapply traces_shift_each_other_option_transitive; eauto.
-    - exact trel_recomb.
-    - 
-      last exact trel_recomb. eauto.
+
+      
       
 Qed.
 

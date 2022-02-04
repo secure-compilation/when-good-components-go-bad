@@ -53,6 +53,7 @@ Require Import Common.Definitions.
 Require Import Common.CompCertExtensions.
 Require Import Common.RenamingOption.
 Require Import Source.Language.
+Require Import Source.NoLeak.
 Require Import Intermediate.Machine.
 Require Import Intermediate.CSInvariants.
 Require Import S2I.CompMonad.
@@ -567,33 +568,35 @@ Local Axiom compilation_preserves_well_formedness:
 
 (* FCC *)
 
-Axiom metadata_size_transformer: (Component.id -> nat) -> (Component.id -> nat).
+Definition disciplined_program (p: Source.program) :=
+  (forall (C : Component.id) (P : Procedure.id) (expr : expr),
+      Source.find_procedure (Source.prog_procedures p) C P = Some expr ->
+      safe_cont_expr CS.Kstop expr
+  ).
 
 Local Axiom forward_simulation_star:
-  forall p t s size_meta,
+  forall p t s,
     Source.closed_program p ->
     Source.well_formed_program p ->
+    disciplined_program p ->
     Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
-    exists s' psz p_compiled t',
+    exists s' psz p_compiled,
       domm psz = domm (Source.prog_interface p) /\
       compile_program p psz = Some p_compiled /\
       Star (I.CS.sem_non_inform p_compiled)
-           (I.CS.initial_machine_state p_compiled) t' s' /\
-      traces_shift_each_other_option
-        size_meta (metadata_size_transformer size_meta) t t'.
+           (I.CS.initial_machine_state p_compiled) t s'.
 
 Local Axiom backward_simulation_star:
-  forall p psz p_compiled t s size_meta,
+  forall p psz p_compiled t s,
     Source.closed_program p ->
     Source.well_formed_program p ->
+    disciplined_program p ->
     compile_program p psz = Some p_compiled ->
     Star (I.CS.sem_non_inform p_compiled)
          (I.CS.initial_machine_state p_compiled) t s ->
-    exists s' t',
-      Star (S.CS.sem p) (S.CS.initial_machine_state p) t' s' /\
-      traces_shift_each_other_option
-        (metadata_size_transformer size_meta) size_meta t t'.
-
+    exists s',
+      Star (S.CS.sem p) (S.CS.initial_machine_state p) t s'.
+      
 Local Axiom well_formed_compilable :
   forall p psz,
     Source.well_formed_program p ->
@@ -615,7 +618,7 @@ Local Axiom compiler_preserves_non_leakage_of_private_pointers:
     Source.well_formed_program p ->
     compile_program p psz = Some p_compiled ->
     S.CS.private_pointers_never_leak_S p          metadata_size ->
-    private_pointers_never_leak_I p_compiled (metadata_size_transformer metadata_size).
+    private_pointers_never_leak_I p_compiled metadata_size.
 
 (***********************************************
 Local Axiom non_leakage_of_private_pointers_compatible_with_separate_compilation:
