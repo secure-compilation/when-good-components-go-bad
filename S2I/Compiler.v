@@ -574,6 +574,56 @@ Definition disciplined_program (p: Source.program) :=
       safe_cont_expr CS.Kstop expr
   ).
 
+Lemma disciplined_program_link (p c: Source.program):
+  Source.well_formed_program p ->
+  Source.well_formed_program c ->
+  linkable (Source.prog_interface p) (Source.prog_interface c) ->
+  disciplined_program p ->
+  disciplined_program c ->
+  disciplined_program (Source.program_link p c).
+Proof.
+  intros Hwfp Hwfc Hlinkable Hp Hc.
+  unfold disciplined_program.
+  intros ? ? ? Hfind.
+  
+  destruct (C \in domm (Source.prog_interface c)) eqn:Cc.
+  - rewrite Source.link_sym in Hfind; auto.
+    assert (C \in domm (Source.prog_interface c) /\
+            Source.find_procedure (Source.prog_procedures c) C P = Some expr)
+      as [_ G].
+    {
+      eapply Source.find_procedure_in_linked_programs with (p2 := p); eauto.
+      - apply linkable_sym. assumption.
+      - destruct Hlinkable as [? G].
+        rewrite fdisjointC in G.
+        pose proof (fdisjointP _ _ G) as G2.
+        apply G2 in Cc. assumption.
+    }
+    specialize (Hc _ _ _ G). assumption.
+  - assert (C \in domm (Source.prog_interface p) /\
+            Source.find_procedure (Source.prog_procedures p) C P = Some expr)
+      as [_ G].
+    { eapply Source.find_procedure_in_linked_programs; eauto. rewrite Cc. auto. }
+    specialize (Hp _ _ _ G). assumption.
+Qed.
+
+Lemma disciplined_program_unlink (p c: Source.program):
+  Source.well_formed_program p ->
+  Source.well_formed_program c ->
+  linkable (Source.prog_interface p) (Source.prog_interface c) ->
+  disciplined_program (Source.program_link p c) ->
+  disciplined_program p.
+Proof.
+  intros Hwfp Hwfc Hlinkable Hdiscpc.
+  intros ? ? ? Hfind.
+  Search Source.find_procedure "link".
+  assert (G: Source.find_procedure (Source.prog_procedures p) C P = Some expr \/
+             Source.find_procedure (Source.prog_procedures c) C P = Some expr).
+  { left. assumption. }
+  apply Source.linkable_programs_find_procedure in G; auto.
+  apply Hdiscpc in G. assumption.
+Qed.
+
 Local Axiom forward_simulation_star:
   forall p t s,
     Source.closed_program p ->

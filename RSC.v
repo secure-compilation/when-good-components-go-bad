@@ -141,25 +141,6 @@ Section RSC_Section.
     (* probably need partialize to obtain them *)
 
     (* At this point, we compile P' and Cs and establish their basic properties. *)
-    (*************************************************************************
-    destruct (Compiler.well_formed_compilable P' well_formed_P') as [P'_compiled HP'_compiles].
-    pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
-      as well_formed_P'_compiled.
-    destruct (Compiler.well_formed_compilable Cs well_formed_Cs) as [Cs_compiled HCs_compiles].
-    pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
-      as well_formed_Cs_compiled.
-    assert
-      (linkable
-         (Intermediate.prog_interface Cs_compiled)
-         (Intermediate.prog_interface P'_compiled))
-      as linkability'. {
-      eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
-      apply linkable_sym.
-      rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
-      rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
-      apply linkability_pcomp_Ct.
-    }
-     *******************************************************)
     
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
@@ -191,52 +172,55 @@ Section RSC_Section.
         - exact Hstar'.
       }
 
-    (******************
-    destruct (Compiler.well_formed_compilable P' dummy_sz well_formed_P') as [P'_compiled HP'_compiles].
-    destruct (Compiler.well_formed_compilable Cs dummy_sz well_formed_Cs) as [Cs_compiled HCs_compiles].
-    *******************)
-
-    (***************************************
-pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
-      as well_formed_P'_compiled.
-    
-    pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
-      as well_formed_Cs_compiled.
-  
-
-    assert
-      (linkable
-         (Intermediate.prog_interface Cs_compiled)
-         (Intermediate.prog_interface P'_compiled))
-      as linkability'. {
-      eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
-      apply linkable_sym.
-      rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
-      rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
-      apply linkability_pcomp_Ct.
-    }
-    *************************************)
-
-    (************************************************
-      rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
-      rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
-      pose proof Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct
-        as Hlinking_wf.
-      apply Compiler.well_formed_compilable; assumption.
-     **********************************)
 
     assert (P'_Cs_linkable:
               linkable (Source.prog_interface P') (Source.prog_interface Cs)).
     {
-      admit.
+      by rewrite Hsame_iface1 Hsame_iface2.
     }
 
-    assert (exists P'sz Cssz, unionm P'sz Cssz = P'Cs_sz /\
-                            domm P'sz = domm (Source.prog_interface P') /\
-                            domm Cssz = domm (Source.prog_interface Cs)
-                            
-           ) as [P'sz [Cssz [Hunion [HdommP'sz HdommCssz]]]].
-    { admit. }
+    assert (exists P'sz Cssz,
+               unionm P'sz Cssz = P'Cs_sz 
+           ) as [P'sz [Cssz Hunion]].
+    {
+      exists (filterm (fun k => fun=> k \in domm (Source.prog_interface P')) P'Cs_sz).
+      exists (filterm (fun k => fun=> k \in domm (Source.prog_interface Cs)) P'Cs_sz).
+      assert (G': unionm
+                    (filterm (T:=nat_ordType)
+                             (fun k : nat_ordType =>
+                                fun=> k \in domm
+                                              (T:=nat_ordType)
+                                              (S:=Component.interface)
+                                              (Source.prog_interface P'))
+                             P'Cs_sz)
+                    (filterm (T:=nat_ordType)
+                             (fun k : nat_ordType =>
+                                fun=> k \in domm
+                                              (T:=nat_ordType)
+                                              (S:=Component.interface)
+                                              (Source.prog_interface Cs))
+                             P'Cs_sz) = P'Cs_sz).
+      {
+        apply eq_fmap. intros x. rewrite unionmE !filtermE.
+        
+        destruct (P'Cs_sz x) eqn:e.
+        + simpl.
+          assert (G1: exists n, P'Cs_sz x = Some n) by eauto.
+          move : G1 => /dommP => G1.
+          rewrite Hdomm_P'Cs_sz domm_union in G1.
+          destruct (x \in domm (Source.prog_interface P')) eqn:edomm; rewrite edomm;
+            simpl; auto.
+          assert (x \in domm (Source.prog_interface Cs)).
+          {
+            rewrite in_fsetU in G1.
+            move : G1 => /orP => G1.
+            destruct G1 as [contra|G1]; [by rewrite edomm in contra | assumption].
+          }
+            by rewrite H.
+        + by simpl.
+      }
+      exact G'.
+    }
 
     specialize (Compiler.well_formed_compilable _ P'sz well_formed_P') as
         [P'_compiled HP'_compiles].
@@ -252,41 +236,7 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
     rewrite HP'_Cs_compiles in Hrewr.
     inversion Hrewr. subst.
       
-    
-    (*********************************************************
-    assert (exists
-               (t'compiled_sep: Events.trace Events.event)
-               (s'_compiled_sep : I.CS.state) (psz csz : nat) 
-               (P'_compiled Cs_compiled : Intermediate.program)
-               (size_meta size_meta' : Component.id -> nat),
-               compile_program P' psz = Some P'_compiled /\
-               compile_program Cs csz = Some Cs_compiled /\
-               Star (CS.sem_non_inform
-                        (Intermediate.program_link P'_compiled Cs_compiled))
-                    (I.CS.initial_machine_state
-                       (Intermediate.program_link P'_compiled Cs_compiled)
-                    ) t'compiled_sep s'_compiled_sep /\
-               traces_shift_each_other_option size_meta size_meta'
-                                              t'compiled t'compiled_sep
-           )
-      as [t'compiled_sep [s'_compiled_sep
-                            [P'sz
-                               [Cssz
-                                  [P'_compiled
-                                     [Cs_compiled
-                                        [P'Cs_size_meta
-                                           [P'Cs_size_meta'
-                                              [HP'_compiles
-                                                 [HCs_compiles
-                                                    [HP'_Cs_compiled_star_sep
-                                                       [Ht'compiled_rel_t'compiled_sep
-         ]]]]]]]]]]]].
-    {
-      by eapply Compiler.separate_compilation; eauto.
-    }
-
-     ********************************************)
-    
+        
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
     
@@ -514,9 +464,14 @@ pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_com
       destruct Hstar_recomb as [s'_pCs HpCs_star].
       do 5 eexists; split; last split; last split; last split; last split;
         eauto.
-
       
+      apply disciplined_program_link; auto.
       
+      eapply disciplined_program_unlink with (c := P'); eauto.
+      - eapply linkable_sym. eauto.
+      - rewrite Source.link_sym; auto.
+          by apply linkable_sym.
+          Unshelve. all: eauto.
 Qed.
 
 Print Assumptions RSC.
