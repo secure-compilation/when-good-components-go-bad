@@ -149,7 +149,7 @@ Section RSC_Section.
       assert (P'Cs_disciplined: disciplined_program (Source.program_link P' Cs)).
       { admit. }
       
-      assert (exists s' P'Cs_sz P'_Cs_compiled,
+      assert (exists s' t'compiled P'Cs_sz P'_Cs_compiled,
                  domm P'Cs_sz = domm (Source.prog_interface (Source.program_link P' Cs))
                  /\
                  Compiler.compile_program (Source.program_link P' Cs) P'Cs_sz =
@@ -157,15 +157,23 @@ Section RSC_Section.
                  /\
                  Star (Intermediate.CS.CS.sem_non_inform P'_Cs_compiled)
                       (I.CS.initial_machine_state P'_Cs_compiled)
-                      t' s'
+                      t'compiled s'
+                 /\
+                 traces_shift_each_other_option
+                   (uniform_shift 1)
+                   (uniform_shift 1)
+                   t'
+                   t'compiled
              )
-        as [s'_compiled [P'Cs_sz [P'_Cs_compiled
+        as [s'_compiled [t'compiled [P'Cs_sz [P'_Cs_compiled
                                        [Hdomm_P'Cs_sz
                                           [HP'_Cs_compiles
-                                             HP'_Cs_compiled_star
-                                             ]]]]].
+                                             [HP'_Cs_compiled_star
+                                                Ht'_rel_t'compiled
+
+           ]]]]]]].
       {
-        eapply Compiler.forward_simulation_star.
+        eapply Compiler.forward_simulation_star with (metasize := uniform_shift 1).
         - assumption.
         - assumption.
         - exact P'Cs_disciplined. 
@@ -264,13 +272,13 @@ Section RSC_Section.
       as Hctx_same_iface. {
       symmetry. erewrite Compiler.compilation_preserves_interface.
       - rewrite <- Hsame_iface2. reflexivity.
-      - assumption.
+      - eassumption.
     }
     (* rewrite Hctx_same_iface in HP_decomp. *)
     assert (Intermediate.prog_interface p_compiled = Intermediate.prog_interface P'_compiled) as Hprog_same_iface. {
       symmetry. erewrite Compiler.compilation_preserves_interface.
       - apply Hsame_iface1.
-      - assumption.
+      - eassumption.
     }
     (* rewrite <- Hprog_same_iface in HCs_decomp. *)
 
@@ -299,7 +307,7 @@ Section RSC_Section.
     assert (Intermediate.linkable_mains p_compiled Cs_compiled) as linkable_mains.
     {
       eapply (@Compiler.compilation_preserves_linkable_mains p _ _ Cs);
-        try assumption.
+        try eassumption.
       - rewrite <- Hsame_iface2 in linkability.
         eapply Source.linkable_disjoint_mains; assumption.
     }
@@ -417,12 +425,14 @@ Section RSC_Section.
       eapply G2; eauto.
     }
 
-    assert (t_rel_t': traces_shift_each_other_option
+    assert (t_rel_t'compiled: traces_shift_each_other_option
                         all_zeros_shift
                         (uniform_shift 1)
-                        (project_non_inform t_inform) t').
+                        (project_non_inform t_inform) t'compiled).
     {
-      by eapply traces_shift_each_other_option_symmetric, Ht_rel_t'.
+        eapply traces_shift_each_other_option_transitive.
+        - apply traces_shift_each_other_option_symmetric; exact Ht_rel_t'.
+        - exact Ht'_rel_t'compiled.
     }
 
     
@@ -440,7 +450,7 @@ Section RSC_Section.
     HP'_compiled_Cs_compiled_good
     Hstar
     HP'_Cs_compiled_star
-    t_rel_t'
+    t_rel_t'compiled
       as [s_recomb [t_recomb [Hstar_recomb [_ trel_recomb]]]].
 
     
@@ -462,8 +472,14 @@ Section RSC_Section.
         ).
       
       destruct Hstar_recomb as [s'_pCs HpCs_star].
+      destruct HpCs_star as [tQed [HstarQed HshiftQed]].
       do 5 eexists; split; last split; last split; last split; last split;
         eauto.
+      {
+        eapply traces_shift_each_other_option_transitive.
+        - exact trel_recomb.
+        - eassumption.
+      }
       
       apply disciplined_program_link; auto.
       
@@ -471,7 +487,7 @@ Section RSC_Section.
       - eapply linkable_sym. eauto.
       - rewrite Source.link_sym; auto.
           by apply linkable_sym.
-          Unshelve. all: eauto.
+         
 Qed.
 
 Print Assumptions RSC.

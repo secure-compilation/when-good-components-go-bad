@@ -360,7 +360,7 @@ Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program)
   | false => ret p
   end.
 
-Definition compile_program
+Definition compile_program_
            (p: Source.program) (stksize: {fmap Component.id -> nat})
   : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
@@ -375,6 +375,8 @@ Definition compile_program
            Intermediate.prog_buffers := bufs;
            Intermediate.prog_main := Some Procedure.main |} in
    wrap_main procs_labels p).
+
+(****************************************************************************
 
 Lemma compilation_preserves_interface:
   forall p p_compiled stksize,
@@ -418,20 +420,6 @@ Proof.
   repeat (erewrite compilation_preserves_interface; eauto).
 Qed.
 
-(* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).
-   Try to get rid of unnecessary clutter in statement and propagate. *)
-Lemma compilation_preserves_main :
-  forall {p pstksize p_compiled},
-    Source.well_formed_program p ->
-    compile_program p pstksize = Some p_compiled ->
-    (exists main, Source.prog_main p = Some main) <->
-    Intermediate.prog_main p_compiled.
-Proof.
-  intros p p_compiled Hp_well_formed Hp_compiles.
-  split; intros [].
-  - admit.
-  - admit.
-Admitted.
 
 Lemma compilation_preserves_linkable_mains : forall p1 p1sz p1' p2 p2sz p2',
   Source.well_formed_program p1 ->
@@ -507,6 +495,111 @@ Lemma compilation_has_matching_mains :
     compile_program p psz = Some p_compiled ->
     matching_mains p p_compiled.
 Admitted.
+
+***************************************************************)
+
+Axiom compile_program :
+  Source.program ->
+  {fmap Component.id -> nat} ->
+  option Intermediate.program.
+
+Axiom compilation_preserves_interface:
+  forall p p_compiled stksize,
+    compile_program p stksize = Some p_compiled ->
+    Intermediate.prog_interface p_compiled = Source.prog_interface p.
+
+Axiom compilation_preserves_linkability:
+  forall {p pstksize p_compiled c cstksize c_compiled},
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p pstksize = Some p_compiled ->
+    compile_program c cstksize = Some c_compiled ->
+    linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
+
+
+Axiom compilation_preserves_main :
+  forall {p pstksize p_compiled},
+    Source.well_formed_program p ->
+    compile_program p pstksize = Some p_compiled ->
+    (exists main, Source.prog_main p = Some main) <->
+    Intermediate.prog_main p_compiled.
+
+
+Lemma compilation_preserves_linkable_mains : forall p1 p1sz p1' p2 p2sz p2',
+  Source.well_formed_program p1 ->
+  Source.well_formed_program p2 ->
+  Source.linkable_mains p1 p2 ->
+  compile_program p1 p1sz = Some p1' ->
+  compile_program p2 p2sz = Some p2' ->
+  Intermediate.linkable_mains p1' p2'.
+Proof.
+  unfold Source.linkable_mains, Intermediate.linkable_mains.
+  intros p1 ? p1' p2 ? p2' Hwf1 Hwf2 Hmains Hcomp1 Hcomp2.
+  pose proof compilation_preserves_main Hwf1 Hcomp1 as Hmain1.
+  pose proof compilation_preserves_main Hwf2 Hcomp2 as Hmain2.
+  destruct (Source.prog_main p1) as [mainp1 |];
+    destruct (Source.prog_main p2) as [mainp2 |];
+    destruct (Intermediate.prog_main p1') as [|];
+    destruct (Intermediate.prog_main p2') as [|];
+    try reflexivity.
+  - inversion Hmains.
+    Ltac some_eq_none_contra Hcontra id :=
+      destruct Hcontra as [_ Hcontra];
+      specialize (Hcontra (ex_intro (fun x => Some id = Some x) id eq_refl));
+      now destruct Hcontra.
+  - destruct Hmain2 as [Hmain2 Hmain2'].
+    destruct (Hmain2' eq_refl) as [? Hcontra]; inversion Hcontra.
+  - destruct Hmain1 as [Hmain1 Hmain1'].
+    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
+  - destruct Hmain1 as [Hmain1 Hmain1'].
+    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
+Qed.
+
+Remark mains_without_source : forall p psz pc pc',
+  Source.well_formed_program p ->
+  compile_program p psz = Some pc ->
+  Source.prog_main p = None ->
+  Intermediate.linkable_mains pc pc'.
+Proof.
+  intros p ? pc pc' Hwf Hcomp Hmain.
+  pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
+  rewrite Hmain in Hpreserve2.
+  destruct (Intermediate.prog_main pc) as [|] eqn: Hpc.
+  - specialize (Hpreserve2 eq_refl) as [? Hcontra]; inversion Hcontra.
+  - unfold Intermediate.linkable_mains. rewrite Hpc. reflexivity.
+Qed.
+
+Lemma compilation_preserves_main_linkability :
+  forall {p psz p_compiled c csz c_compiled},
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p psz = Some p_compiled ->
+    compile_program c csz = Some c_compiled ->
+    Intermediate.linkable_mains p_compiled c_compiled.
+Proof.
+  intros p psz p_compiled c csz c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
+  pose proof Source.linkable_disjoint_mains Hwfp Hwfc Hlinkable as Hmains.
+  destruct (Source.prog_main p) as [mp |] eqn:Hmainp;
+    destruct (Source.prog_main c) as [mc |] eqn:Hmainc.
+  - unfold Source.linkable_mains in Hmains.
+    rewrite Hmainp in Hmains.
+    rewrite Hmainc in Hmains.
+    inversion Hmains.
+  - apply Intermediate.linkable_mains_sym.
+    eapply (mains_without_source c); eauto.
+  - eapply (mains_without_source p); eauto.
+  - eapply (mains_without_source p); eauto.
+Qed.
+
+Lemma compilation_has_matching_mains :
+  forall {p psz p_compiled},
+    Source.well_formed_program p ->
+    compile_program p psz = Some p_compiled ->
+    matching_mains p p_compiled.
+Admitted.
+
 
 (****************************************
 Axiom separate_compilation:
@@ -616,7 +709,6 @@ Lemma disciplined_program_unlink (p c: Source.program):
 Proof.
   intros Hwfp Hwfc Hlinkable Hdiscpc.
   intros ? ? ? Hfind.
-  Search Source.find_procedure "link".
   assert (G: Source.find_procedure (Source.prog_procedures p) C P = Some expr \/
              Source.find_procedure (Source.prog_procedures c) C P = Some expr).
   { left. assumption. }
@@ -625,27 +717,29 @@ Proof.
 Qed.
 
 Local Axiom forward_simulation_star:
-  forall p t s,
+  forall p t s metasize,
     Source.closed_program p ->
     Source.well_formed_program p ->
     disciplined_program p ->
     Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
-    exists s' psz p_compiled,
+    exists s' t' psz p_compiled,
       domm psz = domm (Source.prog_interface p) /\
       compile_program p psz = Some p_compiled /\
       Star (I.CS.sem_non_inform p_compiled)
-           (I.CS.initial_machine_state p_compiled) t s'.
+           (I.CS.initial_machine_state p_compiled) t' s' /\
+      traces_shift_each_other_option metasize metasize t t'.
 
 Local Axiom backward_simulation_star:
-  forall p psz p_compiled t s,
+  forall p psz p_compiled t s metasize,
     Source.closed_program p ->
     Source.well_formed_program p ->
     disciplined_program p ->
     compile_program p psz = Some p_compiled ->
     Star (I.CS.sem_non_inform p_compiled)
          (I.CS.initial_machine_state p_compiled) t s ->
-    exists s',
-      Star (S.CS.sem p) (S.CS.initial_machine_state p) t s'.
+    exists s' t',
+      Star (S.CS.sem p) (S.CS.initial_machine_state p) t' s' /\
+      traces_shift_each_other_option metasize metasize t t'.
       
 Local Axiom well_formed_compilable :
   forall p psz,
@@ -670,21 +764,3 @@ Local Axiom compiler_preserves_non_leakage_of_private_pointers:
     S.CS.private_pointers_never_leak_S p          metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size.
 
-(***********************************************
-Local Axiom non_leakage_of_private_pointers_compatible_with_separate_compilation:
-  forall p p_compiled c c_compiled pcsz pc_compiled,
-    Source.closed_program (Source.program_link p c) ->
-    Source.well_formed_program p ->
-    compile_program p psz = Some p_compiled ->
-    compile_program c csz = Some c_compiled ->
-    pcsz = unionm psz csz
-    compile_program (Source.program_link p c) pcsz = Some pc_compiled -> 
-    private_pointers_never_leak_I (pc_compiled) metadata_size ->
-    forall s t,
-      CSInvariants.CSInvariants.is_prefix
-        s
-        (Intermediate.program_link p_compiled c_compiled) t ->
-      
-      private_pointers_never_leak_I (pc_compiled) metadata_size.
-    
-************************************************)
