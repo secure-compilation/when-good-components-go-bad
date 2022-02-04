@@ -416,3 +416,133 @@ Proof.
   simpl in G1; destruct b; first contradiction.
   unfold uniform_shift; by [].
 Qed.
+
+Fixpoint good_user_of_Elocal_expr (sz: Z) (e: expr): Prop :=
+  match e with
+  | E_deref E_local => True
+  | E_deref (E_binop Add E_local (E_val (Int n))) => (n < sz)%Z
+  | E_assign E_local e' =>
+      good_user_of_Elocal_expr sz e'
+  | E_assign (E_binop Add E_local (E_val (Int n))) e' =>
+      (n < sz)%Z /\ good_user_of_Elocal_expr sz e'
+  | E_val _ | E_arg | E_exit => True
+  | E_binop _ e1 e2 => good_user_of_Elocal_expr sz e1 /\
+                        good_user_of_Elocal_expr sz e2
+  | E_seq e1 e2 => good_user_of_Elocal_expr sz e1 /\
+                    good_user_of_Elocal_expr sz e2
+  | E_if e1 e2 e3 => good_user_of_Elocal_expr sz e1 /\
+                      good_user_of_Elocal_expr sz e2 /\
+                      good_user_of_Elocal_expr sz e3
+  | E_alloc e1 => good_user_of_Elocal_expr sz e1
+  | E_deref e1 => good_user_of_Elocal_expr sz e1
+  | E_assign e1 e2 => good_user_of_Elocal_expr sz e1 /\
+                       good_user_of_Elocal_expr sz e2
+  | E_call C P e' => good_user_of_Elocal_expr sz e'
+  | E_callptr e1 e2 => good_user_of_Elocal_expr sz e1 /\
+                        good_user_of_Elocal_expr sz e2
+  | E_funptr P => True
+  | E_local => False
+  end.
+
+Definition unfold_buffer (b : (nat + list value)%type) : list value :=
+  match b with
+  | inl n  => nseq n Undef
+  | inr vs => vs
+  end.
+
+Definition buffer_size p (C : Component.id) : nat :=
+  match Source.prog_buffers p C with
+  | Some buf => size (unfold_buffer buf)
+  | None => 0 (* Should not happen *)
+  end.
+
+Definition good_Elocal_usage_program (p: Source.program) : Prop :=
+    (forall (C : Component.id) (P : Procedure.id) (expr : expr),
+      Source.find_procedure (Source.prog_procedures p) C P = Some expr ->
+      good_user_of_Elocal_expr (Z.of_nat (buffer_size p C)) expr).
+
+Lemma good_Elocal_usage_program_link (p c: Source.program):
+  Source.well_formed_program p ->
+  Source.well_formed_program c ->
+  linkable (Source.prog_interface p) (Source.prog_interface c) ->
+  good_Elocal_usage_program p ->
+  good_Elocal_usage_program c ->
+  good_Elocal_usage_program (Source.program_link p c).
+Proof.
+  intros Hwfp Hwfc Hlinkable Hp Hc.
+  unfold good_Elocal_usage_program.
+  intros ? ? ? Hfind.
+
+  destruct (C \in domm (Source.prog_interface c)) eqn:Cc.
+  - rewrite Source.link_sym in Hfind; auto.
+    assert (C \in domm (Source.prog_interface c) /\
+            Source.find_procedure (Source.prog_procedures c) C P = Some expr)
+      as [_ G].
+    {
+      eapply Source.find_procedure_in_linked_programs with (p2 := p); eauto.
+      - apply linkable_sym. assumption.
+      - destruct Hlinkable as [? G].
+        rewrite fdisjointC in G.
+        pose proof (fdisjointP _ _ G) as G2.
+        apply G2 in Cc. assumption.
+    }
+    specialize (Hc _ _ _ G).
+    rewrite (Source.wfprog_defined_buffers) in Cc; eauto.
+    assert (eq:(buffer_size (Source.program_link p c) C) =
+              (buffer_size c C)).
+    { unfold buffer_size in *. simpl.
+      rewrite unionmE.
+      destruct Hlinkable as [? G'].
+      rewrite !Source.wfprog_defined_buffers in G'; eauto.
+        rewrite fdisjointC in G'.
+        pose proof (fdisjointP _ _ G') as G3.
+      apply G3 in Cc. move: Cc => /dommPn -> //=.
+    }
+    rewrite eq. auto.
+  - assert (C \in domm (Source.prog_interface p) /\
+            Source.find_procedure (Source.prog_procedures p) C P = Some expr)
+      as [G' G].
+    { eapply Source.find_procedure_in_linked_programs; eauto. rewrite Cc. auto. }
+    specialize (Hp _ _ _ G).
+    rewrite (Source.wfprog_defined_buffers) in Cc; eauto.
+    rewrite (Source.wfprog_defined_buffers) in G'; eauto.
+    assert (eq:(buffer_size (Source.program_link p c) C) =
+              (buffer_size p C)).
+    { unfold buffer_size in *. simpl.
+      rewrite unionmE.
+      move: G' => /dommP [] ? -> //=.
+    }
+    rewrite eq. auto.
+Qed.
+
+Lemma good_Elocal_usage_program_unlink (p c: Source.program):
+  Source.well_formed_program p ->
+  Source.well_formed_program c ->
+  linkable (Source.prog_interface p) (Source.prog_interface c) ->
+  good_Elocal_usage_program (Source.program_link p c) ->
+  good_Elocal_usage_program p.
+Proof.
+  intros Hwfp Hwfc Hlinkable Hdiscpc.
+  intros ? ? ? Hfind.
+  assert (G: Source.find_procedure (Source.prog_procedures p) C P = Some expr \/
+             Source.find_procedure (Source.prog_procedures c) C P = Some expr).
+  { left. assumption. }
+  apply Source.linkable_programs_find_procedure in G; auto.
+  apply Hdiscpc in G.
+  assert (eq:(buffer_size (Source.program_link p c) C) =
+               (buffer_size p C)).
+  { unfold buffer_size. simpl.
+    rewrite unionmE.
+    assert (H: (Source.prog_buffers p C)).
+    { unfold Source.find_procedure in Hfind.
+      destruct (Source.prog_procedures p C) eqn:procs_p_C; last discriminate.
+      assert (G': exists n, Source.prog_procedures p C = Some n) by eauto.
+      move: G' => /dommP.
+      rewrite -Source.wfprog_defined_procedures; eauto.
+      rewrite Source.wfprog_defined_buffers; eauto.
+      by move=> /dommP [] ? -> //=.
+    }
+    rewrite H. reflexivity.
+  }
+  rewrite -eq. assumption.
+Qed.

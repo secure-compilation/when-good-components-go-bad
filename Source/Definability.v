@@ -4232,6 +4232,9 @@ Section Definability.
           simpl. by induction n.
     Qed.
 
+    Theorem definability_good_Elocal_usage: good_Elocal_usage_program p.
+    Admitted.
+
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a

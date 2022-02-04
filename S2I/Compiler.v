@@ -64,6 +64,10 @@ Require Import S2I.Definitions.
 Import MonadNotations.
 Open Scope monad_scope.
 
+From Coq Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import eqtype seq.
+From mathcomp Require ssrnat.
+
 (* the compilation environment *)
 
 Record comp_env : Type := {
@@ -549,11 +553,11 @@ Proof.
       specialize (Hcontra (ex_intro (fun x => Some id = Some x) id eq_refl));
       now destruct Hcontra.
   - destruct Hmain2 as [Hmain2 Hmain2'].
-    destruct (Hmain2' eq_refl) as [? Hcontra]; inversion Hcontra.
+    destruct (Hmain2' Logic.eq_refl) as [? Hcontra]; inversion Hcontra.
   - destruct Hmain1 as [Hmain1 Hmain1'].
-    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
+    destruct (Hmain1' Logic.eq_refl) as [? Hcontra]; inversion Hcontra.
   - destruct Hmain1 as [Hmain1 Hmain1'].
-    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
+    destruct (Hmain1' Logic.eq_refl) as [? Hcontra]; inversion Hcontra.
 Qed.
 
 Remark mains_without_source : forall p psz pc pc',
@@ -566,7 +570,7 @@ Proof.
   pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
   rewrite Hmain in Hpreserve2.
   destruct (Intermediate.prog_main pc) as [|] eqn: Hpc.
-  - specialize (Hpreserve2 eq_refl) as [? Hcontra]; inversion Hcontra.
+  - specialize (Hpreserve2 Logic.eq_refl) as [? Hcontra]; inversion Hcontra.
   - unfold Intermediate.linkable_mains. rewrite Hpc. reflexivity.
 Qed.
 
@@ -716,13 +720,6 @@ Proof.
   apply Hdiscpc in G. assumption.
 Qed.
 
-Definition good_user_of_Elocal_expr (expr: expr) : Prop. Admitted.
-
-Definition good_Elocal_usage (p: Source.program) : Prop :=
-    (forall (C : Component.id) (P : Procedure.id) (expr : expr),
-      Source.find_procedure (Source.prog_procedures p) C P = Some expr ->
-      good_user_of_Elocal_expr expr
-  ).
 
 
 Local Axiom forward_simulation_star:
@@ -730,7 +727,7 @@ Local Axiom forward_simulation_star:
     Source.closed_program p ->
     Source.well_formed_program p ->
     disciplined_program p ->
-    good_Elocal_usage p ->
+    good_Elocal_usage_program p ->
     Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
     exists s' t' psz p_compiled,
       domm psz = domm (Source.prog_interface p) /\
@@ -744,7 +741,7 @@ Local Axiom backward_simulation_star:
     Source.closed_program p ->
     Source.well_formed_program p ->
     disciplined_program p ->
-    good_Elocal_usage p ->
+    good_Elocal_usage_program p ->
     compile_program p psz = Some p_compiled ->
     Star (I.CS.sem_non_inform p_compiled)
          (I.CS.initial_machine_state p_compiled) t s ->
