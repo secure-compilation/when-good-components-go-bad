@@ -13,12 +13,12 @@ Class EventClass (A : Type) :=
   }.
 
 
-(* RB: TODO: RW: Allowing arbitrary values to appear in events does not preclude
-   the possibility of nonsensical values appearing in traces, notably Undef
-   values. We have two basic alternatives:
-    1. Rule out Undef values in the semantics.
-    2. Refine the definition of defined and undefined values at the type level.
- *)
+(* NOTE: Allowing arbitrary values to appear in events does not rule
+   out the possibility of nonsensical values appearing in traces,
+   notably Undef. There are two basic alternatives:
+    1. Handle in the semantics (done in this development).
+    2. Refine the definition of defined and undefined values at the
+       type level. *)
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> value -> Memory.tt -> Component.id -> event
 | ERet : Component.id -> value -> Memory.tt -> Component.id -> event

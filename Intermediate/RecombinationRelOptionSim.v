@@ -71,8 +71,8 @@ Section ThreewayMultisem1.
          now rewrite E0_right).
     (* In memory-altering cases, a second sub-goal is left to be solved. *)
 
-  (* RB: NOTE: Likely provable: since we are on the program, we would not care
-     what changes the "other program" makes to its memory, only what "our
+  (* RB: NOTE: Since we are on the program, we would not care what
+     changes the "other program" makes to its memory, only what "our
      program" eventually will. *)
   (* AEK: Notice here that the precondition CS.is_program_component looks like *)
   (* it should be accompanied with a "mirrored" version of the same lemma that *)

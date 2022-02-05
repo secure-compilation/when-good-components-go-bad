@@ -354,20 +354,25 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
 | Load: forall gps mem regs regs' pc r1 r2 ptr v,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    (* RB: NOTE: [DynShare] Even though cross-component pointer forging is
-       possible at the program level, it WAS detected and stopped here. *)
+    (* NOTE: [DynShare] Previously, programs were syntactically able
+       to forge cross-component pointers, which the semantics stopped
+       at this point. Memory sharing requires that the restriction on
+       loads and stores operating on external components be lifted,
+       and forging must be disallowed in a more direct manner. *)
     (* Pointer.component ptr = Pointer.component pc -> *)
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
     step G (gps, mem, regs, pc)
            [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs']
            (gps, mem, regs', Pointer.inc pc)
-
 | Store: forall gps mem mem' regs pc ptr r1 r2 (* v reach' e *),
     executing G pc (IStore r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    (* RB: NOTE: [DynShare] Even though cross-component pointer forging is
-       possible at the program level, it WAS detected and stopped here. *)
+    (* NOTE: [DynShare] Previously, programs were syntactically able
+       to forge cross-component pointers, which the semantics stopped
+       at this point. Memory sharing requires that the restriction on
+       loads and stores operating on external components be lifted,
+       and forging must be disallowed in a more direct manner. *)
     (* Pointer.component ptr = Pointer.component pc -> *)
     Memory.store mem ptr (Register.get r2 regs) = Some mem' ->
     step G (gps, mem, regs, pc)

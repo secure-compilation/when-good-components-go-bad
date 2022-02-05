@@ -16207,7 +16207,7 @@ Section Definability.
     Print Assumptions definability_gen_rel_right.
 
     Lemma definability :
-      forall procs, (* TODO: What to do with procs? *)
+      forall procs, (* NOTE: procs plays a limited role here *)
         @well_formed_trace T intf procs t ->
         well_formed_intermediate_prefix t ->
         exists s' t' const_map,

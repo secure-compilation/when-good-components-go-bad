@@ -792,12 +792,6 @@ Section ThreewayMultisem1.
     - CS.simplify_turn. by rewrite H_c' in contra.
   Qed. 
 
-  (* RB: TODO: Does it make sense to compact calls and returns into a unified
-     solve tactic? *)
-  (* AEK: This lemma is a "strengthening" lemma. It will be a bit involved to 
-     establish from both the event-relatedness and the memory-relatedness
-     of the non-executing part that mergeable_border_states holds.
-   *)
   Theorem threeway_multisem_event_lockstep_program_step
           s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
     CS.is_program_component s1 ic ->
