@@ -135,43 +135,57 @@ We assume that the compiler satisfies `separate_compilation`:
 compilation and linking commute.
 ```coq
 separate_compilation
-  : forall (p c : Source.program) (p_comp c_comp : Intermediate.program),
+  : forall (p : Source.program) (psz : {fmap Component.id -> nat})
+      (c : Source.program) (csz : {fmap Component.id -> nat})
+      (p_comp c_comp : Intermediate.program),
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_comp ->
-    compile_program c = Some c_comp ->
-    compile_program (Source.program_link p c) =
+    compile_program p psz = Some p_comp ->
+    compile_program c csz = Some c_comp ->
+    compile_program (Source.program_link p c) (unionm psz csz) =
     Some (Intermediate.program_link p_comp c_comp)
 ```
 
 #### Compiler correctness ####
-We also assume CompCert-style compiler correctness, under the form of a
-forward simulation `Compiler.fsim_record`
+We also assume CompCert-style compiler correctness, in the form of a
+forward simulation `forward_simulation_star`
 and a backward simulation `backward_simulation_star`:
-```
-Compiler.order : Compiler.index -> Compiler.index -> Prop
-Compiler.match_states
-  : forall (p : Source.program) (tp : Intermediate.program),
-    Compiler.index ->
-    state (S.CS.sem p) -> state (I.CS.sem_non_inform tp) -> Prop
-Compiler.index : Type
-Compiler.fsim_record
-  : forall (p : Source.program) (tp : Intermediate.program),
-    fsim_properties Events.event (S.CS.sem p) (I.CS.sem_non_inform tp)
-      Compiler.index Compiler.order Compiler.match_states
-backward_simulation_star
-  : forall (p : Source.program) (p_compiled : Intermediate.program)
-      (t : Events.trace Events.event)
-      (s : state (I.CS.sem_non_inform p_compiled)),
+```coq
+Compiler.forward_simulation_star
+  : forall (p : Source.program) (t : Events.trace Events.event)
+      (s : state (S.CS.sem p)) (metasize : Component.id -> nat),
     Source.closed_program p ->
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    disciplined_program p ->
+    NoLeak.good_Elocal_usage_program p ->
+    Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
+    exists
+      (s' : I.CS.state) (t' : Events.trace Events.event) 
+    (psz : {fmap nat_ordType -> nat}) (p_compiled : Intermediate.program),
+      domm (T:=nat_ordType) (S:=nat) psz =
+      domm (T:=nat_ordType) (S:=Component.interface)
+        (Source.prog_interface p) /\
+      compile_program p psz = Some p_compiled /\
+      Star (I.CS.sem_non_inform p_compiled)
+        (I.CS.initial_machine_state p_compiled) t' s' /\
+      traces_shift_each_other_option metasize metasize t t'
+
+Compiler.backward_simulation_star
+  : forall (p : Source.program) (psz : {fmap Component.id -> nat})
+      (p_compiled : Intermediate.program) (t : Events.trace Events.event)
+      (s : state (I.CS.sem_non_inform p_compiled))
+      (metasize : Component.id -> nat),
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    disciplined_program p ->
+    NoLeak.good_Elocal_usage_program p ->
+    compile_program p psz = Some p_compiled ->
     Star (I.CS.sem_non_inform p_compiled)
       (I.CS.initial_machine_state p_compiled) t s ->
-    exists (s' : state (S.CS.sem p)) (i : Compiler.index),
-      Star (S.CS.sem p) (S.CS.initial_machine_state p) t s' /\
-      Compiler.match_states i s' s
+    exists (s' : state (S.CS.sem p)) (t' : Events.trace Events.event),
+      Star (S.CS.sem p) (S.CS.initial_machine_state p) t' s' /\
+      traces_shift_each_other_option metasize metasize t t'
 ```
 
 #### Compiler preserves the privacy of the local buffer ####
@@ -179,13 +193,14 @@ Finally, we assume `Compiler.compiler_preserves_non_leakage_of_private_pointers`
 which states that our compiler preserves the privacy of the local buffer.
 Such a result can likely be proved by using the fine-grained simulation invariants
 in an actual compiler correctness proof.
-```
+```coq
 Compiler.compiler_preserves_non_leakage_of_private_pointers
-  : forall (p : Source.program) (p_compiled : Intermediate.program)
+  : forall (p : Source.program) (psz : {fmap Component.id -> nat})
+      (p_compiled : Intermediate.program)
       (metadata_size : Component.id -> nat),
     Source.closed_program p ->
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p psz = Some p_compiled ->
     S.CS.private_pointers_never_leak_S p metadata_size ->
     private_pointers_never_leak_I p_compiled metadata_size
 ```
@@ -196,12 +211,12 @@ The following standard axioms are used occasionally in our proofs.
 
 ```coq
 ProofIrrelevance.proof_irrelevance : forall (P : Prop) (p1 p2 : P), p1 = p2
+
 FunctionalExtensionality.functional_extensionality_dep
   : forall (A : Type) (B : A -> Type) (f g : forall x : A, B x),
     (forall x : A, f x = g x) -> f = g
+
 Classical_Prop.classic : forall P : Prop, P \/ ~ P
-ClassicalEpsilon.constructive_indefinite_description
-  : forall (A : Type) (P : A -> Prop), (exists x : A, P x) -> {x : A | P x}
 ```
 
 ### License ###
