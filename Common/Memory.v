@@ -621,16 +621,26 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     move=> m m' b i v Hstore b' i'.
     funelim (store m b i v); try congruence.
+    match goal with
+    | e1 : Some ?l = list_upd ?b0 _ _,
+      H : _ = {| pr1 := Some ?l; pr2 := _ |},
+      H0 : _ = {| pr1 := true; pr2 := _ |},
+      H1 : _ = {| pr1 := Some ?b0; pr2 := _ |},
+      e0 : true = (0 <=? i)%Z
+      |- _ =>
+      rename H into H_; rename H0 into H0_; rename H1 into H1_;
+      rename e0 into e0_
+    end.
     rewrite Hstore in Heqcall. injection Heqcall as ?. subst m'.
-    injection H as H.
-    injection H0 as H0.
-    injection H1 as H1.
+    injection H_ as H_.
+    injection H0_ as H0_.
+    injection H1_ as H1_.
     rewrite /load /=.
     rewrite setmE xpair_eqE; case: (b' =P b) => [-> {b'}|] //=.
     case: (i' =P i) => [-> {i'}|i'_ne_i] /=.
-    - rewrite -e0.
-      exact: list_upd_nth_error_same H.
-    - rewrite H1; case: (Z.leb_spec0 0 i')=> [i'_pos|] //=.
+    - rewrite -e0_.
+      exact: list_upd_nth_error_same H_.
+    - rewrite H1_; case: (Z.leb_spec0 0 i')=> [i'_pos|] //=.
       apply: list_upd_nth_error_other; eauto.
       contradict i'_ne_i; symmetry.
       apply Z2Nat.inj; eauto. by apply /Z.leb_spec0.
@@ -697,10 +707,25 @@ Module ComponentMemory : AbstractComponentMemory.
     case: (Z.leb_spec0 0 i)=> [i_pos|] //= chunk_i.
     funelim (store m b i v').
     - congruence.
-    - assert (e0' := e0). symmetry in e0'. move: e0' => /Z.leb_spec0. lia.
+    - match goal with
+      | e0 : false = (0 <=? i)%Z
+        |- _ =>
+        rename e0 into e0_
+      end.
+      assert (e0' := e0_). symmetry in e0'. move: e0' => /Z.leb_spec0. lia.
     - rewrite -Heqcall. now eauto.
-    - rewrite -e in m_b. injection m_b as ?; subst b0.
-      rewrite (list_upd_some_nth_error_none _ _ _ (Logic.eq_sym e1)) in chunk_i.
+    - match goal with
+      | H1 : ?X = Some ?Y1,
+        H2 : Some ?Y2 = ?X
+        |- _ => rewrite <- H2 in H1; injection H1 as ?; subst Y1
+      end.
+      match goal with
+      | chunk_i : nth_error ?b0 _ = _,
+        e1 : _ = list_upd _ _ _
+        |- _ =>
+        rename e1 into e1_; rename chunk_i into chunk_i_
+      end.
+      rewrite (list_upd_some_nth_error_none _ _ _ (Logic.eq_sym e1_)) in chunk_i_.
       discriminate.
   Qed.
 
@@ -732,8 +757,20 @@ Module ComponentMemory : AbstractComponentMemory.
     - eapply store_after_load; eauto.
     - rewrite /load. (* rewrite /store in Hsome. *)
       funelim (store m b i v'); try congruence.
-      rewrite -e -e0.
-      exact (list_upd_some_nth_error_some _ _ _ _ (Logic.eq_sym e1)).
+      match goal with
+      | H1 : ?X = Some ?Y1,
+        H2 : Some ?Y2 = ?X
+        |- _ => rewrite <- H2 in H1; injection H1 as ?; subst Y1
+      end.
+      match goal with
+      | e : Some ?b0 = _,
+        e0 : true = (0 <=? i)%Z,
+        e1 : _ = list_upd ?b0 _ _
+        |- _ =>
+        rename e into e_; rename e0 into e0_; rename e1 into e1_
+      end.
+      rewrite -e_ -e0_.
+      exact (list_upd_some_nth_error_some _ _ _ _ (Logic.eq_sym e1_)).
   Qed.
 
   Lemma domm_prealloc :
