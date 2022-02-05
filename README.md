@@ -39,11 +39,11 @@ mechanized counterparts in Coq.
 
 - Definition 2.1 (RSP~): see statement of Theorem `RSC` in `RSC.v` for an instance of this definition
 
-- Assumption 2.3 (FCC): `S2I/Compiler.v`, Lemma `forward_simulation_star`
+- Assumption 2.3 (FCC): `S2I/Compiler.v`, Axiom `forward_simulation_star`
 
 - Lemma 2.4 (recomposition): `Intermediate/RecombinationRel.v`, Theorem `recombination_trace_rel`
 
-- Assumption 2.5 (BCC): `S2I/Compiler.v`, Lemma `backward_simulation_star`
+- Assumption 2.5 (BCC): `S2I/Compiler.v`, Axiom `backward_simulation_star`
 
 - Definition 2.6 (interaction-trace events): `CompCert/Events.v`, Inductive type `event`
 
@@ -93,18 +93,17 @@ We leave some standard statements about the *correct* compilation of whole
 programs as axioms because they are not really the focus of 
 our novel *secure* compilation proof techniques.
 
-Proving these kind of correctness results is typically laborious and we do not expect
-the proof to be particularly insightful for our chosen pair of languages.
+Proving these kind of correctness results is typically laborious and we do not
+expect the proof to be particularly insightful for our chosen pair of languages.
 
-In fact, one of the key goals of the proof technique for the main 
-secure compilation theorem is to demonstrate that
-standard results about correct compilation can be reused
-by (rather than implicitly reproved as part of) the secure compilation 
-proof, since proving these theorems is typically a big manual effort 
-that one would wish to avoid duplicating.
+In fact, one of the key goals of the proof technique for the main secure
+compilation theorem is to demonstrate that standard results about correct
+compilation can be reused by (rather than implicitly reproved as part of) the
+secure compilation proof, since proving these theorems is typically a big manual
+effort that one would wish to avoid duplicating.
 
 #### Compilation and well-formedness ####
-We assume that every well-formed source program can be compiled
+We assume that every well-formed source program can be successfully compiled
 (`well_formed_compilable`),
 and that compiling preserves certain well-formedness conditions 
 (`Compiler.compilation_preserves_well_formedness`,
