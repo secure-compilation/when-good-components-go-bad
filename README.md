@@ -7,6 +7,8 @@ This branch contains the Coq development of the paper:
    Adrien Durier, Deepak Garg, and Catalin Hritcu.
    arXiv:2110.01439. October 2021.
 
+## Installation ##
+
 ### Prerequisites ###
 
 This development has been built with the following combinations of Coq releases
@@ -30,7 +32,7 @@ Dependencies can be installed through the OCaml package manager, OPAM.
 
 Run `make` at the root to build the development.
 
-### Definitions and theorems ###
+## Definitions and theorems ##
 
 The following list maps the definitions and statements in the paper to their
 mechanized counterparts in Coq.
@@ -73,12 +75,17 @@ mechanized counterparts in Coq.
 
 - Lemma 5.6 (symmetry of the turn-taking state simulation relation): `Intermediate/RecombinationRelCommon.v`, Lemma `mergeable_internal_states_sym`
 
+## Axioms ##
+
 ### How to find axioms/admits ###
 
 All our results are admit-free and only rely, at most, on some of the axioms
-specified below; any other axioms or admitted theorems found in the development
-are not used in our proofs. To verify this, the Coq command `Print Assumptions`
-can be used to examine the theorems of interest.
+specified below. Any other axioms or admitted theorems found in the development
+are not used in our proofs.
+
+To verify this, use the Coq command `Print Assumptions` to examine the axioms
+that apply to the theorems of interest. An index of the above definitions and
+theorems is given at the end of the top-level file `RSC.v`.
 
 ### Axioms about correct compilation of whole programs ###
 
@@ -219,14 +226,7 @@ FunctionalExtensionality.functional_extensionality_dep
 Classical_Prop.classic : forall P : Prop, P \/ ~ P
 ```
 
-### License ###
-- This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
-- The code in the `CompCert` dir is adapted based on files in the
-  `common` and `lib` dirs of CompCert and is thus dual-licensed under
-  the INRIA Non-Commercial License Agreement and the GNU General
-  Public License version 2 or later (see `CompCert/LICENSE`)
-
-### Index of definitions ###
+## Index of definitions ##
 
 The source language `SafeP` corresponds to `Source` in the code. The target language `Mach` corresponds to `Intermediate` in the code.
 
@@ -257,3 +257,10 @@ The source language `SafeP` corresponds to `Source` in the code. The target lang
 - Trace concatenation `++`: function `Eapp` in `CompCert/Events.v`
 - Border-state relation `state_rel_border`: definition `mergeable_border_states` in `Intermediate/REcombinationRelCommon.v`
 - "Is executing in" relation: `is_program_component` and `is_context_component` in `Intermediate/CS.v`
+
+## License ##
+- This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
+- The code in the `CompCert` dir is adapted based on files in the
+  `common` and `lib` dirs of CompCert and is thus dual-licensed under
+  the INRIA Non-Commercial License Agreement and the GNU General
+  Public License version 2 or later (see `CompCert/LICENSE`)
