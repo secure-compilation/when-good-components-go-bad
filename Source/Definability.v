@@ -4267,7 +4267,36 @@ Section Definability.
         assert (exists buf, prog_buffers C = Some buf) as [buf eq_buf].
         { apply /dommP. by rewrite -domm_buffers intf_C. }
         rewrite eq_buf.
-        unfold buffer_nth. rewrite eq_buf. admit.
+        unfold buffer_nth. rewrite eq_buf.
+        remember (Z.of_nat
+                    match mapm (fun=> inr meta_buffer) intf C with
+                    | Some buf0 => size (NoLeak.unfold_buffer buf0)
+                    | None => 0
+                    end) as z.
+        assert (G1: (INITFLAG_offset < z)%Z) by now (subst z; rewrite mapmE eq_Cintf //=).
+        assert (G2: (LOCALBUF_offset < z)%Z) by now (subst z; rewrite mapmE eq_Cintf //=).
+        clear Heqz.
+        remember (unfold_buffer buf) as l. clear Heql.
+        set (e := fun i => match nth_error l i with
+                        | Some (Int _ as v) | Some (Ptr _ as v) => E_val v
+                        | _ => error_expr
+                        end).
+        assert (H: forall i, good_user_of_Elocal_expr z (e i))
+          by now rewrite /e => i; destruct (nth_error l i) as [[]| ] => //=.
+        replace ([seq E_assign (E_binop Add (E_deref LOCALBUF) (E_val (Int (Z.of_nat i))))
+              match nth_error l i with
+              | Some (Int _ as v) | Some (Ptr _ as v) => E_val v
+              | _ => error_expr
+              end
+                 | i <- iota 0 (size l)]) with
+          [seq E_assign (E_binop Add (E_deref LOCALBUF) (E_val (Int (Z.of_nat i))))
+               (e i) | i <- iota 0 (size l)].
+        generalize dependent 0.
+        elim: l e H.
+        + move=> e H n //=.
+        + move=> a l IH //= e H [| n];
+                repeat split; auto.
+        + unfold e. reflexivity.
       - unfold expr_of_trace. unfold switch.
         remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n.
         clear Heqn.
@@ -4301,7 +4330,7 @@ Section Definability.
             try by rewrite mapmE eq_Cintf //=.
           destruct e0;
             try by rewrite mapmE eq_Cintf //=.
-    Admitted.
+    Qed.
 
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
