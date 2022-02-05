@@ -45,7 +45,7 @@ mechanized counterparts in Coq.
 
 - Assumption 2.5 (BCC): `S2I/Compiler.v`, Lemma `backward_simulation_star`
 
-- Definition 2.6 (observable events): `CompCert/Events.v`, Inductive type `event`
+- Definition 2.6 (interaction-trace events): `CompCert/Events.v`, Inductive type `event`
 
 - Definition 3.2 (data-flow events) `Common/TracesInform.v`, Inductive type `event_inform`
 
@@ -57,15 +57,15 @@ mechanized counterparts in Coq.
 
 - Definition 3.10 (relation on interaction traces): `Common/RenamingOption.v`, Inductive proposition `traces_shift_each_other_option`
 
-- Rule `Jump`: `Intermediate/CS.v`, case `Jump` of inductive `step`
+- Rule `Jump` (Section 4): `Intermediate/CS.v`, case `Jump` of inductive `step`
 
-- Rule `Store`: `Intermediate/CS.v`, case `Store` of inductive `step`
+- Rule `Store` (Section 4): `Intermediate/CS.v`, case `Store` of inductive `step`
 
 - Theorem 4.1 (RSP~): Theorem `RSC` in `RSC.v`
 
 - Lemma 5.1 (trace prefix mimicking): `Source/Definability.v`, Lemma `definability_gen_rel_right`
 
-- Definition 5.2 (memory relation at observable events): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_border_states`
+- Definition 5.2 (memory relation at interaction events): `Intermediate/RecombinationRelCommon.v`, Inductive proposition `mergeable_border_states`
 
 - Lemma 5.3 (strengthening at interaction events): `Intermediate/RecombinationRelStrengthening.v`, Theorem `threeway_multisem_event_lockstep_program_step`
 
