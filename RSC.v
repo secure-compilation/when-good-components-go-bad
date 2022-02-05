@@ -504,3 +504,26 @@ Print Assumptions RSC.
 
 End RSC_Section.
 
+(* To evaluate the assumptions and statements of the main results,
+   uncomment and execute the following statements. To show the
+   statement of a theorem, replace [Print Assumptions] -> [Check]. *)
+
+(* Check RSC. *)
+(* Print Assumptions S2I.Compiler.I_simulates_S. *)
+(* Print Assumptions Intermediate.RecombinationRel.recombination_trace_rel. *)
+(* Print Assumptions S2I.Compiler.S_simulates_I. *)
+(* Print CompCert.Events.event. *)
+(* Print Common.TracesInform.event_inform. *)
+(* Print Assumptions Intermediate.CS.CS.star_sem_non_inform_star_sem_inform. *)
+(* Print Assumptions Source.Definability.definability. *)
+(* Print Intermediate.RecombinationRelCommon.mergeable_internal_states. *)
+(* Print Common.RenamingOption.traces_shift_each_other_option. *)
+(* Check Intermediate.CS.CS.Jump. *)
+(* Check Intermediate.CS.CS.Store. *)
+(* Print Assumptions RSC. *)
+(* Print Assumptions Source.Definability.definability_gen_rel_right. *)
+(* Print Intermediate.RecombinationRelCommon.mergeable_border_states. *)
+(* Print Assumptions Intermediate.RecombinationRelStrengthening.threeway_multisem_event_lockstep_program_step. *)
+(* Print Assumptions Intermediate.RecombinationRelOptionSim.merge_states_silent_star. *)
+(* Print Assumptions Intermediate.RecombinationRelLockstepSim.threeway_multisem_star_E0. *)
+(* Print Assumptions Intermediate.RecombinationRelCommon.mergeable_internal_states_sym. *)
