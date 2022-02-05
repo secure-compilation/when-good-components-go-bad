@@ -509,9 +509,9 @@ End RSC_Section.
    statement of a theorem, replace [Print Assumptions] -> [Check]. *)
 
 (* Check RSC. *)
-(* Print Assumptions S2I.Compiler.I_simulates_S. *)
+(* Print Assumptions S2I.Compiler.forward_simulation_star. *)
 (* Print Assumptions Intermediate.RecombinationRel.recombination_trace_rel. *)
-(* Print Assumptions S2I.Compiler.S_simulates_I. *)
+(* Print Assumptions S2I.Compiler.backward_simulation_star. *)
 (* Print CompCert.Events.event. *)
 (* Print Common.TracesInform.event_inform. *)
 (* Print Assumptions Intermediate.CS.CS.star_sem_non_inform_star_sem_inform. *)

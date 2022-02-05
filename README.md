@@ -37,11 +37,11 @@ mechanized counterparts in Coq.
 
 - Definition 2.1 (RSP~): see statement of Theorem `RSC` in `RSC.v` for an instance of this definition
 
-- Assumption 2.3 (FCC): `S2I/Compiler.v`, Lemma `I_simulates_S`
+- Assumption 2.3 (FCC): `S2I/Compiler.v`, Lemma `forward_simulation_star`
 
 - Lemma 2.4 (recomposition): `Intermediate/RecombinationRel.v`, Theorem `recombination_trace_rel`
 
-- Assumption 2.5 (BCC): `S2I/Compiler.v`, Lemma `S_simulates_I`
+- Assumption 2.5 (BCC): `S2I/Compiler.v`, Lemma `backward_simulation_star`
 
 - Definition 2.6 (observable events): `CompCert/Events.v`, Inductive type `event`
 
