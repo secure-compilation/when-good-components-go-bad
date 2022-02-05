@@ -103,25 +103,31 @@ and that compiling preserves certain well-formedness conditions
 (`Compiler.compilation_preserves_well_formedness`,
 ` compilation_preserves_main`, `compilation_has_matching_mains`).
 ```coq
-well_formed_compilable
-  : forall p : Source.program,
+Compiler.well_formed_compilable
+  : forall (p : Source.program) (psz : {fmap Component.id -> nat}),
     Source.well_formed_program p ->
-    exists pc : Intermediate.program, compile_program p = Some pc
+    exists pc : Intermediate.program, compile_program p psz = Some pc
+
 Compiler.compilation_preserves_well_formedness
-  : forall (p : Source.program) (p_compiled : Intermediate.program),
+  : forall (p : Source.program) (psz : {fmap Component.id -> nat})
+      (p_compiled : Intermediate.program),
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p psz = Some p_compiled ->
     Intermediate.well_formed_program p_compiled
+
 compilation_preserves_main
-  : forall (p : Source.program) (p_compiled : Intermediate.program),
+  : forall (p : Source.program) (pstksize : {fmap Component.id -> nat})
+      (p_compiled : Intermediate.program),
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled ->
+    compile_program p pstksize = Some p_compiled ->
     (exists main : expr, Source.prog_main p = Some main) <->
     Intermediate.prog_main p_compiled
+
 compilation_has_matching_mains
-  : forall (p : Source.program) (p_compiled : Intermediate.program),
+  : forall (p : Source.program) (psz : {fmap Component.id -> nat})
+      (p_compiled : Intermediate.program),
     Source.well_formed_program p ->
-    compile_program p = Some p_compiled -> matching_mains p p_compiled
+    compile_program p psz = Some p_compiled -> matching_mains p p_compiled
 ```
 
 #### Separate compilation ####
