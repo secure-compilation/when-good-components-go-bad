@@ -484,7 +484,7 @@ Proof.
       - apply linkable_sym. assumption.
       - destruct Hlinkable as [? G].
         rewrite fdisjointC in G.
-        pose proof (fdisjointP _ _ G) as G2.
+        pose proof (@fdisjointP _ _ _ G) as G2.
         apply G2 in Cc. assumption.
     }
     specialize (Hc _ _ _ G).
@@ -496,7 +496,7 @@ Proof.
       destruct Hlinkable as [? G'].
       rewrite !Source.wfprog_defined_buffers in G'; eauto.
         rewrite fdisjointC in G'.
-        pose proof (fdisjointP _ _ G') as G3.
+        pose proof (@fdisjointP _ _ _ G') as G3.
       apply G3 in Cc. move: Cc => /dommPn -> //=.
     }
     rewrite eq. auto.

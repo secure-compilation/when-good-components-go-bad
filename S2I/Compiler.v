@@ -631,7 +631,7 @@ Proof.
       - apply linkable_sym. assumption.
       - destruct Hlinkable as [? G].
         rewrite fdisjointC in G.
-        pose proof (fdisjointP _ _ G) as G2.
+        pose proof (@fdisjointP _ _ _ G) as G2.
         apply G2 in Cc. assumption.
     }
     specialize (Hc _ _ _ G). assumption.
