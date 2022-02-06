@@ -19,6 +19,7 @@ Require Import Intermediate.RecombinationRelStrengthening.
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
+Require Import Lia.
 
 From mathcomp Require Import ssreflect ssrnat ssrint ssrfun ssrbool eqtype seq.
 
@@ -209,7 +210,7 @@ Section ThreewayMultisem1.
           inversion Hshift as [? ? Hren]; subst; inversion Hren as [|];
             first by find_nil_rcons.
           repeat find_rcons_rcons. assumption.
-        - rewrite !size_rcons in szt2t2''. omega.
+        - rewrite !size_rcons in szt2t2''. lia.
       }
 
       assert (exists e2' se2', Step sem' st2' [:: e2'] se2' /\

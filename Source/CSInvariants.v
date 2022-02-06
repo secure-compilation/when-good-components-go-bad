@@ -28,6 +28,8 @@ From mathcomp Require Import ssreflect eqtype ssrfun seq.
 From mathcomp Require ssrbool ssrnat.
 From extructures Require Import fmap fset.
 
+Require Import Lia.
+
 Set Bullet Behavior "Strict Subproofs".
 
 Section Util.
@@ -54,7 +56,7 @@ Section Util.
         {
           induction l; auto.
         }
-        rewrite <- size_length, size_rcons in Hlength. omega.
+        rewrite <- size_length, size_rcons in Hlength. lia.
     - specialize (IHHstar x t1 Logic.eq_refl) as [st1 [se1 [Ht2 [He1 Hnil]]]].
       pose proof (Hsingle _ _ _ H) as Hlength.
       destruct t2; auto; simpl in *.
@@ -70,7 +72,7 @@ Section Util.
               by rewrite cats1.
           }
           exists s2, s3; intuition. constructor.
-        * omega.
+        * lia.
   Qed.
 
 End Util.

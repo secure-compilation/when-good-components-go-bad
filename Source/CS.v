@@ -16,6 +16,8 @@ Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
 From mathcomp Require ssrnat.
 
+Require Import Lia.
+
 Canonical ssrnat.nat_eqType.
 
 Set Implicit Arguments.
@@ -528,7 +530,7 @@ Section Semantics.
   elim: s1 t s2 / => //= s1 t1 s2 t2 s3 _ Hstep _ -> ->.
   rewrite map_cat last_cat (kstep_component Hstep).
   move/singleton_traces: Hstep.
-  by case: t1=> [|e [|e' t1]] //= *; omega.
+  by case: t1=> [|e [|e' t1]] //= *; lia.
   Qed.
 
   Lemma initial_state_exists:
