@@ -3201,7 +3201,7 @@ Section Definability.
             rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ mem_mem').
             simpl. move: H => /Z.leb_spec0 H; rewrite H.
             case: ifP => //= => /Z.ltb_spec0.
-            rewrite Z2Nat.inj_lt. rewrite Nat2Z.id. intros.
+            rewrite Z2Nat.inj_lt. rewrite Nat2Z.id. intros H1.
             unfold buffer_size in H1. rewrite Hbuf in H1. lia.
             by move: H => /Z.leb_spec0.
             by apply Nat2Z.is_nonneg.
