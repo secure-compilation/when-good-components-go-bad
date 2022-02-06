@@ -24,6 +24,11 @@ Coq 8.13.2
 - Extensional Structures 0.3.1
 - Equations 1.3
 
+Coq 8.14.1
+- Mathematical Components 1.13.0
+- Extensional Structures 0.3.1
+- Equations 1.3
+
 Dependencies can be installed through the OCaml package manager, OPAM.
 
 - Coq (package `coq`) is available through the official
