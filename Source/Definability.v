@@ -10743,9 +10743,28 @@ Section Definability.
                         |];
                         t_postcondition_event_registers_get prefix eregs;
                         rewrite Hget0 Hget1;
-                        injection Hshift0 as ?; subst vs0';
-                        injection Hshift1 as ?; subst vs1';
+                        let G0 := fresh "G" in
+                        let G1 := fresh "G" in
+                        injection Hshift0 as G0;
+                        injection Hshift1 as G1; rewrite G0 G1; subst;
                         reflexivity.
+                        (* repeat match goal with *)
+                        (*        | Hload : Memory.load mem _ = Some (Ptr (Permission.data, _, ?B, _)), *)
+                        (*            HBsub : context [ ssrnat.subn_rec 1 ?B ] |- _ => *)
+                        (*            destruct B as [| ?]; *)
+                        (*            [discriminate |]; *)
+                        (*            simpl in HBsub *)
+                        (*        end; *)
+                        (* [eexists; eexists]; *)
+                        (* split; [| split]; *)
+                        (* [ erewrite Memory.load_after_store_eq; [reflexivity | exact Hstore'] *)
+                        (* | reflexivity *)
+                        (* |]; *)
+                        (* t_postcondition_event_registers_get prefix eregs; *)
+                        (* rewrite Hget0 Hget1; *)
+                        (* injection Hshift0 as ?; subst vs0'; *)
+                        (* injection Hshift1 as ?; subst vs1'; *)
+                        (* reflexivity. *)
 
                       Ltac t_postcondition_event_registers_data_pointers mem :=
                         repeat match goal with
@@ -10808,6 +10827,8 @@ Section Definability.
                         simpl;
                         rewrite HeqC Heqb;
                         reflexivity.
+
+                      rewrite next_comp_of_trace_rcons //=.
 
                       (* General case analysis on values and operations. Most
                            cases can be solved from this information alone. *)
