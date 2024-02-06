@@ -16,7 +16,7 @@ Definition identity : program := {|
   prog_procedures :=
     mkfmap [(Component.main,
              mkfmap [(Procedure.main, E_call Component.main 1 (E_val (Int 42)));
-                     (1, E_deref E_local)])]
+                     (1, E_arg)])]
 |}.
 
 Definition fuel := 1000.

@@ -16,7 +16,7 @@ Definition increment : program := {|
   prog_procedures :=
     mkfmap [(Component.main,
              mkfmap [(Procedure.main, E_call Component.main 1 (E_val (Int 42)));
-                     (1, E_binop Add (E_deref E_local) (E_val (Int 1)))])]
+                     (1, E_binop Add E_arg (E_val (Int 1)))])]
 |}.
 
 Definition fuel := 1000.
