@@ -11,54 +11,23 @@ This repository contains the Coq development of the paper:
 
 ### Prerequisites ###
 
-This development has been built with the following combinations of Coq releases
-and versioned libraries:
+This development has been built and tested under Coq 8.12.2, using Mathematical Components 1.11.0,
+Extensional Structures 0.3.0 and Coq Utils commit #81eaf5b6c2ed5.
 
-Coq 8.7.2
-- Mathematical Components 1.6.4
-- Extensional Structures 0.1.0
-- [Coq Utils 0.1](https://github.com/arthuraa/coq-utils/releases/tag/v0.1)
-
-Coq 8.8.2
-- Mathematical Components 1.7.0
-- Extensional Structures 0.1.0
-- [Coq Utils 0.1](https://github.com/arthuraa/coq-utils/releases/tag/v0.1)
-
-Coq 8.9.1
-- Mathematical Components 1.9.0
-- Extensional Structures 0.2.0
-- [Coq Utils 6334def](https://github.com/arthuraa/coq-utils/tree/6334def1a259a3ce4285cc020f641298fc0c7420)
-
-Coq 8.10.2
-- Mathematical Components 1.11.0
-- Extensional Structures 0.2.2
-- [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
-
-Coq 8.11.2
-- Mathematical Components 1.11.0
-- Extensional Structures 0.2.2
-- [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
-
-Coq 8.12.2
-- Mathematical Components 1.11.0
-- Extensional Structures 0.2.2
-- [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
-
-Most dependencies can be installed through the OCaml package manager, OPAM.
-
-- Coq (package `coq`) is available through the official
-  [Ocaml OPAM repository](http://opam.ocaml.org/).
-- Stable releases of Mathematical Components (packages `coq-mathcomp-ssreflect`,
-  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`) and Extensional Structures
-  (package `coq-extructures`) are available through the
-  [Coq OPAM repository](https://coq.inria.fr/opam/released/).
-- Development versions of Deriving (package `coq-deriving`) and Extensional
-  Structures (package `coq-extructures`) are available through the
-  [Coq OPAM development repository](https://coq.inria.fr/opam/extra-dev/).
-  This package is required by some versions of Coq Utils.
-- Coq Utils has to be built from source and, if necessary, its route added to
-  the `_CoqProject` project description file. Note that it depends on the
-  development version of Extensional Structures, not the stable version.
+We recommend the installation via the OCaml package manager, OPAM:
+- Create a new switch for this development: `opam switch create wgcgb ocaml-base-compiler.4.10.2`
+  (don't forget to run `eval $(opam env)` as instructed by the command).
+- Add the Coq OPAM repositories: `opam repo add coq-released https://coq.inria.fr/opam/released/` then
+  `opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev`.
+- Pin Coq to 8.12.2: `opam pin add coq 8.12.2`.
+- Pin the Mathematical Components library to 1.11.0:
+  `opam pin add coq-mathcomp-ssreflect 1.11.0` then `opam install coq-mathcomp-fingroup coq-mathcomp-algebra`.
+- Pin the Extensional Structures to 0.3.0: `opam pin add coq-extructures 0.3.0`. This should install `coq-deriving` version
+  0.1.1 automatically (as a dependency). Otherwise, pin `coq-deriving` to 0.1.1: `opam pin add coq-deriving 0.1.1`.
+- With that, you have everything required to build the Coq Utils version we are using:
+  first, pin it to the commit 81eaf5b6c2ed5:
+  `opam pin add -e coq-utils git@github.com:arthuraa/coq-utils.git#81eaf5b6c2ed5`. Then, remove the two lines 
+  for the dependency on `coq-extructures` and `coq-deriving`. Then add at the end `version: "81eaf5b6c2ed5"`.
 
 ### Replaying the proofs ###
 
@@ -67,21 +36,6 @@ Most dependencies can be installed through the OCaml package manager, OPAM.
 ### Running the tests ###
 
 In order to run our tests, the following additional dependencies are needed:
-
-Coq 8.7.2
-- QuickChick 1.0.0
-
-Coq 8.8.2
-- QuickChick 1.0.2
-
-Coq 8.9.1
-- QuickChick 1.1.0
-
-Coq 8.10.2
-- QuickChick 1.2.1
-
-Coq 8.11.2
-- QuickChick 1.3.2
 
 Coq 8.12.0
 - QuickChick 1.4.0
