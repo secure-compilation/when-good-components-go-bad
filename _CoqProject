@@ -1,4 +1,4 @@
--arg "-w -parsing"
+-arg "-w -parsing -exclude-dir _opam"
 -R . RobustImp
 
 Common/Definitions.v

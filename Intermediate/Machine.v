@@ -264,7 +264,7 @@ Proof.
   rewrite Hmain1 in Hdomm1. specialize (Hdomm1 isT).
   pose proof (proj2 (wfprog_main_component Hwf2)) as Hdomm2.
   rewrite Hmain2 in Hdomm2. specialize (Hdomm2 isT).
-  pose proof fdisjointP _ _ Hdisjoint _ Hdomm1 as Hcontra.
+  pose proof fdisjointP Hdisjoint _ Hdomm1 as Hcontra.
   now rewrite Hdomm2 in Hcontra.
 Qed.
 
