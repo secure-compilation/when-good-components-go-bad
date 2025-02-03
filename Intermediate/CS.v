@@ -15,6 +15,8 @@ Require Import Lib.Monads.
 
 From mathcomp Require ssreflect ssrfun ssrbool eqtype.
 
+Import eqtype.
+
 Set Bullet Behavior "Strict Subproofs".
 
 Module CS.
@@ -968,8 +970,8 @@ try by move=> *; match goal with
 - by move=> ???????? /find_label_in_component_1 ->.
 - by move=> ???????? ->.
 - by move=> ??????????? /find_label_in_procedure_1 ->.
-- by move=> ???????????; rewrite eqxx Pointer.inc_preserves_component.
-- by move=> ?????????; rewrite !eqxx.
+- by move=> ???????????; rewrite eqtype.eqxx Pointer.inc_preserves_component.
+- by move=> ?????????; rewrite !eqtype.eqxx.
 Qed.
 
 Canonical ssrnat.nat_eqType.
@@ -981,9 +983,9 @@ Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
-- move=> ????????? /eqP ->.
+- move=> ????????? /eqtype.eqP ->.
   by move=> /imported_procedure_iff /= ->.
-- by move=> ??????? /eqP ->.
+- by move=> ??????? /eqtype.eqP ->.
 Qed.
 
 Lemma intermediate_well_formed_trace : forall t cs cs',
