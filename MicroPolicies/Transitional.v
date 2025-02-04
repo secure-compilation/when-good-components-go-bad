@@ -602,7 +602,7 @@ Definition compile_run fuel (p : Intermediate.program) :=
 Close Scope monad_scope.
 
 
-Require Import Compiler.
+Require Import S2I.Compiler.
 
 Definition compile_and_run_from_source := 
 fun (p : Source.program) (fuel : nat) =>
