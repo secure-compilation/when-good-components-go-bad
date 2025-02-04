@@ -82,3 +82,9 @@ MicroPolicies/Printer.v
 I2MP/Tmp.v
 I2MP/Linearize.v
 I2MP/Encode.v
+I2MP/Examples/Helper.v
+I2MP/Examples/Identity.v
+I2MP/Examples/Increment.v
+I2MP/Examples/DefaultInitBuffer.v
+I2MP/Examples/NestedCalls.v
+I2MP/Examples/Factorial.v

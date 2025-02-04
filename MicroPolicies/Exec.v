@@ -107,37 +107,44 @@ Lemma stepP :
   forall st st' ev,
     stepf st = Some (st', ev) <->
     step table st st' ev.
-  Admitted.
-(* Proof. *)
-(*   intros st st'. split; intros STEP. *)
-(*   { destruct st as [mem reg [pc tpc] int]. *)
-(*     move: STEP => /=; case GET: (mem pc) => [[i ti]|] //= STEP; *)
-(*     apply obind_inv in STEP. *)
-(*     - destruct STEP as (instr & INSTR & STEP). *)
-(*       destruct instr; try discriminate; *)
-(*           repeat match goal with *)
-(*              | STEP : (do! x <- ?t; _) = Some _ |- _ => *)
-(*                destruct t eqn:?; simpl in STEP; try discriminate *)
-(*              | x : atom _ _ |- _ => *)
-(*                destruct x; simpl in * *)
-(*              | rv : ovec _ |- _ => *)
-(*                destruct rv; simpl in * *)
-(*              | H : Some _ = Some _ |- _ => *)
-(*                inversion H; subst; clear H *)
-(*            end; *)
-
-(*     - destruct STEP as (sc & GETCALL & STEP). *)
-(*       s_econstructor (solve [eauto]). *)
-(*   } *)
-(*   { unfold stepf. *)
-(*     inversion STEP; subst; rewrite PC; try (subst mv); *)
-(*     simpl; *)
-(*     repeat match goal with *)
-(*              | [H: ?Expr = _ |- context[?Expr]] => *)
-(*                rewrite H; simpl *)
-(*            end; by reflexivity. *)
-(*   } *)
-(* Qed. *)
+Proof.
+  intros st st'. split; intros STEP.
+  { destruct st as [mem reg [pc tpc] int].
+    move: STEP => /=; case GET: (mem pc) => [[i ti]|] //= STEP;
+    apply obind_inv in STEP.
+    - destruct STEP as (instr & INSTR & STEP).
+      destruct instr; try discriminate;
+          repeat match goal with
+             | STEP : (do! x <- ?t; _) = Some _ |- _ =>
+               destruct t eqn:?; simpl in STEP; try discriminate
+             | x : atom _ _ |- _ =>
+               destruct x; simpl in *
+             | rv : ovec _ |- _ =>
+               destruct rv; simpl in *
+             | H : Some _ = Some _ |- _ =>
+               inversion H; subst; clear H
+           end.
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+      + s_econstructor (solve [eauto]).
+    - destruct STEP as (sc & GETCALL & STEP).
+      s_econstructor (solve [eauto]).
+  }
+  { unfold stepf.
+    inversion STEP; subst; rewrite PC; try (subst mv);
+    simpl;
+    repeat match goal with
+             | [H: ?Expr = _ |- context[?Expr]] =>
+               rewrite H; simpl
+           end; by reflexivity.
+  }
+Qed.
 
 (* Lemma stepP' : *)
 (*   forall st st' ev, *)
