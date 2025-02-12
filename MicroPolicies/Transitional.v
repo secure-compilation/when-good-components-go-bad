@@ -349,7 +349,9 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 (*    Pointer.component pc' = Pointer.component pc -> *)
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) E0
-           (st, mem, regs, pc', pct)
+      (st, mem, regs, pc', pct)
+
+(* TODO : add jump rule for jumping betwen different compartment (if pc' is tagged with a return capability of the right level) which add a return to the trace *)
 
 | BnzNZ: forall st mem regs pc tg c pct pc' r l val,
     executing cde pc (TrBnz r l) tg c ->
@@ -627,7 +629,47 @@ match Compiler.compile_program p with
 end.
 
 
-(* Require Import Source.Examples.Identity.
+Module I.
+  Import Intermediate.Machine.
+  Import Intermediate.CS.
+  Module CS := CS.
+End I.
+
+Definition is_initial_state (c: code) (s:state) : Prop :=
+  exists p, (c = pre_linearize p) ->
+  let (ics,tag) := s in
+  initial_state (I.CS.sem p) ics.
+
+Definition is_final_state (c: code) (s:state) : Prop :=
+  exists p, (c = pre_linearize p) ->
+  let (ics,tag) := s in
+  final_state (I.CS.sem p) ics.
+
+Section Semantics.
+  Variable p: Intermediate.program.
+  Let c := pre_linearize p.
+
+  
+ (* Let G := prepare_global_env p.*)
+
+  Definition sem :=
+    @Semantics_gen state code step (is_initial_state c) (is_final_state c) c.
+
+  (*
+  Definition sem :=
+    @Semantics_gen state code step (initial_state p). *)
+
+End Semantics.
+
+Lemma forward_simulation_intermediate_transitional:
+  forall p, forward_simulation (I.CS.sem p) (sem p).
+Proof.
+  intro p.
+  eapply (Forward_simulation (lt) ).
+Admitted.
+
+(*
+Require Import Source.Examples.Identity.
 
 Eval compute in compile_and_run_from_source_ex identity 10.*)
 

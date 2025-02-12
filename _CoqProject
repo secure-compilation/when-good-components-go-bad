@@ -110,12 +110,14 @@ I2MP/Examples/Identity.v
 I2MP/Examples/NestedCalls.v
 
 MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
+MicroPolicies/Merged.v
 
 Tagging/Tags.v   # not currently used
 Tagging/Memory.v # not currently used
 
 Tagging/Language.v
 Tagging/LinearizeCompartments.v
+Tagging/Compiler.v
 
 Tagging/Examples/Assign.v
 Tagging/Examples/DefaultInitBuffer.v
