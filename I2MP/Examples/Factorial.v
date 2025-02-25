@@ -14,14 +14,14 @@ Require Import I2MP.Examples.Helper.
 Require Import Source.Examples.Factorial.
 
 
-Fixpoint execN (n: nat) (cde: code) (st: stackless) str : string * (option Z + nat) :=
+Fixpoint execN (n: nat) (cde: code) st str : string * (option Z + nat) :=
   match n with
   | O => (str, inr 3)
   | S n' =>
     match eval_step cde st with
     | None =>
       let '(_, regs, _, _) := st in
-      match Intermediate.Register.get R_COM regs with
+      match val (Register.get R_COM regs) with
       | Int i => (str,inl (Some i))
       | _ => (str,inr 4)
       end
@@ -34,8 +34,8 @@ Fixpoint execN (n: nat) (cde: code) (st: stackless) str : string * (option Z + n
                     | None => "No C_Cde"
                     end in 
       if Nat.leb 0 n then  execN n' cde st' (show pc ++ " [" ++ stri ++ "]" ++
-                                                        " | RCOM=" ++ show (Intermediate.Register.get R_COM regs) ++ 
-                                                        " | RRA=" ++ show (Intermediate.Register.get R_RA regs) ++ newline ++ str) 
+                                                        " | RCOM=" ++ show (Register.get R_COM regs) ++ 
+                                                        " | RRA=" ++ show (Register.get R_RA regs) ++ newline ++ str) 
       else execN n' cde st' str
     end
   end.
@@ -43,7 +43,7 @@ Fixpoint execN (n: nat) (cde: code) (st: stackless) str : string * (option Z + n
 
 Definition run_transitional cd fuel p :=
     let '(mem, _, entrypoints) := Intermediate.prepare_procedures_initial_memory p in
-    let regs := Intermediate.Register.init in
+    let regs := Register.init in
     match (find_plabel_in_code cd Component.main Procedure.main) with
     | Some pc =>
       execN fuel cd (mem,regs, pc, Level 0) ""
@@ -73,3 +73,11 @@ Definition to_debug := debug factorial fuel.
 
 Set Warnings "-extraction-reserved-identifier".
 Extraction "/tmp/run_mp_compiled_factorial.ml" to_run.
+
+Require Import Merged Int32 I2MP.Examples.Helper.
+
+Definition to_run_mr := @Merged.compile_and_run_from_source_merged_ex concrete_int_32_mt factorial fuel.
+(*
+Definition to_run_mr := @I2MP.Examples.Helper.compile_and_run_and_show_from_source_merged concrete_int_32_mt factorial fuel. *)
+Set Warnings "-extraction-reserved-identifier".
+Extraction "/tmp/run_merged_compiled_factorial.ml" to_run_mr.

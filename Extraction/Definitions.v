@@ -120,6 +120,7 @@ Extract Constant print_explicit_exit => "(fun _ -> print_string ""EXIT""; print_
 Extract Constant print_string_error => "(fun str -> print_string ""FAILED with ""; List.fold_left (fun _ c -> print_char c) () str; print_newline ())".
 Extract Constant print_error => "(fun n -> print_string ""FAILED with ""; print_string (Big_int.string_of_big_int n); print_newline ())".
 Extract Constant print_string_ocaml => "(fun s -> List.fold_left (fun _ c -> print_char c) () s; print_newline ())".
+Extraction Inline print_string_ocaml.
 
 Extract Constant leb    => "Big_int.le_big_int".
 Extract Constant eqb    => "(=)".

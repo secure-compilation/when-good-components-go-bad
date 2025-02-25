@@ -120,6 +120,7 @@ Definition encode (prog : Linearize.prog) : {fmap mword mt -> matom}:=
   let solve (l : label) : int := index (Posz l) labels in
   (* Concretize pointers *)
   let base_adress c b :=
+     (*  length of code + 1 + number of triples (c',b',_) such that (c', b') that occur before (c, b) *)
       length (Linearize.procedures prog) + 1 +
       length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
                      (* TL TODO codomm doesn't typecheck... *)

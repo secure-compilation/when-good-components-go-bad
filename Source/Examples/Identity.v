@@ -12,7 +12,7 @@ Definition identity : program := {|
              {| Component.import := fset [];
                 Component.export := fset [] |})];
   prog_buffers :=
-    mkfmap [(Component.main, inl 1)];
+    mkfmap [(Component.main, inl 1) ; (1, inr [Int 37; Int 24 ; Int 2025]) ; (2, inl 4)];
   prog_procedures :=
     mkfmap [(Component.main,
              mkfmap [(Procedure.main, E_call Component.main 1 (E_val (Int 42)));
