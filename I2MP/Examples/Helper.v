@@ -305,6 +305,16 @@ Instance showMemory : Show (@Merged.memory concrete_int_32_mt) :=
         "" (elementsm m))
  }.
 
+Instance showTrMemoryAux : Show (Memory.mem) :=
+  {
+    show m := show_nmap (Memory.content m)
+  }.
+
+Instance showTrMemory : Show (Memory.t) :=
+  {
+    show m := show_nmap m
+  }.
+
 Instance showState : Show (Merged.state) :=
   {
     show st :=
@@ -370,10 +380,34 @@ Fixpoint execN_pc (n: nat) (cde: Merged.code) (st: state) : option Z + nat :=
     end
   end.
 
+
+
+(* execute transitional code and lists out the progam counters *)
+Fixpoint execN_pc_trans (n: nat) (cde: Transitional.code) (st: stackless) : string :=
+  let '(m,r,pc, Level pcl) := st in
+  (show pc) ++ " @ Level" ++ (show pcl) ++" | R_RA : " ++ (show (Register.get R_RA r)) ++ " @ " ++(show (Register.get_tag R_RA r)) ++  " | R_SP : " ++ (show (r 5)) ++ "| R_AUX1 : " ++ (show (r 2)) ++ newline ++
+            "---------------" ++ newline ++
+            (show m) ++ newline ++ "---------------" ++ newline ++
+  match n with
+  | O => "out of fuel"
+  | S n' =>
+    match Transitional.eval_step cde st with
+    | None =>
+      let '(_, regs, _, _) := st in
+      match val (Register.get R_COM regs) with
+      | Int i => ("result : " ++ (show i))
+      | _ =>  "error"
+      end
+    | Some (_, st') => execN_pc_trans n' cde st'
+    end
+  end.
+
 (* execute interemdiary code and lists out the progam counters *)
 Fixpoint execN_pc_inter (n: nat) (G: Intermediate.GlobalEnv.global_env) (st: Intermediate.CS.CS.state) : string :=
-  let '(_,_,r,pc) := st in
-  (show pc) ++ " | R_RA : " ++ (show (r 4)) ++ newline ++
+  let '(s,m,r,pc) := st in
+  (show pc) ++ " | R_RA : " ++ (show (r 4)) ++ newline ++  " | R_SP : " ++ (show (r 5)) ++ newline ++
+            "---------------" ++ newline ++
+            (show s) ++ newline ++ "---------------" ++ newline ++
   match n with
   | O => "out of fuel"
   | S n' =>
@@ -392,6 +426,16 @@ Definition run_inter_and_show_pc (n : nat) (p : Intermediate.program) : string :
   let G := Intermediate.GlobalEnv.prepare_global_env p in
   let st := Intermediate.CS.CS.initial_machine_state p in
   execN_pc_inter n G st.
+
+Definition run_trans_and_show_pc cd fuel p :=
+    let mem  := Memory.prepare_procedures_initial_memory p in
+    let regs := Register.init in
+    match (find_plabel_in_code cd Component.main Procedure.main) with
+    | Some pc =>
+      execN_pc_trans fuel cd (mem,regs, pc, Level 0)
+    | None => "no main"
+end.
+
 
 From CoqUtils Require Import hseq word.
 
@@ -420,12 +464,12 @@ fun (p : Source.program) (fuel : nat) =>
 match Compiler.compile_program p with
 | Some compiled_p =>
     printer (show (Intermediate.prog_procedures compiled_p))
-    printer (show (pre_linearize compiled_p)) 
     printer ( "intermediary pc : " ++ newline)
     printer (run_inter_and_show_pc fuel compiled_p)
-    (*
-    printer (show (transitional_to_merged (pre_linearize compiled_p)))*)
-    match @run_and_show_merged (transitional_to_merged compiled_p (pre_linearize compiled_p)) (inital_memory compiled_p) fuel with
+    printer (show (pre_linearize compiled_p)) 
+    printer ( "transitional pc : " ++ newline)
+    printer (run_trans_and_show_pc (pre_linearize compiled_p) fuel compiled_p)
+    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (pre_linearize compiled_p)) (inital_memory compiled_p) fuel with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)

@@ -103,10 +103,8 @@ Definition code := (seq (instr * mem_tag)).
 
 Local Notation "x .+1" := (x + 1).
 
-Definition executing (cde : code) (pc : mword mt) (i : instr) : Prop :=
-  exists tg,
-  let off := Symbolic.convert (word.int_of_word pc) in
-  (off >= 0) % Z /\ nth_error cde (Z.to_nat off) = Some (i,tg).
+Definition executing (cde : code) (pc : mword mt) tg (i : instr) : Prop :=
+ nth_error cde (nat_of_word pc) = Some (i,tg).
 
 
 Definition outputs := Symbolic.outputs.
@@ -204,18 +202,18 @@ Definition next_state_do_update (st : state) (tk : Symbolic.tag_kind)
            (updt : update) : option state := 
   match tk, tag with
   | Symbolic.R, t => match updt with
-        | RegWrite r x =>  do! regs' <- updm (regs st) (to_nat_bis r) (x@t);
+        | RegWrite r x =>  let regs':= setm (regs st) (to_nat_bis r) (x@t) in
                           Some (State (mem st) regs' (pc st))
         | RegRead r => do! a <- regs st (to_nat_bis r);
-                      do! regs' <- updm (regs st) (to_nat_bis r) (vala a)@t;
+                      let regs' := setm (regs st) (to_nat_bis r) (vala a)@t in
                       Some (State (mem st) regs' (pc st))
         | _ => None
         end
   | Symbolic.M, t => match updt with
-        | MemWrite w1 w2 => do! mem' <- updm (mem st) w1 w2@t;
+        | MemWrite w1 w2 => let mem':= setm (mem st) w1 w2@t in
                            Some (State mem' (regs st) (pc st))
         | MemRead w => do! a <- mem st w;
-                      do! mem' <- updm (mem st) w (vala a)@t;
+                      let mem' := setm (mem st) w (vala a)@t in
                       Some (State mem' (regs st) (pc st))
         | _ => None
         end
@@ -297,101 +295,90 @@ Definition alloc_fun (cde : code) (st : state) : option state :=
   (* return *)
   do! addr <- (do! x <- hd_error bloc;
                  Some (fst x));
-  do! regs' <- updm (regs st) (to_nat_bis (inr R_SC_RET)) addr@Other;
+  let regs' := setm (regs st) (to_nat_bis (inr R_SC_RET)) addr@Other in
   Some (State mem' regs' next_pc).
 
 
 Definition alloc_label := 2 ^ 14.
 
 Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
-| step_nop : forall mem reg pc tpc i ti
+| step_nop : forall mem reg pc tpc ti
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc MrNop),
-    let iv : ivec NOP := IVec tpc ti ([hseq] : hseq _ (inputs NOP)) in forall
-    (NEXT : next_state_updates cde st iv [:: ] = Some (st', ev)),    step cde st st' ev
-| step_label : forall mem reg pc tpc i ti l
+    (INST : executing cde pc ti MrNop),
+    let mvec : ivec NOP := IVec tpc ti ([hseq] : hseq _ (inputs NOP)) in forall
+    (NEXT : next_state_updates cde st mvec [:: ] = Some (st', ev)),    step cde st st' ev
+| step_label : forall mem reg pc tpc ti l
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrLabel l)),
-    let iv : ivec NOP := IVec tpc ti ([hseq] : hseq _ (inputs NOP)) in forall
-    (NEXT : next_state_updates cde st iv [:: ] = Some (st', ev)),    step cde st st' ev
-| step_const : forall mem reg pc tpc i ti n r old (told : tag_type Symbolic.R) 
+    (INST : executing cde pc ti (MrLabel l)),
+    let mvec : ivec NOP := IVec tpc ti ([hseq] : hseq _ (inputs NOP)) in forall
+    (NEXT : next_state_updates cde st mvec [:: ] = Some (st', ev)),    step cde st st' ev
+| step_const : forall mem reg pc tpc ti n r old (told : tag_type Symbolic.R) 
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrConst n r))
+    (INST : executing cde pc ti (MrConst n r))
     (OLD  : reg (to_nat r) = Some old@told),
     let mvec := IVec tpc ti ([hseq told] : hseq _ (inputs CONST)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegWrite (inl r) (swcast n)] = Some (st', ev)),   step cde st st' ev
-| step_mov : forall mem reg pc tpc i ti r1 w1 t1 r2 old told
+| step_mov : forall mem reg pc tpc ti r1 w1 t1 r2 old told
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrMov r1 r2))
+    (INST : executing cde pc ti (MrMov r1 r2))
     (R1W  : reg (to_nat_bis r1) = Some w1@t1)
     (OLD  : reg (to_nat_bis r2) = Some old@told),
     let mvec := IVec tpc ti ([hseq t1; told] : hseq _ (inputs MOV)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead r1 ; RegWrite r2 w1 ] = Some (st', ev)),   step cde st st' ev
-| step_binop : forall mem reg pc tpc i ti op r1 r2 r3 w1 w2 t1 t2 old told
+| step_binop : forall mem reg pc tpc ti op r1 r2 r3 w1 w2 t1 t2 old told
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrBinop op r1 r2 r3))
+    (INST : executing cde pc ti (MrBinop op r1 r2 r3))
     (R1W  : reg (to_nat r1) = Some w1@t1)
     (R2W  : reg (to_nat r2) = Some w2@t2)
     (OLD  : reg (to_nat r3) = Some old@told),
     let mvec := IVec tpc ti ([hseq t1; t2; told] : hseq _ (inputs (BINOP (binop_of_binop op)))) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead (inl r1) ; RegRead (inl r2) ; RegWrite (inl r3) (binop_denote (binop_of_binop op) w1 w2) ] = Some (st', ev)),
       step cde st st' ev
-| step_load : forall mem reg pc tpc i ti r1 r2 w1 w2 t1 t2 old told 
+| step_load : forall mem reg pc tpc ti r1 r2 w1 w2 t1 t2 old told 
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrLoad r1 r2))
+    (INST : executing cde pc ti (MrLoad r1 r2))
     (R1W  : reg (to_nat r1) = Some w1@t1)
     (MEM1 : mem w1 = Some w2@t2)
     (OLD  : reg (to_nat r2) = Some old@told),
     let mvec := IVec tpc ti ([hseq t1; t2; told] : hseq _ (inputs LOAD)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead (inl r1) ; MemRead w1 ; RegWrite (inl r2) w2 ] = Some (st', ev)),
     step cde st st' ev
-| step_store : forall mem reg pc i r1 r2 w1 w2 tpc ti t1 t2 old told
+| step_store : forall mem reg pc r1 r2 w1 w2 tpc ti t1 t2 old told
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrStore r1 r2))
+    (INST : executing cde pc ti (MrStore r1 r2))
     (R1W  : reg (to_nat r1) = Some w1@t1)
     (R2W  : reg (to_nat r2) = Some w2@t2)
     (OLD  : mem w1 = Some old@told),
     let mvec := IVec tpc ti ([hseq t1; t2; told] : hseq _ (inputs STORE)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead (inl r1) ; RegRead (inl r2) ; MemWrite w1 w2 ] = Some (st', ev)),
     step cde st st' ev
-| step_jump : forall mem reg pc i r w tpc ti t1
+| step_jump : forall mem reg pc r w tpc ti t1
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrJump r))
+    (INST : executing cde pc ti (MrJump r))
     (RW   : reg (to_nat r) = Some w@t1),
     let mvec := IVec tpc ti ([hseq t1] : hseq _ (inputs JUMP)) in forall
     (NEXT : next_state_updates_and_pc cde st mvec [:: RegRead (inl r) ] w = Some (st', ev)),
     step cde st st' ev
-| step_bnz : forall mem reg pc i r n w tpc ti t1
+| step_bnz : forall mem reg pc r n w tpc ti t1
     (ST   : st = State mem reg pc@tpc)
-    (PC   : mem pc = Some i@ti)
-    (INST : executing cde pc (MrBnz r n))
+    (INST : executing cde pc ti (MrBnz r n))
     (RW   : reg (to_nat r) = Some w@t1),
     let mvec := IVec tpc ti ([hseq t1] : hseq _ (inputs BNZ)) in
     let optpc' := (if w == (word_of_nat 0) then Some ((nat_of_word (pc)) + 1) else find_label cde n) in forall pc' (PC' : optpc' = Some pc')
     (NEXT : next_state_updates_and_pc cde st mvec [:: RegRead (inl r) ] (word_of_nat pc') = Some (st', ev)),
     step cde st st' ev
-| step_jal : forall mem reg pc i l tpc ti old told pc'
+| step_jal : forall mem reg pc l tpc ti old told pc'
     (ST : st = State mem reg pc@tpc)
-    (PC : mem pc = Some i@ti)
-    (INST : executing cde pc (MrJal l))
+    (INST : executing cde pc ti (MrJal l))
     (OLD : reg (to_nat R_RA) = Some old@told)
     (NOT_ALLOC : l <> alloc_label),
     let mvec := IVec tpc ti ([hseq told] : hseq _ (inputs JAL)) in
     forall (PC' :  Some pc' = (find_label cde l))
     (NEXT : next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1)) ] (word_of_nat pc') = Some (st', ev)),
     step cde st st' ev
-| step_jal_alloc : forall mem reg pc i l tpc ti old told st_inter
+| step_jal_alloc : forall mem reg pc  l tpc ti old told st_inter
     (ST : st = State mem reg pc@tpc)
-    (PC : mem pc = Some i@ti)
-    (INST : executing cde pc (MrJal l))
+    (INST : executing cde pc ti (MrJal l))
     (OLD : reg (to_nat R_RA) = Some old@told)
     (ALLOC : l = alloc_label),
     let mvec := IVec tpc ti ([hseq told] : hseq _ (inputs JAL)) in
@@ -419,7 +406,7 @@ Definition eval_step (cde : code) (st : state) : option state_ev :=
     | MrMov r1 r2 =>
       do! a1 <- reg (to_nat_bis r1);
       let: w1@t1 := a1 in
-      do! a2 <- reg (to_nat_bis r2);
+      do! a2 <- (reg (to_nat_bis r2));
       let: _@told := a2 in
       let mvec := IVec pctag ti ([hseq t1;told] : hseq _ (inputs MOV)) in
       next_state_updates cde st mvec [:: RegRead r1 ; RegWrite r2 w1]
@@ -462,21 +449,198 @@ Definition eval_step (cde : code) (st : state) : option state_ev :=
       let ivec := IVec pctag ti ([hseq t1] : hseq _ (inputs BNZ)) in
       next_state_updates_and_pc cde st ivec [:: RegRead (inl r)] (word_of_nat pc')
     | MrJal i =>
-        if (eqn i alloc_label) then
+        do! oldtold <- reg (to_nat R_RA);
+        let: _@told := oldtold in
+        if (i == alloc_label) then
         do! st_inter <- (@next_state_do_update st Symbolic.R Other ( RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))));
         do! st' <- alloc_fun cde st_inter;
         Some (st', None)
       else
-      do! oldtold <- reg (to_nat R_RA);
-      let: _@told := oldtold in
-      let mvec := IVec pctag ti ([hseq told] : hseq _ (inputs JAL)) in
-      match (find_label cde i) with
-      | None => None
-      | Some (pc') => next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))] (word_of_nat pc')
-      end
+        let mvec := IVec pctag ti ([hseq told] : hseq _ (inputs JAL)) in
+        match (find_label cde i) with
+        | None => None
+        | Some (pc') => next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))] (word_of_nat pc')
+        end
     | MrHalt => None
     end
   end.
+
+
+Theorem eval_step_complete:
+  forall cd st st' ev, step cd st st' ev -> eval_step cd st = Some (st', ev).
+Proof.
+  intros. inversion H ;
+  try (unfold executing in INST ) ;
+  try (unfold eval_step ; rewrite ST ; rewrite INST ; rewrite <- ST ; unfold mvec in NEXT) ;
+  try (rewrite R1W) ; simpl ; try (rewrite R2W) ; simpl ; try (rewrite RW ) ; simpl ;
+  try (rewrite MEM1); simpl ; try (rewrite OLD) ; simpl ; try exact NEXT.
+  + unfold optpc' in PC'. rewrite PC'. auto.
+  + remember (l == alloc_label) as cond. induction cond ; try (rewrite <- PC' ; exact NEXT).
+    unfold "==", nat_eqType, nat_eqMixin in Heqcond; simpl.
+    inversion Heqcond as [eq]. destruct (@eqnP l alloc_label). destruct (NOT_ALLOC e). inversion eq.
+  + rewrite ALLOC.  rewrite EV.
+    remember {|mem := mem st; regs := setm (regs st) 4 (word_of_nat (nat_of_word pc0).+1)@Other;
+     pc := pc st |} as st_alt. cut (st_alt = st_inter).
+    ++ intro eq. rewrite <- eq in ST'. rewrite Heqst_alt in ST'. rewrite ST'. auto.
+    ++ unfold next_state_do_update in NEXT. unfold to_nat_bis in NEXT. unfold to_nat in NEXT.
+       inversion NEXT. exact Heqst_alt.
+Qed.
+
+
+(* those tactics help when STEP_EQ contains something of the form  "do! _ <- regs0 (f s);" *)
+
+Ltac resolve_register regs0 STEP_EQ s f :=
+  let rval  := fresh in
+  remember (regs0 (f s)) as rval ; destruct rval ; simpl in STEP_EQ. 
+  
+Ltac resolve_register_deep regs0 STEP_EQ s f :=
+  let save  := fresh in 
+  let Heqsave := fresh in 
+  let rval  := fresh in 
+  let Heqrval := fresh in 
+       remember (regs0 (f s)) as save eqn:Heqsave ;
+       unfold Option.bind, oapp, getm in STEP_EQ ;
+       remember (getm_def regs0 (f s)) as rval eqn:Heqrval ;
+       cut (rval = save) ; try (rewrite Heqsave ; rewrite Heqrval ; reflexivity) ;
+       unfold getm_def in STEP_EQ ; unfold getm_def in Heqrval ;
+       simpl in Heqrval ; simpl in STEP_EQ ; rewrite <- Heqrval in STEP_EQ ; destruct rval.
+      (* +++ destruct a. intro tageq. rewrite <- tageq in Heqsave. *)
+
+
+Ltac resolve_memory_deep regs0 STEP_EQ s :=
+  let save  := fresh in 
+  let Heqsave := fresh in 
+  let rval  := fresh in 
+  let Heqrval := fresh in 
+       remember (regs0 s) as save eqn:Heqsave ;
+       unfold Option.bind, oapp, getm in STEP_EQ ;
+       remember (getm_def regs0 s) as rval eqn:Heqrval ;
+       cut (rval = save) ; try (rewrite Heqsave ; rewrite Heqrval ; reflexivity) ;
+       unfold getm_def in STEP_EQ ; unfold getm_def in Heqrval ;
+       simpl in Heqrval ; simpl in STEP_EQ ; rewrite <- Heqrval in STEP_EQ ; destruct rval.
+
+Lemma eq_op_to_eq : forall (x y : nat), (x = y) <-> (true = (x == y)).
+Proof.
+  intro x.
+  induction x ; split ; intro eq ; try ( induction y ; try reflexivity ; inversion eq ).
+  + unfold "==", nat_eqType, nat_eqMixin. simpl.
+    unfold "==", nat_eqType, nat_eqMixin in IHx.
+    remember (IHx y) as a. destruct a as [l r]. simpl in l. destruct Heqa. rewrite H0 in l.
+    apply l. reflexivity.
+  + cut (x=y).
+    ++ intro. auto.
+    ++ apply IHx. auto.
+Qed.
+
+Theorem eval_step_sound:
+  forall cd st st' ev
+    (STEP_EQ : eval_step cd st = Some (st', ev)), step cd st st' ev.
+  intros. unfold eval_step in STEP_EQ.
+  induction st.  induction pc0 as [pcv pctag].
+  remember ({| mem := mem0; regs := regs0; pc := pcv@pctag |}) as st.
+  remember (nth_error cd (nat_of_word pcv)) as nth.
+  destruct nth as [iti|]. destruct iti as [i ti].
+  induction i.
+  + apply (step_nop Heqst (esym Heqnth) STEP_EQ). 
+  + apply (step_label Heqst (esym Heqnth) STEP_EQ). 
+  + remember (regs0 (to_nat r)) as rval. destruct rval ; simpl in STEP_EQ.
+    ++ destruct a as [old told].
+       apply (step_const Heqst (esym Heqnth) (esym Heqrval) STEP_EQ).
+    ++ inversion STEP_EQ.
+  + resolve_register regs0 STEP_EQ s to_nat_bis.
+    ++ destruct a as [old told]. resolve_register_deep regs0 STEP_EQ s0 to_nat_bis.
+       +++ destruct a as [old0 told0]. intro tageq. rewrite <- tageq in H0.
+           apply (step_mov Heqst (esym Heqnth) (esym HeqH) (esym H0) STEP_EQ). 
+       +++ inversion STEP_EQ. 
+    ++ inversion STEP_EQ.
+  + resolve_register regs0 STEP_EQ r to_nat.
+    ++ destruct a as [w1 t1]. resolve_register_deep regs0 STEP_EQ r0 to_nat.
+       +++ destruct a as [old0 told0]. intro tageq. rewrite <- tageq in H0.
+           resolve_register_deep regs0 STEP_EQ r1 to_nat.
+           ++++ destruct a as [old1 told1]. intro tageq1. rewrite <- tageq1 in H3.
+                apply (step_binop Heqst (esym Heqnth) (esym HeqH) (esym H0) (esym H3) STEP_EQ).
+           ++++ inversion STEP_EQ.
+       +++ inversion STEP_EQ.
+    ++ inversion STEP_EQ.
+  + resolve_register regs0 STEP_EQ r to_nat.
+    ++ destruct a as [w1 t1]. 
+       resolve_memory_deep mem0 STEP_EQ w1.
+       +++ destruct a as [old0 told0]. intro tageq. rewrite <- tageq in H0.
+           resolve_register_deep regs0 STEP_EQ r0 to_nat.
+           ++++ destruct a as [old1 told1]. intro tageq1. rewrite <- tageq1 in H3.
+                apply (step_load Heqst (esym Heqnth) (esym HeqH) (esym H0) (esym H3) STEP_EQ). 
+           ++++ inversion STEP_EQ.
+       +++ inversion STEP_EQ.
+    ++ inversion STEP_EQ.
+  + resolve_register regs0 STEP_EQ r to_nat.
+    ++ destruct a as [w1 t1]. 
+       resolve_register_deep regs0 STEP_EQ r0 to_nat.
+       +++ destruct a as [old0 told0]. intro tageq. rewrite <- tageq in H0.
+           resolve_memory_deep mem0 STEP_EQ w1.
+           ++++ destruct a as [old1 told1]. intro tageq1. rewrite <- tageq1 in H3.
+                apply (step_store Heqst (esym Heqnth) (esym HeqH) (esym H0) (esym H3) STEP_EQ).
+           ++++ inversion STEP_EQ.
+       +++ resolve_memory_deep mem0 STEP_EQ w1 ; try (destruct a) ; inversion STEP_EQ.
+    ++ inversion STEP_EQ.
+  + resolve_register regs0 STEP_EQ r to_nat.
+    ++ destruct a as [w1 t1]. 
+       apply (step_jump Heqst (esym Heqnth) (esym HeqH) STEP_EQ).
+    ++ inversion STEP_EQ.
+  + resolve_register regs0 STEP_EQ r to_nat.
+    ++ destruct a as [w1 t1].
+       remember (if w1 == word_of_nat 0 then Some (nat_of_word pcv).+1 else find_label cd l) as save.
+       unfold Option.bind, oapp, "==", nat_eqType, nat_eqMixin in STEP_EQ.
+       remember ((if Equality.op (Equality.class (word_eqType (word_size mt))) w1 (word_of_nat 0)
+               then Some (nat_of_word pcv).+1
+                  else find_label cd l)) as pc'.
+       cut (save = pc') ; try (rewrite Heqsave ; rewrite Heqpc' ; reflexivity). intro Heqif.
+       rewrite Heqsave in Heqif. destruct pc'.
+       +++ apply (step_bnz Heqst (esym Heqnth) (esym HeqH) (Heqif) STEP_EQ).
+       +++ inversion STEP_EQ.
+    ++ inversion STEP_EQ.
+  + remember (l == alloc_label) as cond. destruct cond.
+    (* l = alloc_label case *)
+    ++ remember (@next_state_do_update st Symbolic.R Other ( RegWrite (inl R_RA) (word_of_nat((nat_of_word pcv).+1)))) as st_inter. 
+       destruct st_inter ; simpl in STEP_EQ.
+       +++ remember (alloc_fun cd s) as st_final. destruct st_final; simpl in STEP_EQ.
+           ++++ resolve_memory_deep regs0 STEP_EQ 4.
+                * intro eqa. destruct a as [old told]. inversion STEP_EQ.
+                remember (regs0 (to_nat R_RA)) as rval. destruct rval.
+                **  destruct a. unfold "==", nat_eqType, nat_eqMixin in Heqcond; simpl.
+                    rewrite H3 in Heqst_final.
+                    inversion Heqcond as [eq]. destruct (@eqnP l alloc_label) as [alloceq|].
+                    *** apply (step_jal_alloc Heqst (esym Heqnth) (esym Heqrval) alloceq (esym Heqst_inter) (esym Heqst_final)). reflexivity.
+                    *** inversion eq.
+                **  rewrite <- eqa in H0. simpl in Heqrval.
+                    unfold getm, getm_def in H0, Heqrval. simpl in Heqrval, H0.
+                    rewrite <- Heqrval in H0. inversion H0.
+                * inversion STEP_EQ.
+           ++++ resolve_memory_deep regs0 STEP_EQ 4 ; (try destruct a) ; inversion STEP_EQ.
+       +++ resolve_memory_deep regs0 STEP_EQ 4 ; (try destruct a) ; inversion STEP_EQ.
+    (* l <> alloc_label case *)
+    ++ simpl in STEP_EQ. resolve_memory_deep regs0 STEP_EQ 4 ; intro eq.
+       +++ destruct a as [old told]. remember (find_label cd l) as pc'.
+           cut (l <> alloc_label).
+           ++++ intro ineq.
+                destruct pc' as [pc'|].
+                * rewrite H0 in eq. apply (step_jal Heqst (esym Heqnth) (esym eq) ineq Heqpc' STEP_EQ).
+                * inversion STEP_EQ.
+                  ++++ intro eql. remember (eq_op_to_eq l alloc_label) as equi.
+                       destruct equi as [limp rimp]. rewrite <- (limp eql) in Heqcond.
+                       inversion Heqcond.
+       +++ inversion STEP_EQ.
+    ++ inversion STEP_EQ.
+  + inversion STEP_EQ.
+Qed.
+
+Theorem eval_step_equiv_step:
+  forall cd st st' ev, (eval_step cd st = Some (st', ev)) <-> (step cd st st' ev).
+  intros.
+  split.
+  + apply eval_step_sound.
+  + apply eval_step_complete.
+Qed.
+
 
 Fixpoint execN (n: nat) (cde: code) (st: state) : option Z + nat :=
   match n with

@@ -42,7 +42,7 @@ Fixpoint execN (n: nat) (cde: code) st str : string * (option Z + nat) :=
 
 
 Definition run_transitional cd fuel p :=
-    let '(mem, _, entrypoints) := Intermediate.prepare_procedures_initial_memory p in
+    let mem  := Memory.prepare_procedures_initial_memory p in
     let regs := Register.init in
     match (find_plabel_in_code cd Component.main Procedure.main) with
     | Some pc =>

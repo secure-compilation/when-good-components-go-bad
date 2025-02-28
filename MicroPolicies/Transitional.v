@@ -169,10 +169,6 @@ check_comp_belongs c l -> check_pc_callret ti tni. *)
 
 
 Section Values.
-
-
-  
-
   Record tvalue := MVal
    { tvtag : value_tag;
      val : value }.
@@ -185,36 +181,13 @@ Section Values.
 
   Definition to_tagged_block (c : Component.id) (l : list value) : list (tvalue * mem_tag) := 
     map (to_tagged_cell c) l.
-(*
-Definition eval_binop (op : binop) (v1 v2 : value) : value :=
-  match op, v1, v2 with
-  (* natural numbers *)
-  | Add,   Int n1, Int n2 => Int (n1 + n2)
-  | Minus, Int n1, Int n2 => Int (n1 - n2)
-  | Mul,   Int n1, Int n2 => Int (n1 * n2)
-  | Eq,    Int n1, Int n2 => Int (Util.Z.of_bool (n1  =? n2)%Z)
-  | Leq,   Int n1, Int n2 => Int (Util.Z.of_bool (n1 <=? n2)%Z)
-  (* pointer arithmetic *)
-  | Add,   Ptr p,  Int n  => Ptr (Pointer.add p n)
-  | Add,   Int n,  Ptr p  => Ptr (Pointer.add p n)
-  | Minus, Ptr p1, Ptr p2 => let '(b1, o1) := p1 in
-                             let '(b2, o2) := p2 in
-                             if (Nat.eqb b1 b2) then
-                               Int (o1 - o2)
-                             else
-                               Undef
-  | Minus, Ptr p,  Int n  => Ptr (Pointer.sub p n)
-  | Eq,    Ptr p1, Ptr p2 => Int (Util.Z.of_bool (Pointer.eq p1 p2))
-  | Leq,   Ptr p1, Ptr p2 => match Pointer.leq p1 p2 with
-                             | Some res => Int (Util.Z.of_bool res)
-                             | None     => Undef
-                             end
-  (* undefined operations *)
-  | _,     _,       _       => Undef
-  end.
-*)
 End Values.
 
+Definition value_to_pc_tag (vt : value_tag) : option pc_tag :=
+  match vt with
+  | Other => None
+  | Ret n => Some (Level (S n))
+  end.
 
 Module Register.
   Definition t : Type := NMap tvalue.
@@ -229,9 +202,6 @@ Module Register.
     | R_SP   => 5
     | R_ARG  => 6
     end.
-
-
-
 
   Definition init :=
     mkfmap [(to_nat R_ONE, tUndef);
@@ -284,6 +254,136 @@ Definition invalidate regs :=
      congruence.
   Qed.
 End Register.
+
+
+Require Import Common.Memory.
+
+Module Memory. (* : AbstractComponentMemory.*)
+  Definition block := list (tvalue * mem_tag).
+
+  Implicit Types (b : Block.id).
+
+  Record mem := mkMemT {
+    content : NMap block;
+    nextblock : Block.id;
+  }.
+  Definition t := NMap mem.
+
+  Definition prealloc (bufs: {fmap Block.id -> (Component.id * (nat + list value))}) : mem :=
+    let init_block x := match x with
+                        | (c,inl size) => repeat (tUndef, def_mem_tag c) size
+                        | (c,inr chunk) => (to_tagged_block c chunk)
+                        end in
+    {| content := mapm init_block bufs;
+       nextblock := S (fold_left Nat.max (domm bufs) 0) |}.
+
+
+  Definition prealloc_c C (bufs: {fmap Block.id -> ((nat + list value))}) : mem :=
+    let init_block x := match x with
+                        | inl size => repeat (tUndef, def_mem_tag C) size
+                        | inr chunk => to_tagged_block C chunk
+                        end in
+    {| content := mapm init_block bufs;
+       nextblock := S (fold_left Nat.max (domm bufs) 0) |}.
+
+
+  Definition empty :=
+    {| content := emptym; nextblock := 0 |}.
+
+  Definition reserve_block (m: mem) : (mem * Block.id) :=
+    ({| content := content (m); nextblock := (1 + nextblock m)%nat |},
+     nextblock m).
+
+  Definition alloc_bis (c : Component.id) m (size : nat) : mem * Block.id :=
+    let fresh_block := nextblock m in
+    let chunk := repeat (tUndef, def_mem_tag c) size in
+    ({| content := setm (content m) fresh_block chunk;
+        nextblock := (1 + nextblock m) |},
+     fresh_block).
+
+  Definition alloc (m : t) (C : Component.id) (size : nat) : option (t * Pointer.t) :=
+    do mem <- m C;
+    let '(mem', b) := alloc_bis C mem size in
+      Some (setm m C mem', (C, b, 0%Z)).
+
+  Definition load_b m b i : option (tvalue * mem_tag) :=
+    match getm (content m) b with
+    | Some chunk =>
+      if (0 <=? i)%Z then nth_error chunk (Z.to_nat i)
+      else None
+    | None => None
+    end.
+
+  Definition load (m:t) ptr : option (tvalue * mem_tag) :=
+    obind (fun m =>
+    load_b m (Pointer.block ptr) (Pointer.offset ptr)) (m (Pointer.component ptr)).
+
+  Definition store_b m b i v : option mem :=
+    match getm (content m) b with
+    | Some chunk =>
+      if (0 <=? i)%Z then
+        match list_upd chunk (Z.to_nat i) v with
+        | Some chunk' =>
+          Some {| content := setm (content m) b chunk';
+                  nextblock := nextblock m |}
+        | _ => None
+        end
+      else None
+    | None => None
+    end.
+
+  Definition store (m:t) ptr v : option t :=
+    let c := (Pointer.component ptr) in
+    obind (fun mem =>
+           obind (fun mem => Some (setm m c mem)) (store_b mem (Pointer.block ptr) (Pointer.offset ptr) v)) (m c).
+
+  Definition domm_mem (m : t) c := obind (fun mem => Some (@domm nat_ordType block (content mem))) (m c).
+
+  
+
+  (* all functions below are used to initialize the memory *)
+  
+  Definition reserve_blocks (m : mem) (n : nat) : (mem * list Block.id) :=
+    let acc '(_, bs) :=
+      let (mem', b) := (reserve_block m) in
+      (mem', bs ++ [b])  in
+    ssrnat.iter n (acc)  ((m, [])).
+  
+Definition reserve_component_blocks p C Cmem procs_code
+  : (mem * NMap Machine.code * NMap Block.id) :=
+  let is_main_proc comp_id proc_id :=
+      match prog_main p with
+      | true =>
+        (Component.main =? comp_id) && (Procedure.main =? proc_id)
+      | false => false
+      end in
+  (* if P is exported or is the main procedure, add an external entrypoint *)
+  let map_entrypoint '(P, b) :=
+      match getm (prog_interface p) C with
+      | Some Ciface =>
+        if (P \in Component.export Ciface) || is_main_proc C P then Some (P, b)
+        else None
+      | None => None (* this case shouldn't happen for well formed p *)
+      end in
+  let (Cmem', bs) := reserve_blocks Cmem (length procs_code) in
+  let (procs, code) := (unzip1 procs_code, unzip2 procs_code) in
+  let Cprocs := mkfmap (zip bs code) in
+  let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
+  (Cmem', Cprocs, Centrypoints).
+
+  Definition prepare_procedures_initial_memory_aux (p: Intermediate.program) :=
+    mkfmapf
+      (fun C =>
+         let Cprocs := odflt emptym ((prog_procedures p) C) in
+         let Cmem := prealloc (mapm (fun a => (C, a)) (odflt emptym ((prog_buffers p) C))) in
+         reserve_component_blocks p C Cmem (elementsm Cprocs))
+      (domm (prog_interface p)).
+
+  Definition prepare_procedures_initial_memory (p: Intermediate.program)
+    : Memory.t :=
+    let m := prepare_procedures_initial_memory_aux p in
+    (mapm (fun x => x.1.1) m).
+End Memory.
 
 Definition state : Type := list Pointer.t * Memory.t * Register.t * Pointer.t * pc_tag.
 
@@ -356,35 +456,6 @@ Definition find_plabel_in_code (cde : code) (c : Component.id) (p : Procedure.id
 end.
 
 
-
-
-(*      match find_label cde l with
-      | Some offset => Some (Pointer.component pc, Pointer.block pc, offset)
-      | None => None
-      end.
-
-
-Fixpoint find_label_in_component_helper
-         G (procs: list (Block.id * code))
-         (pc: Pointer.t) (l: label) : option Pointer.t :=
-  match procs with
-  | [] => None
-  | (p_block,p_code) :: procs' =>
-    match find_label_in_procedure G (Pointer.component pc, p_block, 0%Z) l with
-    | None => find_label_in_component_helper G procs' pc l
-    | Some ptr => Some ptr
-    end
-  end.
-
-Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Pointer.t :=
-  match getm (genv_procedures G) (Pointer.component pc) with
-  | Some C_procs =>
-    find_label_in_component_helper G (elementsm C_procs) pc l
-  | None => None *)
-
-
-
-
 Inductive check_pc : code -> Pointer.t -> mem_tag -> Prop :=
 | PcFall : forall cde pc tg i tni c, 
     executing cde (Pointer.inc pc) i tni c ->
@@ -438,10 +509,12 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs', Pointer.inc pc, pct)
 
-| Mov: forall st mem regs regs' pc tg c pct r1 r2,
+| Mov: forall st mem regs regs_tmp regs' pc tg c pct r1 r2,
     executing cde pc (TrMov r1 r2) tg c ->
     check_pc cde pc tg ->
-    Register.set r2 (val (Register.get r1 regs)) Other regs = regs' ->
+    Register.set r2 (val (Register.get r1 regs)) ((tvtag (Register.get r1 regs))) regs = regs_tmp ->
+    (*remove capability, if any*)
+    Register.set r1 (val (Register.get r1 regs)) Other regs_tmp = regs' -> 
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs', Pointer.inc pc, pct)
 
@@ -453,24 +526,29 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs', Pointer.inc pc, pct)
 
-| Load: forall st mem regs regs' pc tg c pct r1 r2 ptr v,
+| Load: forall st mem mem' regs regs' pc tg c pct r1 r2 ptr v,
     executing cde pc (TrLoad r1 r2) tg c ->
     check_pc cde pc tg ->
     val (Register.get r1 regs) = Ptr ptr ->
     Pointer.component ptr = c ->
     Memory.load mem ptr = Some v ->
-    Register.set r2 v Other regs = regs' ->
+    Register.set r2 (val (fst v)) (tvtag (fst v)) regs = regs' ->
+    (*remove capability, if any*)
+    Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := Other ; color := c ; entry := None|}) = Some mem' ->
     step cde (st, mem, regs, pc, pct) E0
-           (st, mem, regs', Pointer.inc pc, pct)
+           (st, mem', regs', Pointer.inc pc, pct)
 
-| Store: forall st mem mem' regs pc tg c pct ptr r1 r2,
+| Store: forall st mem mem' regs regs' pc tg c pct ptr r1 r2 vt,
     executing cde pc (TrStore r1 r2) tg c ->
     check_pc cde pc tg ->
     val (Register.get r1 regs) = Ptr ptr ->
     Pointer.component ptr =  c ->
-    Memory.store mem ptr (val (Register.get r2 regs)) = Some mem' ->
+    ((Register.get_tag r2 regs) = Some vt) ->
+    Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None|}) = Some mem' ->
+    (*remove capability, if any*)
+    Register.set r2 (val (Register.get r2 regs)) Other regs = regs' -> 
     step cde (st, mem, regs, pc, pct) E0
-           (st, mem', regs, Pointer.inc pc, pct)
+           (st, mem', regs', Pointer.inc pc, pct)
 
 | Jal: forall st mem regs regs' pc tg c pct pc' l,
     executing cde pc (TrJalNat l) tg c ->
@@ -496,14 +574,11 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 (*    check_pc cde pc tg ->*)
     val (Register.get r regs) = Ptr pc' ->
     Pointer.component pc' <> Pointer.component pc ->
-    (* level of pct = level of r *)
+    (Some pct = value_to_pc_tag (tvtag (Register.get r regs))) ->
     (val (Register.get R_COM regs) = Int rcomval) ->
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) [ERet (Pointer.component pc) rcomval (Pointer.component pc')]
     (st, mem, regs, pc', dec_pc_tag pct)
-    (* TODO : MISSING HERE : ENFORCEMENT ABOUT LEVEL OF RETURN AND RA (should be same level) *)
-
-(* TODO : add jump rule for jumping betwen different compartment (if pc' is tagged with a return capability of the right level) which add a return to the trace *)
 
 | BnzNZ: forall st mem regs pc tg c pct pc' r l v,
     executing cde pc (TrBnz r l) tg c ->
@@ -532,7 +607,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     step cde (st, mem, regs, pc, pct) E0
            (st, mem', regs', Pointer.inc pc, pct)
 
-| Call: forall st mem regs regs' pc tg c pct pc' i tni c' pid call_arg,
+| Call: forall st mem regs regs' pc tg c pct pc' i tni c' pid call_arg n,
     executing cde pc (TrJalProc (c',pid)) tg c ->
 (*   check_pc cde pc tg ->*)
 (*    find_label_in_component G pc l = Some pc' -> *)
@@ -540,7 +615,8 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     executing cde pc' i tni c' ->
     c <> c' ->
     check_pc_call c tni pid ->
-    Register.set R_RA (Ptr (Pointer.inc pc)) Other regs = regs' ->
+    (pct = Level n) ->
+    Register.set R_RA (Ptr (Pointer.inc pc)) (Ret n) regs = regs' ->
     val (Register.get R_COM regs) = Int call_arg ->
     step cde (st, mem, regs, pc, pct) [ECall c pid call_arg c']
            (Pointer.inc pc :: st, mem, Register.invalidate regs', pc', inc_pc_tag pct).
@@ -569,8 +645,10 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       let regs' := Register.set r (imm_to_val v) Other regs in
       ret (E0, (mem, regs', Pointer.inc pc, pct))
     | TrMov r1 r2 =>
-      let regs' := Register.set r2 (val (Register.get r1 regs)) Other regs in
-      ret (E0, (mem, regs', Pointer.inc pc, pct))
+      let regs' := Register.set r2 (val (Register.get r1 regs)) (tvtag (Register.get r1 regs)) regs in
+      (*remove capability, if any*)
+      let regs'' := Register.set r1 (val (Register.get r1 regs)) Other regs' in
+      ret (E0, (mem, regs'', Pointer.inc pc, pct))
     | TrBinOp op r1 r2 r3 =>
       let result := eval_binop op (val (Register.get r1 regs)) (val (Register.get r2 regs)) in
       let regs' := Register.set r3 result Other regs in
@@ -578,22 +656,29 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
     | TrLoad r1 r2 =>
       match val (Register.get r1 regs) with
       | Ptr ptr =>
-        if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
+        let c := (Pointer.component ptr) in
+        if Component.eqb c (Pointer.component pc) then
           do v <- Memory.load mem ptr;
-          let regs' := Register.set r2 v Other regs in
-          ret (E0, (mem, regs', Pointer.inc pc, pct))
+          let regs' := Register.set r2 (val (fst v)) (tvtag (fst v))  regs in
+          (*remove capability, if any*)
+          do mem' <- Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := Other ; color := c ; entry := None|});
+          ret (E0, (mem', regs', Pointer.inc pc, pct))
         else
           None
       | _ => None
       end
     | TrStore r1 r2 =>
       match val (Register.get r1 regs) with
-      | Ptr ptr => (* CAREFUL, NO CHECK HERE ! TODO solve this *)
-    (*    if Component.eqb (Pointer.component ptr) (Pointer.component pc) then *)
-          do mem' <- Memory.store mem ptr (val (Register.get r2 regs));
-          ret (E0, (mem', regs, Pointer.inc pc, pct))
-    (*    else
-          None  *)
+      | Ptr ptr =>
+          let c := (Pointer.component ptr) in
+          if Component.eqb c (Pointer.component pc) then
+            do vt <- Register.get_tag r2 regs ;
+            do mem' <- Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None|});
+            (*remove capability, if any*)
+            let regs' := Register.set r2 (val (Register.get r2 regs)) Other regs in
+            ret (E0, (mem', regs', Pointer.inc pc, pct))
+          else
+            None
       | _ => None
       end
     | TrAlloc rptr rsize =>
@@ -612,8 +697,11 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       | Ptr pc' =>
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
           ret (E0, (mem, regs, pc', pct))
-        else
-         if (Pointer.offset pc' <? 0) % Z then
+        else (
+          match (tvtag (Register.get r regs), pct) with
+          | (Other, _) => None
+          | (Ret n, Level m) =>(
+         if orb ((Pointer.offset pc' <? 0) % Z)  (negb (ssrnat.eqn (S n) m)) then
             None
          else
             do C_code' <- cde (Pointer.component pc');
@@ -623,8 +711,8 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
               let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
               ret (t, (mem, Register.invalidate regs, pc', dec_pc_tag pct))
             | _ => None
-            end
-            (* TODO : MISSING HERE : ENFORCEMENT ABOUT LEVEL OF RETURN AND RA (should be same level) *)
+            end)
+          end)
       | _ => None
       end
     | TrBnz r l =>
@@ -637,37 +725,36 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       | _ => None
       end
     | TrJalNat l => (* ADD CHECK THAT NO CROSS COMPARTMENT!!!!!!!!!!! *)
-(* remove locality of labels LATER *)
+        (* remove locality of labels LATER *)
+        (* BS TODO : find_label_in_comp or find_label_in_code ? *)
       do pc' <- find_label_in_comp cde (Pointer.component pc) l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) Other regs in
       ret (E0, (mem, regs', pc', pct))
     | TrJalProc (c',pid) =>
       match find_plabel_in_code cde c' pid with 
       | Some pc' => 
-        if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) Other regs in
-          ret (E0, (mem, regs', pc', pct))
-        else 
-         if (Pointer.offset pc' <? 0) % Z then
-            None
-         else
-            do C_code' <- cde (Pointer.component pc');
-            do (ni,tni) <- nth_error C_code' (Z.to_nat (Pointer.offset pc'));
-            match entry tni with
-             | Some (pid',lc) => 
-               if Procedure.eqb pid pid' then 
-                if check_comp_belongs_b (Pointer.component pc) lc then
-                  match val (Register.get R_COM regs) with
-                  | Int rcomval =>
-                      let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) Other regs in
-                      let t := [ECall (Pointer.component pc) pid rcomval (Pointer.component pc')] in
-                      ret (t, (mem, Register.invalidate regs', pc', inc_pc_tag pct))
-                  | _ => None
-                  end
-                else None
-               else None
-             | _ => None
-            end
+          (if Component.eqb (Pointer.component pc') (Pointer.component pc) then
+              let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) Other regs in
+              ret (E0, (mem, regs', pc', pct))
+           else 
+             if (Pointer.offset pc' <? 0) % Z then
+               None
+             else
+               do C_code' <- cde (Pointer.component pc');
+               do (ni,tni) <- nth_error C_code' (Z.to_nat (Pointer.offset pc'));
+               match entry tni with
+               | Some (pid',lc) => 
+                   if andb (Procedure.eqb pid pid') (check_comp_belongs_b (Pointer.component pc) lc) then
+                     match (val (Register.get R_COM regs), pct) with
+                     | (Int rcomval, Level n) =>
+                         let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) (Ret n) (Register.invalidate regs) in
+                         let t := [ECall (Pointer.component pc) pid rcomval (Pointer.component pc')] in
+                         ret (t, (mem, regs', pc', inc_pc_tag pct))
+                     | _ => None
+                     end
+                   else None
+               | _ => None
+               end)
       | None => None
       end
     | _ => None
@@ -741,11 +828,11 @@ Definition pre_linearize (p : Intermediate.program) : code :=
     prog_main : bool } *)
 
 Definition run_transitional cd fuel p :=
-    let '(mem, _, entrypoints) := prepare_procedures_initial_memory p in
+    let mem  := Memory.prepare_procedures_initial_memory p in
     let regs := Register.init in
     match (find_plabel_in_code cd Component.main Procedure.main) with
     | Some pc =>
-      execN fuel cd (mem,regs, pc, Level 0)
+      execN fuel cd (mem, regs, pc, Level 0)
     | None => inr 5
 end.
 
@@ -766,16 +853,17 @@ end.
 
 Require Export Extraction.Definitions.
 
-
-Definition compile_and_run_from_source_ex := 
-fun (p : Source.program) (fuel : nat) =>
-match Compiler.compile_program p with
-| Some compiled_p =>
+Definition compile_and_run_from_intermediate compiled_p fuel :=
     match compile_run fuel compiled_p with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)
-    end
+    end.
+
+Definition compile_and_run_from_source_ex := 
+fun (p : Source.program) (fuel : nat) =>
+match Compiler.compile_program p with
+| Some compiled_p => compile_and_run_from_intermediate compiled_p fuel
 | None => print_error ocaml_int_0
 end.
 
@@ -913,7 +1001,7 @@ Record prog :=
   { procedures : code ;
     buffers : bufs ;
   }.
-
+ 
 
 
 Definition max_label (p : Intermediate.program) : nat :=
