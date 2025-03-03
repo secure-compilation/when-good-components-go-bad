@@ -24,7 +24,7 @@ Local Open Scope word_scope.
 Local Notation "x .+1" := (x + 1).
 
 Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
-  let 'State mem reg pc@tpc extra := st in
+  let 'State mem reg pc@tpc extra nc := st in
   match mem pc with
   | Some iti =>
     let: i@ti := iti in

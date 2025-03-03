@@ -166,7 +166,8 @@ Record state := State {
   mem : memory;
   regs : registers;
   pc : atom (tag_type ttypes P);
-  internal : internal_state
+  internal : internal_state;
+  comp_num : nat (* smallest n such that number of components < 2^n *)
 }.
 
 
@@ -189,7 +190,7 @@ Definition evi (st : state) : option ev_inputs :=
 Notation state_ev := (state * option event)%type.
 
 Lemma state_eta st :
-  st = State (mem st) (regs st) (pcv st)@(pct st) (internal st).
+  st = State (mem st) (regs st) (pcv st)@(pct st) (internal st) (comp_num st).
 Proof. by case: st=> ? ? [? ?] ?. Qed.
 
 (* CH: TODO: should make the entry_tags part of the state
@@ -232,18 +233,18 @@ Definition next_state_do_update (st : state) (tk : tag_kind)
   match tk, tag with
   | R, t => match updt with
         | RegWrite r x =>  do! regs' <- updm (regs st) r x@t;
-                          Some (State (mem st) regs' (pc st) (internal st))
+                          Some (State (mem st) regs' (pc st) (internal st) (comp_num st))
         | RegRead r => do! a <- regs st r;
                       do! regs' <- updm (regs st) r (vala a)@t;
-                      Some (State (mem st) regs' (pc st) (internal st))
+                      Some (State (mem st) regs' (pc st) (internal st) (comp_num st))
         | _ => None
         end
   | M, t => match updt with
         | MemWrite w1 w2 => do! mem' <- updm (mem st) w1 w2@t;
-                           Some (State mem' (regs st) (pc st) (internal st))
+                           Some (State mem' (regs st) (pc st) (internal st) (comp_num st))
         | MemRead w => do! a <- mem st w;
                       do! mem' <- updm (mem st) w (vala a)@t;
-                      Some (State mem' (regs st) (pc st) (internal st))
+                      Some (State mem' (regs st) (pc st) (internal st) (comp_num st))
         | _ => None
         end
   | P, t => None
@@ -272,7 +273,7 @@ Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
     match op iv as o return vovec_ev _ o -> option state_ev with
     | OP op => fun ov_ev => match ov_ev with
                               | (ov, ev) => do! st' <- next_state_do_updates st (tr ov) updts;
-                                              Some (State (mem st') (regs st') pc'@(trpc ov) (internal st'), ev)
+                                              Some (State (mem st') (regs st') pc'@(trpc ov) (internal st') (comp_num st), ev)
                             end
     | SERVICE => fun _ => None
     end
@@ -284,29 +285,29 @@ Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq upd
 
 
 Inductive step (st st' : state) (ev : option event) : Prop :=
-| step_nop : forall mem reg pc tpc i ti extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_nop : forall mem reg pc tpc i ti extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Nop _)),
     let mvec := IVec NOP tpc ti [hseq] in forall
     (NEXT : next_state_updates st mvec [:: ] = Some (st', ev)),    step st st' ev
-| step_const : forall mem reg pc tpc i ti n r old (told : tag_type ttypes R) extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_const : forall mem reg pc tpc i ti n r old (told : tag_type ttypes R) extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Const n r))
     (OLD  : reg r = Some old@told),
     let mvec := IVec CONST tpc ti [hseq told] in forall
     (NEXT : next_state_updates st mvec [:: RegWrite r (swcast n)] = Some (st', ev)),   step st st' ev
-| step_mov : forall mem reg pc tpc i ti r1 w1 t1 r2 old told extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_mov : forall mem reg pc tpc i ti r1 w1 t1 r2 old told extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Mov r1 r2))
     (R1W  : reg r1 = Some w1@t1)
     (OLD  : reg r2 = Some old@told),
     let mvec := IVec MOV tpc ti [hseq t1; told] in forall
     (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegWrite r2 w1 ] = Some (st', ev)),   step st st' ev
-| step_binop : forall mem reg pc tpc i ti op r1 r2 r3 w1 w2 t1 t2 old told extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_binop : forall mem reg pc tpc i ti op r1 r2 r3 w1 w2 t1 t2 old told extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Binop op r1 r2 r3))
     (R1W  : reg r1 = Some w1@t1)
@@ -315,8 +316,8 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
     let mvec := IVec (BINOP op) tpc ti [hseq t1; t2; told] in forall
     (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; RegWrite r3 (binop_denote op w1 w2) ] = Some (st', ev)),
       step st st' ev
-| step_load : forall mem reg pc tpc i ti r1 r2 w1 w2 t1 t2 old told extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_load : forall mem reg pc tpc i ti r1 r2 w1 w2 t1 t2 old told extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Load r1 r2))
     (R1W  : reg r1 = Some w1@t1)
@@ -324,8 +325,8 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
     (OLD  : reg r2 = Some old@told),
     let mvec := IVec LOAD tpc ti [hseq t1; t2; told] in forall
     (NEXT : next_state_updates st mvec [:: RegRead r1 ; MemRead w1 ; RegWrite r2 w2 ] = Some (st', ev)),    step st st' ev
-| step_store : forall mem reg pc i r1 r2 w1 w2 tpc ti t1 t2 old told extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_store : forall mem reg pc i r1 r2 w1 w2 tpc ti t1 t2 old told extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Store r1 r2))
     (R1W  : reg r1 = Some w1@t1)
@@ -333,15 +334,15 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
     (OLD  : mem w1 = Some old@told),
     let mvec := IVec STORE tpc ti [hseq t1; t2; told] in forall
     (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; MemWrite w1 w2 ] = Some (st', ev)),    step st st' ev
-| step_jump : forall mem reg pc i r w tpc ti t1 extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_jump : forall mem reg pc i r w tpc ti t1 extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jump r))
     (RW   : reg r = Some w@t1),
     let mvec := IVec JUMP tpc ti [hseq t1] in forall
     (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] w = Some (st', ev)),    step st st' ev
-| step_bnz : forall mem reg pc i r n w tpc ti t1 extra
-    (ST   : st = State mem reg pc@tpc extra)
+| step_bnz : forall mem reg pc i r n w tpc ti t1 extra nc
+    (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Bnz r n))
     (RW   : reg r = Some w@t1),
@@ -349,16 +350,16 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
      let pc' := pc + (if w == 0%w
                       then 1%w else swcast n) in forall
     (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] pc' = Some (st', ev)),     step st st' ev
-| step_jal : forall mem reg pc i imm tpc ti old told extra
-    (ST : st = State mem reg pc@tpc extra)
+| step_jal : forall mem reg pc i imm tpc ti old told extra nc
+    (ST : st = State mem reg pc@tpc extra nc)
     (PC : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jal imm))
     (OLD : reg ra = Some old@told),
     let mvec := IVec JAL tpc ti [hseq told] in
     let pc' := (swcast imm) in forall
     (NEXT : next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1) ] pc' = Some (st', ev)), step st st' ev
-| step_syscall : forall mem reg pc sc tpc extra
-    (ST : st = State mem reg pc@tpc extra)
+| step_syscall : forall mem reg pc sc tpc extra nc
+    (ST : st = State mem reg pc@tpc extra nc)
     (PC : mem pc = None)
     (GETCALL : table pc = Some sc)
     (CALL : run_syscall sc st = Some (st', ev)), step st st' ev.
@@ -378,15 +379,17 @@ Import Symbolic.
 Definition state_eqb mt p : rel (@state mt p) :=
   [rel s1 s2 | [&& mem s1 == mem s2,
                    regs s1 == regs s2,
-                   pc s1 == pc s2 &
-                   internal s1 == internal s2 ] ].
+                   pc s1 == pc s2,
+                   internal s1 == internal s2 &
+                   comp_num s1 == comp_num s2
+  ] ].
 
 Lemma state_eqbP mt p : Equality.axiom (@state_eqb mt p).
 Proof.
-  move => [? ? ? ?] [? ? ? ?].
-  apply (iffP and4P); simpl.
-  - by move => [/eqP -> /eqP -> /eqP -> /eqP ->].
-  - by move => [-> -> -> ->].
+  move => [? ? ? ? ?] [? ? ? ? ?].
+  apply (iffP and5P); simpl.
+  - by move => [/eqP -> /eqP -> /eqP -> /eqP -> /eqP ->].
+  - by move => [-> -> -> -> ->].
 Qed.
 
 Definition state_eqMixin mt p := EqMixin (@state_eqbP mt p).

@@ -84,9 +84,10 @@ end.
 Notation pc_type := (atom (tag_type Symbolic.P)).
 
 Record state := State {
-  mem : memory;
-  regs : registers;
-  pc : pc_type
+                    mem : memory;
+                    regs : registers;
+                    pc : pc_type;
+                    comp_num : nat (* smallest n such that number of components < 2^n *)
 }.
 
 Notation state_ev := (state * option event)%type.
@@ -203,18 +204,18 @@ Definition next_state_do_update (st : state) (tk : Symbolic.tag_kind)
   match tk, tag with
   | Symbolic.R, t => match updt with
         | RegWrite r x =>  let regs':= setm (regs st) (to_nat_bis r) (x@t) in
-                          Some (State (mem st) regs' (pc st))
+                          Some (State (mem st) regs' (pc st) (comp_num st))
         | RegRead r => do! a <- regs st (to_nat_bis r);
                       let regs' := setm (regs st) (to_nat_bis r) (vala a)@t in
-                      Some (State (mem st) regs' (pc st))
+                      Some (State (mem st) regs' (pc st) (comp_num st))
         | _ => None
         end
   | Symbolic.M, t => match updt with
         | MemWrite w1 w2 => let mem':= setm (mem st) w1 w2@t in
-                           Some (State mem' (regs st) (pc st))
+                           Some (State mem' (regs st) (pc st) (comp_num st))
         | MemRead w => do! a <- mem st w;
                       let mem' := setm (mem st) w (vala a)@t in
-                      Some (State mem' (regs st) (pc st))
+                      Some (State mem' (regs st) (pc st) (comp_num st))
         | _ => None
         end
   | Symbolic.P, t => None
@@ -241,7 +242,7 @@ Definition next_state_updates_and_pc (cde : code) (st : state)
   let k :=
     (fun (ov_ev:((ovec op) * (option event))) => let (ov,ev) := ov_ev in
        do! st' <- next_state_do_updates st (tr ov) updts;
-       Some (State (mem st') (regs st') pc'@(trpc ov), ev)
+       Some (State (mem st') (regs st') pc'@(trpc ov) (comp_num st), ev)
     ) in
   next_state st iv tni k.
 
@@ -272,15 +273,20 @@ Definition binop_of_binop (b : binop) : Types.binop :=
   | Leq => LEQ
   end.
 
+(* allows to split memory between components *)
+Definition component_memory_prefix (c : nat) (nc : nat) :=
+ @word.shlw (word_size mt) (word_of_nat (c)) (word_of_nat ((word_size mt) - nc)). (* left shift *)
+
 Definition alloc_fun (cde : code) (st : state) : option state :=
-  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
-  let max_addr := last (as_word (ssrint.Posz 0)) (domm (mem st)) in (* TODO : what to actually put here? *)
-  do! ra_val <- regs st (to_nat R_RA);
-  let next_pc := (vala ra_val)@(taga (pc st)) in
-  (* TL TODO: Is using return address to compute calling component safe? *)
-  (*do! ra_atom <- mem st (vala ra_val);*)
+  let prefix := (component_memory_prefix (nat_of_word ( vala (pc st))) (comp_num st)) in
+  let mask := (component_memory_prefix ((2 ^ (comp_num st))-1) (comp_num st)) in
+  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
   do! current_instr <- nth_error cde (nat_of_word (vala (pc st)));
   let current_c := (color (snd current_instr)) in
+  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
+  let max_addr := last (prefix) (filter prefix_filter (domm (mem st))) in
+  do! ra_val <- regs st (to_nat R_RA);
+  let next_pc := (vala ra_val)@(taga (pc st)) in
   (* create the new bloc *)
   let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c) in
   do! size <- regs st (to_nat_bis (inr R_SC_ARG1));
@@ -296,37 +302,37 @@ Definition alloc_fun (cde : code) (st : state) : option state :=
   do! addr <- (do! x <- hd_error bloc;
                  Some (fst x));
   let regs' := setm (regs st) (to_nat_bis (inr R_SC_RET)) addr@Other in
-  Some (State mem' regs' next_pc).
+  Some (State mem' regs' next_pc (comp_num st)).
 
 
 Definition alloc_label := 2 ^ 14.
 
 Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
-| step_nop : forall mem reg pc tpc ti
-    (ST   : st = State mem reg pc@tpc)
+| step_nop : forall mem reg pc tpc ti nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti MrNop),
     let mvec : ivec NOP := IVec tpc ti ([hseq] : hseq _ (inputs NOP)) in forall
     (NEXT : next_state_updates cde st mvec [:: ] = Some (st', ev)),    step cde st st' ev
-| step_label : forall mem reg pc tpc ti l
-    (ST   : st = State mem reg pc@tpc)
+| step_label : forall mem reg pc tpc ti l nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrLabel l)),
     let mvec : ivec NOP := IVec tpc ti ([hseq] : hseq _ (inputs NOP)) in forall
     (NEXT : next_state_updates cde st mvec [:: ] = Some (st', ev)),    step cde st st' ev
-| step_const : forall mem reg pc tpc ti n r old (told : tag_type Symbolic.R) 
-    (ST   : st = State mem reg pc@tpc)
+| step_const : forall mem reg pc tpc ti n r old (told : tag_type Symbolic.R) nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrConst n r))
     (OLD  : reg (to_nat r) = Some old@told),
     let mvec := IVec tpc ti ([hseq told] : hseq _ (inputs CONST)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegWrite (inl r) (swcast n)] = Some (st', ev)),   step cde st st' ev
-| step_mov : forall mem reg pc tpc ti r1 w1 t1 r2 old told
-    (ST   : st = State mem reg pc@tpc)
+| step_mov : forall mem reg pc tpc ti r1 w1 t1 r2 old told nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrMov r1 r2))
     (R1W  : reg (to_nat_bis r1) = Some w1@t1)
     (OLD  : reg (to_nat_bis r2) = Some old@told),
     let mvec := IVec tpc ti ([hseq t1; told] : hseq _ (inputs MOV)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead r1 ; RegWrite r2 w1 ] = Some (st', ev)),   step cde st st' ev
-| step_binop : forall mem reg pc tpc ti op r1 r2 r3 w1 w2 t1 t2 old told
-    (ST   : st = State mem reg pc@tpc)
+| step_binop : forall mem reg pc tpc ti op r1 r2 r3 w1 w2 t1 t2 old told nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrBinop op r1 r2 r3))
     (R1W  : reg (to_nat r1) = Some w1@t1)
     (R2W  : reg (to_nat r2) = Some w2@t2)
@@ -334,8 +340,8 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     let mvec := IVec tpc ti ([hseq t1; t2; told] : hseq _ (inputs (BINOP (binop_of_binop op)))) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead (inl r1) ; RegRead (inl r2) ; RegWrite (inl r3) (binop_denote (binop_of_binop op) w1 w2) ] = Some (st', ev)),
       step cde st st' ev
-| step_load : forall mem reg pc tpc ti r1 r2 w1 w2 t1 t2 old told 
-    (ST   : st = State mem reg pc@tpc)
+| step_load : forall mem reg pc tpc ti r1 r2 w1 w2 t1 t2 old told nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrLoad r1 r2))
     (R1W  : reg (to_nat r1) = Some w1@t1)
     (MEM1 : mem w1 = Some w2@t2)
@@ -343,8 +349,8 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     let mvec := IVec tpc ti ([hseq t1; t2; told] : hseq _ (inputs LOAD)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead (inl r1) ; MemRead w1 ; RegWrite (inl r2) w2 ] = Some (st', ev)),
     step cde st st' ev
-| step_store : forall mem reg pc r1 r2 w1 w2 tpc ti t1 t2 old told
-    (ST   : st = State mem reg pc@tpc)
+| step_store : forall mem reg pc r1 r2 w1 w2 tpc ti t1 t2 old told nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrStore r1 r2))
     (R1W  : reg (to_nat r1) = Some w1@t1)
     (R2W  : reg (to_nat r2) = Some w2@t2)
@@ -352,23 +358,23 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     let mvec := IVec tpc ti ([hseq t1; t2; told] : hseq _ (inputs STORE)) in forall
     (NEXT : next_state_updates cde st mvec [:: RegRead (inl r1) ; RegRead (inl r2) ; MemWrite w1 w2 ] = Some (st', ev)),
     step cde st st' ev
-| step_jump : forall mem reg pc r w tpc ti t1
-    (ST   : st = State mem reg pc@tpc)
+| step_jump : forall mem reg pc r w tpc ti t1 nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrJump r))
     (RW   : reg (to_nat r) = Some w@t1),
     let mvec := IVec tpc ti ([hseq t1] : hseq _ (inputs JUMP)) in forall
     (NEXT : next_state_updates_and_pc cde st mvec [:: RegRead (inl r) ] w = Some (st', ev)),
     step cde st st' ev
-| step_bnz : forall mem reg pc r n w tpc ti t1
-    (ST   : st = State mem reg pc@tpc)
+| step_bnz : forall mem reg pc r n w tpc ti t1 nc
+    (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrBnz r n))
     (RW   : reg (to_nat r) = Some w@t1),
     let mvec := IVec tpc ti ([hseq t1] : hseq _ (inputs BNZ)) in
     let optpc' := (if w == (word_of_nat 0) then Some ((nat_of_word (pc)) + 1) else find_label cde n) in forall pc' (PC' : optpc' = Some pc')
     (NEXT : next_state_updates_and_pc cde st mvec [:: RegRead (inl r) ] (word_of_nat pc') = Some (st', ev)),
     step cde st st' ev
-| step_jal : forall mem reg pc l tpc ti old told pc'
-    (ST : st = State mem reg pc@tpc)
+| step_jal : forall mem reg pc l tpc ti old told pc' nc
+    (ST : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrJal l))
     (OLD : reg (to_nat R_RA) = Some old@told)
     (NOT_ALLOC : l <> alloc_label),
@@ -376,8 +382,8 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     forall (PC' :  Some pc' = (find_label cde l))
     (NEXT : next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1)) ] (word_of_nat pc') = Some (st', ev)),
     step cde st st' ev
-| step_jal_alloc : forall mem reg pc  l tpc ti old told st_inter
-    (ST : st = State mem reg pc@tpc)
+| step_jal_alloc : forall mem reg pc  l tpc ti old told st_inter nc
+    (ST : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrJal l))
     (OLD : reg (to_nat R_RA) = Some old@told)
     (ALLOC : l = alloc_label),
@@ -388,17 +394,9 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     step cde st st' ev
 .
 
-Inductive step_iter (cde : code) (st st' : state) : (list event) -> Prop :=
-| step_iter_refl : (st = st') ->
-                   step_iter cde st st' []
-| step_iter_some : forall st'' ev l, (step cde st st'' (Some ev)) -> (step_iter cde st'' st l) ->
-                                step_iter cde st st' (ev :: l)
-| step_iter_none : forall st'' l, (step cde st st'' None) -> (step_iter cde st'' st l) ->
-                                step_iter cde st st' (l).
-
 
 Definition eval_step (cde : code) (st : state) : option state_ev := 
-  let 'State mem reg pc@pctag := st in
+  let 'State mem reg pc@pctag nc := st in
   match (nth_error cde (nat_of_word pc)) with
   | None =>None
   | Some (instr,ti) =>
@@ -488,7 +486,7 @@ Proof.
     inversion Heqcond as [eq]. destruct (@eqnP l alloc_label). destruct (NOT_ALLOC e). inversion eq.
   + rewrite ALLOC.  rewrite EV.
     remember {|mem := mem st; regs := setm (regs st) 4 (word_of_nat (nat_of_word pc0).+1)@Other;
-     pc := pc st |} as st_alt. cut (st_alt = st_inter).
+     pc := pc st ; comp_num := comp_num st|} as st_alt. cut (st_alt = st_inter).
     ++ intro eq. rewrite <- eq in ST'. rewrite Heqst_alt in ST'. rewrite ST'. auto.
     ++ unfold next_state_do_update in NEXT. unfold to_nat_bis in NEXT. unfold to_nat in NEXT.
        inversion NEXT. exact Heqst_alt.
@@ -804,13 +802,13 @@ Definition reg0 : registers :=
    (18,default_reg) ;
    (19,default_reg) ].
 
-Definition run_merged cd mem0 fuel :=
+Definition run_merged cd mem0 fuel nc :=
   let pctag := build_tpc 0 in
-      execN fuel cd {|mem := mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag|}.
+      execN fuel cd {|mem := mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
 
 
 Definition compile_run_merged fuel (p : Intermediate.program) :=
- run_merged (transitional_to_merged p (pre_linearize p)) (inital_memory p) fuel .
+ run_merged (transitional_to_merged p (pre_linearize p)) (inital_memory p) fuel (1+ Nat.log2 (size (domm (Intermediate.prog_interface p)))).
 
 Close Scope monad_scope.
 
@@ -824,141 +822,6 @@ end.
 
 
 End WithClasses.
-
-
-Section NoRecomposition.
-
-Require Import Int32.
-
-  
-Definition mt := concrete_int_32_mt.
-  
-Inductive step_iter_link (c : nat -> nat -> code) (p : nat -> nat -> code) (m : list event) : Prop :=
-| step_link : (exists st st', (@step_iter mt (app (c 0 1) (p 1 0)) st st' m)) -> step_iter_link c p m.
-
-Definition l := [:: (@MrMov mt (inl R_ONE) (inr R_SC_ARG1)) ;
-            (MrMov (inl R_RA) (inr R_SC_ARG3))  ;
-            (MrJal alloc_label)  ;
-            (MrMov (inr R_SC_ARG3) (inl R_RA))  ;
-            (MrMov (inr R_SC_RET) (inl R_SP))].
-  
-Definition alloc0 c t : @code mt :=
-  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
-  map (fun i => (i, def_mem_tag c)) ([MrJal t]).
-
-Definition alloc1 c t : code :=
-  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
-  map (fun i => (i, def_mem_tag c)) (app (l) [MrJal t]).
-
-(* no alloc -> R_SP is 0 -> rejection (0). *)
-Definition reject0 c t : code :=
-  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
-  map (fun i => (i, def_mem_tag c)) 
-  (app l
-    [MrBnz R_SP 10 ;
-     MrConst (word_of_nat 0) R_COM ;
-     MrHalt ;
-     MrLabel 10 ;
-     MrConst (word_of_nat 1) R_COM ;
-     MrHalt]).
-
-(* some alloc -> R_SP is not 0 -> acceptance (1). *)
-Definition accept0 c t : code :=
-  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
-  map (fun i => (i, def_mem_tag c)) 
-  (app l
-    [MrBnz R_SP 10 ;
-     MrConst (word_of_nat 1) R_COM ;
-     MrHalt ;
-     MrLabel 10 ;
-     MrConst (word_of_nat 0) R_COM ;
-     MrHalt]).
-
-Definition trace := [ERet 1 1 0; ECall 0 0 0 1].
-
-Definition st0 : @state mt := {| mem := emptym; regs := reg0 ; pc := (word_of_nat 0)@(Level 0) |}.
-
-
-Ltac derive_next_state cd Heqcd st0 pc :=
-  match goal with | [st0eq : (st0 = _) |- _] =>
-  let st := fresh "st" in
-  let ev := fresh "ev" in
-  let stop := fresh "stop" in
-  let Heqstop := fresh "Heqstop" in
-  let Heq1 := fresh "Heq1" in
-  let nth := fresh "nth" in
-  let Heqnth := fresh "Heqnth" in
-  let stev := fresh "stev" in
-  let tmp := fresh in
-  let steq := fresh "steq" in
-    remember (eval_step cd st0) as st1op ; inversion Heqst1op as [Heq1] ;
-    rewrite st0eq in Heq1 ; rewrite Heqcd in Heq1 ; simpl in Heq1 ;
-    unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1 ;
-    simpl in Heq1 ;
-    induction st1op as [stev|] ; inversion Heq1 ; destruct stev as [st ev] ;
-    inversion H0 as [steq] ; destruct Heq1
-  (*
-  remember (eval_step cd st0) as stop eqn:Heqstop ; inversion Heqstop as [Heq1];
-  rewrite st0eq in Heq1;
-  unfold eval_step in Heq1 ; rewrite <- st0eq in Heq1 ;
-  remember (nth_error cd (nat_of_word (word_of_nat pc)))as nth eqn:Heqnth  ;
-  simpl in Heqnth ; rewrite Heqcd in Heqnth ; rewrite Heqnth in Heq1 ;
-  unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1 ;
-  simpl in Heq1 ; rewrite Heqcd in Heq1 ; simpl in Heq1 ;
-  induction stop as [stev|] ; inversion Heq1 as [tmp]; destruct stev as [st ev ] ; destruct Heq1, Heqnth, nth ; inversion tmp as [steq] *)
-  end.
-
-Theorem no_merged_recomposition :
-  exists c1 c2 p1 p2 m, (step_iter_link c1 p1 m) /\ (step_iter_link c2 p2 m) /\ not (step_iter_link c1 p2 m).
-Proof.
-  exists alloc0, alloc1, accept0, reject0, trace. split ; try split.
-  + remember ((alloc0 0 1) ++ (accept0 1 0)) as cd.
-    simpl. unfold accept0. simpl.
-    unfold alloc0, accept0 in Heqcd. simpl in Heqcd.
-    rewrite <- Heqcd. exists st0.  cut (st0 = {| mem := emptym; regs := reg0 ; pc := (word_of_nat 0)@(Level 0) |}) ; try reflexivity. intro st0eq. (*
-    (*  match goal with | [st0eq : (st0 = ?state) |- _] => destruct st0eq end. 
-    testtac st0.
-  match goal with | [st0eq : (st0 = _) |- _] => destruct st0eq end. *)
-     derive_next_state cd Heqcd sta 0.
-
-  remember (nth_error cd (nat_of_word (word_of_nat 0)))as nth eqn:Heqnth.
-  simpl in Heqnth ; rewrite Heqcd in Heqnth ; rewrite Heqnth in Heq1.
-  unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1.
-   simpl in Heq1. *)
-                                                   (*
-    Transparent st0eq. 
-    derive_next_state cd Heqcd st0 st0eq 0. *)
-    (*
-  remember (nth_error cd (nat_of_word (word_of_nat 0)).+1)as nth.
-    unfold st0 in Heqstop.
-    derive_next_state cd Heqcd st' 1.
-    rewrite Heqnth in Heq1. *)
-    
-    remember (eval_step cd st0) as st1op. inversion Heqst1op as [Heq1].
-    rewrite st0eq in Heq1. rewrite Heqcd in Heq1. simpl in Heq1.
-    (*unfold eval_step in Heq1. unfold st0 in Heq1.
-    remember (nth_error cd (nat_of_word (word_of_nat 0))) as nth.
-    simpl in Heqnth. rewrite Heqcd in Heqnth. rewrite Heqnth in Heq1. *)
-    unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1.
-    simpl in Heq1.
-    induction st1op as [stev1|] ; inversion Heq1. destruct stev1 as [st1 ev1].
-    inversion H0 as [st1eq]. destruct H0, Heq1.
-(*  match goal with | [st0eq : (st1 = ?a) |- _] => destruct st0eq end. *)
-    (*derive_next_state cd Heqcd st1 1. 
-    exists st1. destruct (@step_iter_none mt cd st0 st1).
-  (*  cut ((eval_step cd st0)=(eval_step cd st0)) ; try reflexivity. intro eval_eq.*)
- (*   compute in eval_eq. *)
-(*    let st1op := eval compute in (eval_step cd st0) in remember st1op as st1.*)
-    remember (eval_step cd st0) as st1op. simpl in Heqcd. compute in Heqst1op.
-    rewrite Heqcd in Heqst1op. unfold nth_error in Heqst1op. simpl in Heqst1op.
-    simpl.
-  *)
-Admitted.
-
-
-
-End NoRecomposition.
-  
 
 
 Definition compile_and_run_from_source_merged_ex (mt : machine_types) := 

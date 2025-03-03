@@ -46,8 +46,9 @@ Definition reg0 : {fmap reg mt -> ratom } :=
       ; (as_word 19, Atom (as_word 0) Other)].
 
 
-Definition load (m : {fmap mword mt -> matom }) : state :=
+Definition load (m : {fmap mword mt -> matom }) nc : state :=
   {| Symbolic.mem := m ;
      Symbolic.regs := reg0 ;
      Symbolic.pc := {| vala := word.as_word 0 ; taga := Level 0 |} ;
-     Symbolic.internal := tt |}.
+     Symbolic.internal := tt ;
+     Symbolic.comp_num := nc|}.

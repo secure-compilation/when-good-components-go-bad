@@ -440,7 +440,7 @@ end.
 From CoqUtils Require Import hseq word.
 
 
-Definition run_and_show_merged (cd:code) mem0 fuel :=
+Definition run_and_show_merged (cd:code) mem0 fuel nc :=
   let default_reg := {| MicroPolicies.Types.vala := (word_of_nat 0) ; MicroPolicies.Types.taga := (LRC.Other) |} in
   let reg0 := [fmap (0, default_reg) ;
                (1, default_reg) ;
@@ -455,7 +455,7 @@ Definition run_and_show_merged (cd:code) mem0 fuel :=
                (19,default_reg) ] in
   let pctag := LRC.build_tpc 0 in
   let pc := {| MicroPolicies.Types.vala := (word_of_nat 0) ; MicroPolicies.Types.taga := pctag |} in
-  let st := {|mem := mem0 ; regs := reg0 ; pc := pc|} in
+  let st := {|mem := mem0 ; regs := reg0 ; pc := pc ; comp_num := nc|} in
   printer (show cd)
   execN_and_show fuel cd st.
 
@@ -469,7 +469,7 @@ match Compiler.compile_program p with
     printer (show (pre_linearize compiled_p)) 
     printer ( "transitional pc : " ++ newline)
     printer (run_trans_and_show_pc (pre_linearize compiled_p) fuel compiled_p)
-    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (pre_linearize compiled_p)) (inital_memory compiled_p) fuel with
+    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (pre_linearize compiled_p)) (inital_memory compiled_p) fuel (1+ Nat.log2 (size (domm (Intermediate.prog_interface compiled_p)))) with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)

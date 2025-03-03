@@ -242,11 +242,19 @@ Notation State := (@Symbolic.State mt sym_lrc).
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
 
+
+(* allows to split memory between components *)
+Definition component_memory_prefix (c : int) (nc : nat) :=
+ @word.shlw (word_size mt) (word.as_word  (c)) (word.as_word (ssrint.Posz ((word_size mt) - nc))). (* left shift *)
+
 (* alloc is a syscall taking one argument, the size to allocate *)
 (* a syscall don't change the pc level *)
 Definition alloc_fun (st : state) : option state :=
+  let prefix := (component_memory_prefix (int_of_word ( vala (pc st))) (comp_num st)) in
+  let mask := (component_memory_prefix ((2 ^ (comp_num st))-1) (comp_num st)) in
+  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
-  let max_addr := last (domm (mem st)) (as_word 0) in
+  let max_addr := last (filter prefix_filter (domm (mem st))) (prefix) in
   do! ra_val <- regs st ra;
   let next_pc := (vala ra_val)@(taga (pc st)) in
   (* TL TODO: Is using return address to compute calling component safe? *)
@@ -267,6 +275,6 @@ Definition alloc_fun (st : state) : option state :=
   do! addr <- (do! x <- head bloc;
                  Some (fst x));
   do! regs' <- updm (regs st) syscall_ret addr@Other;
-  Some (State mem' regs' next_pc tt).
+  Some (State mem' regs' next_pc tt (comp_num st)).
 
 End WithClasses.
