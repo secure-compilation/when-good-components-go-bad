@@ -388,6 +388,14 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     step cde st st' ev
 .
 
+Inductive step_iter (cde : code) (st st' : state) : (list event) -> Prop :=
+| step_iter_refl : (st = st') ->
+                   step_iter cde st st' []
+| step_iter_some : forall st'' ev l, (step cde st st'' (Some ev)) -> (step_iter cde st'' st l) ->
+                                step_iter cde st st' (ev :: l)
+| step_iter_none : forall st'' l, (step cde st st'' None) -> (step_iter cde st'' st l) ->
+                                step_iter cde st st' (l).
+
 
 Definition eval_step (cde : code) (st : state) : option state_ev := 
   let 'State mem reg pc@pctag := st in
@@ -782,19 +790,21 @@ Definition inital_memory (p : Intermediate.program) :=
      taga := snd x |})
   in Tmp.mapk f (mapm (encode_memval) bufs).
 
-Definition run_merged cd mem0 fuel :=
+Definition reg0 : registers :=
   let default_reg := (word_of_nat 0)@(LRC.Other): atom (tag_type Symbolic.R) in
-  let reg0 := [fmap (0, default_reg) ;
-               (1, default_reg) ;
-               (2, default_reg) ;
-               (3, default_reg) ;
-               (4, (word_of_nat (1+size cd))@(LRC.Other)) ; (* value equivalent to "Undef" for R_RA*)
-               (5, default_reg) ;
-               (6, default_reg) ;
-               (16,default_reg) ;
-               (17,default_reg) ;
-               (18,default_reg) ;
-               (19,default_reg) ] in
+  [fmap (0, default_reg) ;
+   (1, default_reg) ;
+   (2, default_reg) ;
+   (3, default_reg) ;
+   (4, (word_of_nat (2 ^ 15))@(LRC.Other)) ; (* value equivalent to "Undef" for R_RA*)
+   (5, default_reg) ;
+   (6, default_reg) ;
+   (16,default_reg) ;
+   (17,default_reg) ;
+   (18,default_reg) ;
+   (19,default_reg) ].
+
+Definition run_merged cd mem0 fuel :=
   let pctag := build_tpc 0 in
       execN fuel cd {|mem := mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag|}.
 
@@ -812,7 +822,143 @@ match Compiler.compile_program p with
 | None => inl None
 end.
 
+
 End WithClasses.
+
+
+Section NoRecomposition.
+
+Require Import Int32.
+
+  
+Definition mt := concrete_int_32_mt.
+  
+Inductive step_iter_link (c : nat -> nat -> code) (p : nat -> nat -> code) (m : list event) : Prop :=
+| step_link : (exists st st', (@step_iter mt (app (c 0 1) (p 1 0)) st st' m)) -> step_iter_link c p m.
+
+Definition l := [:: (@MrMov mt (inl R_ONE) (inr R_SC_ARG1)) ;
+            (MrMov (inl R_RA) (inr R_SC_ARG3))  ;
+            (MrJal alloc_label)  ;
+            (MrMov (inr R_SC_ARG3) (inl R_RA))  ;
+            (MrMov (inr R_SC_RET) (inl R_SP))].
+  
+Definition alloc0 c t : @code mt :=
+  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
+  map (fun i => (i, def_mem_tag c)) ([MrJal t]).
+
+Definition alloc1 c t : code :=
+  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
+  map (fun i => (i, def_mem_tag c)) (app (l) [MrJal t]).
+
+(* no alloc -> R_SP is 0 -> rejection (0). *)
+Definition reject0 c t : code :=
+  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
+  map (fun i => (i, def_mem_tag c)) 
+  (app l
+    [MrBnz R_SP 10 ;
+     MrConst (word_of_nat 0) R_COM ;
+     MrHalt ;
+     MrLabel 10 ;
+     MrConst (word_of_nat 1) R_COM ;
+     MrHalt]).
+
+(* some alloc -> R_SP is not 0 -> acceptance (1). *)
+Definition accept0 c t : code :=
+  (MrLabel c, {| vtag := Other; color:= c; entry:= Some (0, [t]) |}) :: 
+  map (fun i => (i, def_mem_tag c)) 
+  (app l
+    [MrBnz R_SP 10 ;
+     MrConst (word_of_nat 1) R_COM ;
+     MrHalt ;
+     MrLabel 10 ;
+     MrConst (word_of_nat 0) R_COM ;
+     MrHalt]).
+
+Definition trace := [ERet 1 1 0; ECall 0 0 0 1].
+
+Definition st0 : @state mt := {| mem := emptym; regs := reg0 ; pc := (word_of_nat 0)@(Level 0) |}.
+
+
+Ltac derive_next_state cd Heqcd st0 pc :=
+  match goal with | [st0eq : (st0 = _) |- _] =>
+  let st := fresh "st" in
+  let ev := fresh "ev" in
+  let stop := fresh "stop" in
+  let Heqstop := fresh "Heqstop" in
+  let Heq1 := fresh "Heq1" in
+  let nth := fresh "nth" in
+  let Heqnth := fresh "Heqnth" in
+  let stev := fresh "stev" in
+  let tmp := fresh in
+  let steq := fresh "steq" in
+    remember (eval_step cd st0) as st1op ; inversion Heqst1op as [Heq1] ;
+    rewrite st0eq in Heq1 ; rewrite Heqcd in Heq1 ; simpl in Heq1 ;
+    unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1 ;
+    simpl in Heq1 ;
+    induction st1op as [stev|] ; inversion Heq1 ; destruct stev as [st ev] ;
+    inversion H0 as [steq] ; destruct Heq1
+  (*
+  remember (eval_step cd st0) as stop eqn:Heqstop ; inversion Heqstop as [Heq1];
+  rewrite st0eq in Heq1;
+  unfold eval_step in Heq1 ; rewrite <- st0eq in Heq1 ;
+  remember (nth_error cd (nat_of_word (word_of_nat pc)))as nth eqn:Heqnth  ;
+  simpl in Heqnth ; rewrite Heqcd in Heqnth ; rewrite Heqnth in Heq1 ;
+  unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1 ;
+  simpl in Heq1 ; rewrite Heqcd in Heq1 ; simpl in Heq1 ;
+  induction stop as [stev|] ; inversion Heq1 as [tmp]; destruct stev as [st ev ] ; destruct Heq1, Heqnth, nth ; inversion tmp as [steq] *)
+  end.
+
+Theorem no_merged_recomposition :
+  exists c1 c2 p1 p2 m, (step_iter_link c1 p1 m) /\ (step_iter_link c2 p2 m) /\ not (step_iter_link c1 p2 m).
+Proof.
+  exists alloc0, alloc1, accept0, reject0, trace. split ; try split.
+  + remember ((alloc0 0 1) ++ (accept0 1 0)) as cd.
+    simpl. unfold accept0. simpl.
+    unfold alloc0, accept0 in Heqcd. simpl in Heqcd.
+    rewrite <- Heqcd. exists st0.  cut (st0 = {| mem := emptym; regs := reg0 ; pc := (word_of_nat 0)@(Level 0) |}) ; try reflexivity. intro st0eq. (*
+    (*  match goal with | [st0eq : (st0 = ?state) |- _] => destruct st0eq end. 
+    testtac st0.
+  match goal with | [st0eq : (st0 = _) |- _] => destruct st0eq end. *)
+     derive_next_state cd Heqcd sta 0.
+
+  remember (nth_error cd (nat_of_word (word_of_nat 0)))as nth eqn:Heqnth.
+  simpl in Heqnth ; rewrite Heqcd in Heqnth ; rewrite Heqnth in Heq1.
+  unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1.
+   simpl in Heq1. *)
+                                                   (*
+    Transparent st0eq. 
+    derive_next_state cd Heqcd st0 st0eq 0. *)
+    (*
+  remember (nth_error cd (nat_of_word (word_of_nat 0)).+1)as nth.
+    unfold st0 in Heqstop.
+    derive_next_state cd Heqcd st' 1.
+    rewrite Heqnth in Heq1. *)
+    
+    remember (eval_step cd st0) as st1op. inversion Heqst1op as [Heq1].
+    rewrite st0eq in Heq1. rewrite Heqcd in Heq1. simpl in Heq1.
+    (*unfold eval_step in Heq1. unfold st0 in Heq1.
+    remember (nth_error cd (nat_of_word (word_of_nat 0))) as nth.
+    simpl in Heqnth. rewrite Heqcd in Heqnth. rewrite Heqnth in Heq1. *)
+    unfold next_state_updates, next_state_updates_and_pc, next_state, instr_rules in Heq1.
+    simpl in Heq1.
+    induction st1op as [stev1|] ; inversion Heq1. destruct stev1 as [st1 ev1].
+    inversion H0 as [st1eq]. destruct H0, Heq1.
+(*  match goal with | [st0eq : (st1 = ?a) |- _] => destruct st0eq end. *)
+    (*derive_next_state cd Heqcd st1 1. 
+    exists st1. destruct (@step_iter_none mt cd st0 st1).
+  (*  cut ((eval_step cd st0)=(eval_step cd st0)) ; try reflexivity. intro eval_eq.*)
+ (*   compute in eval_eq. *)
+(*    let st1op := eval compute in (eval_step cd st0) in remember st1op as st1.*)
+    remember (eval_step cd st0) as st1op. simpl in Heqcd. compute in Heqst1op.
+    rewrite Heqcd in Heqst1op. unfold nth_error in Heqst1op. simpl in Heqst1op.
+    simpl.
+  *)
+Admitted.
+
+
+
+End NoRecomposition.
+  
 
 
 Definition compile_and_run_from_source_merged_ex (mt : machine_types) := 

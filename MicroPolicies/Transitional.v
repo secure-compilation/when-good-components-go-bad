@@ -554,7 +554,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     executing cde pc (TrJalNat l) tg c ->
 (*   check_pc cde pc tg ->*)
 (*    find_label_in_component G pc l = Some pc' -> *)
-    find_label_in_code cde l = Some pc' ->
+    find_label_in_comp cde c l = Some pc' ->
     Register.set R_RA (Ptr (Pointer.inc pc)) Other regs = regs' ->
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) E0
@@ -724,9 +724,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
         ret (E0, (mem, regs, pc', pct))
       | _ => None
       end
-    | TrJalNat l => (* ADD CHECK THAT NO CROSS COMPARTMENT!!!!!!!!!!! *)
-        (* remove locality of labels LATER *)
-        (* BS TODO : find_label_in_comp or find_label_in_code ? *)
+    | TrJalNat l =>
       do pc' <- find_label_in_comp cde (Pointer.component pc) l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) Other regs in
       ret (E0, (mem, regs', pc', pct))
