@@ -84,5 +84,5 @@ Extraction "/tmp/run_merged_compiled_factorial.ml" to_run_mr.
 
 Require Import I2MP.Examples.Helper.
 
-Definition to_run := compile_and_run_mp factorial fuel.
+Definition to_run := compile_and_run_and_show_mp factorial fuel.
 Extraction "/tmp/run_mp_compiled_factorial.ml" to_run.

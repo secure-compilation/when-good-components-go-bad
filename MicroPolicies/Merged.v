@@ -870,7 +870,7 @@ Definition encode_code (cde : code) : memory * nat :=
   let lp := (fun l => match (findopt (is_label l) cde ) with
                    | Some (n) => pc0 + n
                    | _ => l end) in
-  let f := (fun x acc => ((encode_instr_atom x lp (offset - (snd acc))) :: (fst acc), S (snd acc)) ) in
+  let f := (fun x acc => ((encode_instr_atom x lp (offset - 1 - (snd acc))) :: (fst acc), S (snd acc)) ) in
   (Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (fst (foldr f ([], 0) cde))), pc0).
 (* TODO : check that pos in computed correctly in foldr f *)
 
