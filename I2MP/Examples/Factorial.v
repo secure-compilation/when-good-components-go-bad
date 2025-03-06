@@ -67,12 +67,12 @@ end.
 
 
 Definition fuel := 2000%nat.
-Definition to_run := compile_and_run_from_source_ex factorial fuel.
+Definition to_run_tr := compile_and_run_from_source_ex factorial fuel.
 Definition to_show := compile_and_show factorial.
 Definition to_debug := debug factorial fuel.
 
 Set Warnings "-extraction-reserved-identifier".
-Extraction "/tmp/run_mp_compiled_factorial.ml" to_run.
+Extraction "/tmp/run_tagged_compiled_factorial.ml" to_run_tr.
 
 Require Import Merged Int32 I2MP.Examples.Helper.
 
@@ -81,3 +81,8 @@ Definition to_run_mr := @Merged.compile_and_run_from_source_merged_ex concrete_i
 Definition to_run_mr := @I2MP.Examples.Helper.compile_and_run_and_show_from_source_merged concrete_int_32_mt factorial fuel. *)
 Set Warnings "-extraction-reserved-identifier".
 Extraction "/tmp/run_merged_compiled_factorial.ml" to_run_mr.
+
+Require Import I2MP.Examples.Helper.
+
+Definition to_run := compile_and_run_mp factorial fuel.
+Extraction "/tmp/run_mp_compiled_factorial.ml" to_run.

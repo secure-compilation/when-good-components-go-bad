@@ -857,15 +857,22 @@ Definition encode_instr i lp pos := encode_instr_mp (instr_tagged_to_mp i lp pos
 
 Definition encode_instr_atom x lp pos : matom := (encode_instr (fst x) lp pos)@(snd x).
 
+Definition findopt {A : Type} (pred : A -> bool) l : option nat :=
+  foldr (fun el acc => match acc with | None => if pred el then Some 0 else acc | Some n => Some (n+1)
+                    end) None l.
+
 (* puts the code at the end of the memory, along with the first pc *)
 Definition encode_code (cde : code) : memory * nat :=
   let offset := (* 2 ^ (word_size mt) - 1 *) (*TEMPORARY*) 500 in
   let code_length := size cde in
   let pc0 := offset - code_length in
   let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in
-  let lp := (fun l => let n := (find (is_label l) cde ) in pc0 + n ) in
+  let lp := (fun l => match (findopt (is_label l) cde ) with
+                   | Some (n) => pc0 + n
+                   | _ => l end) in
   let f := (fun x acc => ((encode_instr_atom x lp (offset - (snd acc))) :: (fst acc), S (snd acc)) ) in
-  (Tmp.mapk word_of_nat (fmap_of_seq (fst (foldr f ([], 0) cde))), pc0).
+  (Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (fst (foldr f ([], 0) cde))), pc0).
+(* TODO : check that pos in computed correctly in foldr f *)
 
 (* return the memory along with the first pc *)
 Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory * nat :=

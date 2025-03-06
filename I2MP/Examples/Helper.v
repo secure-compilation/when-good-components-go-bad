@@ -567,7 +567,11 @@ Instance showStateMP : Show (state) :=
         newline
   }.
 
+
+Definition show_memory_word_alt m := (odflt "failed2" (omap (@show _ show_mp) (@Types.decode_instr concrete_int_32_mt concrete_int_32_ops m))).
+
 Fixpoint execN (n: nat) (st: state) : option Z + nat :=
+ (*  printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) *)
   (*
   printer ( (* show st *) (show (MicroPolicies.Types.vala (Symbolic.pc st))) ++ " | " )
    *)
@@ -583,17 +587,15 @@ Fixpoint execN (n: nat) (st: state) : option Z + nat :=
     end
   end.
 
-Definition show_memory_word_alt m := (odflt "failed2" (omap (@show _ show_mp) (@Types.decode_instr concrete_int_32_mt concrete_int_32_ops m))).
-
 Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
-  printer ("executing merged :" ++ newline)
+(*  printer ("executing merged :" ++ newline) *)
   match compile_program p with
   | None => print_error ocaml_int_0
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (size (domm (Intermediate.prog_interface inter_p)))) in
       let st := load (merged_to_mp_backend inter_p merged_p) nc in
-      printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) 
+ (*     printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) *)
      (* printer (show (Symbolic.mem st)) *)
       match execN fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
