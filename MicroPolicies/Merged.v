@@ -686,11 +686,11 @@ Fixpoint fold_left_map_bis {FROM ACC TO: Type} (f : ACC -> FROM -> TO * ACC) (in
   | cons e ll => let (val,acc) := (f init e) in let (res, a) := (fold_left_map_bis f acc ll) in (val :: res, a)
 end.
 
-(* code_lengths cde c give you the line at which the code of the compartment c begins*)
+(* gives you the beginning point of each buffers in memory *)
 Definition memory_lengths (buf : NMap {fmap Block.id -> nat + seq value}):  NMap (NMap nat) :=
   (*
-  (* this (notably) takes into account the fact that the allocation is linearized into 5 instructions *)
-  let size_instr := (fun (i:Transitional.instr) => match i with | TrAlloc _ _ => 5 | TrLabel (_,Some _) => 2 | _ => 1 end) in
+  (* this takes into account the fact that the allocation is linearized into 5 instructions *)
+  let size_instr := (fun (i:Transitional.instr) => match i with | TrAlloc _ _ => 5 | _ => 1 end) in
   let size_sum := (fold_left (fun n im => n + 1) 0) in
   let l := Maps.elementsm (mapm (fun m => mkfmap (size_sum (Maps.elementsm m))) buf) in
   mkfmap (fold_left_map (fun (count : nat) (p:nat*nat) => let (color, size) := p in ((color,count), count+size)) 0 l).*)
@@ -726,8 +726,8 @@ Definition convert_value (memory_size : NMap (NMap nat)) (iv : imvalue) : imm mt
 Definition instr_translation (make_label : proc_label -> nat) (update_label : nat -> nat) (memory_size : NMap (NMap nat)) (i : Transitional.instr) : (seq instr) :=
   match i with
     | TrNop => MrNop :: nil
-    | TrLabel (l, None) => MrLabel (update_label l) :: nil
-    | TrLabel (l, Some pl) => MrLabel (update_label l) :: (MrLabel (make_label pl)) :: nil
+    | TrLabel (inl l) => MrLabel (update_label l) :: nil
+    | TrLabel (inr pl) =>  (MrLabel (make_label pl)) :: nil
     | TrConst iv reg => MrConst (convert_value memory_size iv) reg :: nil
     | TrMov r1 r2 => MrMov (inl r1) (inl r2) :: nil
     | TrBinOp b r1 r2 r3 => MrBinop b r1 r2 r3 :: nil
@@ -748,9 +748,9 @@ Definition instr_translation (make_label : proc_label -> nat) (update_label : na
 
 Definition transitional_to_merged (p: Intermediate.program) (cde : Transitional.code) : code :=
   let memory_size := memory_lengths (Intermediate.prog_buffers p) in
-  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (la,_) => la | _ => 0 end) l )) in
+  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inl la) => la | _ => 0 end) l )) in
   let lmax := foldl Init.Nat.max 0 (codomm(mapm max_seq cde)) in
-  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (_,Some(_,p)) => p | _ => 0 end) l )) in
+  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inr (_,p)) => p | _ => 0 end) l )) in
   let pmax := foldl Init.Nat.max 0 (codomm(mapm max_seq cde)) in
   let cmax := foldl Init.Nat.max 0 (domm cde) in
   let make_label := (fun pl => lmax * (cmax + 1) + 1 + (fst pl)*pmax + (snd pl)) in
@@ -761,14 +761,14 @@ Definition transitional_to_merged (p: Intermediate.program) (cde : Transitional.
   let c :=  flatten(map snd  (Maps.elementsm cde)) in
   foldr f nil c.
 
-Definition inital_memory (p : Intermediate.program) :=
+Definition initial_memory (p : Intermediate.program) :=
   let p := Linearize.linearize p in
   let bufs := Linearize.buffers p in
     let base_adress c b :=
      (*  length of code + 1 + number of triples (c',b',_) such that (c', b') that occur before (c, b) *)
       (*length (Linearize.procedures p) + 1 +*)
       length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
-                     (* TL TODO codomm doesn't typecheck... *)
+                      (* TL TODO codomm doesn't typecheck... *)
                      (* Invariant: Linearize.buffers is "continuous" *)
                      ((Linearize.buffers p))))
   in
@@ -808,7 +808,8 @@ Definition run_merged cd mem0 fuel nc :=
 
 
 Definition compile_run_merged fuel (p : Intermediate.program) :=
- run_merged (transitional_to_merged p (pre_linearize p)) (inital_memory p) fuel (1+ Nat.log2 (size (domm (Intermediate.prog_interface p)))).
+  run_merged (transitional_to_merged p (intermediate_to_transitional p)) (initial_memory p) fuel
+    (1+ Nat.log2 (size (domm (Intermediate.prog_interface p)))).
 
 Close Scope monad_scope.
 
@@ -820,6 +821,56 @@ match Compiler.compile_program p with
 | None => inl None
 end.
 
+Notation instr_merged := instr.
+
+Require Import MicroPolicies.Types.
+
+(*Notation memory := {fmap mword mt -> matom}.*)
+
+Definition binop_trans (b : Values.binop) : binop :=
+  match b with
+    Add => ADD
+  | Minus => SUB
+  | Mul => MUL
+  | Eq => EQ
+  | Leq => LEQ
+end.
+    
+
+Definition instr_tagged_to_mp (i : instr_merged) (label_pos : nat -> nat) (pos : nat) : @Types.instr mt :=
+  match i with
+  | MrNop | MrLabel _ => Nop mt
+  | MrConst i r => Const i (word_of_nat (to_nat r))
+  | MrMov r1 r2 => Mov (word_of_nat (to_nat_bis r1)) (word_of_nat (to_nat_bis r2))
+  | MrBinop b r1 r2 r3 => Binop (binop_trans b) (word_of_nat (to_nat r1)) (word_of_nat (to_nat r2)) (word_of_nat (to_nat r3))
+  | MrLoad r1 r2 => Load (word_of_nat (to_nat r1)) (word_of_nat (to_nat r2))
+  | MrStore r1 r2 => Store (word_of_nat (to_nat r1)) (word_of_nat (to_nat r2))
+  | MrJump r => Jump (word_of_nat (to_nat r))
+  | MrBnz r l => Bnz (word_of_nat (to_nat r)) (word_of_nat ((label_pos l) - pos))
+  | MrJal l => Jal (word_of_nat (label_pos l))
+  | MrHalt => Halt mt
+  end.
+
+Definition encode_instr_mp := @Types.encode_instr mt ops.
+
+Definition encode_instr i lp pos := encode_instr_mp (instr_tagged_to_mp i lp pos).
+
+Definition encode_instr_atom x lp pos : matom := (encode_instr (fst x) lp pos)@(snd x).
+
+(* puts the code at the end of the memory, along with the first pc *)
+Definition encode_code (cde : code) : memory * nat :=
+  let offset := (* 2 ^ (word_size mt) - 1 *) (*TEMPORARY*) 500 in
+  let code_length := size cde in
+  let pc0 := offset - code_length in
+  let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in
+  let lp := (fun l => let n := (find (is_label l) cde ) in pc0 + n ) in
+  let f := (fun x acc => ((encode_instr_atom x lp (offset - (snd acc))) :: (fst acc), S (snd acc)) ) in
+  (Tmp.mapk word_of_nat (fmap_of_seq (fst (foldr f ([], 0) cde))), pc0).
+
+(* return the memory along with the first pc *)
+Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory * nat :=
+  let (c, pc0) := (encode_code cde) in
+  (unionm c (initial_memory p), pc0).
 
 End WithClasses.
 
@@ -835,5 +886,4 @@ match Compiler.compile_program p with
     end
 | None => print_error ocaml_int_0
 end.
-
 

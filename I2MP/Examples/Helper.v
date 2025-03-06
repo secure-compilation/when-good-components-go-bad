@@ -38,7 +38,7 @@ Instance showInt : Show int :=
 
 Instance showWord {k : nat} : Show (word k) :=
   {
-  show m := show (ssrint.absz (int_of_word m)) (*fintype.nat_of_ord (eqtype.val m)*)
+  show m := show ( (int_of_word m)) (*fintype.nat_of_ord (eqtype.val m)*)
   }.
 
 (* Instance showRegInt : Show (Types.reg mt) := *)
@@ -123,7 +123,8 @@ Instance show_trans : Show Transitional.instr :=
        fun i =>
          match (i:Transitional.instr) with
            | Transitional.TrNop => "TrNop"
-           | Transitional.TrLabel lbl => "TrLabel " ++ (show lbl)
+           | Transitional.TrLabel (inl lbl) => "TrLabel " ++ (show lbl)
+           | Transitional.TrLabel (inr lbl) => "TrLabel " ++ (show lbl)
            | Transitional.TrConst v r => "TrConst " ++ (show v) ++ " " ++ (show r)
            | Transitional.TrMov r1 r2 => "TrMov " ++ (show r1) ++ " " ++ (show r2)
            | Transitional.TrBinOp op r1 r2 r3 => "TrBinop " ++ (show op)
@@ -172,11 +173,10 @@ Definition show_nmap { A :Type} `{_ : Show A} (m : (NMap A)) : string :=
 
 
 
-
 Instance show_dummymemtag : Show LRC.mem_tag :=
  {
   show mt := ""
-}.
+ }.
 
 Instance show_seq  { A :Type} `{_ : Show A} : Show (list A) :=
 {
@@ -208,7 +208,7 @@ Definition compile_and_show (p: Source.program) :=
       match compile_program p with
       | None => "Compilation failed"%string
       | Some inter_p =>
-        let cde := (pre_linearize inter_p) in
+        let cde := (intermediate_to_transitional inter_p) in
         (* match execN fuel st with
         | (None, str) => str
         | (Some st, str) => str
@@ -296,13 +296,72 @@ Proof.
      exact (@FMap.fmval (word_ordType k) A).
 Defined.
 
-Instance showMemory : Show (@Merged.memory concrete_int_32_mt) :=
- {
- show m :=   (foldl (fun acc '(n,v) =>
-           acc ++ (show n) ++ " : "
-               ++ (show (MicroPolicies.Types.vala v)) ++ " @ "
-               ++ (show (MicroPolicies.Types.taga v)) ++ " | ")
-        "" (elementsm m))
+
+Instance show_atom  { A B :Type} `{_ : Show A} {_ : Show B}: Show (Types.atom A B) :=
+{
+  show a := (show (Types.vala a)) ++ " @ " ++ (show (Types.taga a))
+}.
+(*
+From deriving Require Import deriving.
+
+Definition to_tag n := match n with 0 => LRC.Other | S m => LRC.Ret m end.
+Definition of_tag t := match t with LRC.Other => 0 | LRC.Ret m => S m end.
+Lemma cancel_tag : cancel of_tag to_tag. intro x ; destruct x ; simpl ; try reflexivity. Qed.
+
+Definition value_tag_isOrder := CanOrdMixin cancel_tag. (* [derive orderMixin for (LRC.value_tag)]. *)
+
+Notation atom := (Types.atom (Types.mword concrete_int_32_mt) (LRC.value_tag)).
+
+Scheme atom_rect := Induction for (Types.atom (Types.mword concrete_int_32_mt) (LRC.value_tag)) Sort Type.
+
+Definition at_indDef := Eval simpl in [indDef for atom_rect].
+Canonical at_indType := IndType var var_indDef.
+Definition at_eqMixin := Eval simpl in [derive eqMixin for var].
+Canonical at_eqType := EqType var var_eqMixin.
+Definition at_choiceMixin := [derive choiceMixin for var].
+Canonical at_choiceType := Eval hnf in ChoiceType var var_choiceMixin.
+Definition at_ordMixin := Eval simpl in [derive ordMixin for var].
+Canonical at_ordType := OrdType var var_ordMixin.
+Definition at_countMixin := [derive countMixin for var].
+Canonical at_countType := Eval hnf in CountType var var_countMixin.
+ *)
+Notation mt := concrete_int_32_mt.
+Notation ops := concrete_int_32_ops.
+
+
+Instance show_mp : Show (Types.instr concrete_int_32_mt) :=
+  {
+    show i :=
+      match i with
+      | Types.Nop => "Nop"
+      | Types.Const im r => "Const " ++ (show im) ++ " " ++ (show r)
+      | Types.Mov r1 r2 => "Mov " ++ (show r1) ++ " " ++ (show r2)
+      | Types.Binop b r1 r2 r3 => "Binop " ++ "todo : op" ++ " " ++ (show r1) ++ " " ++ (show r2) ++ " " ++ (show r3)
+      | Types.Load  r1 r2 => "Load " ++ (show r1) ++ " " ++ (show r2)
+      | Types.Store  r1 r2 => "Store " ++ (show r1) ++ " " ++ (show r2)
+      | Types.Bnz r l => "Bnz " ++ (show r) ++ " " ++ (show l)
+      | Types.Jump r => "Jump " ++ (show r)
+      | Types.Jal l => "Jal " ++ (show l)
+      | Types.Halt => "Halt"
+      | _ => "error"
+      end
+  }.
+
+Definition show_memory_word m := (odflt (show m) (omap show (Types.decode_instr m))).
+
+Instance showMemory : Show (@Merged.memory mt) :=
+  {
+    
+    show m :=  let m := mapm Types.vala m in
+               let l := ((codomm m): list _) in
+               foldl (fun acc m => acc ++ (show_memory_word m) ++ newline) "" l
+      (* foldl (fun acc ad => acc ++ (odflt (show ad) (omap show (Types.decode_instr ad))) ++ newline) "" ((codomm m): list _) *)
+    (* ( foldl (fun acc '(_,a) => acc ++ (show (Types.vala a)) ++ " | ") "" (elementsm m))*)
+(* show   (map snd (elementsm m)) *) (* (foldl (fun acc '(n,v) =>
+           acc ++ (* (show n) ++ " : " *) "| "
+               ++ (show (Types.vala v)) ++ " @ "
+               ++ (show (Types.taga v)) ++ " | ")
+        "" (elementsm m)) *)
  }.
 
 Instance showTrMemoryAux : Show (Memory.mem) :=
@@ -320,7 +379,11 @@ Instance showState : Show (Merged.state) :=
     show st :=
       let n := match (MicroPolicies.Types.taga (Merged.pc st)) with LRC.Level m => m end in
       "---------------------" ++ newline ++
-   "Memory: " ++ newline ++ (show (Merged.mem st)) ++ newline ++ "Registers: " ++ newline ++ (show (Merged.regs st )) ++ newline ++ "pc: " ++ show (MicroPolicies.Types.vala (Merged.pc st)) ++ "; level: " ++ show (ssrint.Posz n) ++ newline ++ "---------------------" ++ newline
+        "Memory: " ++ newline ++ (show (Merged.mem st)) ++ newline ++
+        "Registers: " ++ newline ++ (show (Merged.regs st )) ++ newline ++
+        "pc: " ++ show (MicroPolicies.Types.vala (Merged.pc st)) ++
+        "; level: " ++ show (ssrint.Posz n) ++ newline ++
+        "---------------------" ++ newline
   }.
 
 
@@ -466,13 +529,76 @@ match Compiler.compile_program p with
     printer (show (Intermediate.prog_procedures compiled_p))
     printer ( "intermediary pc : " ++ newline)
     printer (run_inter_and_show_pc fuel compiled_p)
-    printer (show (pre_linearize compiled_p)) 
+    printer (show (intermediate_to_transitional compiled_p)) 
     printer ( "transitional pc : " ++ newline)
-    printer (run_trans_and_show_pc (pre_linearize compiled_p) fuel compiled_p)
-    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (pre_linearize compiled_p)) (inital_memory compiled_p) fuel (1+ Nat.log2 (size (domm (Intermediate.prog_interface compiled_p)))) with
+    printer (run_trans_and_show_pc (intermediate_to_transitional compiled_p) fuel compiled_p)
+    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (intermediate_to_transitional compiled_p)) (initial_memory compiled_p) fuel (1+ Nat.log2 (size (domm (Intermediate.prog_interface compiled_p)))) with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)
     end
 | None => print_error ocaml_int_0
 end.
+
+Require Import Instance.
+
+Definition word_of_reg {k : nat} r := (@Merged.word_of_nat k (Intermediate.Register.to_nat r)).
+
+Instance showRegMap : Show ({fmap Types.reg concrete_int_32_mt ->
+                             Types.atom (Types.mword concrete_int_32_mt)
+                               (Symbolic.tag_type Symbolic.ttypes Symbolic.R)}) :=
+  {
+    show reg := (foldl (fun acc '(n,v) =>
+                          acc ++ ((register_of_nat (Merged.nat_of_word n))) ++ " : "
+                            ++ (show (MicroPolicies.Types.vala v)) ++ " @ "
+                            ++ (show (MicroPolicies.Types.taga v)) ++ " | ")
+                   "" (elementsm reg))
+  }.
+
+Instance showStateMP : Show (state) :=
+  {
+    show st :=
+      let n := match (Types.taga (Symbolic.pc st)) with LRC.Level m => m end in
+      "---------------------" ++ newline ++
+        "Memory: " ++ newline ++ (show (Symbolic.mem st)) ++ newline ++
+        "Registers: " ++ newline ++ (show (@Symbolic.regs concrete_int_32_mt LRC.sym_lrc st )) ++ newline ++
+        "pc: " ++ show (MicroPolicies.Types.vala (Symbolic.pc st)) ++
+        "; level: " ++ show (ssrint.Posz n) ++ newline ++ "---------------------" ++
+        newline
+  }.
+
+Fixpoint execN (n: nat) (st: state) : option Z + nat :=
+  (*
+  printer ( (* show st *) (show (MicroPolicies.Types.vala (Symbolic.pc st))) ++ " | " )
+   *)
+  match n with
+  | O => inr 3
+  | S n' =>
+    match stepf st with
+    | None => (inl (
+             do! w <- (Symbolic.regs st (word_of_reg R_COM));
+             Some (Symbolic.convert (word.int_of_word (Types.vala w)))))
+    | Some (st', _) =>
+        execN n' st'
+    end
+  end.
+
+Definition show_memory_word_alt m := (odflt "failed2" (omap (@show _ show_mp) (@Types.decode_instr concrete_int_32_mt concrete_int_32_ops m))).
+
+Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
+  printer ("executing merged :" ++ newline)
+  match compile_program p with
+  | None => print_error ocaml_int_0
+  | Some inter_p =>
+      let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
+      let nc := (1+ Nat.log2 (size (domm (Intermediate.prog_interface inter_p)))) in
+      let st := load (merged_to_mp_backend inter_p merged_p) nc in
+      printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) 
+     (* printer (show (Symbolic.mem st)) *)
+      match execN fuel st with
+    | inl (Some n) => print_ocaml_int (z2int n)
+    | inl None => print_error ocaml_int_1
+    | inr n => print_error (nat2int n)
+      end
+  end
+.

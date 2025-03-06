@@ -55,7 +55,7 @@ Definition debug :=
 fun (p : Source.program) (fuel : nat) =>
 match Compiler.compile_program p with
 | Some compiled_p =>
-    match  run_transitional (pre_linearize compiled_p) fuel compiled_p with
+    match  run_transitional (intermediate_to_transitional compiled_p) fuel compiled_p with
     | (str,inl (Some n)) => print_string_ocaml str (* print_ocaml_int (z2int n)*)
     | (str,inl None) => print_string_ocaml str
     | (str,inr n) => print_string_ocaml str

@@ -34,9 +34,7 @@ Definition def_mem_tag (c : Component.id) := MTag Other None.
 *)
 Definition proc_label : Set := Component.id * Procedure.id.
 
-Definition plabel : Set := label * option proc_label.
-
-Definition label_of (pl : plabel) : label := let (n,_) := pl in n.
+Definition plabel : Set := label +  proc_label.
 
 Variant instr :=
 | TrNop : instr
@@ -91,20 +89,13 @@ Definition code := NMap (seq (instr * mem_tag)).
 
 
 
-Record compiler_env :=
-  { program : Intermediate.program ;
-    make_label : Component.id -> Procedure.id -> label ;
-  }.
-
-
-Definition instr_to_transitional (cenv : compiler_env)
-           (c : Component.id) (i : Machine.instr) : (instr * mem_tag) :=
+Definition instr_to_transitional (c : Component.id) (i : Machine.instr) : (instr * mem_tag) :=
   match i with
-  | ICall c' P => if beq_nat c c' then ((TrJalProc (c',P)), def_mem_tag c) (* ((TrJalNat (make_label cenv c' P)), def_mem_tag c) *)
+  | ICall c' P => if beq_nat c c' then ((TrJalProc (c',P)), def_mem_tag c)
     else ((TrJalProc (c',P)), def_mem_tag c)
   | IReturn => ((TrJump R_RA), def_mem_tag c)
   | INop => (TrNop, def_mem_tag c)
-  | ILabel l =>  (TrLabel (l,None), def_mem_tag c)
+  | ILabel l =>  (TrLabel (inl l), def_mem_tag c)
   | IConst v r =>  (TrConst v r, def_mem_tag c)
   | IMov r r' => (TrMov r r', def_mem_tag c)
   | IBinOp op r r' r'' => (TrBinOp op r r' r'', def_mem_tag c)
@@ -394,8 +385,8 @@ Fixpoint find_label (cd : seq (instr * mem_tag)) (l : label) : option Z :=
   let fix aux c o :=
       match c with
       | [] => None
-      | (TrLabel l',_) :: c' =>
-        if Nat.eqb l (label_of l') then
+      | (TrLabel (inl l'),_) :: c' =>
+        if Nat.eqb l l' then
           Some o
         else
           aux c' (1 + o)%Z
@@ -434,7 +425,7 @@ Fixpoint find_plabel (cd : seq (instr * mem_tag)) (c : Component.id) (p : Proced
   let fix aux cd o :=
       match cd with
       | [] => None
-      | (TrLabel (_,Some (c',p')),_) :: cd' =>
+      | (TrLabel (inr (c',p')),_) :: cd' =>
         if Nat.eqb c c' && Nat.eqb p p' then
           Some o
         else
@@ -776,8 +767,8 @@ Fixpoint execN (n: nat) (cde: code) (st: stackless) : option Z + nat :=
 
 
 
-Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) : mem_tag :=
-  let I := Intermediate.prog_interface (program cenv) in
+Definition head_tag (pr : Intermediate.program) (c : Component.id) (p : Procedure.id) : mem_tag :=
+  let I := Intermediate.prog_interface pr in
   let allowed_call_by (c' : Component.id) :=
       Option.default false (do i <- getm I c ;
                             do i' <- getm I c' ;
@@ -785,17 +776,17 @@ Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) 
   in MTag LRC.Other c (Some (p, filter allowed_call_by (domm I))).
 
 
-Definition linearize_proc (cenv : compiler_env)
+Definition linearize_proc (pr : Intermediate.program )
            (c : Component.id) (p : Procedure.id) : seq (instr * mem_tag) :=
-  let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
+  let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (pr)) c;
                                     getm map p)
-  in ((TrLabel (make_label cenv c p, Some (c,p))), head_tag cenv c p) :: (map (instr_to_transitional cenv c) code).
+  in ((TrLabel (inr (c,p))), head_tag pr c p) :: (map (instr_to_transitional c) code).
 
-Definition linearize_component (cenv : compiler_env) (c : Component.id) : seq (instr * mem_tag) :=
+Definition linearize_component (pr : Intermediate.program ) (c : Component.id) : seq (instr * mem_tag) :=
   let procs : seq Procedure.id :=
-      Option.default fset0 (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
+      Option.default fset0 (do map <- getm (Intermediate.prog_procedures (pr)) c;
                             Some (domm map)) in
-  flatten (map (linearize_proc cenv c) procs).
+  flatten (map (linearize_proc pr c) procs).
 
 
 Fixpoint compile_component_list {T} cenv (l : list (Component.id * T)) :=
@@ -804,21 +795,14 @@ Fixpoint compile_component_list {T} cenv (l : list (Component.id * T)) :=
   | (c,_) :: cs => (c,linearize_component cenv c) :: compile_component_list cenv cs
 end.
 
-Definition intermediate_to_transitional (cenv : compiler_env) : code := 
-mkfmap (compile_component_list cenv (elementsm (Intermediate.prog_procedures (program cenv)))).
+Definition intermediate_to_transitional (pr : Intermediate.program) : code := 
+mkfmap (compile_component_list pr (elementsm (Intermediate.prog_procedures (pr)))).
 
 
 
-
+(*
 Definition pre_linearize (p : Intermediate.program) : code :=
-  let lmax := max_label p in
-  let pmax := max_proc_id p in
- (*  let cmax := max_comp p in
-  let cenv := {| program := p ;
-                 make_label := (fun c p => lmax + c * pmax + p + pmax * cmax +1) |} in *)
-  let cenv := {| program := p ;
-                 make_label := (fun c p => lmax + c * pmax + p +1000) |} in 
- intermediate_to_transitional cenv.
+ intermediate_to_transitional p. *)
 
 (* Record program : Type := mkProg
     prog_code : code;
@@ -835,7 +819,7 @@ Definition run_transitional cd fuel p :=
 end.
 
 Definition compile_run fuel (p : Intermediate.program) :=
- run_transitional (pre_linearize p) fuel p.
+ run_transitional (intermediate_to_transitional p) fuel p.
 
 Close Scope monad_scope.
 
