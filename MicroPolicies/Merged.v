@@ -278,15 +278,17 @@ Definition component_memory_prefix (c : nat) (nc : nat) :=
  @word.shlw (word_size mt) (word_of_nat (c)) (word_of_nat ((word_size mt) - nc)). (* left shift *)
 
 Definition alloc_fun (cde : code) (st : state) : option state :=
-  let prefix := (component_memory_prefix (nat_of_word ( vala (pc st))) (comp_num st)) in
-  let mask := (component_memory_prefix ((2 ^ (comp_num st))-1) (comp_num st)) in
-  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
-  do! current_instr <- nth_error cde (nat_of_word (vala (pc st)));
-  let current_c := (color (snd current_instr)) in
-  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
-  let max_addr := last (prefix) (filter prefix_filter (domm (mem st))) in
   do! ra_val <- regs st (to_nat R_RA);
   let next_pc := (vala ra_val)@(taga (pc st)) in
+  do! instr <- nth_error cde (nat_of_word (vala ra_val));
+  let current_c := color (snd (instr)) in
+  do! current_instr <- nth_error cde (nat_of_word (vala (pc st)));
+  let current_c := (color (snd current_instr)) in
+  let prefix := (component_memory_prefix (1 + current_c) (comp_num st)) in
+  let mask := (component_memory_prefix ((2 ^ (comp_num st))-1) (comp_num st)) in
+  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
+  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
+  let max_addr := last (prefix) (filter prefix_filter (domm (mem st))) in
   (* create the new bloc *)
   let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c) in
   do! size <- regs st (to_nat_bis (inr R_SC_ARG1));
@@ -809,7 +811,7 @@ Definition run_merged cd mem0 fuel nc :=
 
 Definition compile_run_merged fuel (p : Intermediate.program) :=
   run_merged (transitional_to_merged p (intermediate_to_transitional p)) (initial_memory p) fuel
-    (1+ Nat.log2 (size (domm (Intermediate.prog_interface p)))).
+    (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))).
 
 Close Scope monad_scope.
 
@@ -861,23 +863,22 @@ Definition findopt {A : Type} (pred : A -> bool) l : option nat :=
   foldr (fun el acc => match acc with | None => if pred el then Some 0 else acc | Some n => Some (n+1)
                     end) None l.
 
-(* puts the code at the end of the memory, along with the first pc *)
-Definition encode_code (cde : code) : memory * nat :=
-  let offset := (* 2 ^ (word_size mt) - 1 *) (*TEMPORARY*) 500 in
+Definition encode_code (cde : code) (pc0 : nat) : memory :=
   let code_length := size cde in
-  let pc0 := offset - code_length in
+  let offset := pc0 + code_length in
   let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in
   let lp := (fun l => match (findopt (is_label l) cde ) with
                    | Some (n) => pc0 + n
                    | _ => l end) in
   let f := (fun x acc => ((encode_instr_atom x lp (offset - 1 - (snd acc))) :: (fst acc), S (snd acc)) ) in
-  (Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (fst (foldr f ([], 0) cde))), pc0).
-(* TODO : check that pos in computed correctly in foldr f *)
+  Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (fst (foldr f ([], 0) cde))).
 
 (* return the memory along with the first pc *)
 Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory * nat :=
-  let (c, pc0) := (encode_code cde) in
-  (unionm c (initial_memory p), pc0).
+  let m := (initial_memory p) in
+  let pc0 := size m in
+  let c := (encode_code cde pc0) in
+  (unionm c m, pc0).
 
 End WithClasses.
 

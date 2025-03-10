@@ -534,7 +534,7 @@ match Compiler.compile_program p with
     printer (show (intermediate_to_transitional compiled_p)) 
     printer ( "transitional pc : " ++ newline)
     printer (run_trans_and_show_pc (intermediate_to_transitional compiled_p) fuel compiled_p)
-    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (intermediate_to_transitional compiled_p)) (initial_memory compiled_p) fuel (1+ Nat.log2 (size (domm (Intermediate.prog_interface compiled_p)))) with
+    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (intermediate_to_transitional compiled_p)) (initial_memory compiled_p) fuel (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface compiled_p))))) with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)
@@ -573,6 +573,7 @@ Instance showStateMP : Show (state) :=
 Definition show_memory_word_alt m := (odflt "failed2" (omap (@show _ show_mp) (@Types.decode_instr concrete_int_32_mt concrete_int_32_ops m))).
 
 Fixpoint execN (n: nat) (st: state) : option Z + nat :=
+  printer ((show (Types.vala (Symbolic.pc st))) ++ " | ")
   match n with
   | O => inr 3
   | S n' =>
@@ -591,7 +592,7 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
   | None => print_error ocaml_int_0
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
-      let nc := (1+ Nat.log2 (size (domm (Intermediate.prog_interface inter_p)))) in
+      let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
       let st := load (merged_to_mp_backend inter_p merged_p) nc in
       match execN fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
@@ -624,7 +625,7 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
   | None => print_error ocaml_int_0
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
-      let nc := (1+ Nat.log2 (size (domm (Intermediate.prog_interface inter_p)))) in
+      let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
       let st := load (merged_to_mp_backend inter_p merged_p) nc in
  (*     printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) *)
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
