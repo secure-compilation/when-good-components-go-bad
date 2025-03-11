@@ -122,6 +122,7 @@ Record ivec (op : opcode) : Type := IVec {
   ts  : hseq tag_type (inputs op)
 }.
 
+
 Definition instr_rules (rcom_val : Z)
   (op : opcode)
   (tpc : tag_type Symbolic.P)
@@ -142,22 +143,27 @@ Definition instr_rules (rcom_val : Z)
   | MOV,     [hseq ts; td]     => do! _ <- check_belong current tni;
                                      Some (OVec tpc ([hseq Other; ts] : hseq _ (outputs MOV)), None)
 
-  | BINOP b, [hseq tx; ty; td] => do! _ <- check_belong current tni;
+  | BINOP b, [hseq tx; ty; td] => do! _ <- is_not_capacity tx;
+                                  do! _ <- is_not_capacity ty;
+                                  do! _ <- check_belong current tni;
                                      Some (OVec tpc ([hseq tx; ty; Other] : hseq _ (outputs  (BINOP b))), None)
 
-  | LOAD,    [hseq tp; ts; td] => do! _ <- check_belong current tni;
+  | LOAD,    [hseq tp; ts; td] => do! _ <- is_not_capacity tp;
+                                  do! _ <- check_belong current tni;
                                      if belong current (Some ts) then
                                        let (ts', td') := switch_val ts Other in
                                        Some (OVec tpc ([hseq tp; ts'; td'] : hseq _ (outputs LOAD )), None)
                                      else
                                        Some (OVec tpc ([hseq tp; ts; Other] : hseq _ (outputs LOAD )), None)
 
-  | STORE,   [hseq tp; ts; td] => do! _ <- check_belong current tni;
+  | STORE,   [hseq tp; ts; td] => do! _ <- is_not_capacity tp;
+                                  do! _ <- check_belong current tni;
                                  do! _ <- check_belong current (Some td);
                                      let (td', _) := switch_val td ts in
                                      Some (OVec tpc ([hseq tp; Other; td'] : hseq _ (outputs  STORE)), None)
 
-  | BNZ,     [hseq tx]         => do! _ <- check_belong current tni;
+  | BNZ,     [hseq tx]         => do! _ <- is_not_capacity tx;
+                                  do! _ <- check_belong current tni;
                                      Some (OVec tpc ([hseq tx] : hseq _ (outputs BNZ)), None)
 
   | JUMP,    [hseq tp]         => if belong current tni then
