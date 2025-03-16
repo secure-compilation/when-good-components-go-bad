@@ -10,6 +10,8 @@ TAGGED_PREFIX="run_tagged_compiled_"
 MERGED_PREFIX="run_merged_compiled_"
 MP_PREFIX="run_mp_compiled_"
 
+RECOMP_PREFIX="run_recomposition_"
+
 if (( $# == 1 )); then
     if [[ $1 = "--force-extraction" ]]; then
         echo "*** Forcing extraction ***"
@@ -25,6 +27,17 @@ pushd $EXTRACTION_DIR
 ocamlc -a nums.cma big.ml -o big.cma
 # ocamlc -c nums.cma Extraction/big.ml -o $EXTRACTION_DIR/big.cmo
 
+
+# run recomposition examples
+echo "*** Running recomposition examples ***"
+for example in $RECOMP_PREFIX*.ml; do
+    [ -f "$example" ] || continue
+    # prepend big int import to each example
+    echo -e "open Big_int\n$(cat $example)" > $example
+    # run the example
+    echo "Output of $example:"
+    ocaml nums.cma big.cma $example
+done
 
 # run source examples
 echo "*** Running examples at the source level ***"

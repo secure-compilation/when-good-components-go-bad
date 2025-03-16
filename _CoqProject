@@ -111,6 +111,7 @@ I2MP/Examples/NestedCalls.v
 
 MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
+MicroPolicies/Recomposition/Helper.v
 
 Tagging/Tags.v   # not currently used
 Tagging/Memory.v # not currently used

@@ -79,6 +79,15 @@ Definition to_nat_bis (r : register + sys_reg) : nat :=
         | R_SC_ARG2 => 18
         | R_SC_ARG3 => 19
         end
+    end.
+
+Definition from_nat_bis (n : nat) : register + sys_reg :=
+    match n with
+    | 16 => inr R_SC_RET
+    | 17 => inr R_SC_ARG1
+    | 18 => inr R_SC_ARG2
+    | 19 => inr R_SC_ARG3
+    | _ => inl (from_nat n)
 end.
 
 Notation pc_type := (atom (tag_type Symbolic.P)).
@@ -123,71 +132,11 @@ Record ivec (op : opcode) : Type := IVec {
 }.
 
 
-Definition instr_rules (rcom_val : Z)
-  (op : opcode)
-  (tpc : tag_type Symbolic.P)
-  (ti  : tag_type Symbolic.M)
-  (ts : hseq (tag_type) (inputs op))
-  (tni : option (tag_type Symbolic.M))
-  : option ((ovec op) * (option event)) :=
-  let current := match ti with {| color := c |} => c end in
-  let level := match tpc with Level n => n end in
-  match op, ts return option (ovec op * option event) with
-    
-  | NOP,     [hseq]            => do! _ <- check_belong current tni;
-                                     Some (OVec tpc ([hseq] : hseq _ (outputs NOP)), None)
-
-  | CONST,   [hseq td]         => do! _ <- check_belong current tni;
-                                     Some (OVec tpc ([hseq Other] : hseq _ (outputs CONST)), None)
-
-  | MOV,     [hseq ts; td]     => do! _ <- check_belong current tni;
-                                     Some (OVec tpc ([hseq Other; ts] : hseq _ (outputs MOV)), None)
-
-  | BINOP b, [hseq tx; ty; td] => do! _ <- is_not_capacity tx;
-                                  do! _ <- is_not_capacity ty;
-                                  do! _ <- check_belong current tni;
-                                     Some (OVec tpc ([hseq tx; ty; Other] : hseq _ (outputs  (BINOP b))), None)
-
-  | LOAD,    [hseq tp; ts; td] => do! _ <- is_not_capacity tp;
-                                  do! _ <- check_belong current tni;
-                                     if belong current (Some ts) then
-                                       let (ts', td') := switch_val ts Other in
-                                       Some (OVec tpc ([hseq tp; ts'; td'] : hseq _ (outputs LOAD )), None)
-                                     else
-                                       Some (OVec tpc ([hseq tp; ts; Other] : hseq _ (outputs LOAD )), None)
-
-  | STORE,   [hseq tp; ts; td] => do! _ <- is_not_capacity tp;
-                                  do! _ <- check_belong current tni;
-                                 do! _ <- check_belong current (Some td);
-                                     let (td', _) := switch_val td ts in
-                                     Some (OVec tpc ([hseq tp; Other; td'] : hseq _ (outputs  STORE)), None)
-
-  | BNZ,     [hseq tx]         => do! _ <- is_not_capacity tx;
-                                  do! _ <- check_belong current tni;
-                                     Some (OVec tpc ([hseq tx] : hseq _ (outputs BNZ)), None)
-
-  | JUMP,    [hseq tp]         => if belong current tni then
-                                   Some (OVec  tpc ([hseq tp] : hseq _ (outputs JUMP)), None)
-                                 else
-                                   (* TL TODO: should forbid return if level = 0 ?         *)
-                                   (*          I think it is already enforced by invariant *)
-                                   (*          (unique Ret n)                              *)
-                                   let ev := do! c' <- get_tni_color tni;
-                                               Some (ERet current (rcom_val) c') in
-                                   do! _ <- check_ret level.-1 tp;
-                                     Some (OVec  (build_tpc level.-1) ([hseq Other] : hseq _ (outputs JUMP)), ev)
-
-  | JAL,     [hseq tra]    => if belong current tni then
-                                   Some (OVec  tpc ([hseq tra] : hseq _ (outputs JAL)), None)
-                                 else
-                                   let ev := do! c' <- get_tni_color tni;
-                                             do! p  <- get_proc_name tni;
-                                                 Some (ECall current p (rcom_val) c') in
-                                   do! _ <- check_entry current tni;
-                                       Some (OVec  (build_tpc level.+1) ([hseq Ret level] : hseq _ (outputs JAL)), ev)
-
-  | _,     _                   => None
-  end.
+Context {instr_rules : Z ->
+       forall op : opcode,
+       tag_type Symbolic.P ->
+       tag_type Symbolic.M ->
+       hseq (fun tk : Symbolic.tag_kind => tag_type tk) (inputs op) -> option (tag_type Symbolic.M) -> option (ovec op * option event)}.
 
 Definition next_state (st : state)
   (op : opcode)
@@ -280,8 +229,8 @@ Definition binop_of_binop (b : binop) : Types.binop :=
   end.
 
 (* allows to split memory between components *)
-Definition component_memory_prefix (c : nat) (nc : nat) :=
- @word.shlw (word_size mt) (word_of_nat (c)) (word_of_nat ((word_size mt) - nc)). (* left shift *)
+Definition component_memory_prefix {k} (c : nat) (nc : nat) :=
+ @word.shlw k (word_of_nat (c)) (word_of_nat ((word_size mt) - nc)). (* left shift *)
 
 Definition alloc_fun (cde : code) (st : state) : option state :=
   do! ra_val <- regs st (to_nat R_RA);
@@ -314,6 +263,19 @@ Definition alloc_fun (cde : code) (st : state) : option state :=
 
 
 Definition alloc_label := 2 ^ 14.
+
+
+Definition reg_clear_read :=
+  let reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil in
+  map (fun n => (RegRead (from_nat_bis n))) reg_list.
+
+(* return an hseq containing the tags of all registers apart from RA and RCOM, plus top_reg *)
+Definition reg_clear_list (regs : registers)
+  top_reg_tag : (hseq (Symbolic.tag_type lrc_tags) (inputs JUMP)) :=
+  let reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil in
+  @Symbolic.make_hseq _ _ _ (top_reg_tag :: (map (fun n =>
+                                odflt top_reg_tag (omap taga (regs n))) reg_list)).
+
 
 Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
 | step_nop : forall mem reg pc tpc ti nc
@@ -370,8 +332,8 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     (ST   : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrJump r))
     (RW   : reg (to_nat r) = Some w@t1),
-    let mvec := IVec tpc ti ([hseq t1] : hseq _ (inputs JUMP)) in forall
-    (NEXT : next_state_updates_and_pc cde st mvec [:: RegRead (inl r) ] w = Some (st', ev)),
+    let mvec := IVec tpc ti ((reg_clear_list reg t1) : hseq _ (inputs JUMP)) in forall
+    (NEXT : next_state_updates_and_pc cde st mvec ((RegRead (inl r)) :: reg_clear_read) w = Some (st', ev)),
     step cde st st' ev
 | step_bnz : forall mem reg pc r n w tpc ti t1 nc
     (ST   : st = State mem reg pc@tpc nc)
@@ -386,18 +348,17 @@ Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
     (INST : executing cde pc ti (MrJal l))
     (OLD : reg (to_nat R_RA) = Some old@told)
     (NOT_ALLOC : l <> alloc_label),
-    let mvec := IVec tpc ti ([hseq told] : hseq _ (inputs JAL)) in
+    let mvec := IVec tpc ti ((reg_clear_list reg told) : hseq _ (inputs JAL)) in
     forall (PC' :  Some pc' = (find_label cde l))
-    (NEXT : next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1)) ] (word_of_nat pc') = Some (st', ev)),
+      (NEXT : next_state_updates_and_pc cde st mvec
+                ((RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))) :: reg_clear_read) (word_of_nat pc') = Some (st', ev)),
     step cde st st' ev
 | step_jal_alloc : forall mem reg pc  l tpc ti old told st_inter nc
     (ST : st = State mem reg pc@tpc nc)
     (INST : executing cde pc ti (MrJal l))
     (OLD : reg (to_nat R_RA) = Some old@told)
     (ALLOC : l = alloc_label),
-    let mvec := IVec tpc ti ([hseq told] : hseq _ (inputs JAL)) in
     forall (NEXT : @next_state_do_update st Symbolic.R Other ( RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))) = Some st_inter)
-      (*NEXT : next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1)) ] pc' = Some (st_inter, ev)*)
     (ST' : (alloc_fun cde st_inter) = Some st') (EV : ev = None),
     step cde st st' ev
 .
@@ -454,8 +415,8 @@ Definition eval_step (cde : code) (st : state) : option state_ev :=
     | MrJump r =>
       do! a <- reg (to_nat r);
       let: w@t1 := a in
-      let mvec := IVec pctag ti ([hseq t1] : hseq _ (inputs JUMP)) in
-      next_state_updates_and_pc cde st mvec [:: RegRead (inl r)] w
+      let mvec := IVec pctag ti ((reg_clear_list reg t1) : hseq _ (inputs JUMP)) in
+      next_state_updates_and_pc cde st mvec ((RegRead (inl r)) :: reg_clear_read) w
     | MrBnz r n =>
       do! a <- reg (to_nat r);
       let: w@t1 := a in
@@ -470,14 +431,29 @@ Definition eval_step (cde : code) (st : state) : option state_ev :=
         do! st' <- alloc_fun cde st_inter;
         Some (st', None)
       else
-        let mvec := IVec pctag ti ([hseq told] : hseq _ (inputs JAL)) in
+        let mvec := IVec pctag ti ((reg_clear_list reg told) : hseq _ (inputs JAL)) in
         match (find_label cde i) with
         | None => None
-        | Some (pc') => next_state_updates_and_pc cde st mvec [:: RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))] (word_of_nat pc')
+        | Some (pc') => next_state_updates_and_pc cde st mvec
+                         ((RegWrite (inl R_RA) (word_of_nat((nat_of_word pc).+1))) :: reg_clear_read) (word_of_nat pc')
         end
     | MrHalt => None
     end
   end.
+
+
+Lemma eq_op_to_eq : forall (x y : nat), (x = y) <-> (true = (x == y)).
+Proof.
+  intro x.
+  induction x ; split ; intro eq ; try ( induction y ; try reflexivity ; inversion eq ).
+  + unfold "==", nat_eqType, nat_eqMixin. simpl.
+    unfold "==", nat_eqType, nat_eqMixin in IHx.
+    remember (IHx y) as a. destruct a as [l r]. simpl in l. destruct Heqa. rewrite H0 in l.
+    apply l. reflexivity.
+  + cut (x=y).
+    ++ intro. auto.
+    ++ apply IHx. auto.
+Qed.
 
 
 Theorem eval_step_complete:
@@ -492,11 +468,12 @@ Proof.
   + remember (l == alloc_label) as cond. induction cond ; try (rewrite <- PC' ; exact NEXT).
     unfold "==", nat_eqType, nat_eqMixin in Heqcond; simpl.
     inversion Heqcond as [eq]. destruct (@eqnP l alloc_label). destruct (NOT_ALLOC e). inversion eq.
-  + rewrite ALLOC.  rewrite EV.
-    remember {|mem := mem st; regs := setm (regs st) 4 (word_of_nat (nat_of_word pc0).+1)@Other;
-     pc := pc st ; comp_num := comp_num st|} as st_alt. cut (st_alt = st_inter).
+  +  unfold eval_step. rewrite ST.  rewrite INST. rewrite OLD. simpl. rewrite <- ALLOC.
+     rewrite <- (fst (eq_op_to_eq l l)) ; try reflexivity. rewrite EV. 
+    remember {|mem := mem0; regs := setm reg 4 (word_of_nat (nat_of_word pc0).+1)@Other;
+     pc := pc0@tpc0; comp_num := nc |} as st_alt. cut (st_alt = st_inter).
     ++ intro eq. rewrite <- eq in ST'. rewrite Heqst_alt in ST'. rewrite ST'. auto.
-    ++ unfold next_state_do_update in NEXT. unfold to_nat_bis in NEXT. unfold to_nat in NEXT.
+    ++ unfold next_state_do_update,to_nat_bis, to_nat in NEXT. rewrite ST in NEXT.
        inversion NEXT. exact Heqst_alt.
 Qed.
 
@@ -532,19 +509,6 @@ Ltac resolve_memory_deep regs0 STEP_EQ s :=
        cut (rval = save) ; try (rewrite Heqsave ; rewrite Heqrval ; reflexivity) ;
        unfold getm_def in STEP_EQ ; unfold getm_def in Heqrval ;
        simpl in Heqrval ; simpl in STEP_EQ ; rewrite <- Heqrval in STEP_EQ ; destruct rval.
-
-Lemma eq_op_to_eq : forall (x y : nat), (x = y) <-> (true = (x == y)).
-Proof.
-  intro x.
-  induction x ; split ; intro eq ; try ( induction y ; try reflexivity ; inversion eq ).
-  + unfold "==", nat_eqType, nat_eqMixin. simpl.
-    unfold "==", nat_eqType, nat_eqMixin in IHx.
-    remember (IHx y) as a. destruct a as [l r]. simpl in l. destruct Heqa. rewrite H0 in l.
-    apply l. reflexivity.
-  + cut (x=y).
-    ++ intro. auto.
-    ++ apply IHx. auto.
-Qed.
 
 Theorem eval_step_sound:
   forall cd st st' ev
@@ -665,6 +629,18 @@ Fixpoint execN (n: nat) (cde: code) (st: state) : option Z + nat :=
              do! w <- (regs st (to_nat R_COM));
              Some (Symbolic.convert (word.int_of_word (vala w)))))
     | Some (st', _) => execN n' cde st'
+    end
+  end.
+
+
+Fixpoint execN_trace (n: nat) (cde: code) (st: state) : trace :=
+  match n with
+  | O => []
+  | S n' =>
+    match eval_step cde st with
+    | None => []
+    | Some (st', None) => execN_trace n' cde st'
+    | Some (st', Some ev) => ev :: (execN_trace n' cde st')
     end
   end.
 
@@ -810,14 +786,18 @@ Definition reg0 : registers :=
    (18,default_reg) ;
    (19,default_reg) ].
 
-Definition run_merged cd mem0 fuel nc :=
+Definition initial_state (p : Intermediate.program) :=
+  let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))) in
+  let mem0 := (initial_memory p) in
   let pctag := build_tpc 0 in
-      execN fuel cd {|mem := mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
+  {|mem := mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
+
+Definition run_merged cd fuel p :=
+      execN fuel cd (initial_state p).
 
 
 Definition compile_run_merged fuel (p : Intermediate.program) :=
-  run_merged (transitional_to_merged p (intermediate_to_transitional p)) (initial_memory p) fuel
-    (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))).
+  run_merged (transitional_to_merged p (intermediate_to_transitional p)) fuel p.
 
 Close Scope monad_scope.
 
@@ -889,11 +869,23 @@ Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory 
 End WithClasses.
 
 
+
+Definition instr_rules (rcom_val : Z)
+  (op : opcode)
+  tpc
+  ti
+  (ts : hseq _ (inputs op))
+  tni
+  : option ((ovec op) * (option event)) :=
+  do! out <- LRC.instr_rules {| Symbolic.rcom_value := rcom_val|} op tpc ti ts tni;
+  let 'Symbolic.OVec trpc' tr' := (fst out) in
+  Some ({| trpc := trpc' ; tr := tr' |}, snd out).
+
 Definition compile_and_run_from_source_merged_ex (mt : machine_types) := 
 fun (p : Source.program) (fuel : nat) =>
 match Compiler.compile_program p with
 | Some compiled_p =>
-    match @compile_run_merged mt fuel compiled_p with
+    match @compile_run_merged mt instr_rules fuel compiled_p with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)

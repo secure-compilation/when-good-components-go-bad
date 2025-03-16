@@ -176,8 +176,8 @@ End Values.
 
 Definition value_to_pc_tag (vt : value_tag) : option pc_tag :=
   match vt with
-  | Other => None
   | Ret n => Some (Level (S n))
+  | _ => None
   end.
 
 Module Register.
@@ -690,7 +690,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
           ret (E0, (mem, regs, pc', pct))
         else (
           match (tvtag (Register.get r regs), pct) with
-          | (Other, _) => None
+          | (Other, _) | (InternalJump, _) | (Invalidated, _) => None
           | (Ret n, Level m) =>(
          if orb ((Pointer.offset pc' <? 0) % Z)  (negb (ssrnat.eqn (S n) m)) then
             None

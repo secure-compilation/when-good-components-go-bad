@@ -36,6 +36,8 @@ Definition coqstring_of_value_tag (t : value_tag) : string :=
   match t with
     | Ret n => "Ret " ++ coqstring_of_nat n
     | Other => "Other"
+    | InternalJump => "InternalJump"
+    | Invalidated => "Invalidated"
   end.
 
 Definition coqstring_of_ratom (a : ratom) : string :=

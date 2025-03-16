@@ -42,9 +42,9 @@ Definition inputs (op : opcode) : seq tag_kind :=
   | BINOP _ => [:: R;R;R]
   | LOAD    => [:: R;M;R]
   | STORE   => [:: R;R;M]
-  | JUMP    => [:: R]
+  | JUMP    => nseq 11 R
   | BNZ     => [:: R]
-  | JAL     => [:: R]
+  | JAL     => nseq 11 R
   (* the other opcodes are not used by the symbolic machine *)
   | JUMPEPC => [:: P]
   | ADDRULE => [::]
@@ -283,6 +283,24 @@ Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
 Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state_ev :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
+Definition make_hseq {I : Set} {f : I -> Type} (t : I ) (l : list (f t))  : (hseq f (nseq (size l) t)).
+  induction l.
+  + simpl ; try exact HSeqNil.
+  + simpl. exact (HSeqCons a IHl).
+Qed.
+
+
+(* return an hseq containing the tags of all registers apart from RA and RCOM, plus top_reg *)
+Definition reg_clear_list (regs : {fmap reg mt -> atom (tag_type ttypes R)})
+  top_reg_tag : (hseq (tag_type ttypes) (vinputs JUMP)) :=
+  let reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil in
+  @make_hseq tag_kind (tag_type ttypes) _ (top_reg_tag :: (map (fun n =>
+                                let a := @word.as_word (reg_field_size mt) (ssrint.Posz n) in
+                                odflt top_reg_tag (omap taga (regs a))) reg_list)).
+
+Definition reg_clear_read :=
+  let reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil in
+  map (fun n => (RegRead (word.as_word (ssrint.Posz n)))) reg_list.
 
 Inductive step (st st' : state) (ev : option event) : Prop :=
 | step_nop : forall mem reg pc tpc i ti extra nc
@@ -339,8 +357,8 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jump r))
     (RW   : reg r = Some w@t1),
-    let mvec := IVec JUMP tpc ti [hseq t1] in forall
-    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] w = Some (st', ev)),    step st st' ev
+    let mvec := IVec JUMP tpc ti (reg_clear_list reg t1)  in forall
+    (NEXT : next_state_updates_and_pc st mvec ( (RegRead r):: reg_clear_read) w = Some (st', ev)),    step st st' ev
 | step_bnz : forall mem reg pc i r n w tpc ti t1 extra nc
     (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
@@ -355,9 +373,9 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
     (PC : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jal imm))
     (OLD : reg ra = Some old@told),
-    let mvec := IVec JAL tpc ti [hseq told] in
+    let mvec := IVec JAL tpc ti (reg_clear_list reg told)  in
     let pc' := (swcast imm) in forall
-    (NEXT : next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1) ] pc' = Some (st', ev)), step st st' ev
+    (NEXT : next_state_updates_and_pc st mvec ((RegWrite ra (pc.+1)) :: reg_clear_read) pc' = Some (st', ev)), step st st' ev
 | step_syscall : forall mem reg pc sc tpc extra nc
     (ST : st = State mem reg pc@tpc extra nc)
     (PC : mem pc = None)

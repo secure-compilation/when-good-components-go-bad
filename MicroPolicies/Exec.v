@@ -75,8 +75,8 @@ Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
     | Jump r =>
       do! a <- reg r;
       let: w@t1 := a in
-      let mvec := IVec JUMP tpc ti [hseq t1] in
-      next_state_updates_and_pc st mvec [:: RegRead r] w
+      let mvec := IVec JUMP tpc ti (reg_clear_list reg  t1) in
+      next_state_updates_and_pc st mvec ((RegRead r) :: reg_clear_read) w
     | Bnz r n =>
       do! a <- reg r;
       let: w@t1 := a in
@@ -87,9 +87,9 @@ Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
     | Jal i =>
       do! oldtold <- reg ra;
       let: _@told := oldtold in
-      let mvec := IVec JAL tpc ti [hseq told] in
+      let mvec := IVec JAL tpc ti (reg_clear_list reg  told) in
       let pc' := swcast i in
-      next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1)] pc'
+      next_state_updates_and_pc st mvec ((RegWrite ra (pc.+1)) :: reg_clear_read) pc'
     | JumpEpc | AddRule | GetTag _ _ | PutTag _ _ _ | Halt =>
       None
     end
@@ -187,13 +187,13 @@ Definition build_k_ivec st : option (k_ivec ttypes)  :=
               Some (part [hseq (taga w1); (taga w2); (taga w3)])
             | Jump  r => fun part =>
               do! w <- regs st r;
-              Some (part [hseq taga w])
+              Some (part (reg_clear_list (regs st) (taga w)))
             | Bnz  r n => fun part =>
               do! w <- regs st r;
               Some (part [hseq taga w])
             | Jal  r => fun part =>
               do! old <- regs st ra;
-              Some (part [hseq taga old])
+              Some (part (reg_clear_list (regs st) (taga old)))
             | JumpEpc => fun _ => None
             | AddRule => fun _ => None
             | GetTag _ _ => fun _ => None

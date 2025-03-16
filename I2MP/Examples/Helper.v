@@ -230,13 +230,13 @@ Require Import MicroPolicies.Merged MicroPolicies.Symbolic Int32.
 
 Instance showRegisterTag : Show (Symbolic.tag_type LRC.lrc_tags Symbolic.R) :=
  {
-  show rt := match rt with LRC.Ret n => "Ret " ++ (show n) | LRC.Other => "Other" end
+  show rt := match rt with LRC.Ret n => "Ret " ++ (show n) | _ => "not Ret" end
 }.
 
 
 Instance showMemoryTag : Show (Symbolic.tag_type LRC.lrc_tags Symbolic.M) :=
  {
-   show mt := (match LRC.vtag mt with | LRC.Ret n => ("Ret " ++ (show n)) | LRC.Other => "Other" end)
+   show mt := (match LRC.vtag mt with | LRC.Ret n => ("Ret " ++ (show n)) | _ => "not ret" end)
                ++ " ; c=" ++ (show (LRC.color mt) ++
               (match (LRC.entry mt) with | None => " ; no entry" | Some e => " ; entry = " ++ (show e) end))
  }.
@@ -424,7 +424,7 @@ Fixpoint execN_and_show (n: nat) (cde: Merged.code) (st: state) : option Z + nat
   match n with
   | O => inr 3
   | S n' =>
-    match Merged.eval_step cde st with
+    match @Merged.eval_step mt instr_rules cde st with
     | None => (inl (
              do! w <- (regs st (Intermediate.Machine.Intermediate.Register.to_nat R_COM));
              Some (Symbolic.convert (word.int_of_word (MicroPolicies.Types.vala w)))))
@@ -437,7 +437,7 @@ Fixpoint execN_pc (n: nat) (cde: Merged.code) (st: state) : option Z + nat :=
   match n with
   | O => inr 3
   | S n' =>
-    match Merged.eval_step cde st with
+    match @Merged.eval_step mt instr_rules cde st with
     | None => (inl (
              do! w <- (@regs concrete_int_32_mt st (Intermediate.Machine.Intermediate.Register.to_nat R_COM));
              Some (Symbolic.convert (word.int_of_word (MicroPolicies.Types.vala w)))))
@@ -470,9 +470,10 @@ Fixpoint execN_pc_trans (n: nat) (cde: Transitional.code) (st: stackless) : stri
 (* execute interemdiary code and lists out the progam counters *)
 Fixpoint execN_pc_inter (n: nat) (G: Intermediate.GlobalEnv.global_env) (st: Intermediate.CS.CS.state) : string :=
   let '(s,m,r,pc) := st in
-  (show pc) ++ " | R_RA : " ++ (show (r 4)) ++ newline ++  " | R_SP : " ++ (show (r 5)) ++ newline ++
+  (show pc) ++ " | " ++
+    (*"R_RA : " ++ (show (r 4)) ++ newline ++  " | R_SP : " ++ (show (r 5)) ++ newline ++
             "---------------" ++ newline ++
-            (show s) ++ newline ++ "---------------" ++ newline ++
+            (show s) ++ newline ++ "---------------" ++ newline ++*)
   match n with
   | O => "out of fuel"
   | S n' =>
@@ -570,10 +571,7 @@ Instance showStateMP : Show (state) :=
   }.
 
 
-Definition show_memory_word_alt m := (odflt "failed2" (omap (@show _ show_mp) (@Types.decode_instr concrete_int_32_mt concrete_int_32_ops m))).
-
 Fixpoint execN (n: nat) (st: state) : option Z + nat :=
-  printer ((show (Types.vala (Symbolic.pc st))) ++ " | ")
   match n with
   | O => inr 3
   | S n' =>
@@ -603,8 +601,6 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
 .
 
 Fixpoint execN_and_show_mp (n: nat) (st: state) : option Z + nat :=
- (*  printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) *)
-  
   printer ( show st )
    
   match n with
@@ -627,7 +623,6 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
       let st := load (merged_to_mp_backend inter_p merged_p) nc in
- (*     printer (odflt "failed" (omap show_memory_word_alt (omap Types.vala ((Symbolic.mem st) (Types.vala (Symbolic.pc st)))))) *)
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
      printer ("-------------" ++ newline ++ (show (Symbolic.mem st)) ++ "-------------" ++ newline)
       match execN_and_show_mp fuel st with

@@ -9,25 +9,30 @@ Require Import Common.Definitions CompCert.Events.
 
 (* TL TODO: this mechanism of value tag and location tag moy be generalized *)
 
-Inductive value_tag : Type := Ret : nat -> value_tag | Other : value_tag.
+Inductive value_tag : Type := Ret : nat -> value_tag | Other : value_tag | InternalJump : value_tag | Invalidated : value_tag.
 
 Module Import ValueTagEq.
-Definition option_of_value_tag t :=
+Definition nat_of_value_tag t :=
   match t with
-  | Other => None
-  | Ret n => Some n
+  | Other => 0
+  | InternalJump => 1
+  | Invalidated => 2
+  | Ret n => S (S (S n))
   end.
 
-Definition value_tag_of_option t :=
+Definition value_tag_of_nat t :=
   match t with
-  | None => Other
-  | Some n => Ret n
+  | 0 => Other
+  | 1 => InternalJump
+  | 2 => Invalidated
+  | S (S (S n)) => Ret n
   end.
 
-Lemma option_of_value_tagK : cancel option_of_value_tag value_tag_of_option.
+
+Lemma nat_of_value_tagK : cancel nat_of_value_tag value_tag_of_nat.
 Proof. by case. Qed.
 
-Definition value_tag_eqMixin := CanEqMixin option_of_value_tagK.
+Definition value_tag_eqMixin := CanEqMixin nat_of_value_tagK.
 Canonical value_tag_eqType := EqType value_tag value_tag_eqMixin.
 End ValueTagEq.
 
@@ -108,7 +113,7 @@ Definition check_belong (c : Component.id) (m : option (tag_type lrc_tags M)) : 
 Definition check_ret (n : nat) (r : tag_type lrc_tags R) : option unit :=
   match r with
     | Ret n' => if n == n' then Some tt else None
-    | Other => None
+    | _ => None
   end.
 
 Definition check_entry (c : Component.id) (m : option (tag_type lrc_tags M)) : option unit :=
@@ -140,9 +145,22 @@ Definition switch_val (m : tag_type lrc_tags M)
 (* TL TODO: without this, I get a type error *)
 Definition build_tpc (n : nat) : tag_type lrc_tags P := Level n.
 
+Definition is_not_invalid (t:value_tag) : option unit :=
+  match t with | Invalidated => None  | _ => Some tt end.
 
-Definition is_not_capacity (t:value_tag) : option unit :=
-  match t with | Other => Some tt | Ret _ => None end.
+(* is not invalid, a jump, or a capability *)
+Definition is_other (t:value_tag) : option unit :=
+  match t with | Other => Some tt | _ => None end.
+
+Definition is_jump (t:value_tag) : option unit :=
+  match t with | InternalJump => Some tt | _ => None end.
+
+(* tags of values that are (potentially) addresses *)
+Definition is_address (t:value_tag) : bool :=
+  match t with | Ret _ | InternalJump | Invalidated => true | Other => false end.
+
+Definition reg_invalidate_hseq : (hseq (tag_type lrc_tags) (nseq 10 R)) :=
+  make_hseq (nseq 10 Invalidated).
 
 (* TL TODO: comments? cf org file *)
 Definition instr_rules (evi : ev_inputs) (op : opcode)
@@ -159,51 +177,58 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
   | CONST,   [hseq td]         => do! _ <- check_belong current tni;
                                      Some (OVec CONST     tpc [hseq Other], None)
 
-  | MOV,     [hseq ts; td]     => do! _ <- check_belong current tni;
-                                     Some (OVec MOV       tpc [hseq Other; ts], None)
+  | MOV,     [hseq ts; td]     => (*do! _ <- is_not_invalid ts;*)
+                                  do! _ <- check_belong current tni;
+                                  let ts' := if (is_address ts) then Invalidated else Other in
+                                     Some (OVec MOV       tpc [hseq ts'; ts], None)
 
-  | BINOP b, [hseq tx; ty; td] => do! _ <- is_not_capacity tx;
-                                  do! _ <- is_not_capacity ty;
+  | BINOP b, [hseq tx; ty; td] => do! _ <- is_other tx;
+                                  do! _ <- is_other ty;
                                   do! _ <- check_belong current tni;
                                      Some (OVec (BINOP b) tpc [hseq tx; ty; Other], None)
 
-  | LOAD,    [hseq tp; ts; td] => do! _ <- is_not_capacity tp;
+  | LOAD,    [hseq tp; ts; td] => do! _ <- is_other tp;
                                   do! _ <- check_belong current tni;
                                      if belong current (Some ts) then
-                                       let (ts', td') := switch_val ts Other in
+                                       let ts' := if (is_address (vtag ts)) then Invalidated else Other in
+                                       let (ts', td') := switch_val ts ts' in
                                        Some (OVec LOAD tpc [hseq tp; ts'; td'], None)
                                      else
-                                       Some (OVec LOAD tpc [hseq tp; ts; Other], None)
+                                       None
 
-  | STORE,   [hseq tp; ts; td] => do! _ <- is_not_capacity tp;
+  | STORE,   [hseq tp; ts; td] => do! _ <- is_other tp;
                                   do! _ <- check_belong current tni;
                                   do! _ <- check_belong current (Some td);
+                                  let ts' := if (is_address ts) then Invalidated else Other in
                                      let (td', _) := switch_val td ts in
-                                     Some (OVec STORE tpc [hseq tp; Other; td'], None)
+                                     Some (OVec STORE tpc [hseq tp; ts'; td'], None)
 
-  | BNZ,     [hseq tx]         => do! _ <- is_not_capacity tx;
+  | BNZ,     [hseq tx]         => do! _ <- is_other tx;
                                   do! _ <- check_belong current tni;
                                      Some (OVec BNZ       tpc [hseq tx], None)
 
-  | JUMP,    [hseq tp]         => if belong current tni then
-                                   Some (OVec JUMP tpc [hseq tp], None)
+  | JUMP,    HSeqCons tp next  => if belong current tni then
+                                   do! _ <- is_jump tp;
+                                   Some (OVec JUMP tpc (HSeqCons tp next), None)
                                  else
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
                                    (*          (unique Ret n)                              *)
                                    let ev := do! c' <- get_tni_color tni;
-                                               Some (ERet current (rcom_value evi) c') in
+                                             Some (ERet current (rcom_value evi) c') in
                                    do! _ <- check_ret level.-1 tp;
-                                     Some (OVec JUMP (build_tpc level.-1) [hseq Other], ev)
+                                   Some (OVec JUMP (build_tpc level.-1)
+                                           (HSeqCons Other reg_invalidate_hseq), ev)
 
-  | JAL,     [hseq tra]    => if belong current tni then
-                                   Some (OVec JAL tpc [hseq tra], None)
+  | JAL,     HSeqCons tra next    => if belong current tni then
+                                   Some (OVec JAL tpc (HSeqCons InternalJump next), None)
                                  else
                                    let ev := do! c' <- get_tni_color tni;
                                              do! p  <- get_proc_name tni;
                                                  Some (ECall current p (rcom_value evi) c') in
                                    do! _ <- check_entry current tni;
-                                       Some (OVec JAL (build_tpc level.+1) [hseq Ret level], ev)
+                                   Some (OVec JAL (build_tpc level.+1)
+                                           (HSeqCons (Ret level) reg_invalidate_hseq), ev)
 
   | _,     _                   => None
   end.
