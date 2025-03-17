@@ -229,7 +229,7 @@ Definition compile_proc (P: Procedure.id) (e: expr)
         pop R_AUX1 ++
         store_arg local_buf_ptr R_AUX1 R_AUX2 ++
         pop R_SP ++
-        [IJump R_RA]).
+        [IJump]).
 
 Definition compile_procedures
          (procs: list (Procedure.id * expr))

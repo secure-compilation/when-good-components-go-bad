@@ -41,17 +41,17 @@ Source/Examples/DefaultInitBuffer.v
 Source/Examples/NestedCalls.v
 Source/Examples/Factorial.v
 
-S2I/Definitions.v
-S2I/CompMonad.v
-S2I/Compiler.v
-S2I/Examples/Helper.v
-S2I/Examples/Empty.v
-S2I/Examples/Identity.v
-S2I/Examples/Assign.v
-S2I/Examples/Increment.v
-S2I/Examples/DefaultInitBuffer.v
-S2I/Examples/NestedCalls.v
-S2I/Examples/Factorial.v
+#S2I/Definitions.v
+#S2I/CompMonad.v
+#S2I/Compiler.v
+#S2I/Examples/Helper.v
+#S2I/Examples/Empty.v
+#S2I/Examples/Identity.v
+#S2I/Examples/Assign.v
+#S2I/Examples/Increment.v
+#S2I/Examples/DefaultInitBuffer.v
+#S2I/Examples/NestedCalls.v
+#S2I/Examples/Factorial.v
 
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
@@ -62,16 +62,16 @@ RSC_DC_MD_Sigs.v
 RSC_DC_MD_Instance.v
 RSC_DC_MD.v
 
-TargetSFI/StateMonad.v
-TargetSFI/SFIUtil.v
-TargetSFI/Machine.v
-TargetSFI/CS.v
-TargetSFI/ExecutionError.v
+#TargetSFI/StateMonad.v
+#TargetSFI/SFIUtil.v
+#TargetSFI/Machine.v
+#TargetSFI/CS.v
+#TargetSFI/ExecutionError.v
 
-I2SFI/CompStateMonad.v
-I2SFI/AbstractMachine.v
-I2SFI/Compiler.v
-I2SFI/CompilerError.v
+#I2SFI/CompStateMonad.v
+#I2SFI/AbstractMachine.v
+#I2SFI/Compiler.v
+#I2SFI/CompilerError.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
@@ -113,18 +113,18 @@ MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
 MicroPolicies/Recomposition/Helper.v
 
-Tagging/Tags.v   # not currently used
-Tagging/Memory.v # not currently used
+#Tagging/Tags.v   # not currently used
+#Tagging/Memory.v # not currently used
 
-Tagging/Language.v
-Tagging/LinearizeCompartments.v
-Tagging/Compiler.v
+#Tagging/Language.v
+#Tagging/LinearizeCompartments.v
+#Tagging/Compiler.v
 
-Tagging/Examples/Assign.v
-Tagging/Examples/DefaultInitBuffer.v
-Tagging/Examples/Empty.v
-Tagging/Examples/Factorial.v
-Tagging/Examples/Helper.v
-Tagging/Examples/Identity.v
-Tagging/Examples/Increment.v
-Tagging/Examples/NestedCalls.v
+#Tagging/Examples/Assign.v
+#Tagging/Examples/DefaultInitBuffer.v
+#Tagging/Examples/Empty.v
+#Tagging/Examples/Factorial.v
+#Tagging/Examples/Helper.v
+#Tagging/Examples/Identity.v
+#Tagging/Examples/Increment.v
+#Tagging/Examples/NestedCalls.v

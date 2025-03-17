@@ -103,7 +103,7 @@ Definition instr_to_transitional (c : Component.id) (i : Machine.instr) : (instr
   | IStore r r' => (TrStore r r', def_mem_tag c)
   | IAlloc r r' => (TrAlloc r r', def_mem_tag c)
   | IBnz r l => (TrBnz r l, def_mem_tag c)
-  | IJump r => (TrJump r, def_mem_tag c)
+  | IJump => (TrJump R_RA, def_mem_tag c)
   | IJal l => (TrJalNat l, def_mem_tag c)
   | IHalt => (TrHalt, def_mem_tag c)
   end.
@@ -505,13 +505,16 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     check_pc cde pc tg ->
     Register.set r2 (val (Register.get r1 regs)) ((tvtag (Register.get r1 regs))) regs = regs_tmp ->
     (*remove capability, if any*)
-    Register.set r1 (val (Register.get r1 regs)) Other regs_tmp = regs' -> 
+    let ts' := if (is_address (tvtag (Register.get r1 regs))) then Invalidated else Other in
+    Register.set r1 (val (Register.get r1 regs)) ts' regs_tmp = regs' -> 
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs', Pointer.inc pc, pct)
 
 | BinOp: forall st mem regs regs' pc tg c pct r1 r2 r3 op,
     executing cde pc (TrBinOp op r1 r2 r3) tg c ->
     check_pc cde pc tg ->
+    (tvtag (Register.get r1 regs) = Other) ->
+    (tvtag (Register.get r2 regs) = Other) ->
     let result := eval_binop op (val (Register.get r1 regs)) (val (Register.get r2 regs)) in
     Register.set r3 result Other regs = regs' ->
     step cde (st, mem, regs, pc, pct) E0
@@ -520,24 +523,28 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 | Load: forall st mem mem' regs regs' pc tg c pct r1 r2 ptr v,
     executing cde pc (TrLoad r1 r2) tg c ->
     check_pc cde pc tg ->
+    (tvtag (Register.get r1 regs) = Other) ->
     val (Register.get r1 regs) = Ptr ptr ->
     Pointer.component ptr = c ->
     Memory.load mem ptr = Some v ->
     Register.set r2 (val (fst v)) (tvtag (fst v)) regs = regs' ->
     (*remove capability, if any*)
-    Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := Other ; color := c ; entry := None|}) = Some mem' ->
+    let ts' := if (is_address (tvtag (fst v))) then Invalidated else Other in
+    Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := ts' ; color := c ; entry := None|}) = Some mem' ->
     step cde (st, mem, regs, pc, pct) E0
            (st, mem', regs', Pointer.inc pc, pct)
 
 | Store: forall st mem mem' regs regs' pc tg c pct ptr r1 r2 vt,
     executing cde pc (TrStore r1 r2) tg c ->
     check_pc cde pc tg ->
+    (tvtag (Register.get r1 regs) = Other) ->
     val (Register.get r1 regs) = Ptr ptr ->
     Pointer.component ptr =  c ->
     ((Register.get_tag r2 regs) = Some vt) ->
     Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None|}) = Some mem' ->
     (*remove capability, if any*)
-    Register.set r2 (val (Register.get r2 regs)) Other regs = regs' -> 
+    let ts' := if (is_address (tvtag (Register.get r2 regs))) then Invalidated else Other in
+    Register.set r2 (val (Register.get r2 regs)) ts' regs = regs' -> 
     step cde (st, mem, regs, pc, pct) E0
            (st, mem', regs', Pointer.inc pc, pct)
 
@@ -546,7 +553,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 (*   check_pc cde pc tg ->*)
 (*    find_label_in_component G pc l = Some pc' -> *)
     find_label_in_comp cde c l = Some pc' ->
-    Register.set R_RA (Ptr (Pointer.inc pc)) Other regs = regs' ->
+    Register.set R_RA (Ptr (Pointer.inc pc)) InternalJump regs = regs' ->
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs', pc', pct)
@@ -554,7 +561,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 | Jump: forall st mem regs pc tg c pct pc' r,
     executing cde pc (TrJump r) tg c ->
 (*    check_pc cde pc tg ->*)
-    val (Register.get r regs) = Ptr pc' ->
+    ((Register.get r regs) = MVal InternalJump (Ptr pc')) ->
     Pointer.component pc' = Pointer.component pc ->
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) E0
@@ -574,6 +581,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 | BnzNZ: forall st mem regs pc tg c pct pc' r l v,
     executing cde pc (TrBnz r l) tg c ->
 (*    check_pc cde pc tg ->*)
+    (tvtag (Register.get r regs) = Other) ->
     val (Register.get r regs) = Int v ->
     (v <> 0) % Z ->
     find_label_in_code cde l = Some pc' ->
@@ -583,7 +591,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 
 | BnzZ: forall st mem regs pc tg c pct r l,
     executing cde pc (TrBnz r l) tg c ->
-    check_pc cde pc tg ->
+    (tvtag (Register.get r regs) = Other) ->
     val (Register.get r regs) = Int 0 ->
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs, Pointer.inc pc, pct)
@@ -591,6 +599,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
 | Alloc: forall st mem mem' regs regs' pc tg c pct rsize rptr size ptr,
     executing cde pc (TrAlloc rptr rsize) tg c ->
     check_pc cde pc tg ->
+    (tvtag (Register.get rsize regs) = Other) ->
     val (Register.get rsize regs) = Int size ->
     (size > 0) % Z ->
     Memory.alloc mem c (Z.to_nat size) = Some (mem', ptr) ->
@@ -638,43 +647,49 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
     | TrMov r1 r2 =>
       let regs' := Register.set r2 (val (Register.get r1 regs)) (tvtag (Register.get r1 regs)) regs in
       (*remove capability, if any*)
-      let regs'' := Register.set r1 (val (Register.get r1 regs)) Other regs' in
+      let ts' := if (is_address (tvtag (Register.get r1 regs))) then Invalidated else Other in
+      let regs'' := Register.set r1 (val (Register.get r1 regs)) ts' regs' in
       ret (E0, (mem, regs'', Pointer.inc pc, pct))
     | TrBinOp op r1 r2 r3 =>
-      let result := eval_binop op (val (Register.get r1 regs)) (val (Register.get r2 regs)) in
-      let regs' := Register.set r3 result Other regs in
-      ret (E0, (mem, regs', Pointer.inc pc, pct))
+        match (tvtag (Register.get r1 regs), tvtag (Register.get r2 regs)) with
+        | (Other, Other) =>
+            let result := eval_binop op (val (Register.get r1 regs)) (val (Register.get r2 regs)) in
+            let regs' := Register.set r3 result Other regs in
+            ret (E0, (mem, regs', Pointer.inc pc, pct))
+        | _ => None end
     | TrLoad r1 r2 =>
-      match val (Register.get r1 regs) with
-      | Ptr ptr =>
+      match (Register.get r1 regs) with
+      | MVal Other (Ptr ptr) =>
         let c := (Pointer.component ptr) in
         if Component.eqb c (Pointer.component pc) then
           do v <- Memory.load mem ptr;
           let regs' := Register.set r2 (val (fst v)) (tvtag (fst v))  regs in
           (*remove capability, if any*)
-          do mem' <- Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := Other ; color := c ; entry := None|});
+          let ts' := if (is_address (tvtag (fst v))) then Invalidated else Other in
+          do mem' <- Memory.store mem ptr ({|val := val (fst v); tvtag := ts' |}, {|vtag := ts' ; color := c ; entry := None|});
           ret (E0, (mem', regs', Pointer.inc pc, pct))
         else
           None
       | _ => None
       end
     | TrStore r1 r2 =>
-      match val (Register.get r1 regs) with
-      | Ptr ptr =>
+      match (Register.get r1 regs) with
+      | MVal Other (Ptr ptr) =>
           let c := (Pointer.component ptr) in
           if Component.eqb c (Pointer.component pc) then
             do vt <- Register.get_tag r2 regs ;
             do mem' <- Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None|});
             (*remove capability, if any*)
-            let regs' := Register.set r2 (val (Register.get r2 regs)) Other regs in
+            let ts' := if (is_address (vt)) then Invalidated else Other in
+            let regs' := Register.set r2 (val (Register.get r2 regs)) ts' regs in
             ret (E0, (mem', regs', Pointer.inc pc, pct))
           else
             None
       | _ => None
       end
     | TrAlloc rptr rsize =>
-      match val (Register.get rsize regs) with
-      | Int size =>
+      match (Register.get rsize regs) with
+      | MVal Other (Int size) =>
         if (size <=? 0) % Z then
           None
         else
@@ -684,12 +699,15 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       | _ => None
       end
     | TrJump r =>
-      match val (Register.get r regs) with
-      | Ptr pc' =>
-        if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (mem, regs, pc', pct))
+      match (Register.get r regs) with
+      | MVal tag (Ptr pc') =>
+          if Component.eqb (Pointer.component pc') (Pointer.component pc) then
+            match tag with
+            | InternalJump => ret (E0, (mem, regs, pc', pct))
+            | _ => None
+            end
         else (
-          match (tvtag (Register.get r regs), pct) with
+          match (tag, pct) with
           | (Other, _) | (InternalJump, _) | (Invalidated, _) => None
           | (Ret n, Level m) =>(
          if orb ((Pointer.offset pc' <? 0) % Z)  (negb (ssrnat.eqn (S n) m)) then
@@ -707,17 +725,17 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       | _ => None
       end
     | TrBnz r l =>
-      match val (Register.get r regs) with
-      | Int 0 =>
+      match (Register.get r regs) with
+      | MVal Other (Int 0) =>
         ret (E0, (mem, regs, Pointer.inc pc, pct))
-      | Int val =>
+      | MVal Other (Int val) =>
         do pc' <- find_label_in_code cde l;
         ret (E0, (mem, regs, pc', pct))
       | _ => None
       end
     | TrJalNat l =>
       do pc' <- find_label_in_comp cde (Pointer.component pc) l;
-      let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) Other regs in
+      let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) InternalJump regs in
       ret (E0, (mem, regs', pc', pct))
     | TrJalProc (c',pid) =>
       match find_plabel_in_code cde c' pid with 

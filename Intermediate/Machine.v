@@ -45,7 +45,7 @@ Variant instr :=
 | IAlloc : register -> register -> instr
 (* conditional and unconditional jumps *)
 | IBnz : register -> label -> instr
-| IJump : register -> instr
+| IJump : instr
 | IJal : label -> instr
 (* components interaction *)
 | ICall : Component.id -> Procedure.id -> instr
@@ -170,7 +170,7 @@ Definition well_formed_instruction
   | ILoad r1 r2 => True
   | IStore r1 r2 => True
   | IAlloc r1 r2 => True
-  | IJump r => True
+  | IJump => True
   | IReturn => True
   | IHalt => True
   end.

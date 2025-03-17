@@ -37,7 +37,7 @@ Definition linearize_instr_bis (cenv : compiler_env)
            (c : Component.id) (i : instr) : code_bis :=
   match i with
   | ICall C P => [:: ((IJal (make_label cenv C P)), def_mem_tag c)]
-  | IReturn => [:: ((IJump R_RA), def_mem_tag c)]
+  | IReturn => [:: ((IJump), def_mem_tag c)]
   | _ => [:: (i, def_mem_tag c) ]
   end.
 
@@ -46,7 +46,7 @@ Definition linearize_instr (cenv : compiler_env)
            (c : Component.id) (i : instr) : code :=
   match i with
   | ICall C P => [:: (inr (IJal (make_label cenv C P)), def_mem_tag c)]
-  | IReturn => [:: (inr (IJump R_RA), def_mem_tag c)]
+  | IReturn => [:: (inr (IJump), def_mem_tag c)]
   | IAlloc rptr rsize => [:: (inl (SSyscallSetArg1 rsize), def_mem_tag c) ;
                              (inl (SSyscallSetArg3 R_RA), def_mem_tag c) ;
                              (inl (SJalAlloc), def_mem_tag c) ;

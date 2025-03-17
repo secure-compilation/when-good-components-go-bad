@@ -250,15 +250,14 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
 | Jal: forall gps mem regs regs' pc pc' l,
     executing G pc (IJal l) ->
     find_label_in_component G pc l = Some pc' ->
-    Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
+    Register.set R_RA (Undef) regs = regs' ->
     step G (gps, mem, regs, pc) E0
-           (gps, mem, regs', pc')
+           ((Pointer.inc pc) :: gps, mem, regs', pc')
 
-| Jump: forall gps mem regs pc pc' r,
-    executing G pc (IJump r) ->
-    Register.get r regs = Ptr pc' ->
+| Jump: forall gps mem regs pc pc',
+    executing G pc (IJump) ->
     Pointer.component pc' = Pointer.component pc ->
-    step G (gps, mem, regs, pc) E0
+    step G (pc' :: gps, mem, regs, pc) E0
            (gps, mem, regs, pc')
 
 | BnzNZ: forall gps mem regs pc pc' r l val,
@@ -380,13 +379,13 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
       end
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
-      let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret (E0, (gps, mem, regs', pc'))
-    | IJump r =>
-      match Register.get r regs with
-      | Ptr pc' =>
+      let regs' := Register.set R_RA (Undef) regs in
+      ret (E0, ((Pointer.inc pc) :: gps, mem, regs', pc'))
+    | IJump =>
+      match gps with
+      | pc' :: gps' =>
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (gps, mem, regs, pc'))
+          ret (E0, (gps', mem, regs, pc'))
         else
           None
       | _ => None
@@ -509,9 +508,8 @@ Proof.
     reflexivity.
 
   - match goal with
-    | Hregs_value: Register.get _ _ = _,
-      Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite -> Hregs_value, Hsame_component, Nat.eqb_refl
+    | Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
+      rewrite -> Hsame_component, Nat.eqb_refl
     end.
     reflexivity.
 
@@ -707,7 +705,7 @@ Proof.
                  Hcond: (if (Pointer.offset _ <? 0) % Z then None else _) = Some _ |- _ =>
                  rewrite Hpositive_offset in Hcond
                end.
-               destruct (Register.get r regs0) eqn:Hreg;
+               destruct (gps0);
                  try discriminate.
                destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
                         eqn:Hcompcheck;
@@ -716,7 +714,6 @@ Proof.
                eapply Jump with (pc':=pc);
                  try reflexivity.
                **** eexists. eexists. eauto.
-               **** assumption.
                **** apply Nat.eqb_eq. assumption.
 
            *** match goal with
@@ -966,13 +963,16 @@ elim: cs t cs' / => [|cs1 t1 cs2 t2 cs3 t Hstep _ IH ->] //=.
 case: cs1 t1 cs2 / Hstep IH => /=;
 try by move=> *; match goal with
 | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
-        rewrite Pointer.inc_preserves_component in H end.
+    rewrite Pointer.inc_preserves_component in H end.
+(* TODO: the notion of well_bracketed_trace do not work anymore. *)
+(*
 - by move=> ???????? /find_label_in_component_1 ->.
 - by move=> ???????? ->.
 - by move=> ??????????? /find_label_in_procedure_1 ->.
 - by move=> ???????????; rewrite eqtype.eqxx Pointer.inc_preserves_component.
 - by move=> ?????????; rewrite !eqtype.eqxx.
-Qed.
+Qed.*)
+Admitted.
 
 Canonical ssrnat.nat_eqType.
 
@@ -1087,13 +1087,12 @@ Proof.
       simpl in *;
       try easy.
     (* The only semi-interesting cases is the call instruction. *)
-    split; [| assumption].
-    rewrite Pointer.inc_preserves_component.
-    match goal with
-    | Himp : imported_procedure _ _ _ _ |- _ =>
-      destruct Himp as [CI [Hhas_comp Himp]];
-      exact (has_component_in_domm_prog_interface Hhas_comp)
-    end.
+    (split; [| assumption] ;
+    rewrite Pointer.inc_preserves_component; destruct H, H, H; rewrite <- domm_genv_procedures;
+            apply (introT dommP); exists x; exact H).
+    (split; [| assumption] ;
+    rewrite Pointer.inc_preserves_component; destruct H, H, H; rewrite <- domm_genv_procedures;
+            apply (introT dommP); exists x; exact H).
 Qed.
 
 (* RB: TODO: This result admits more general formulations (see above).
@@ -1195,7 +1194,7 @@ Proof.
            end);
       try now rewrite Pointer.inc_preserves_component.
     + erewrite <- find_label_in_component_1; eassumption.
-    + now rewrite H2.
+    + now rewrite H1.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 

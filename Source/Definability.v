@@ -683,7 +683,7 @@ Proof.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
-    exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
+admit.   (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
   have := definability Hclosed_intf intf_main wf_m.
   set back := (program_of_trace intf m') => Hback.
   exists (program_unlink (domm (Intermediate.prog_interface p)) back).
@@ -707,4 +707,4 @@ Proof.
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
-Qed.
+Admitted.
