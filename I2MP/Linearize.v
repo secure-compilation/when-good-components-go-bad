@@ -32,27 +32,26 @@ Notation code_bis := (seq (instr * mem_tag)).
 
 (** Precompilation: translate call/ret, tag code and data, linearize code **)
 
-
 Definition linearize_instr_bis (cenv : compiler_env)
            (c : Component.id) (i : instr) : code_bis :=
   match i with
-  | ICall C P => [:: ((IJal (make_label cenv C P)), def_mem_tag c)]
-  | IReturn => [:: ((IJump), def_mem_tag c)]
-  | _ => [:: (i, def_mem_tag c) ]
+  | ICall C P => [:: ((IJal (make_label cenv C P)), def_mem_tag c true)]
+  | IReturn => [:: ((IJump), def_mem_tag c true)]
+  | _ => [:: (i, def_mem_tag c true) ]
   end.
 
 
 Definition linearize_instr (cenv : compiler_env)
            (c : Component.id) (i : instr) : code :=
   match i with
-  | ICall C P => [:: (inr (IJal (make_label cenv C P)), def_mem_tag c)]
-  | IReturn => [:: (inr (IJump), def_mem_tag c)]
-  | IAlloc rptr rsize => [:: (inl (SSyscallSetArg1 rsize), def_mem_tag c) ;
-                             (inl (SSyscallSetArg3 R_RA), def_mem_tag c) ;
-                             (inl (SJalAlloc), def_mem_tag c) ;
-                             (inl (SSyscallGetArg3 R_RA), def_mem_tag c) ;
-                             (inl (SSyscallGetRet rptr), def_mem_tag c) ]
-  | _ => [:: (inr i, def_mem_tag c) ]
+  | ICall C P => [:: (inr (IJal (make_label cenv C P)), def_mem_tag c true)]
+  | IReturn => [:: (inr (IJump), def_mem_tag c true)]
+  | IAlloc rptr rsize => [:: (inl (SSyscallSetArg1 rsize), def_mem_tag c true) ;
+                             (inl (SSyscallSetArg3 R_RA), def_mem_tag c true) ;
+                             (inl (SJalAlloc), def_mem_tag c true) ;
+                             (inl (SSyscallGetArg3 R_RA), def_mem_tag c true) ;
+                             (inl (SSyscallGetRet rptr), def_mem_tag c true) ]
+  | _ => [:: (inr i, def_mem_tag c true) ]
   end.
 
 
@@ -65,7 +64,8 @@ Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) 
                             Some ((p \in Component.export i) && ((c, p) \in Component.import i')))
   in {| vtag := Other ;
         color := c ;
-        entry := Some (p, filter allowed_call_by (domm I)) |}.
+        entry := Some (p, filter allowed_call_by (domm I)) ;
+        is_code := true|}.
 
 
 Definition linearize_proc (cenv : compiler_env)
@@ -98,7 +98,7 @@ Definition linearize_component_bis (cenv : compiler_env) (c : Component.id) : co
 
 Definition linearize_code (cenv : compiler_env) : code :=
   let main_code :=
-      [:: (inr (IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main) ; (inr IHalt, def_mem_tag Component.main)] in
+      [:: (inr (IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main true) ; (inr IHalt, def_mem_tag Component.main  true)] in
 
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main_code ++ flatten (map (linearize_component cenv) components).
@@ -106,7 +106,7 @@ Definition linearize_code (cenv : compiler_env) : code :=
 
 Definition linearize_code_bis (cenv : compiler_env) : code_bis :=
   let main_code :=
-      [:: ((IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main) ; (IHalt, def_mem_tag Component.main)] in
+      [:: ((IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main true) ; (IHalt, def_mem_tag Component.main  true)] in
 
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main_code ++ flatten (map (linearize_component_bis cenv) components).
@@ -120,8 +120,8 @@ Definition linearize_buf (cenv : compiler_env) (c : Component.id) (b : Block.id)
   Option.default [::] (do map <- getm (Intermediate.prog_buffers (program cenv)) c ;
                        do block <- getm map b ;
                        Some match block with
-                            | inl n => repeat (Undef, def_mem_tag c) n
-                            | inr l => [seq (x, def_mem_tag c) | x <- l]
+                            | inl n => repeat (Undef, def_mem_tag c false) n
+                            | inr l => [seq (x, def_mem_tag c false) | x <- l]
                             end).
 
 Definition linearize_bufs (cenv : compiler_env) : bufs :=

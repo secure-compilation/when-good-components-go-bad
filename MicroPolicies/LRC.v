@@ -57,22 +57,24 @@ Record mem_tag : Type := MTag {
   vtag   : [eqType of value_tag];
   color  : Component.id;
   entry  : option (Procedure.id * list Component.id);
+  is_code : bool;
 }.
 
 
-Definition def_mem_tag (c : Component.id) : mem_tag :=
+Definition def_mem_tag (c : Component.id) code : mem_tag :=
   {| vtag := Other ;
      color := c ;
-     entry := None
+     entry := None ;
+     is_code := code;
   |}.
 
 
 
 Module Import MemTagEq.
-Definition tuple_of_mem_tag t := (vtag t, color t, entry t).
+Definition tuple_of_mem_tag t := (vtag t, color t, entry t, is_code t).
 Definition mem_tag_of_tuple tp :=
   match tp with
-  | (vt, c, e) => MTag vt c e
+  | (vt, c, e, b) => MTag vt c e b
   end.
 
 Lemma tuple_of_mem_tagK : cancel tuple_of_mem_tag mem_tag_of_tuple.
@@ -138,7 +140,7 @@ Definition get_proc_name (m : option (tag_type lrc_tags M)) : option Procedure.i
 Definition switch_val (m : tag_type lrc_tags M)
            (v : tag_type lrc_tags R) : (tag_type lrc_tags M * tag_type lrc_tags R) :=
   match m with
-    | {| vtag := v' ; color := c ; entry := e |} => ({| vtag := v ; color := c ; entry := e |}, v')
+    | {| vtag := v' ; color := c ; entry := e ; is_code := b |} => ({| vtag := v ; color := c ; entry := e ; is_code := b|}, v')
   end.
 
 
@@ -189,7 +191,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
 
   | LOAD,    [hseq tp; ts; td] => do! _ <- is_other tp;
                                   do! _ <- check_belong current tni;
-                                     if belong current (Some ts) then
+                                     if orb (belong current (Some ts)) (is_code ts) then
                                        let ts' := if (is_address (vtag ts)) then Invalidated else Other in
                                        let (ts', td') := switch_val ts ts' in
                                        Some (OVec LOAD tpc [hseq tp; ts'; td'], None)
@@ -294,7 +296,7 @@ Definition alloc_fun (st : state) : option state :=
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
   let max_addr := last (filter prefix_filter (domm (mem st))) (prefix) in
   (* create the new bloc *)
-  let atom : matom := (word.as_word 0)@(def_mem_tag current_c) in
+  let atom : matom := (word.as_word 0)@(def_mem_tag current_c false) in
   do! size <- regs st syscall_arg1;
   do! length <- match word.int_of_word (vala size) with
                 | Posz x => Some x

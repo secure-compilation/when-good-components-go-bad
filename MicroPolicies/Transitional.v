@@ -91,21 +91,21 @@ Definition code := NMap (seq (instr * mem_tag)).
 
 Definition instr_to_transitional (c : Component.id) (i : Machine.instr) : (instr * mem_tag) :=
   match i with
-  | ICall c' P => if beq_nat c c' then ((TrJalProc (c',P)), def_mem_tag c)
-    else ((TrJalProc (c',P)), def_mem_tag c)
-  | IReturn => ((TrJump R_RA), def_mem_tag c)
-  | INop => (TrNop, def_mem_tag c)
-  | ILabel l =>  (TrLabel (inl l), def_mem_tag c)
-  | IConst v r =>  (TrConst v r, def_mem_tag c)
-  | IMov r r' => (TrMov r r', def_mem_tag c)
-  | IBinOp op r r' r'' => (TrBinOp op r r' r'', def_mem_tag c)
-  | ILoad r r' => (TrLoad r r', def_mem_tag c)
-  | IStore r r' => (TrStore r r', def_mem_tag c)
-  | IAlloc r r' => (TrAlloc r r', def_mem_tag c)
-  | IBnz r l => (TrBnz r l, def_mem_tag c)
-  | IJump => (TrJump R_RA, def_mem_tag c)
-  | IJal l => (TrJalNat l, def_mem_tag c)
-  | IHalt => (TrHalt, def_mem_tag c)
+  | ICall c' P => if beq_nat c c' then ((TrJalProc (c',P)), def_mem_tag c true)
+    else ((TrJalProc (c',P)), def_mem_tag c true)
+  | IReturn => ((TrJump R_RA), def_mem_tag c true)
+  | INop => (TrNop, def_mem_tag c true)
+  | ILabel l =>  (TrLabel (inl l), def_mem_tag c true)
+  | IConst v r =>  (TrConst v r, def_mem_tag c true)
+  | IMov r r' => (TrMov r r', def_mem_tag c true)
+  | IBinOp op r r' r'' => (TrBinOp op r r' r'', def_mem_tag c true)
+  | ILoad r r' => (TrLoad r r', def_mem_tag c true)
+  | IStore r r' => (TrStore r r', def_mem_tag c true)
+  | IAlloc r r' => (TrAlloc r r', def_mem_tag c true)
+  | IBnz r l => (TrBnz r l, def_mem_tag c true)
+  | IJump => (TrJump R_RA, def_mem_tag c true)
+  | IJal l => (TrJalNat l, def_mem_tag c true)
+  | IHalt => (TrHalt, def_mem_tag c true)
   end.
 
 
@@ -168,7 +168,7 @@ Section Values.
 
   Definition tUndef := to_tvalue Undef.
 
-  Definition to_tagged_cell (c : Component.id) (v : value) : tvalue * mem_tag := (to_tvalue v,def_mem_tag c).
+  Definition to_tagged_cell (c : Component.id) (v : value) : tvalue * mem_tag := (to_tvalue v,def_mem_tag c false).
 
   Definition to_tagged_block (c : Component.id) (l : list value) : list (tvalue * mem_tag) := 
     map (to_tagged_cell c) l.
@@ -262,7 +262,7 @@ Module Memory. (* : AbstractComponentMemory.*)
 
   Definition prealloc (bufs: {fmap Block.id -> (Component.id * (nat + list value))}) : mem :=
     let init_block x := match x with
-                        | (c,inl size) => repeat (tUndef, def_mem_tag c) size
+                        | (c,inl size) => repeat (tUndef, def_mem_tag c  false) size
                         | (c,inr chunk) => (to_tagged_block c chunk)
                         end in
     {| content := mapm init_block bufs;
@@ -271,7 +271,7 @@ Module Memory. (* : AbstractComponentMemory.*)
 
   Definition prealloc_c C (bufs: {fmap Block.id -> ((nat + list value))}) : mem :=
     let init_block x := match x with
-                        | inl size => repeat (tUndef, def_mem_tag C) size
+                        | inl size => repeat (tUndef, def_mem_tag C false) size
                         | inr chunk => to_tagged_block C chunk
                         end in
     {| content := mapm init_block bufs;
@@ -287,7 +287,7 @@ Module Memory. (* : AbstractComponentMemory.*)
 
   Definition alloc_bis (c : Component.id) m (size : nat) : mem * Block.id :=
     let fresh_block := nextblock m in
-    let chunk := repeat (tUndef, def_mem_tag c) size in
+    let chunk := repeat (tUndef, def_mem_tag c false) size in
     ({| content := setm (content m) fresh_block chunk;
         nextblock := (1 + nextblock m) |},
      fresh_block).
@@ -530,7 +530,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     Register.set r2 (val (fst v)) (tvtag (fst v)) regs = regs' ->
     (*remove capability, if any*)
     let ts' := if (is_address (tvtag (fst v))) then Invalidated else Other in
-    Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := ts' ; color := c ; entry := None|}) = Some mem' ->
+    Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := ts' ; color := c ; entry := None ; is_code := false|}) = Some mem' ->
     step cde (st, mem, regs, pc, pct) E0
            (st, mem', regs', Pointer.inc pc, pct)
 
@@ -541,7 +541,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     val (Register.get r1 regs) = Ptr ptr ->
     Pointer.component ptr =  c ->
     ((Register.get_tag r2 regs) = Some vt) ->
-    Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None|}) = Some mem' ->
+    Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None ; is_code := false|}) = Some mem' ->
     (*remove capability, if any*)
     let ts' := if (is_address (tvtag (Register.get r2 regs))) then Invalidated else Other in
     Register.set r2 (val (Register.get r2 regs)) ts' regs = regs' -> 
@@ -666,7 +666,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
           let regs' := Register.set r2 (val (fst v)) (tvtag (fst v))  regs in
           (*remove capability, if any*)
           let ts' := if (is_address (tvtag (fst v))) then Invalidated else Other in
-          do mem' <- Memory.store mem ptr ({|val := val (fst v); tvtag := ts' |}, {|vtag := ts' ; color := c ; entry := None|});
+          do mem' <- Memory.store mem ptr ({|val := val (fst v); tvtag := ts' |}, {|vtag := ts' ; color := c ; entry := None ; is_code := false|});
           ret (E0, (mem', regs', Pointer.inc pc, pct))
         else
           None
@@ -678,7 +678,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
           let c := (Pointer.component ptr) in
           if Component.eqb c (Pointer.component pc) then
             do vt <- Register.get_tag r2 regs ;
-            do mem' <- Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None|});
+            do mem' <- Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None ; is_code := false|});
             (*remove capability, if any*)
             let ts' := if (is_address (vt)) then Invalidated else Other in
             let regs' := Register.set r2 (val (Register.get r2 regs)) ts' regs in
@@ -791,7 +791,7 @@ Definition head_tag (pr : Intermediate.program) (c : Component.id) (p : Procedur
       Option.default false (do i <- getm I c ;
                             do i' <- getm I c' ;
                             Some ((p \in Component.export i) && ((c, p) \in Component.import i')))
-  in MTag LRC.Other c (Some (p, filter allowed_call_by (domm I))).
+  in MTag LRC.Other c (Some (p, filter allowed_call_by (domm I))) true.
 
 
 Definition linearize_proc (pr : Intermediate.program )

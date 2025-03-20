@@ -132,9 +132,9 @@ Definition alloc n := [:: (@MrConst mt (word_of_nat n) (R_SP)) ;
 (* give tag for component cnum to a list of code *)
 (* with the first instruction being an entry point *) 
 Definition give_tag cl cnum pid : @code mt :=
-  let tag := map (fun i => (i, MTag Other cnum None)) in
+  let tag := map (fun i => (i, MTag Other cnum None true)) in
   match cl with
-  | top :: cll => (top, MTag Other cnum (Some (pid, [0 ; 1]))) :: (tag cll)
+  | top :: cll => (top, MTag Other cnum (Some (pid, [0 ; 1])) true) :: (tag cll)
   | nil => nil
   end.
 

@@ -245,7 +245,7 @@ Definition alloc_fun (cde : code) (st : state) : option state :=
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
   let max_addr := last (prefix) (filter prefix_filter (domm (mem st))) in
   (* create the new bloc *)
-  let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c) in
+  let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c false) in
   do! size <- regs st (to_nat_bis (inr R_SC_ARG1));
   do! length <- match word.int_of_word (vala size) with
                 | ssrint.Posz x => Some x
@@ -786,14 +786,18 @@ Definition reg0 : registers :=
    (18,default_reg) ;
    (19,default_reg) ].
 
-Definition initial_state (p : Intermediate.program) :=
+(* tag the part of memory that will serve for the code in mp*)
+Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word_ordType (word_size mt) -> atom mem_tag} :=
+  Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (map (fun '(_,t) => Atom (word_of_nat 0) t) cde)).
+
+Definition initial_state cde (p : Intermediate.program) :=
   let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))) in
   let mem0 := (initial_memory p) in
   let pctag := build_tpc 0 in
-  {|mem := mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
+  {|mem := unionm (encode_code_placeholder cde (size mem0)) mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
 
 Definition run_merged cd fuel p :=
-      execN fuel cd (initial_state p).
+      execN fuel cd (initial_state cd p).
 
 
 Definition compile_run_merged fuel (p : Intermediate.program) :=
@@ -877,6 +881,13 @@ Definition instr_rules (rcom_val : Z)
   (ts : hseq _ (inputs op))
   tni
   : option ((ovec op) * (option event)) :=
+  (* check that we're not reading/writing code *)
+  do! _ <- match op, ts  with
+          | STORE,   [hseq _; _; ts]
+          | LOAD,    [hseq _; ts; _] => if (is_code ts) then None else Some tt
+          | _, _ => Some tt
+          end;
+  (* otherwise, same micro-policy *)
   do! out <- LRC.instr_rules {| Symbolic.rcom_value := rcom_val|} op tpc ti ts tni;
   let 'Symbolic.OVec trpc' tr' := (fst out) in
   Some ({| trpc := trpc' ; tr := tr' |}, snd out).
