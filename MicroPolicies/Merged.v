@@ -235,8 +235,6 @@ Definition component_memory_prefix {k} (c : nat) (nc : nat) :=
 Definition alloc_fun (cde : code) (st : state) : option state :=
   do! ra_val <- regs st (to_nat R_RA);
   let next_pc := (vala ra_val)@(taga (pc st)) in
-  do! instr <- nth_error cde (nat_of_word (vala ra_val));
-  let current_c := color (snd (instr)) in
   do! current_instr <- nth_error cde (nat_of_word (vala (pc st)));
   let current_c := (color (snd current_instr)) in
   let prefix := (component_memory_prefix (1 + current_c) (comp_num st)) in
@@ -881,7 +879,12 @@ Definition instr_rules (rcom_val : Z)
   (ts : hseq _ (inputs op))
   tni
   : option ((ovec op) * (option event)) :=
-  (* check that we're not reading/writing code *)
+  (* checks that we're not executing code *)
+  do! _ <- match tni with
+         | None => Some tt
+         | Some mtag => if (is_code mtag) then Some tt else None
+         end;
+  (* checks that we're not reading/writing code *)
   do! _ <- match op, ts  with
           | STORE,   [hseq _; _; ts]
           | LOAD,    [hseq _; ts; _] => if (is_code ts) then None else Some tt

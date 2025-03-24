@@ -201,6 +201,8 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
   | STORE,   [hseq tp; ts; td] => do! _ <- is_other tp;
                                   do! _ <- check_belong current tni;
                                   do! _ <- check_belong current (Some td);
+                                  (* TODO: delete this line to allow editing your own static code *)
+                                  if (is_code td) then None else
                                   let ts' := if (is_address ts) then Invalidated else Other in
                                      let (td', _) := switch_val td ts in
                                      Some (OVec STORE tpc [hseq tp; ts'; td'], None)
