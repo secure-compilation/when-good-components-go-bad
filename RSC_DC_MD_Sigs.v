@@ -4,6 +4,7 @@ Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
+Require Import Common.SmallstepUB.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -134,39 +135,6 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
-  (* Local Axiom decomposition_with_refinement : *)
-  (*   forall p c, *)
-  (*     well_formed_program p -> *)
-  (*     well_formed_program c -> *)
-  (*     linkable (prog_interface p) (prog_interface c) -> *)
-  (*     linkable_mains p c -> *)
-  (*   forall beh1, *)
-  (*     program_behaves (CS.sem (program_link p c)) beh1 -> *)
-  (*   exists beh2, *)
-  (*     program_behaves (PS.sem p (prog_interface c)) beh2 /\ *)
-  (*     behavior_improves beh1 beh2. *)
-
-  (* Local Axiom decomposition_prefix : *)
-  (*   forall p c m, *)
-  (*     well_formed_program p -> *)
-  (*     well_formed_program c -> *)
-  (*     linkable (prog_interface p) (prog_interface c) -> *)
-  (*     linkable_mains p c -> *)
-  (*     not_wrong_finpref m -> (* needed here, and will have it in main proof *) *)
-  (*     does_prefix (CS.sem (program_link p c)) m -> *)
-  (*     does_prefix (PS.sem p (prog_interface c)) m. *)
-
-  (* Local Axiom composition_prefix : *)
-  (*   forall p c m, *)
-  (*     well_formed_program p -> *)
-  (*     well_formed_program c -> *)
-  (*     linkable_mains p c -> *)
-  (*     closed_program (program_link p c) -> *)
-  (*     mergeable_interfaces (prog_interface p) (prog_interface c) -> *)
-  (*     does_prefix (PS.sem p (prog_interface c)) m -> *)
-  (*     does_prefix (PS.sem c (prog_interface p)) m -> *)
-  (*     does_prefix (CS.sem (program_link p c)) m. *)
-
   Local Axiom compose_mergeable_interfaces :
     forall p c,
       linkable (prog_interface p) (prog_interface c) ->
@@ -189,6 +157,126 @@ Module Type Intermediate_Sig.
       does_prefix (CS.sem (program_link p' c')) m ->
       does_prefix (CS.sem (program_link p c')) m.
 End Intermediate_Sig.
+
+Module Type Target_Sig.
+  Parameter program : Type.
+
+  Parameter prog_interface : program -> Program.interface.
+
+  Parameter well_formed_program : program -> Prop.
+
+  Parameter closed_program : program -> Prop.
+
+  Parameter linkable_mains : program -> program -> Prop.
+
+  Parameter matching_mains : program -> program -> Prop.
+
+  Parameter program_link : program -> program -> program.
+
+  Local Axiom linkable_mains_sym : forall p1 p2,
+    linkable_mains p1 p2 -> linkable_mains p2 p1.
+
+  Local Axiom program_linkC : forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    program_link p1 p2 = program_link p2 p1.
+
+  Local Axiom linking_well_formedness : forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    well_formed_program (program_link p1 p2).
+
+  Local Axiom interface_preserves_closedness_r : forall p1 p2 p2',
+    well_formed_program p1 ->
+    well_formed_program p2' ->
+    prog_interface p2 = prog_interface p2' ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    closed_program (program_link p1 p2) ->
+    linkable_mains p1 p2 ->
+    matching_mains p2 p2' ->
+    closed_program (program_link p1 p2').
+
+  Module CS.
+    Parameters state genvtype: Type.
+    Parameter step1: genvtype -> state -> Events.trace -> state -> Prop.
+    Parameter step2: genvtype -> state -> Events.trace -> state -> Prop.
+    Parameter initial_state: forall (p: program), state -> Prop.
+    Parameter final_state: forall (p: program), state -> Prop.
+    Parameter globalenv: forall (p: program), genvtype.
+
+    Parameter current_comp: state -> Component.id.
+
+    Definition sem1 (p: program) := Semantics_gen step1 (initial_state p) (final_state p)
+                                      (globalenv p).
+    Definition sem2 (p: program) := Semantics_gen step2 (initial_state p) (final_state p)
+                                      (globalenv p).
+    Definition sem_restricted_UB (p: program) :=
+      L_restricted_UB step1 step2 (initial_state p) (final_state p) (globalenv p).
+
+  End CS.
+
+  Definition allowed_UB (intf: Program.interface) (s: CS.state) :=
+    CS.current_comp s \in domm intf.
+
+  Local Axiom compose_mergeable_interfaces :
+    forall p c,
+      linkable (prog_interface p) (prog_interface c) ->
+      closed_program (program_link p c) ->
+      mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Local Axiom recombination_blame_prefix :
+    forall p c p' c',
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program p' ->
+      well_formed_program c' ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      prog_interface p = prog_interface p' ->
+      prog_interface c = prog_interface c' ->
+      closed_program (program_link p c) ->
+      closed_program (program_link p' c') ->
+    forall m,
+      does_prefix (CS.sem_restricted_UB (program_link p c) (allowed_UB (prog_interface p))) m ->
+      does_prefix (CS.sem1 (program_link p' c')) m ->
+      does_prefix (CS.sem1 (program_link p c')) m.
+
+  Local Axiom recombination_blame_prefix_final_UB :
+    forall p c p' c',
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program p' ->
+      well_formed_program c' ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      prog_interface p = prog_interface p' ->
+      prog_interface c = prog_interface c' ->
+      closed_program (program_link p c) ->
+      closed_program (program_link p' c') ->
+    forall m,
+      does_prefix (CS.sem_restricted_UB (program_link p c) (allowed_UB (prog_interface p))) (FGoes_wrong m) ->
+      does_prefix (CS.sem1 (program_link p' c')) (FTbc m) ->
+      undef_in m (prog_interface p) ->
+      does_prefix (CS.sem1 (program_link p c')) (FGoes_wrong m).
+
+  Local Axiom definability_with_linking :
+    forall p c b m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      closed_program (program_link p c) ->
+      program_behaves (CS.sem2 (program_link p c)) b ->
+      prefix m b ->
+      not_wrong_finpref m ->
+    exists p' c',
+      prog_interface p' = prog_interface p /\
+      prog_interface c' = prog_interface c /\
+      well_formed_program p' /\
+      well_formed_program c' /\
+      closed_program (program_link p' c') /\
+      does_prefix (CS.sem1 (program_link p' c')) m.
+
+End Target_Sig.
 
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
   Parameter matching_mains : Source.program -> Intermediate.program -> Prop.
@@ -221,30 +309,6 @@ Module Type Linker_Sig
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
       does_prefix (Source.CS.sem (Source.program_link p' c')) m.
-
-(* TODO: split definability_with_linking into a more standard
-         definability + a "unlinking" lemma *)
-
-  (* Local Axiom definability : *)
-  (*   forall p m, *)
-  (*     Intermediate.well_formed_program p -> *)
-  (*     Intermediate.closed_program p -> *)
-  (*     does_prefix (Intermediate.CS.sem p) m -> *)
-  (*     not_wrong_finpref m -> *)
-  (*   exists p', *)
-  (*     Source.prog_interface p' = Intermediate.prog_interface p /\ *)
-  (*     S2I.matching_mains p' p /\ *)
-  (*     Source.well_formed_program p' /\ *)
-  (*     Source.closed_program p' /\ *)
-  (*     does_prefix (Source.CS.sem p') m. *)
-
-  (* Local Axiom unlinking : forall p i1 i2, *)
-  (*   Source.prog_interface p = unionm i1 i2 -> *)
-  (*   Source.well_formed_program p -> *)
-  (*   linkable i1 i2 -> *)
-  (*   exists p1 p2, Source.program_link p1 p2 = p /\ *)
-  (*     Source.prog_interface p1 = i1 /\ *)
-  (*     Source.prog_interface p2 = i2. *)
 
 End Linker_Sig.
 
@@ -289,27 +353,6 @@ Module Type Compiler_Sig
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     S2I.matching_mains p p_compiled.
-
-  (* CH: To match the paper this should be weakened even more to work with prefixes *)
-  (* Local Axiom separate_compilation_weaker : *)
-  (*   forall p c pc_comp p_comp c_comp, *)
-  (*     Source.well_formed_program p -> *)
-  (*     Source.well_formed_program c -> *)
-  (*     linkable (Source.prog_interface p) (Source.prog_interface c) -> *)
-  (*     compile_program p = Some p_comp -> *)
-  (*     compile_program c = Some c_comp -> *)
-  (*     compile_program (Source.program_link p c) = Some pc_comp -> *)
-  (*   forall b : program_behavior, *)
-  (*     program_behaves (Intermediate.CS.sem pc_comp) b <-> *)
-  (*     program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b. *)
-
-  (* Local Axiom S_simulates_I: *)
-  (*   forall p, *)
-  (*     Source.closed_program p -> *)
-  (*     Source.well_formed_program p -> *)
-  (*   forall tp, *)
-  (*     compile_program p = Some tp -> *)
-  (*     backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp). *)
 
   Local Axiom forward_simulation_same_safe_prefix:
     forall p p_compiled c c_compiled m,
