@@ -274,6 +274,7 @@ Definition reg_clear_list (regs : registers)
   @Symbolic.make_hseq _ _ _ (top_reg_tag :: (map (fun n =>
                                 odflt top_reg_tag (omap taga (regs n))) reg_list)).
 
+(*** step / eval_step ***)
 
 Inductive step (cde : code) (st st' : state) (ev : option event) : Prop :=
 | step_nop : forall mem reg pc tpc ti nc
@@ -642,7 +643,7 @@ Fixpoint execN_trace (n: nat) (cde: code) (st: state) : trace :=
     end
   end.
 
-
+(*** Tagged -> Merged ***)
 
 Fixpoint fold_left {A B : Type} (f : B -> A -> B) (init : B) (l : list A) : B :=
   match l with
@@ -743,79 +744,10 @@ Definition transitional_to_merged (p: Intermediate.program) (cde : Transitional.
   let c :=  flatten(map snd  (Maps.elementsm cde)) in
   foldr f nil c.
 
-Definition initial_memory (p : Intermediate.program) :=
-  let p := Linearize.linearize p in
-  let bufs := Linearize.buffers p in
-    let base_adress c b :=
-     (*  length of code + 1 + number of triples (c',b',_) such that (c', b') that occur before (c, b) *)
-      (*length (Linearize.procedures p) + 1 +*)
-      length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
-                      (* TL TODO codomm doesn't typecheck... *)
-                     (* Invariant: Linearize.buffers is "continuous" *)
-                     ((Linearize.buffers p))))
-  in
-  let concretize := (fun p => match p with
-                              | (c, b, o) =>
-                                (* TL TODO: I have add notation issues, hence intZmod.addz... *)
-                                ssrint.intZmod.addz (encode_int o) (ssrint.Posz (base_adress c b))
-                              end) in
-  let f (x : nat * nat * nat) : mword mt :=
-    match x with (c, b, o) => word.as_word (concretize (c, b, Z.of_nat o)) end in
-  let encode_memval : ((value * mem_tag) -> (atom mem_tag)) := (fun x =>
-  {| vala := match fst x with
-             | Int z => word.as_word (encode_int z)
-             | Ptr p => word.as_word (concretize p)
-             | Undef =>  word.as_word (ssrint.Posz 0) (* Invariant: should not be present *)
-             end ;
-     taga := snd x |})
-  in Tmp.mapk f (mapm (encode_memval) bufs).
-
-Definition reg0 : registers :=
-  let default_reg := (word_of_nat 0)@(LRC.Other): atom (tag_type Symbolic.R) in
-  [fmap (0, default_reg) ;
-   (1, default_reg) ;
-   (2, default_reg) ;
-   (3, default_reg) ;
-   (4, (word_of_nat (2 ^ 15))@(LRC.Other)) ; (* value equivalent to "Undef" for R_RA*)
-   (5, default_reg) ;
-   (6, default_reg) ;
-   (16,default_reg) ;
-   (17,default_reg) ;
-   (18,default_reg) ;
-   (19,default_reg) ].
-
-(* tag the part of memory that will serve for the code in mp*)
-Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word_ordType (word_size mt) -> atom mem_tag} :=
-  Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (map (fun '(_,t) => Atom (word_of_nat 0) t) cde)).
-
-Definition initial_state cde (p : Intermediate.program) :=
-  let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))) in
-  let mem0 := (initial_memory p) in
-  let pctag := build_tpc 0 in
-  {|mem := unionm (encode_code_placeholder cde (size mem0)) mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
-
-Definition run_merged cd fuel p :=
-      execN fuel cd (initial_state cd p).
-
-
-Definition compile_run_merged fuel (p : Intermediate.program) :=
-  run_merged (transitional_to_merged p (intermediate_to_transitional p)) fuel p.
-
-Close Scope monad_scope.
-
-
-Definition compile_and_run_from_source_merged := 
-fun (p : Source.program) (fuel : nat) =>
-match Compiler.compile_program p with
-| Some compiled_p => compile_run_merged fuel compiled_p
-| None => inl None
-end.
+(*** Merged -> MP ***)
 
 Notation instr_merged := instr.
-
 Require Import MicroPolicies.Types.
-
-(*Notation memory := {fmap mword mt -> matom}.*)
 
 Definition binop_trans (b : Values.binop) : binop :=
   match b with
@@ -861,6 +793,51 @@ Definition encode_code (cde : code) (pc0 : nat) : memory :=
   let f := (fun x acc => ((encode_instr_atom x lp (offset - 1 - (snd acc))) :: (fst acc), S (snd acc)) ) in
   Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (fst (foldr f ([], 0) cde))).
 
+(*** Initialization/Compilation ***)
+
+Definition initial_memory (p : Intermediate.program) :=
+  (* TODO: move default buffers to their respective compartments *)
+  let p := Linearize.linearize p in
+  let bufs := Linearize.buffers p in
+    let base_adress c b :=
+     (*  length of code + 1 + number of triples (c',b',_) such that (c', b') that occur before (c, b) *)
+      (*length (Linearize.procedures p) + 1 +*)
+      length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
+                      (* TL TODO codomm doesn't typecheck... *)
+                     (* Invariant: Linearize.buffers is "continuous" *)
+                     ((Linearize.buffers p))))
+  in
+  let concretize := (fun p => match p with
+                              | (c, b, o) =>
+                                (* TL TODO: I have add notation issues, hence intZmod.addz... *)
+                                ssrint.intZmod.addz (encode_int o) (ssrint.Posz (base_adress c b))
+                              end) in
+  let f (x : nat * nat * nat) : mword mt :=
+    match x with (c, b, o) => word.as_word (concretize (c, b, Z.of_nat o)) end in
+  let encode_memval : ((value * mem_tag) -> (atom mem_tag)) := (fun x =>
+  {| vala := match fst x with
+             | Int z => word.as_word (encode_int z)
+             | Ptr p => word.as_word (concretize p)
+             | Undef =>  word.as_word (ssrint.Posz 0) (* Invariant: should not be present *)
+             end ;
+     taga := snd x |})
+  in Tmp.mapk f (mapm (encode_memval) bufs).
+
+Definition reg0 : registers :=
+  let default_reg := (word_of_nat 0)@(LRC.Other): atom (tag_type Symbolic.R) in
+  [fmap (0, default_reg) ;
+   (1, default_reg) ;
+   (2, default_reg) ;
+   (3, default_reg) ;
+   (4, (word_of_nat (2 ^ 15))@(LRC.Other)) ; (* value equivalent to "Undef" for R_RA*)
+   (5, default_reg) ;
+   (6, default_reg) ;
+   (16,default_reg) ;
+   (17,default_reg) ;
+   (18,default_reg) ;
+   (19,default_reg) ].
+
+
 (* return the memory along with the first pc *)
 Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory * nat :=
   let m := (initial_memory p) in
@@ -868,9 +845,38 @@ Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory 
   let c := (encode_code cde pc0) in
   (unionm c m, pc0).
 
+(*
+(* tag the part of memory that will serve for the code in mp*)
+Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word_ordType (word_size mt) -> atom mem_tag} :=
+  Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (map (fun '(_,t) => Atom (word_of_nat 0) t) cde)).
+ *)
+
+Definition initial_state cde (p : Intermediate.program) :=
+  let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))) in
+  let mem0 := (initial_memory p) in
+  let pctag := build_tpc 0 in
+  {|mem := unionm (encode_code cde (size mem0)) mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
+
+Definition run_merged cd fuel p :=
+      execN fuel cd (initial_state cd p).
+
+
+Definition compile_run_merged fuel (p : Intermediate.program) :=
+  run_merged (transitional_to_merged p (intermediate_to_transitional p)) fuel p.
+
+Definition compile_and_run_from_source_merged := 
+fun (p : Source.program) (fuel : nat) =>
+match Compiler.compile_program p with
+| Some compiled_p => compile_run_merged fuel compiled_p
+| None => inl None
+end.
+
 End WithClasses.
 
 
+Section WithClasses'.
+
+Context {mt : machine_types}.
 
 Definition instr_rules (rcom_val : Z)
   (op : opcode)
@@ -879,7 +885,7 @@ Definition instr_rules (rcom_val : Z)
   (ts : hseq _ (inputs op))
   tni
   : option ((ovec op) * (option event)) :=
-  (* checks that we're not executing code *)
+  (* checks that we're not executing data *)
   do! _ <- match tni with
          | None => Some tt
          | Some mtag => if (is_code mtag) then Some tt else None
@@ -895,11 +901,96 @@ Definition instr_rules (rcom_val : Z)
   let 'Symbolic.OVec trpc' tr' := (fst out) in
   Some ({| trpc := trpc' ; tr := tr' |}, snd out).
 
-Definition compile_and_run_from_source_merged_ex (mt : machine_types) := 
+Context  {ops : machine_ops mt} {sregs : syscall_regs mt}.
+
+
+
+Definition transfer (iv : Symbolic.ivec lrc_tags) (evi : Symbolic.ev_inputs) : option (Symbolic.vovec lrc_tags (Symbolic.op iv) * option event) :=
+  match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
+  | Symbolic.IVec vop tpc ti ts tni =>
+    match vop, ts, ti, tni return option (Symbolic.vovec _ vop * option event) with
+    | (OP op), ts, ti, tni =>
+        do! out:(ovec op * option event) <- instr_rules (Symbolic.rcom_value evi) tpc ti ts tni;
+        let (ov, ev) := out in
+        Some (Symbolic.OVec op (trpc ov) (tr ov), ev)
+    (* Monitor stuff *)
+    | SERVICE, [hseq], ti, None => Some (tt, None)
+    |       _,      _,  _,    _ => None
+    end
+  end.
+
+
+
+Definition sym_lrc_merged : Symbolic.params := {|
+  Symbolic.ttypes := lrc_tags;
+  Symbolic.transfer := transfer;
+  Symbolic.internal_state := [eqType of unit]
+ |}.
+
+
+
+Definition lrc_alloc_fun (st : @Symbolic.state mt sym_lrc_merged) : option (Symbolic.state sym_lrc_merged) :=
+  do! ra_val <- Symbolic.regs st ra;
+  let next_pc := (vala ra_val)@(taga (Symbolic.pc st)) in
+  (* TL TODO: Is using return address to compute calling component safe? *)
+  do! ra_atom <- Symbolic.mem st (vala ra_val);
+  let current_c := (color (taga ra_atom)) in
+  let prefix := (LRC.component_memory_prefix (ssrint.Posz (1 + current_c)) (Symbolic.comp_num st)) in
+  let mask := (LRC.component_memory_prefix (ssrint.Posz ((2 ^ (Symbolic.comp_num st))-1)) (Symbolic.comp_num st)) in
+  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
+  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
+  let max_addr := List.last (filter prefix_filter (domm (Symbolic.mem st))) (prefix) in
+  (* create the new bloc *)
+  let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c false) in
+  do! size <- Symbolic.regs st syscall_arg1;
+  do! length <- match word.int_of_word (vala size) with
+                | ssrint.Posz x => Some x
+                | ssrint.Negz _ => None
+                end;
+  let bloc :=
+      mkseq (fun n => ((word.addw max_addr (word.as_word (ssrint.Posz(n + 2)))), atom)) (* this + 2 is giving you one unallocated word between each block *)
+            length in
+  let mem' := unionm (Symbolic.mem st) (mkfmap bloc) in
+  (* return *)
+  do! addr <- (do! x <- List.head bloc;
+                 Some (fst x));
+  do! regs' <- updm (Symbolic.regs st) (syscall_ret) addr@Other;
+  Some (Symbolic.State sym_lrc_merged mem' regs' next_pc tt (Symbolic.comp_num st)).
+
+
+Definition table : (Symbolic.syscall_table sym_lrc_merged) :=
+  [fmap ((word_of_nat alloc_label), (@Symbolic.Syscall mt sym_lrc_merged tt lrc_alloc_fun ) )].
+
+
+Definition alloc_addr : imm mt := shlw 1%w (as_word (ssrint.Posz 14)). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)
+Definition table_lrc : @Symbolic.syscall_table mt sym_lrc :=
+  [fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := LRC.alloc_fun |})].
+
+Definition step_m := @step mt instr_rules.
+Definition step_s := (@Symbolic.step mt ops sym_lrc table_lrc).
+
+
+Inductive state_merged_equiv (s:@state mt) (s':@Symbolic.state mt sym_lrc) :=
+| State_merged_equiv_def :
+  ((@Symbolic.State mt sym_lrc) (mem s) (Tmp.mapk word_of_nat (regs s)) (pc s) tt (comp_num s)) = s' ->
+  state_merged_equiv s s'.
+
+Theorem step_equiv cde p s1 s2 s1' s2' ev:
+  cde = (transitional_to_merged p (intermediate_to_transitional p)) ->
+  state_merged_equiv s1  s2  ->
+  state_merged_equiv s1' s2' ->
+  ((step_m cde s1 s1' ev)) <-> ((step_s s2 s2' ev ))
+.
+Admitted.
+
+               
+End WithClasses'.
+
+Definition compile_and_run_from_source_merged_ex (mt : machine_types) {ops : machine_ops mt} := 
 fun (p : Source.program) (fuel : nat) =>
 match Compiler.compile_program p with
 | Some compiled_p =>
-    match @compile_run_merged mt instr_rules fuel compiled_p with
+    match @compile_run_merged mt ops instr_rules fuel compiled_p with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)

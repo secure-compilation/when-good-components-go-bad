@@ -381,7 +381,8 @@ Instance showState : Show (Merged.state) :=
     show st :=
       let n := match (MicroPolicies.Types.taga (Merged.pc st)) with LRC.Level m => m end in
       "---------------------" ++ newline ++
-        "Memory: " ++ newline ++ (show (Merged.mem st)) ++ newline ++
+(*        "Memory: " ++ newline ++ (show (Merged.mem st)) ++ newline ++*)
+        "Memory: " ++ (show (size (domm (Merged.mem st)))) ++ newline ++ 
         "Registers: " ++ newline ++ (show (Merged.regs st )) ++ newline ++
         "pc: " ++ show (MicroPolicies.Types.vala (Merged.pc st)) ++
         "; level: " ++ show (ssrint.Posz n) ++ newline ++
@@ -624,7 +625,6 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
       let st := load (merged_to_mp_backend inter_p merged_p) nc in
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
-     printer ("-------------" ++ newline ++ (show (Symbolic.mem st)) ++ "-------------" ++ newline)
       match execN_and_show_mp fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
