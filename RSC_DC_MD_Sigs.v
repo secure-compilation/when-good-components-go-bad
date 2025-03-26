@@ -238,7 +238,7 @@ Module Type Target_Sig.
       closed_program (program_link p c) ->
       closed_program (program_link p' c') ->
     forall m,
-      does_prefix (CS.sem_restricted_UB (program_link p c) (allowed_UB (prog_interface p))) m ->
+      does_prefix (CS.sem_restricted_UB (program_link p c) (allowed_UB (prog_interface c))) m ->
       does_prefix (CS.sem1 (program_link p' c')) m ->
       does_prefix (CS.sem1 (program_link p c')) m.
 
@@ -254,7 +254,8 @@ Module Type Target_Sig.
       closed_program (program_link p c) ->
       closed_program (program_link p' c') ->
     forall m,
-      does_prefix (CS.sem_restricted_UB (program_link p c) (allowed_UB (prog_interface p))) (FGoes_wrong m) ->
+      does_prefix (CS.sem_restricted_UB (program_link p c) (allowed_UB (prog_interface c)))
+        (FGoes_wrong m) ->
       does_prefix (CS.sem1 (program_link p' c')) (FTbc m) ->
       undef_in m (prog_interface p) ->
       does_prefix (CS.sem1 (program_link p c')) (FGoes_wrong m).
