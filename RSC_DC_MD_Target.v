@@ -1,8 +1,11 @@
 Require Import CompCert.Behaviors.
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Common.Definitions.
 Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
+Require Import Common.Util.
 
 Require Import RSC_DC_MD_Sigs.
 
@@ -35,8 +38,66 @@ Section RSC_DC_MD_Section.
     closed_program (program_link p Ct).
   Hypothesis mains : linkable_mains p Ct.
 
-  (* Main Theorem *)
+  Lemma max_prefix_no_UB: forall (m: finpref_behavior),
+    does_prefix (CS.sem2 (program_link p Ct)) m ->
+    exists m', does_prefix
+            (CS.sem_restricted_UB (program_link p Ct)
+               (allowed_UB (prog_interface Ct))) m' /\
+            (m = m' \/
+               (finpref_trace_prefix m' (finpref_trace m) /\
+                  undef_in (finpref_trace m') (prog_interface p) /\
+               does_prefix
+                (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct) ))
+                (FGoes_wrong (finpref_trace m')))).
+  Proof.
+    unfold does_prefix.
+    intros m [beh [prg_beh pref]].
+    inv prg_beh.
+    - assert (ini_res_s: Smallstep.initial_state
+                (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct)))
+                s) by auto.
+      inv H0.
+      + assert (G: Star (CS.sem_restricted_UB (program_link p Ct)
+                        (allowed_UB (prog_interface Ct))) s t s' \/
+                exists s'' t',
+                  trace_prefix t' (finpref_trace m) /\
+                    undef_in t' (prog_interface p) /\
+                    Star (CS.sem_restricted_UB (program_link p Ct)
+                            (allowed_UB (prog_interface Ct))) s t' s'' /\
+                    not (final_state ((CS.sem_restricted_UB (program_link p Ct)
+                            (allowed_UB (prog_interface Ct)))) s'') /\
+                    (Nostep (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s'')).
+        admit.
+        destruct G as [G | [s'' [t' [t'_m [UNDEF [STAR [NOT_FINAL NOSTEP]]]]]]].
+        * eexists; split.
+          eexists; split; eauto.
+          econstructor; eauto.
+          econstructor; eauto.
+          now left.
+        * eexists; split.
+          -- eexists; split.
+             ++ econstructor; eauto.
+                eapply state_goes_wrong; eauto.
+             ++ instantiate (1 := FTbc t'). simpl.
+                unfold behavior_prefix. exists (Goes_wrong []); eauto.
+                simpl. now rewrite E0_right.
+          -- right.
+             split; auto.
+             split; auto.
+             eexists; split.
+             ++ econstructor; eauto.
+                eapply state_goes_wrong; eauto.
+             ++ simpl. reflexivity.
+      + admit.
+      + admit.
+      + admit.
+    - eexists; split.
+      + eexists; split; eauto.
+        constructor; auto.
+      + auto.
+  Admitted.
 
+  (* Main Theorem *)
   Theorem RSC_DC_MD:
     forall m,
       does_prefix (CS.sem2 (program_link p Ct)) m ->
@@ -59,165 +120,19 @@ Section RSC_DC_MD_Section.
                 linkability closedness Hbeh Hprefix0 Hsafe_pref)
       as [P' [Cs
          [Hsame_iface1 [Hsame_iface2
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed HP'_Cs_m]]]]]]].
-
-    (* assert (linkable_mains P' Cs) as HP'Cs_mains. *)
-    (* { apply linkable_disjoint_mains; trivial; congruence. } *)
-
-    (* FCC *)
-    (* the definability output can be split in two programs *)
-    (* probably need partialize to obtain them *)
-
-    (* At this point, we compile P' and Cs and establish their basic properties. *)
-    (* destruct (Compiler.well_formed_compilable well_formed_P') as [P'_compiled HP'_compiles]. *)
-    (* pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles *)
-    (*   as well_formed_P'_compiled. *)
-    (* destruct (Compiler.well_formed_compilable well_formed_Cs) as [Cs_compiled HCs_compiles]. *)
-    (* pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles *)
-    (*   as well_formed_Cs_compiled. *)
-    (* assert *)
-    (*   (linkable *)
-    (*      (prog_interface Cs_compiled) *)
-    (*      (prog_interface P'_compiled)) *)
-    (*   as linkability'. { *)
-    (*   eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto. *)
-    (*   apply linkable_sym. *)
-    (*   rewrite <- Hsame_iface1 in linkability_pcomp_Ct. *)
-    (*   rewrite <- Hsame_iface2 in linkability_pcomp_Ct. *)
-    (*   apply linkability_pcomp_Ct. *)
-    (* } *)
-    (* assert (exists P'_Cs_compiled, *)
-    (*           Compiler.compile_program (program_link P' Cs) = Some P'_Cs_compiled) *)
-    (*   as [P'_Cs_compiled HP'_Cs_compiles]. { *)
-    (*   rewrite <- Hsame_iface1 in linkability_pcomp_Ct. *)
-    (*   rewrite <- Hsame_iface2 in linkability_pcomp_Ct. *)
-    (*   pose proof linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct *)
-    (*     as Hlinking_wf. *)
-    (*   apply Compiler.well_formed_compilable; assumption. *)
-    (* } *)
-
-    (* have well_formed_P'Cs : well_formed_program (program_link P' Cs). *)
-    (*   rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct. *)
-    (*   exact: linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct. *)
-    (*   have HP'_Cs_compiled_doesm : does_prefix (CS.sem (program_link P'_compiled Cs_compiled)) m. *)
-    (*   { *)
-    (*     eapply Compiler.forward_simulation_same_safe_prefix; try eassumption. congruence. *)
-    (*   } *)
-
-    (* (* intermediate decomposition (for Cs_compiled) *) *)
-    (* rewrite program_linkC in HP'_Cs_compiled_doesm; *)
-    (*    [| assumption |assumption | apply linkable_sym in linkability'; assumption]. *)
-    (* (* pose proof (decomposition_prefix *) *)
-    (* (*        well_formed_Cs_compiled well_formed_P'_compiled *) *)
-    (* (*        linkability' mains' Hsafe_pref HP'_Cs_compiled_doesm) as HCs_decomp. *) *)
-
-    (* (* intermediate composition *) *)
-    (* assert (prog_interface Ct = prog_interface Cs_compiled) *)
-    (*   as Hctx_same_iface. { *)
-    (*   symmetry. erewrite Compiler.compilation_preserves_interface. *)
-    (*   - rewrite <- Hsame_iface2. reflexivity. *)
-    (*   - assumption. *)
-    (* } *)
-    (* (* rewrite Hctx_same_iface in HP_decomp. *) *)
-    (* assert (prog_interface p_compiled = prog_interface P'_compiled) as Hprog_same_iface. { *)
-    (*   symmetry. erewrite Compiler.compilation_preserves_interface. *)
-    (*   - apply Hsame_iface1. *)
-    (*   - assumption. *)
-    (* } *)
-    (* (* rewrite <- Hprog_same_iface in HCs_decomp. *) *)
-
-    (* assert (linkable (prog_interface p_compiled) (prog_interface Cs_compiled)) *)
-    (*   as linkability''. *)
-    (* { *)
-    (*   unfold linkable. split; try *)
-    (*     rewrite Hprog_same_iface; *)
-    (*     apply linkable_sym in linkability'; *)
-    (*     now inversion linkability'. *)
-    (* } *)
-    (* assert (closed_program (program_link p_compiled Cs_compiled)) *)
-    (*   as HpCs_compiled_closed. *)
-    (* pose proof S2I.matching_mains_equiv *)
-    (*      Hmatching_mains_Cs_Ct *)
-    (*      (Compiler.compilation_has_matching_mains well_formed_Cs HCs_compiles) *)
-    (*      as Hctx_match_mains. *)
-    (* now apply (interface_preserves_closedness_r *)
-    (*              well_formed_p_compiled well_formed_Cs_compiled *)
-    (*              Hctx_same_iface linkability_pcomp_Ct closedness mains Hctx_match_mains); auto. *)
-    (* assert (well_formed_program (program_link p_compiled Cs_compiled)) *)
-    (*   as HpCs_compiled_well_formed *)
-    (*     by (apply linking_well_formedness; assumption). *)
-
-    (* assert (linkable_mains p_compiled Cs_compiled) as linkable_mains. *)
-    (* { *)
-    (*   eapply (@Compiler.compilation_preserves_linkable_mains p _ Cs); *)
-    (*     try assumption. *)
-    (*   - rewrite <- Hsame_iface2 in linkability. *)
-    (*     eapply linkable_disjoint_mains; assumption. *)
-    (* } *)
-
-    (* assert (mergeable_interfaces (prog_interface p_compiled) *)
-    (*                              (prog_interface Cs_compiled)) *)
-    (*   as Hmergeable_ifaces. *)
-    (*   by apply compose_mergeable_interfaces. *)
-
-    (* (* pose proof composition_prefix *) *)
-    (* (*      well_formed_p_compiled well_formed_Cs_compiled *) *)
-    (* (*      linkable_mains HpCs_compiled_closed *) *)
-    (* (*      Hmergeable_ifaces *) *)
-    (* (*      HP_decomp HCs_decomp *) *)
-    (* (*   as HpCs_compiled_beh. *) *)
-    (* assert (closed_program (program_link p Cs)) as Hclosed_p_Cs. { *)
-    (*   apply (interface_preserves_closedness_l HP'Cs_closed); trivial. *)
-    (*   apply Compiler.compilation_preserves_interface in HP'_compiles. *)
-    (*   apply Compiler.compilation_preserves_interface in successful_compilation. *)
-    (*   congruence. *)
-    (* } *)
-    (* assert (linkable (prog_interface p) (prog_interface Cs)) *)
-    (*   as Hlinkable_p_Cs. { *)
-    (*   inversion linkability'' as [sound_interface_p_Cs fdisjoint_p_Cs]. *)
-    (*   constructor; *)
-    (*     (apply Compiler.compilation_preserves_interface in HCs_compiles; *)
-    (*     apply Compiler.compilation_preserves_interface in successful_compilation; *)
-    (*     rewrite <- HCs_compiles; rewrite <- successful_compilation; *)
-    (*     assumption). *)
-    (* } *)
-    (* assert (well_formed_program (program_link p Cs)) as Hwf_p_Cs *)
-    (*   by (apply linking_well_formedness; assumption). *)
-
-    (* assert (HP'Cs_compiled_closed : *)
-    (*           closed_program (program_link P'_compiled Cs_compiled)). *)
-    (* { *)
-    (*   rewrite program_linkC; try easy; try now apply linkable_sym. *)
-    (*   apply interface_preserves_closedness_r with (p2 := p_compiled); eauto. *)
-    (*   apply linkable_sym; eauto. *)
-    (*   rewrite program_linkC; eauto. *)
-    (*   apply linkable_sym; eauto. *)
-    (*   apply linkable_mains_sym; eauto. *)
-    (*   eapply S2I.matching_mains_equiv; eauto. *)
-    (*   apply Compiler.compilation_has_matching_mains; eauto. *)
-    (* } *)
-
-    (* rewrite program_linkC in HP'_Cs_compiled_doesm; try assumption. *)
-    (* rewrite <- Hctx_same_iface in Hmergeable_ifaces. *)
+         [matching_mains1 [matching_mains2
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed HP'_Cs_m]]]]]]]]].
 
     assert (mergeable_interfaces (prog_interface p)
                                  (prog_interface Ct))
-      as Hmergeable_ifaces by (split ; try eauto ; admit).
-    
-    assert (
-        exists m', does_prefix
-                (CS.sem_restricted_UB (program_link p Ct)
-                   (allowed_UB (prog_interface Ct))) m' /\
-                (m = m' \/
-                   (m <> m' /\
-                  (finpref_trace_prefix m' (finpref_trace m) /\
-                     forall m'', finpref_trace_prefix m' (finpref_trace m'') ->
-                            m <> m'' ->
-                            not (does_prefix
-                              (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct)))
-                              m'')))))
-             as [m' [p_Ct_does_m' H]] by admit.
-    destruct H as [? | [m_not_m' [m'_m m'_maximal]]]; try subst m'.
+      as Hmergeable_ifaces
+           by (eapply Target.compose_mergeable_interfaces; eauto).
+
+    pose proof (max_prefix_no_UB
+                  (ex_intro _ t (conj Hbeh Hprefix0)))
+      as [m' [p_Ct_does_m' H]].
+
+    destruct H as [H | [m'_m [undef_in_m'_p m'_maximal]]]; try subst m'.
     - pose proof Target.recombination_blame_prefix
                  well_formed_p well_formed_Ct well_formed_P' well_formed_Cs Hmergeable_ifaces
                  (eq_sym Hsame_iface1) (eq_sym Hsame_iface2) closedness HP'Cs_closed
@@ -227,89 +142,42 @@ Section RSC_DC_MD_Section.
       exists Cs, t'.
       repeat (split; [now auto |]).
       rewrite Hsame_iface2; split; [now auto |].
-      split; [ admit | ].
-      split; eauto.
+      split.
+      + eapply Target.interface_preserves_closedness_r with (p2 := Ct); eauto.
+      + split; eauto.
 
-    -
-      assert (p_Ct_wrong_m': does_prefix
-                (CS.sem_restricted_UB (program_link p Ct) (fun s : CS.state => allowed_UB (prog_interface Ct) s))
-                (FGoes_wrong (finpref_trace m'))).
-      { exists (Goes_wrong (finpref_trace m')).
-        split; [| constructor].
-
-        destruct p_Ct_does_m' as [b' [p_Ct_b' m'_b']].
-        inversion p_Ct_b'; subst; clear p_Ct_b'.
-        - destruct b' as [tra | tra | trainf | tra].
-          + eapply program_runs ; eauto.  admit.
-          + admit.
-          + admit.
-          + admit.
-        - destruct m'; try now inversion m'_b'.
-          simpl in m'_b'.
-          destruct m'_b' as [? G].
-          destruct t0; destruct x; inversion G; subst. simpl.
-          constructor. eauto. }
-
-      assert (P'_Cs_tbc_m':
+    - assert (P'_Cs_tbc_m':
                does_prefix (CS.sem1 (program_link P' Cs)) (FTbc (finpref_trace m'))).
       { clear -HP'_Cs_m m'_m.
-        admit. }
-
-      assert (undef_in_m'_p: undef_in (finpref_trace m') (prog_interface p)) by admit.
+        revert HP'_Cs_m m'_m.
+        generalize (CS.sem1 (program_link P' Cs)). clear.
+        intros s. unfold does_prefix.
+        intros [b [s_b m_b]] m'_m.
+        exists b. split; auto.
+        clear -m'_m m_b.
+        unfold finpref_trace_prefix in m'_m.
+        destruct m'; try now auto. simpl in *.
+        eapply trace_behavior_prefix_trans'; eauto. unfold trace_finpref_prefix.
+        destruct m; eauto. }
 
       pose proof Target.recombination_blame_prefix_final_UB
                  well_formed_p well_formed_Ct well_formed_P' well_formed_Cs Hmergeable_ifaces
                  (eq_sym Hsame_iface1) (eq_sym Hsame_iface2) closedness HP'Cs_closed
-                 p_Ct_wrong_m' P'_Cs_tbc_m' undef_in_m'_p.
+                 m'_maximal P'_Cs_tbc_m' undef_in_m'_p.
 
-      assert (exists t', program_behaves (CS.sem1 (program_link p Cs)) t' /\
-                      prefix m t') as [t' [p_Cs_t' m_t']] by admit.
-      exists Cs, t'.
+      exists Cs, (Goes_wrong (finpref_trace m')).
       repeat (split; [now auto |]).
       rewrite Hsame_iface2; split; [now auto |].
-      split; [ admit | ].
-      split; eauto.
-  Admitted.
+      split; [| split].
+      + eapply Target.interface_preserves_closedness_r with (p2 := Ct); eauto.
+      + destruct H as [t' [A B]].
+        simpl in B. destruct t'; try now auto. congruence.
+      + right. unfold behavior_improves_blame.
+        eexists; split; eauto. split.
+        * destruct m'; simpl in *; try now auto.
+          destruct m; simpl in *; try now auto.
+        * eauto.
+  Qed.
 
-  Lemma max_prefix_no_UB {t} (m : finpref_behavior) {m_eq: m = FTbc t}
-    (Hexec : does_prefix
-                (CS.sem_restricted_UB (program_link p Ct)
-                   (allowed_UB (prog_interface Ct))) m) :
-    exists m', does_prefix
-            (CS.sem_restricted_UB (program_link p Ct)
-               (allowed_UB (prog_interface Ct))) m' /\
-            (m = m' \/
-               (m <> m' /\
-                  (finpref_trace_prefix m' (finpref_trace m) /\
-                     forall m'', finpref_trace_prefix m' (finpref_trace m'') ->
-                            m <> m'' ->
-                            not (does_prefix
-                                   (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct)))
-                                   m'')))).
-Proof.
-  subst.
-  induction t.
-  - exists (FTbc []) ; split ; try eauto.
-  - destruct IHt as [m' Hm'] ;  destruct Hexec as [beh [beh_behaves m_beh_prefix]].
-    -- simpl in m_beh_prefix.
-        destruct beh as [bt|bt|bt|bt] ; destruct bt ; destruct m_beh_prefix as [beh' beh_beh'_eq] ;
-          try (destruct beh' ; simpl in beh_beh'_eq ; inversion beh_beh'_eq).
-        --- admit.
-        --- exists (Diverges bt). split ; try eauto. admit.
-            subst. simpl. exists (Diverges t0). eauto.
-        --- exists (Reacts bt). split ; try eauto. admit.
-            subst. simpl. exists (Reacts t0). eauto.
-        --- exists (Goes_wrong bt). split ; try eauto. admit.
-            subst. simpl. exists (Goes_wrong t0). eauto.
-    -- destruct Hm' as [m'prefix disj]. destruct disj.
-       --- destruct beh_behaves as [s beh s_init s_beh|].
-           
-         exists m'. split ; try eauto.
-Admitted.
-(*
-Lemma
-  Target.sem_restricted_UB_computable
-*)
-    
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.

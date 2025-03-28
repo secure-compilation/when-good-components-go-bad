@@ -198,6 +198,11 @@ Module Type Target_Sig.
     matching_mains p2 p2' ->
     closed_program (program_link p1 p2').
 
+  Local Axiom matching_mains_equiv : forall p1 p2 p3,
+      matching_mains p1 p2 ->
+      matching_mains p1 p3 ->
+      matching_mains p2 p3.
+
   Module CS.
     Parameters state genvtype: Type.
     Parameter step1: genvtype -> state -> Events.trace -> state -> Prop.
@@ -278,6 +283,8 @@ Module Type Target_Sig.
     exists p' c',
       prog_interface p' = prog_interface p /\
       prog_interface c' = prog_interface c /\
+      matching_mains p p' /\
+      matching_mains c c' /\
       well_formed_program p' /\
       well_formed_program c' /\
       closed_program (program_link p' c') /\
