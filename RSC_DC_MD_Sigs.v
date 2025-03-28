@@ -220,6 +220,12 @@ Module Type Target_Sig.
   Definition allowed_UB (intf: Program.interface) (s: CS.state) :=
     CS.current_comp s \in domm intf.
 
+  Local Axiom sem_restricted_UB_computable :
+    forall p allowed_UB,
+      let step := step (CS.sem_restricted_UB p allowed_UB) in
+      forall g s,
+        (exists s' t, step g s t s') /\ not (exists s' t, step g s t s').
+
   Local Axiom compose_mergeable_interfaces :
     forall p c,
       linkable (prog_interface p) (prog_interface c) ->

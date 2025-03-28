@@ -202,8 +202,8 @@ Section RSC_DC_MD_Section.
 
     assert (mergeable_interfaces (prog_interface p)
                                  (prog_interface Ct))
-      as Hmergeable_ifaces by admit.
-
+      as Hmergeable_ifaces by (split ; try eauto ; admit).
+    
     assert (
         exists m', does_prefix
                 (CS.sem_restricted_UB (program_link p Ct)
@@ -223,8 +223,7 @@ Section RSC_DC_MD_Section.
                  (eq_sym Hsame_iface1) (eq_sym Hsame_iface2) closedness HP'Cs_closed
                  p_Ct_does_m' HP'_Cs_m.
 
-      assert (exists t', program_behaves (CS.sem1 (program_link p Cs)) t' /\
-                      prefix m t') as [t' [p_Cs_t' m_t']] by admit.
+      destruct H  as [t' [p_Cs_t' m_t']].
       exists Cs, t'.
       repeat (split; [now auto |]).
       rewrite Hsame_iface2; split; [now auto |].
@@ -241,7 +240,7 @@ Section RSC_DC_MD_Section.
         destruct p_Ct_does_m' as [b' [p_Ct_b' m'_b']].
         inversion p_Ct_b'; subst; clear p_Ct_b'.
         - destruct b' as [tra | tra | trainf | tra].
-          + admit.
+          + eapply program_runs ; eauto.  admit.
           + admit.
           + admit.
           + admit.
@@ -272,5 +271,45 @@ Section RSC_DC_MD_Section.
       split; eauto.
   Admitted.
 
+  Lemma max_prefix_no_UB {t} (m : finpref_behavior) {m_eq: m = FTbc t}
+    (Hexec : does_prefix
+                (CS.sem_restricted_UB (program_link p Ct)
+                   (allowed_UB (prog_interface Ct))) m) :
+    exists m', does_prefix
+            (CS.sem_restricted_UB (program_link p Ct)
+               (allowed_UB (prog_interface Ct))) m' /\
+            (m = m' \/
+               (m <> m' /\
+                  (finpref_trace_prefix m' (finpref_trace m) /\
+                     forall m'', finpref_trace_prefix m' (finpref_trace m'') ->
+                            m <> m'' ->
+                            not (does_prefix
+                                   (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct)))
+                                   m'')))).
+Proof.
+  subst.
+  induction t.
+  - exists (FTbc []) ; split ; try eauto.
+  - destruct IHt as [m' Hm'] ;  destruct Hexec as [beh [beh_behaves m_beh_prefix]].
+    -- simpl in m_beh_prefix.
+        destruct beh as [bt|bt|bt|bt] ; destruct bt ; destruct m_beh_prefix as [beh' beh_beh'_eq] ;
+          try (destruct beh' ; simpl in beh_beh'_eq ; inversion beh_beh'_eq).
+        --- admit.
+        --- exists (Diverges bt). split ; try eauto. admit.
+            subst. simpl. exists (Diverges t0). eauto.
+        --- exists (Reacts bt). split ; try eauto. admit.
+            subst. simpl. exists (Reacts t0). eauto.
+        --- exists (Goes_wrong bt). split ; try eauto. admit.
+            subst. simpl. exists (Goes_wrong t0). eauto.
+    -- destruct Hm' as [m'prefix disj]. destruct disj.
+       --- destruct beh_behaves as [s beh s_init s_beh|].
+           
+         exists m'. split ; try eauto.
+Admitted.
+(*
+Lemma
+  Target.sem_restricted_UB_computable
+*)
+    
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
