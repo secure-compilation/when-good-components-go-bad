@@ -225,11 +225,27 @@ Module Type Target_Sig.
   Definition allowed_UB (intf: Program.interface) (s: CS.state) :=
     CS.current_comp s \in domm intf.
 
-  Local Axiom sem_restricted_UB_computable :
+  Parameter det_sem1 : forall p, determinate (CS.sem1 p).
+  Parameter det_sem2 : forall p, determinate (CS.sem2 p).
+  Parameter det_sem_restricted : forall p aUB, determinate (CS.sem_restricted_UB p aUB).
+  
+  Parameter strong_det_sem2 : forall p s t1 t2 s1 s2,
+      Step (CS.sem2 p) s t1 s1 -> Step (CS.sem2 p) s t2 s2 -> t1 = t2 /\ s1 = s2.
+  
+  Local Axiom sem_restricted_UB_lem :
     forall p allowed_UB,
       let step := step (CS.sem_restricted_UB p allowed_UB) in
-      forall g s,
-        (exists s' t, step g s t s') /\ not (exists s' t, step g s t s').
+      forall g s s' t,
+        (step g s t s') \/ not (step g s t s').
+
+  Local Axiom get_program_behave_sem_restricted_UB :
+    forall p allowed_UB,
+      exists beh, program_behaves (CS.sem_restricted_UB p allowed_UB) beh.
+ 
+  Local Axiom sem_restricted_UB_generalises_sem2 :
+    forall p allowed_UB g s s' t,
+      (step (CS.sem_restricted_UB p allowed_UB)) g s t s' ->
+      (step (CS.sem2 p)) g s t s'.
 
   Local Axiom compose_mergeable_interfaces :
     forall p c,
