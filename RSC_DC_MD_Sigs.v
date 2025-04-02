@@ -225,12 +225,35 @@ Module Type Target_Sig.
   Definition allowed_UB (intf: Program.interface) (s: CS.state) :=
     CS.current_comp s \in domm intf.
 
-  Parameter det_sem1 : forall p, determinate (CS.sem1 p).
-  Parameter det_sem2 : forall p, determinate (CS.sem2 p).
-  Parameter det_sem_restricted : forall p aUB, determinate (CS.sem_restricted_UB p aUB).
+  Local Axiom det_sem1 : forall p, determinate (CS.sem1 p).
+  Local Axiom det_sem2 : forall p, determinate (CS.sem2 p).
+  Local Axiom det_sem_restricted : forall p aUB, determinate (CS.sem_restricted_UB p aUB).
   
-  Parameter strong_det_sem2 : forall p s t1 t2 s1 s2,
+  Local Axiom strong_det_sem2 :
+    forall p s t1 t2 s1 s2,
       Step (CS.sem2 p) s t1 s1 -> Step (CS.sem2 p) s t2 s2 -> t1 = t2 /\ s1 = s2.
+  
+  Local Axiom trace_last_comp_initial_state :
+    forall p aUB g s t s',
+      (CS.initial_state p s) ->
+      (step (CS.sem_restricted_UB p aUB)) g s t s' ->
+      last_comp t = CS.current_comp s'.
+
+  Local Axiom initial_state_main :
+    forall p s,
+      (CS.initial_state p s) ->
+      CS.current_comp s = Component.main.
+  
+  Local Axiom non_empty_trace_last_comp :
+    forall p aUB g s s' t,
+      t <> [] ->
+      (star (step (CS.sem_restricted_UB p aUB))) g s t s' ->
+      last_comp t = CS.current_comp s'.
+  
+  Local Axiom component_conservation_on_empty_trace :
+    forall p aUB g s s',
+      (star (step (CS.sem_restricted_UB p aUB))) g s [] s' ->
+      CS.current_comp s = CS.current_comp s'.
   
   Local Axiom sem_restricted_UB_lem :
     forall p allowed_UB,
@@ -287,6 +310,17 @@ Module Type Target_Sig.
       undef_in m (prog_interface p) ->
       does_prefix (CS.sem1 (program_link p c')) (FGoes_wrong m).
 
+  Local Axiom state_component_on_linking :
+    forall p aUB c g s s' t,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      closed_program (program_link p c) ->
+      (CS.initial_state (program_link p c) s) ->
+      (star (step (CS.sem_restricted_UB p aUB))) g s t s' ->
+      (CS.current_comp s' \in (domm (prog_interface c)))
+      \/ (CS.current_comp s' \in (domm (prog_interface p))).
+  
   Local Axiom definability_with_linking :
     forall p c b m,
       well_formed_program p ->
