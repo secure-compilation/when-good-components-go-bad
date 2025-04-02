@@ -316,7 +316,7 @@ Module Type Target_Sig.
       well_formed_program c ->
       linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
-      (CS.initial_state (program_link p c) s) ->
+      ((CS.initial_state (program_link p c) s) \/ t <> []) ->
       (star (step (CS.sem_restricted_UB p aUB))) g s t s' ->
       (CS.current_comp s' \in (domm (prog_interface c)))
       \/ (CS.current_comp s' \in (domm (prog_interface p))).
