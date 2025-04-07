@@ -6,6 +6,9 @@ Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
 
+Set Bullet Behavior "Strict Subproofs".
+Require Import Coq.micromega.Lia.
+
 (* Define a canonical structure on event equality. If needed, richer event types
    can extend the encoding by using nested sums. *)
 Definition sum_of_event (e : event) :=
@@ -179,35 +182,24 @@ Definition finpref_trace_prefix (m : finpref_behavior) (t : trace) : Prop :=
   | FTbc t' => trace_prefix t' t
   end.
 
-Definition behavior_improves_finpref (b:program_behavior) (m:finpref_behavior) :=
-  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
-
-(* CH: Introduce a definition for
-       does_prefix and use it everywhere where it's
-       possible, instead of unfolding it everywhere. *)
-Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
-(* CH: Alternatively could define this in terms of Star and prove the
-       predicate above as an alternative characterization. *)
-
-(* Properties of prefixes. *)
 
 Lemma help : forall m1 m2 T,
     trace_prefix m1 T -> trace_prefix m2 T ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
   intros m1. induction m1 as [| e m1]; intros m2 T [x1 H1] [x2 H2].
-  - left. now exists m2.
+  - left. now (exists m2).
   - assert (foo : (exists s, m2 = e :: s) \/ m2 = []).
-   { destruct m2. right. reflexivity. subst T. inversion H2.
-     left. now exists m2. }
+    { destruct m2. right. reflexivity. subst T. inversion H2.
+      left. now exists m2. }
     destruct foo as [[s k0] | k1].
-     + subst m2. subst T. inversion H2. specialize (IHm1 s (m1 ** x1)).
-       assert (use1 : trace_prefix m1 (m1 ** x1)) by now exists x1.
-       assert (use2 : trace_prefix s (m1 ** x1)) by (rewrite H0; now exists x2).
-       destruct (IHm1 use1 use2) as [K | K]. clear IHm1.
-       left. destruct K as [m K]. exists m. simpl. now rewrite K.
-     + right. destruct K as [m K]. exists m. simpl. now rewrite K.
-     + right. rewrite k1. now exists (e :: m1).
+    + subst m2. subst T. inversion H2. specialize (IHm1 s (m1 ** x1)).
+      assert (use1 : trace_prefix m1 (m1 ** x1)) by now (exists x1).
+      assert (use2 : trace_prefix s (m1 ** x1)) by (rewrite H0; now exists x2).
+      destruct (IHm1 use1 use2) as [K | K]. clear IHm1.
+      left. destruct K as [m K]. exists m. simpl. now rewrite K.
+      * right. destruct K as [m K]. exists m. simpl. now rewrite K.
+    + right. rewrite k1. now exists (e :: m1).
 Qed.
 
 Lemma help_inf : forall m1 m2 T,
@@ -215,17 +207,17 @@ Lemma help_inf : forall m1 m2 T,
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
    intros m1. induction m1 as [| e m1]; intros m2 T [x1 H1] [x2 H2].
-  - left. now exists m2.
+  - left. now (exists m2).
   - assert (foo : (exists s, m2 = e :: s) \/ m2 = []).
    { destruct m2. right. reflexivity. subst T. inversion H2.
-     left. now exists m2. }
+     left. now (exists m2). }
     destruct foo as [[s k0] | k1].
      + subst m2. subst T. inversion H2. specialize (IHm1 s (m1 *** x1)).
-       assert (use1 : traceinf_prefix m1 (m1 *** x1)) by now exists x1.
+       assert (use1 : traceinf_prefix m1 (m1 *** x1)) by now (exists x1).
        assert (use2 : traceinf_prefix s (m1 *** x1)) by (rewrite H0; now exists x2).
        destruct (IHm1 use1 use2) as [K | K]. clear IHm1.
        left. destruct K as [m K]. exists m. simpl. now rewrite K.
-     + right. destruct K as [m K]. exists m. simpl. now rewrite K.
+       * right. destruct K as [m K]. exists m. simpl. now rewrite K.
      + right. rewrite k1. now exists (e :: m1).
 Qed.
 
@@ -283,6 +275,135 @@ Proof.
     subst m1'; destruct Hbp2 as [b'' Happ]; destruct b''; inversion Happ as [Hb'];
       right; now exists t.
 Qed.
+
+
+
+Definition behavior_improves_finpref (b:program_behavior) (m:finpref_behavior) :=
+  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
+
+(* CH: Introduce a definition for
+       does_prefix and use it everywhere where it's
+       possible, instead of unfolding it everywhere. *)
+Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
+(* CH: Alternatively could define this in terms of Star and prove the
+       predicate above as an alternative characterization. *)
+
+Variant does_prefix' (L: semantics): finpref_behavior -> Prop :=
+  | does_FTbc: forall s s' t,
+      initial_state L s ->
+      Star L s t s' ->
+      does_prefix' L (FTbc t)
+  | does_FGoes_wrong: forall s s' t,
+      initial_state L s ->
+      Star L s t s' ->
+      Nostep L s' ->
+      not (final_state L s') ->
+      does_prefix' L (FGoes_wrong t)
+  | does_FTerminates: forall s s' t,
+      initial_state L s ->
+      Star L s t s' ->
+      final_state L s' ->
+      does_prefix' L (FTerminates t)
+  | does_no_initial_FGoes_wrong:
+    (forall s, not (initial_state L s)) ->
+    does_prefix' L (FGoes_wrong E0)
+  | does_no_initial_FTbc:
+    (forall s, not (initial_state L s)) ->
+    does_prefix' L (FTbc E0)
+.
+
+Lemma does_prefix_equiv L (det: determinate L): forall m,
+    does_prefix L m <-> does_prefix' L m.
+Proof.
+  intros m; split.
+  - unfold does_prefix.
+    intros [b [L_beh pref_m_b]].
+    inversion L_beh; subst.
+    + destruct b as [t | t | t | t]; destruct m as [m | m | m]; try (now inversion pref_m_b);
+        inversion H0; subst.
+      * inversion pref_m_b; subst; econstructor; eauto.
+      * simpl in pref_m_b.
+        destruct pref_m_b as [t' t_t']. destruct t'; (try now inversion t_t'). simpl in *.
+        inversion t_t'; subst; clear t_t'.
+        eapply star_app_inv in H2 as [s0 [? ?]]; eauto using sd_traces.
+        econstructor; eauto.
+      * simpl in pref_m_b.
+        destruct pref_m_b as [t' t_t']. destruct t'; (try now inversion t_t'). simpl in *.
+        inversion t_t'; subst; clear t_t'.
+        eapply star_app_inv in H2 as [s0 [? ?]]; eauto using sd_traces.
+        econstructor; eauto.
+      * simpl in pref_m_b.
+        rename t into T.
+        assert (F: forall n, exists t' s', (n < length t')%coq_nat /\ (behavior_prefix t' (Reacts T))
+                                 /\ (Star L s t' s')).
+        { clear -H2. intro n. revert H2. revert s T. induction n; intros s T forever.
+          - destruct forever. exists t, s2. split; [|split;[exists (Reacts T); done|auto]].
+            destruct t; try contradiction. simpl. eapply Nat.lt_0_succ.
+          - destruct forever.
+            destruct (IHn s2 T forever) as [t' [s' [len [pref star]]]].
+            exists (t ** t'), s'. split; [|split].
+            + rewrite (app_length t t'). assert (1 <= length t)%coq_nat.
+              { destruct t; try contradiction. simpl. lia. } lia.
+            + destruct pref. exists x. destruct x; inversion H1. simpl. traceEq.
+            + eapply star_trans. exact H. exact star. done. }
+        destruct (F (length m)) as [m' [s' [ineq [Tpref star]]]].
+        destruct (behavior_prefix_comp Tpref pref_m_b) as [tpref|tpref];
+          try (destruct tpref; subst; rewrite (app_length t' x0) in ineq; lia; done).
+        { exfalso.
+          destruct tpref. subst.
+          rewrite app_length in ineq; try lia. }
+
+        destruct tpref. subst.
+        eapply star_app_inv in star as [? [? ?]]; eauto using sd_traces.
+        econstructor; eauto.
+      * inversion pref_m_b; subst; econstructor; eauto.
+      * simpl in pref_m_b.
+        destruct pref_m_b as [t' t_t']. destruct t'; (try now inversion t_t'). simpl in *.
+        inversion t_t'; subst; clear t_t'.
+        eapply star_app_inv in H2 as [s0 [? ?]]; eauto using sd_traces.
+        econstructor; eauto.
+    + destruct m; inversion pref_m_b; subst.
+      eapply does_no_initial_FGoes_wrong; eauto.
+      destruct t; destruct x; simpl in *; try congruence.
+      inversion H0; subst.
+      eapply does_no_initial_FTbc; eauto.
+      inversion H0.
+  - intros H. inversion H; subst; clear H.
+    + assert (exists b, state_behaves L s' b) as [b H].
+      { eapply state_behaves_exists. }
+      assert (G: state_behaves L s (behavior_app t b)).
+      { destruct H.
+        - econstructor; eauto. eapply star_trans; eauto.
+        - econstructor; eauto. eapply star_trans; eauto.
+        - econstructor; eauto.
+          destruct H.
+          rewrite <- Eappinf_assoc.
+          eapply forever_reactive_intro with (t := t ** t0) (T := T).
+          eapply star_trans; eauto.
+          destruct t; simpl; now eauto.
+          eauto.
+        - econstructor; eauto. eapply star_trans; eauto. }
+      exists (behavior_app t b); split.
+      * econstructor; eauto.
+      * simpl; exists b; reflexivity.
+    + econstructor; split; eauto.
+      * econstructor; eauto.
+        eapply state_goes_wrong; eauto.
+      * reflexivity.
+    + econstructor; split; eauto.
+      * econstructor; eauto.
+        eapply state_terminates; eauto.
+      * reflexivity.
+    + econstructor; split; eauto.
+      * eapply program_goes_initially_wrong; eauto.
+      * reflexivity.
+    + econstructor; split; eauto.
+      * eapply program_goes_initially_wrong; eauto.
+      * exists (Goes_wrong [::]). reflexivity.
+Qed.
+
+
+(* Properties of prefixes. *)
 
 Lemma trace_behavior_prefix_trans : forall m1 m2 b,
     finpref_trace_prefix m1 m2 ->
