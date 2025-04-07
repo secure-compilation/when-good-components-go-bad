@@ -41,6 +41,12 @@ Section RSC_DC_MD_Section.
   Hypothesis mains : linkable_mains p Ct.
   Hypothesis disjoint_interface : fdisjoint (domm (prog_interface p)) (domm (prog_interface Ct)).
 
+  Lemma star_convert : forall s t s',
+      Star (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s t s' ->
+      Star (CS.sem2 (program_link p Ct)) s t s'.
+  Proof.
+    intros. induction H; econstructor. eapply Target.sem_restricted_UB_generalises_sem2. eauto. eauto. eauto.
+  Qed.
   
   Lemma last_comp_in_interface_p : forall t t' s s' s'0,
       (CS.initial_state (program_link p Ct) s \/ t' <> []) ->
@@ -147,50 +153,12 @@ Section RSC_DC_MD_Section.
                        eapply (last_comp_in_interface_p (or_introl init_s1)). eapply star_step. exact H. exact H1. reflexivity.
                        exact star_s1_s''. auto.
                        right. split. intro eq. apply ineq. simpl in *. rewrite <- H0. rewrite eq. done. exists t2. auto.
-                       (*
-                       unfold last_comp. simpl.
-                       rewrite <- (Target.initial_state_main init_s1).
-                       rewrite (Target.component_conservation_on_empty_trace star_s1_s''). 
-                       destruct (Target.state_component_on_linking well_formed_p well_formed_Ct
-                                   linkability closedness disj star_s1_s''); try done.
-                       exfalso.
-                       clear - H0 pref ineq no_step H1 star_s2_s''. revert pref ineq star_s2_s''.
-                       generalize t'. clear t'.
-                       induction H1; intros t' pref ineq star_s2_s''.
-                       +++ exfalso. apply ineq. destruct pref. destruct t'; inversion H. auto.
-                       +++ subst. destruct star_s2_s''.
-                           *** eapply no_step. simpl. eapply SmallstepUB.step_UB_allowed.
-                               exact H. auto.
-                           *** assert (conj: t1 = t0 /\ s2 = s0). eapply Target.strong_det_sem2.
-                               eauto. eapply Target.sem_restricted_UB_generalises_sem2. eauto.
-                               destruct conj; subst. eapply (IHstar t3); auto.
-                               ---- destruct pref. exists x. clear -H3. induction t0; inversion H3; auto.
-                               ---- intro eq. apply ineq. clear - eq. induction t0; inv eq; auto. *)
                    --- assert (not_nil': t1 ** t' <> []). { intro. rewrite H0 in Heqt. inv Heqt. }
                        destruct (esym Heqt). 
                        eapply last_comp_in_interface_p. eauto. eapply star_step. eauto. eauto. reflexivity.
                        exact star_s1_s''. eauto. right. split. intro eq. apply ineq. clear -eq. induction t1; inversion eq; auto.
                        { clear - t3_t2 t'_m_prefix. destruct t3_t2. destruct t'_m_prefix.
                          subst. exists (x0 ** x). traceEq. }
-                       (* rewrite (Target.non_empty_trace_last_comp not_nil' star_s1_s'').
-                       destruct (Target.state_component_on_linking well_formed_p well_formed_Ct
-                                   linkability closedness disj star_s1_s''); try done.
-                       exfalso.
-                       assert (pref: trace_prefix t' t2).
-                       { clear - t3_t2 t'_m_prefix. destruct t3_t2. destruct t'_m_prefix.
-                         subst. exists (x0 ** x). traceEq. }
-                       clear - H0 pref ineq no_step H1 star_s2_s''. revert pref ineq star_s2_s''.
-                       generalize t'. clear t'.
-                       induction H1; intros t' pref ineq star_s2_s''.
-                       +++ exfalso. apply ineq. destruct pref. destruct t'; inversion H. auto.
-                       +++ subst. destruct star_s2_s''.
-                           *** eapply no_step. simpl. eapply SmallstepUB.step_UB_allowed.
-                               exact H. auto.
-                           *** assert (conj: t1 = t0 /\ s2 = s0). eapply Target.strong_det_sem2.
-                               eauto. eapply Target.sem_restricted_UB_generalises_sem2. eauto.
-                               destruct conj; subst. eapply (IHstar t3); auto.
-                               ---- destruct pref. exists x. clear -H3. induction t0; inversion H3; auto.
-                               ---- intro eq. apply ineq. clear - eq. induction t0; inv eq; auto. *)
                 ** econstructor. exact step_no_UB12. exact star_s2_s''. auto.
         *  assert (len_t1 : length t1 <= 1) by (eapply (sd_traces (Target.det_sem2 (program_link p Ct))); exact H).
            (* deals with the case where t0 = [] + absurd cases *)
@@ -267,6 +235,41 @@ Section RSC_DC_MD_Section.
         exists x. subst. traceEq.
   Qed.
 
+  
+  Lemma parallel_star_prefix_comp : forall s0 t t' s s',
+      (Star (CS.sem2 (program_link p Ct)) s0 t s) ->
+      (Star (CS.sem2 (program_link p Ct)) s0 t' s') ->
+      trace_prefix t' t \/ trace_prefix t t'.
+    intros s0 t t' s s' star_t star_t'.
+    generalize s' t' star_t'. clear s' star_t' t'.
+    induction star_t; intros s' t' star_t'.
+    - right. exists t'. auto.
+    - subst. destruct star_t'.
+      + left. exists (t1 ** t2). traceEq.
+      + destruct (Target.strong_det_sem2 H H0). subst.
+        destruct (IHstar_t s4 t3 star_t'); destruct H1.
+        * left. exists x. traceEq.
+        * right. exists x. traceEq.
+  Qed.
+  
+  Lemma parallel_star_prefix_restricted : forall s0 t t' s s',
+      (Star (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s0 t s) ->
+      (Star (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s0 t' s') ->
+      (Nostep (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s') ->
+      trace_prefix t t'.
+    intros s0 t t' s s' star_t star_t' nostep.
+    generalize s' t' star_t' nostep. clear s' star_t' nostep t'.
+    induction star_t; intros s' t' star_t' nostep.
+    - exists t'. auto.
+    - subst. induction star_t'.
+      + exfalso. eapply nostep. exact H.
+      + destruct (Target.strong_det_sem2 (Target.sem_restricted_UB_generalises_sem2 H)
+                    (Target.sem_restricted_UB_generalises_sem2 H0)). subst.
+        destruct (IHstar_t s4 t3 star_t' nostep).
+        exists x. subst. traceEq.
+  Qed.
+  
+  
   Lemma forever_silent_contradiction : forall t t' s s' s'',
       Star (CS.sem2 (program_link p Ct)) s t s' ->
       Nostep (CS.sem2 (program_link p Ct)) s' ->
@@ -285,6 +288,27 @@ Section RSC_DC_MD_Section.
         eapply IHstar; auto. eauto. auto.
   Qed.
 
+  
+  Lemma forever_silent_contradiction_bis : forall t t' s s' s'',
+      Star (CS.sem2 (program_link p Ct)) s t s' ->
+      Nostep (CS.sem2 (program_link p Ct)) s'' ->
+      Star (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s t' s'' ->
+      Forever_silent ((CS.sem2 (program_link p Ct))) s' -> False .
+  Proof.
+    intros t t' s s' s'' star nostep star'. revert star. revert s' t.
+    induction star'; intros s' t0 star forever.
+    - destruct star.
+      + destruct forever. eapply nostep. eauto.
+      + eapply nostep. eauto.
+    - destruct star.
+      + destruct forever.
+        destruct (Target.strong_det_sem2 (Target.sem_restricted_UB_generalises_sem2 H) H1). subst.
+        eapply IHstar'; auto. econstructor. auto.
+      + destruct (Target.strong_det_sem2 H1 (Target.sem_restricted_UB_generalises_sem2 H)). subst.
+        eapply IHstar'; auto. eauto. auto.
+  Qed.
+ 
+  
   Lemma forever_reactive_contradiction : forall t T s s',
       Star (CS.sem2 (program_link p Ct)) s t s' ->
       Nostep (CS.sem2 (program_link p Ct)) s' ->
@@ -301,6 +325,21 @@ Section RSC_DC_MD_Section.
         intro eq. clear -eq H4. induction t3; inversion eq; auto.  eauto.
   Qed.
 
+  Lemma forever_reactive_contradiction_bis : forall t T s s',
+      Star (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s t s' ->
+      Nostep (CS.sem2 (program_link p Ct)) s' ->
+      Forever_reactive (CS.sem2 (program_link p Ct)) s T -> False .
+  Proof.
+    intros t T s s' star nostep. revert T.
+    induction star; intros T forever.
+    - destruct forever. destruct H; try contradiction. eapply nostep. eauto.
+    - destruct forever. destruct H1; try (subst; contradiction).
+      destruct (Target.strong_det_sem2 H1 (Target.sem_restricted_UB_generalises_sem2 H)). subst.
+      destruct t1.
+      + destruct t3; try contradiction. eapply IHstar; auto. econstructor. exact H3. auto. eauto.
+      + destruct forever. eapply IHstar; auto. econstructor. eapply star_trans. exact H3. exact H0. reflexivity.
+        intro eq. clear -eq H4. induction t3; inversion eq; auto.  eauto.
+  Qed.
   
   Lemma max_prefix_no_UB: forall (m: finpref_behavior),
     does_prefix (CS.sem2 (program_link p Ct)) m ->
@@ -393,25 +432,7 @@ Section RSC_DC_MD_Section.
                        destruct H4; inv Heqbeh. destruct (sd_initial_determ (Target.det_sem2 (program_link p Ct)) s s0 H H3).
                        unfold undef_in.
                        eapply last_comp_in_interface_p. left. exact ini_res_s. exact H1. exact H4. auto. left.
-                       split; [auto|split;auto]. (*
-
-                       assert (eq: last_comp t= CS.current_comp s'0).
-                       { destruct t.
-                         - rewrite <- (Target.component_conservation_on_empty_trace H4). unfold last_comp. simpl.
-                           rewrite (Target.initial_state_main H). auto.
-                         - eapply Target.non_empty_trace_last_comp. intro; inversion H7. exact H4. } 
-                        rewrite eq. 
-                       destruct (Target.state_component_on_linking well_formed_p well_formed_Ct linkability closedness
-                                   (or_introl ini_res_s) H4); try done.
-                       exfalso. clear G eq x H0 pref H ini_res_s H3. revert H4 H5 H6 H7. revert s'0.
-                       induction H1; intros s'0 star_s'0 nostep nofinal in_Ct; destruct star_s'0.
-                       +++ eapply nofinal. exact H2.
-                       +++ eapply (sd_final_nostep (Target.det_sem2 (program_link p Ct)) s1 H2).
-                           eapply Target.sem_restricted_UB_generalises_sem2. exact H.
-                       +++ eapply nostep. simpl. eapply SmallstepUB.step_UB_allowed. exact H. auto.
-                       +++ eapply IHstar; eauto.
-                           destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H3)). subst.
-                           assert (eq: t2 = t3). {clear -H4. induction t0; auto. inv H4. auto. } inv eq. auto. *)
+                       split; [auto|split;auto].
                    --- remember (Goes_wrong t0) as beh. destruct pb_b; try destruct (H3 s H).
                        destruct H4; inv Heqbeh. destruct (sd_initial_determ (Target.det_sem2 (program_link p Ct)) s s0 H H3).
                        unfold undef_in. assert (eq: last_comp t0= CS.current_comp s'0). 
@@ -485,23 +506,7 @@ Section RSC_DC_MD_Section.
                          destruct ((sd_initial_determ (Target.det_sem2 (program_link p Ct))) s s0 H H3).
                          unfold undef_in.
                          eapply last_comp_in_interface_p. left. eauto. eauto. exact H4. eauto.
-                         left. split; [auto|split; auto]. (*
-                         assert (eq: last_comp t= CS.current_comp s'0). 
-                       { destruct t.
-                         - rewrite <- (Target.component_conservation_on_empty_trace H4). unfold last_comp. simpl.
-                           rewrite (Target.initial_state_main H). auto.
-                         - eapply Target.non_empty_trace_last_comp. intro; inversion H7. exact H4. } rewrite eq.
-                         destruct (Target.state_component_on_linking well_formed_p well_formed_Ct linkability closedness
-                                     (or_introl ini_res_s) H4); try done.
-                         exfalso. clear - H1 H2 H4 H5 H6 H7. revert H4 H5 H6 H7. revert s'0.
-                         induction H1; intros s'0 star_s'0 nostep nofinal in_Ct; destruct star_s'0.
-                         +++ eapply nofinal. exact H2.
-                         +++ eapply (sd_final_nostep (Target.det_sem2 (program_link p Ct)) s1 H2).
-                             eapply Target.sem_restricted_UB_generalises_sem2. exact H.
-                         +++ eapply nostep. simpl. eapply SmallstepUB.step_UB_allowed. exact H. auto.
-                         +++ subst. eapply IHstar; eauto.
-                             destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H3)). subst.
-                             assert (eq: t2 = t3). {clear -H4. induction t0; auto. inv H4. auto. } inv eq. auto. *)
+                         left. split; [auto|split; auto]. 
                      --- eexists; split; eauto. simpl. reflexivity. }
                 { exists (FTbc m); split.
                   ** exists (Goes_wrong t0). split; eauto.
@@ -537,35 +542,114 @@ Section RSC_DC_MD_Section.
         destruct G as [G | [s'' [t' [t'_m [UNDEF [STAR [NOT_FINAL NOSTEP]]]]]]].
         * destruct G as [s'' G].
           destruct (Target.get_program_behave_sem_restricted_UB  (program_link p Ct) (allowed_UB (prog_interface Ct))) as [b pb_b].
-          destruct pb_b; try destruct (H0 s H). destruct H3.
-          -- exfalso. admit. (* similar to forever_reactive_contradiction lemma *)
-          -- exists m. destruct m; inversion pref. split; [| left; done]. admit. (*reasonable induction*)
-          -- exfalso. admit.
-          -- exfalso. admit. (* similar to forever_silent_contradiction lemma *)
-        * destruct m; inversion pref.
-          exists (FTbc t'); split; [exists (Goes_wrong t');split; eauto| right; split; [|split]]; simpl in *; auto.
-          -- econstructor. exact H. econstructor; eauto.
-          -- exists (Goes_wrong []). simpl. traceEq.
-          -- assert (t'_t: trace_prefix t' t) by admit.
-             assert (ineq: t' <> t).
-             { intro. subst. clear -H1 H2 STAR NOSTEP. admit. (* similar to forever_silent_contradiction lemma *) }
-             unfold undef_in. eapply last_comp_in_interface_p. left. eauto. eauto. exact STAR. auto.
-             right. auto.
-          -- exists (Goes_wrong t'). split; auto. econstructor. exact H. econstructor; eauto.
-      + induction m ; induction t ; try inversion pref.
-        eexists; eauto.
-        eexists; eauto.
-        eexists; eauto.
-        econstructor. eauto.
-        econstructor; eauto.
-        unfold CS.sem_restricted_UB, SmallstepUB.L_restricted_UB.
-        inv H1.
-        remember s2 as s'.
-        remember (FTbc t) as m.
+          destruct pb_b; try destruct (H0 s H).
+          destruct ((sd_initial_determ (Target.det_sem2 (program_link p Ct))) s s0 H H0).
+          destruct H3.
+          -- exfalso. eapply forever_silent_contradiction_bis.
+             exact H1. eapply (sd_final_nostep (Target.det_sem2 (program_link p Ct))).
+             exact H4. exact H3. auto.
+          -- exists m. destruct m; inversion pref. split; [| left; done].
+             assert (t = t0).
+             { clear -H1 H2 H3 H4. revert H2 H3 H4. revert s'0 t0.
+               induction H1; intros s0 t0 forever_s' star forever_s0.
+               - clear - star forever_s'. induction star; auto.
+                 destruct forever_s'.
+                 destruct (Target.strong_det_sem2 H1 (Target.sem_restricted_UB_generalises_sem2 H)).
+                 subst. simpl. eapply IHstar. auto.
+               - induction star.
+                 + destruct forever_s0. 
+                   destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H2)).
+                   subst. simpl. eapply (IHstar); auto. econstructor. auto.
+                 + destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H2)).
+                   subst. assert (t2 = t3). eapply IHstar; auto. exact star. auto. subst. done. }
+             subst. exists (Diverges t0). split. econstructor; eauto. econstructor; eauto.
+             simpl. exists x. done.
+          -- exfalso. clear -H1 H2 H3.
+             
+             assert (exists t', exists T', trace_prefix t t' /\ T = t' *** T').
+             { 
+               assert (F: forall n, exists t' s' T', (n < length t') /\ (T = t' *** T')
+                                        /\ (Star (CS.sem2 (program_link p Ct)) s t' s')).
+               { clear -H3. intro n. revert H3. revert s T. induction n; intros s T forever.
+                 - destruct forever. exists t, s2, T. split; [|split;[|auto]].
+                   destruct t; try contradiction. simpl. apply Nat.lt_0_succ. auto.
+                   eapply (star_convert H).
+                 - destruct forever. destruct (IHn s2 T forever) as [t' [s' [T' [len [pref star]]]]].
+                   exists (t ** t'), s', T'. split; [|split].
+                   + rewrite (app_length t t'). assert (1 <= length t).
+                     { destruct t; try contradiction. simpl. lia. } lia.
+                   + subst. traceEq.
+                   + eapply star_trans. exact (star_convert H). exact star. done. }
+               destruct (F (length t)) as [t' [s'' [T' [ineq [eq star]]]]].
+               assert (exists T'', T = t *** T'').
+               { clear -H1 H3. revert H3. revert T.
+                 induction H1; intros T forever. exists T. auto.
+                 admit.
+                 
+                 } admit. (*
+               destruct (behavior_prefix_comp (ex_intro _ T' eq) (H)) as [tpref|tpref];
+                 try (destruct tpref; subst; rewrite (app_length t' x0) in ineq; lia; done). *)
+             }
+             destruct H as [t'' [T' [[t' eqt'] eq]]]. subst.
+             remember (t' *** T') as T. rewrite Eappinf_assoc in H3. rewrite <- (HeqT) in H3.
+             assert (Forever_reactive (CS.sem2 (program_link p Ct)) s' T).
+             { clear -H3 H1. revert H1 H3. revert t s' s T. cofix Hind.
+               intros t s' s T star forever.  admit.
+               (* destruct forever. 
+               destruct (parallel_star_prefix_comp star (star_convert H)).
+               + admit.
+               + *)
+             } clear HeqT. clear -H H2.
+             destruct H. clear H1.
+             induction H; try contradiction. destruct H2.
+             destruct (Target.strong_det_sem2 H2 H). subst. simpl in *. auto.
+          -- destruct m; inversion pref.
+             assert (tmp: trace_prefix t1 t0).
+             { eapply parallel_star_prefix_restricted. eauto. eauto. eauto. }
+             exists (FTbc t1). split.
+             ++ exists (Goes_wrong t0). split. econstructor; eauto. econstructor; eauto.
+                simpl. destruct tmp. exists (Goes_wrong x0). simpl. subst. done. 
+             ++ left; done.
+        * destruct m; inversion pref. simpl in *.
+          destruct t'_m.
+          destruct x0.
+          -- assert (t' = t0) by traceEq. subst.
+             exists (FTbc t'). split.
+             ++ exists (Goes_wrong t'). split. econstructor; eauto. econstructor; eauto.
+                simpl. exists (Goes_wrong []). simpl. traceEq.
+             ++ left; traceEq.
+          -- 
+            exists (FTbc t'). split.
+            ++ exists (Goes_wrong t'). split. econstructor; eauto. econstructor; eauto.
+                simpl. exists (Goes_wrong []). simpl. traceEq.
+            ++ right. simpl. split; [exists (e :: x0); traceEq | split].
+               unfold undef_in. eapply last_comp_in_interface_p. left; eauto.
+               exact H1. exact STAR. auto.
+               right. clear -pref H3. destruct pref. inv H.
+               destruct x; inv H1. split.
+               { intro. induction t'; inversion H; auto. }
+               { exists (e :: x0 ** t0). traceEq. }
+               exists (Goes_wrong t'). split; auto. econstructor; eauto. econstructor; eauto.
+      + destruct m; inversion pref. simpl in pref.
+        assert (F: forall n, exists t' s', (n < length t') /\ (behavior_prefix t' (Reacts T))
+                                 /\ (Star (CS.sem2 (program_link p Ct)) s t' s')).
+        { clear -H1. intro n. revert H1. revert s T. induction n; intros s T forever.
+          - destruct forever. exists t, s2. split; [|split;[exists (Reacts T); done|auto]].
+            destruct t; try contradiction. simpl. apply Nat.lt_0_succ.
+          - destruct forever.
+            destruct (IHn s2 T forever) as [t' [s' [len [pref star]]]].
+            exists (t ** t'), s'. split; [|split].
+            + rewrite (app_length t t'). assert (1 <= length t).
+              { destruct t; try contradiction. simpl. lia. } lia.
+            + destruct pref. exists x. destruct x; inversion H1. simpl. traceEq.
+            + eapply star_trans. exact H. exact star. done. }
+        destruct (F (length t)) as [t' [s' [ineq [Tpref star]]]].
+        destruct (behavior_prefix_comp Tpref (ex_intro _ x H0)) as [tpref|tpref];
+          try (destruct tpref; subst; rewrite (app_length t' x0) in ineq; lia; done).
         assert (G: (exists s'', Star (CS.sem_restricted_UB (program_link p Ct)
-                        (allowed_UB (prog_interface Ct))) s (finpref_trace m)  s'') \/
+                                   (allowed_UB (prog_interface Ct))) s t  s'') \/
                 exists s'' t',
-                  trace_prefix t' (finpref_trace m) /\
+                  trace_prefix t' t /\
                     (((initial_state (CS.sem2 (program_link p Ct)) s \/ t' <> [])
                                /\ exists s2, Star (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s t' s2) ->
                      undef_in t' (prog_interface p)) /\
@@ -574,13 +658,45 @@ Section RSC_DC_MD_Section.
                     not (final_state ((CS.sem_restricted_UB (program_link p Ct)
                             (allowed_UB (prog_interface Ct)))) s'') /\
                     (Nostep (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))) s'')).
-        { destruct x; inversion H0.
-          assert (pref': trace_prefix (finpref_trace m) t)  by (exists []; subst; now rewrite E0_right).
-          eapply (star_max_prefix pref' H2).
-        }
-        destruct G as [G | [s'' [t' [t'_m [UNDEF [STAR [NOT_FINAL NOSTEP]]]]]]]; admit.
-        * admit.
-        * admit. (* hard - coinductive *)
+        { apply (star_max_prefix tpref star). }
+        destruct G as [[s'' star_s''] | [s'' [t'' [t''_m [UNDEF [STAR [NOT_FINAL NOSTEP]]]]]]].
+        * destruct (Target.get_program_behave_sem_restricted_UB  (program_link p Ct) (allowed_UB (prog_interface Ct))) as [b pb_b].
+          destruct pb_b; try destruct (H2 s H).
+          destruct ((sd_initial_determ (Target.det_sem2 (program_link p Ct))) s s0 H H2).
+          destruct H3.
+          -- exfalso.
+             eapply forever_reactive_contradiction_bis. exact H3.
+             eapply (sd_final_nostep (Target.det_sem2 (program_link p Ct))); auto.
+             eauto.
+          -- exfalso. admit. (* reactive and silent in parallel *)
+          -- exists (FTbc t). split; auto.
+             exists (Reacts T0). split. econstructor; eauto. econstructor; eauto.
+             simpl.
+             assert (Forever_reactive (CS.sem2 (program_link p Ct)) s T0).
+             { clear - H3. revert H3. revert s T0. 
+               cofix Hind. intros s T forever.
+               destruct forever.
+               assert (Star (CS.sem2 (program_link p Ct)) s1 t s2).
+               { clear -H. induction H; econstructor.
+                 eapply Target.sem_restricted_UB_generalises_sem2. exact H. eauto. eauto. }
+               econstructor. exact H1. auto. eapply Hind. auto. }
+             assert (T = T0).
+             { clear -H1 H4. revert H1 H4. revert s T T0.
+               (* cofix Hind. *) admit.
+             }
+             admit. (* forever_reactive in sem2 and semUB *)
+          -- assert (tmp: trace_prefix t t0).
+             { eapply parallel_star_prefix_restricted. eauto. eauto. eauto. }
+             exists (FTbc (t)). split.
+             ++ exists (Goes_wrong t0). split. econstructor; eauto. econstructor; eauto.
+                simpl. destruct tmp. exists (Goes_wrong x0). simpl. subst. done. 
+             ++ left; done.
+        * exists (FTbc t''). split; [|right; split; [| split]].
+          -- exists (Goes_wrong t''). split; try done. econstructor; eauto. econstructor; eauto.
+             simpl. exists (Goes_wrong []). simpl. traceEq.
+          -- simpl. done.
+          -- simpl. eapply UNDEF. split. left; auto. exists s''; eauto.
+          --  exists (Goes_wrong t''). split; try done. econstructor; eauto. econstructor; eauto.
       + assert (G: (exists s'', Star (CS.sem_restricted_UB (program_link p Ct)
                         (allowed_UB (prog_interface Ct))) s (finpref_trace m) s'') \/
                 exists s'' t',
