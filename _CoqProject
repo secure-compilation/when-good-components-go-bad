@@ -72,7 +72,6 @@ MicroPolicies/Exec.v
 MicroPolicies/LRC.v
 MicroPolicies/Instance.v
 MicroPolicies/Printer.v
-MicroPolicies/Recomposition.v
 
 # MicroPolicies/Examples/Helper.v -- was missing before causing big dependency issues, since used by the files below
 # - Jeremy copied in a version, but it's still incomplete, so the files below don't compile:
@@ -103,7 +102,7 @@ I2MP/Examples/NestedCalls.v
 
 MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
-MicroPolicies/Helper.v
+#MicroPolicies/Helper.v
 
 #Tagging/Tags.v   # not currently used
 #Tagging/Memory.v # not currently used

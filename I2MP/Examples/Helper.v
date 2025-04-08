@@ -10,18 +10,12 @@ Require Import Intermediate.Machine.
 Require Import S2I.Compiler.
 
 Require Import Transitional.
-(* Require Import I2MP.Encode.
-Require Import I2MP.Linearize.
-Require Import MicroPolicies.Symbolic.
-Require Import MicroPolicies.Types.
-Require Import MicroPolicies.LRC.
-Require Import MicroPolicies.Exec.
-
-Require Import MicroPolicies.Instance.
- *)
 Require Import MicroPolicies.Utils.
 Require Export Extraction.Definitions.
 Require Import Intermediate.Machine.
+
+Require Import MicroPolicies.Merged MicroPolicies.Symbolic Int32 Instance.
+From CoqUtils Require Import hseq word. 
 
 Import DoNotation.
 
@@ -192,12 +186,12 @@ Instance show_code : Show Transitional.code :=
   show c := show_nmap c
 }.
 
-Instance show_intermediate_code_aux : Show (NMap code) :=
+Instance show_intermediate_code_aux : Show (NMap Machine.code) :=
  {
   show c := show_nmap c
 }.
 
-Instance show_intermediate_code : Show (NMap (NMap code)) :=
+Instance show_intermediate_code : Show (NMap (NMap Machine.code)) :=
  {
   show c := show_nmap c
 }.
@@ -217,15 +211,6 @@ Definition compile_and_show (p: Source.program) :=
       end in
   print_string_ocaml str.
 
-(* Definition compile_and_run' (p: Intermediate.program) (fuel:nat) := *)
-(*   let st := load (encode (linearize p)) in *)
-(*     match execN fuel st with *)
-(*     | None => print_error ocaml_int_1 *)
-(*     | Some st' => fstate_to_unit (print_regs st' 6 fstate0) *)
-(*     end *)
-(* . *)
-
-Require Import MicroPolicies.Merged MicroPolicies.Symbolic Int32.
 
 
 Instance showRegisterTag : Show (Symbolic.tag_type LRC.lrc_tags Symbolic.R) :=
@@ -301,30 +286,7 @@ Instance show_atom  { A B :Type} `{_ : Show A} {_ : Show B}: Show (Types.atom A 
 {
   show a := (show (Types.vala a)) ++ " @ " ++ (show (Types.taga a))
 }.
-(*
-From deriving Require Import deriving.
 
-Definition to_tag n := match n with 0 => LRC.Other | S m => LRC.Ret m end.
-Definition of_tag t := match t with LRC.Other => 0 | LRC.Ret m => S m end.
-Lemma cancel_tag : cancel of_tag to_tag. intro x ; destruct x ; simpl ; try reflexivity. Qed.
-
-Definition value_tag_isOrder := CanOrdMixin cancel_tag. (* [derive orderMixin for (LRC.value_tag)]. *)
-
-Notation atom := (Types.atom (Types.mword concrete_int_32_mt) (LRC.value_tag)).
-
-Scheme atom_rect := Induction for (Types.atom (Types.mword concrete_int_32_mt) (LRC.value_tag)) Sort Type.
-
-Definition at_indDef := Eval simpl in [indDef for atom_rect].
-Canonical at_indType := IndType var var_indDef.
-Definition at_eqMixin := Eval simpl in [derive eqMixin for var].
-Canonical at_eqType := EqType var var_eqMixin.
-Definition at_choiceMixin := [derive choiceMixin for var].
-Canonical at_choiceType := Eval hnf in ChoiceType var var_choiceMixin.
-Definition at_ordMixin := Eval simpl in [derive ordMixin for var].
-Canonical at_ordType := OrdType var var_ordMixin.
-Definition at_countMixin := [derive countMixin for var].
-Canonical at_countType := Eval hnf in CountType var var_countMixin.
- *)
 Notation mt := concrete_int_32_mt.
 Notation ops := concrete_int_32_ops.
 
@@ -376,20 +338,6 @@ Instance showTrMemory : Show (Memory.t) :=
     show m := show_nmap m
   }.
 
-Instance showState : Show (Merged.state) :=
-  {
-    show st :=
-      let n := match (MicroPolicies.Types.taga (Merged.pc st)) with LRC.Level m => m end in
-      "---------------------" ++ newline ++
-(*        "Memory: " ++ newline ++ (show (Merged.mem st)) ++ newline ++*)
-        "Memory: " ++ (show (size (domm (Merged.mem st)))) ++ newline ++ 
-        "Registers: " ++ newline ++ (show (Merged.regs st )) ++ newline ++
-        "pc: " ++ show (MicroPolicies.Types.vala (Merged.pc st)) ++
-        "; level: " ++ show (ssrint.Posz n) ++ newline ++
-        "---------------------" ++ newline
-  }.
-
-
 Instance showMergedInstr : Show (@Merged.instr concrete_int_32_mt) :=
   {
     show i := match i with              
@@ -419,34 +367,6 @@ Instance showMergedCode : Show (@Merged.code concrete_int_32_mt) :=
 Definition printer {T : Type} (_:string) (v:T) : T := v.
 
 Extract Constant printer => "(fun s v -> (List.fold_left (fun acc c -> print_char c; acc) () s); print_newline () ; v)". 
-
-Fixpoint execN_and_show (n: nat) (cde: Merged.code) (st: state) : option Z + nat :=
-  printer (show st)
-  match n with
-  | O => inr 3
-  | S n' =>
-    match @Merged.eval_step mt instr_rules cde st with
-    | None => (inl (
-             do! w <- (regs st (Intermediate.Machine.Intermediate.Register.to_nat R_COM));
-             Some (Symbolic.convert (word.int_of_word (MicroPolicies.Types.vala w)))))
-    | Some (st', _) => execN_and_show n' cde st'
-    end
-  end.
-
-Fixpoint execN_pc (n: nat) (cde: Merged.code) (st: state) : option Z + nat :=
-  printer (show (Types.vala (pc st)) ++ " ; ")
-  match n with
-  | O => inr 3
-  | S n' =>
-    match @Merged.eval_step mt instr_rules cde st with
-    | None => (inl (
-             do! w <- (@regs concrete_int_32_mt st (Intermediate.Machine.Intermediate.Register.to_nat R_COM));
-             Some (Symbolic.convert (word.int_of_word (MicroPolicies.Types.vala w)))))
-    | Some (st', _) => execN_pc n' cde st'
-    end
-  end.
-
-
 
 (* execute transitional code and lists out the progam counters *)
 Fixpoint execN_pc_trans (n: nat) (cde: Transitional.code) (st: stackless) : string :=
@@ -504,47 +424,6 @@ Definition run_trans_and_show_pc cd fuel p :=
 end.
 
 
-From CoqUtils Require Import hseq word.
-
-
-Definition run_and_show_merged (cd:code) mem0 fuel nc :=
-  let default_reg := {| MicroPolicies.Types.vala := (word_of_nat 0) ; MicroPolicies.Types.taga := (LRC.Other) |} in
-  let reg0 := [fmap (0, default_reg) ;
-               (1, default_reg) ;
-               (2, default_reg) ;
-               (3, default_reg) ;
-               (4, {| MicroPolicies.Types.vala := (word_of_nat (1 + size cd)) ; MicroPolicies.Types.taga := (LRC.Other) |}) ;
-               (5, default_reg) ;
-               (6, default_reg) ;
-               (16,default_reg) ;
-               (17,default_reg) ;
-               (18,default_reg) ;
-               (19,default_reg) ] in
-  let pctag := LRC.build_tpc 0 in
-  let pc := {| MicroPolicies.Types.vala := (word_of_nat 0) ; MicroPolicies.Types.taga := pctag |} in
-  let st := {|mem := mem0 ; regs := reg0 ; pc := pc ; comp_num := nc|} in
-  printer (show cd)
-  execN_and_show fuel cd st.
-
-Definition compile_and_run_and_show_from_source_merged (mt : Types.machine_types) := 
-fun (p : Source.program) (fuel : nat) =>
-match Compiler.compile_program p with
-| Some compiled_p =>
-    printer (show (Intermediate.prog_procedures compiled_p))
-    printer ( "intermediary pc : " ++ newline)
-    printer (run_inter_and_show_pc fuel compiled_p)
-    printer (show (intermediate_to_transitional compiled_p)) 
-    printer ( "transitional pc : " ++ newline)
-    printer (run_trans_and_show_pc (intermediate_to_transitional compiled_p) fuel compiled_p)
-    match @run_and_show_merged (*concrete_int_32_mt*) (transitional_to_merged compiled_p (intermediate_to_transitional compiled_p)) (initial_memory compiled_p) fuel (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface compiled_p))))) with
-    | inl (Some n) => print_ocaml_int (z2int n)
-    | inl None => print_error ocaml_int_1
-    | inr n => print_error (nat2int n)
-    end
-| None => print_error ocaml_int_0
-end.
-
-Require Import Instance.
 
 Definition word_of_reg {k : nat} r := (@Merged.word_of_nat k (Intermediate.Register.to_nat r)).
 
@@ -576,7 +455,7 @@ Fixpoint execN (n: nat) (st: state) : option Z + nat :=
   match n with
   | O => inr 3
   | S n' =>
-    match stepf st with
+    match step_eval_mp st with
     | None => (inl (
              do! w <- (Symbolic.regs st (word_of_reg R_COM));
              Some (Symbolic.convert (word.int_of_word (Types.vala w)))))
@@ -585,6 +464,37 @@ Fixpoint execN (n: nat) (st: state) : option Z + nat :=
     end
   end.
 
+
+Fixpoint execN_me (n: nat) (st: Symbolic.state sym_lrc_merged) : option Z + nat :=
+  match n with
+  | O => inr 3
+  | S n' =>
+    match step_eval_me st with
+    | None => (inl (
+             do! w <- (Symbolic.regs st (word_of_reg R_COM));
+             Some (Symbolic.convert (word.int_of_word (Types.vala w)))))
+    | Some (st', _) =>
+        execN_me n' st'
+    end
+  end.
+
+
+Definition compile_and_run_me (p: Source.program) (fuel:nat) :=
+(*  printer ("executing merged :" ++ newline) *)
+  match compile_program p with
+  | None => print_error ocaml_int_0
+  | Some inter_p =>
+      let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
+      let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
+      let st := @load sym_lrc_merged LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
+      match execN_me fuel st with
+    | inl (Some n) => print_ocaml_int (z2int n)
+    | inl None => print_error ocaml_int_1
+    | inr n => print_error (nat2int n)
+      end
+  end
+.
+
 Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
 (*  printer ("executing merged :" ++ newline) *)
   match compile_program p with
@@ -592,7 +502,7 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := load (merged_to_mp_backend inter_p merged_p) nc in
+      let st := @load LRC.sym_lrc LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
       match execN fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
@@ -623,7 +533,7 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := load (merged_to_mp_backend inter_p merged_p) nc in
+      let st := @load LRC.sym_lrc LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
       match execN_and_show_mp fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)

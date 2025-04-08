@@ -6,9 +6,11 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 
 Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic MicroPolicies.LRC.
 Require Import Intermediate.Machine.
-Require Import I2MP.Examples.Helper MicroPolicies.Int32 MicroPolicies.Merged.
+Require Import I2MP.Examples.Helper Merged Int32 Instance.
 
 Require Export Extraction.Definitions.
+Require Import CompCert.Events.
+Export Symbolic.
 
 
 Set Implicit Arguments.
@@ -19,41 +21,126 @@ Import DoNotation.
 Require Import String.
 Open Scope string.
 
+
+Fixpoint execN_trace {mt ops sp table} (n: nat) (st: Symbolic.state sp) : trace :=
+  match n with
+  | O => []
+  | S n' =>
+    match (@Exec.stepf mt ops sp table) st with
+    | None => []
+    | Some (st', None) => @execN_trace mt ops sp table n' st'
+    | Some (st', Some ev) => ev :: (@execN_trace mt ops sp table n' st')
+    end
+  end.
+
 Definition instr_rules_empty (rcom_val : Z)
   (op : opcode)
-  tpc
-  ti
-  (ts : hseq _ (inputs op))
-  tni
-  : option ((ovec op) * (option event)) :=
+  (tpc : tag_type lrc_tags P)
+  (ti : tag_type lrc_tags M)
+  (ts : hseq (tag_type lrc_tags) (outputs op))
+  (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op * option event) :=
   let current := match ti with {| color := c |} => c end in
   let level := match tpc with Level n => n end in
-  match op, ts return option (ovec op * option event) with
+  match op, ts return option (ovec _ op * option event) with
   | JUMP,    _  => if belong current tni then
-                    Some (OVec tpc ts, None)
+                    Some (OVec JUMP tpc ts, None)
                   else
                     let ev := do! c' <- get_tni_color tni;
                               Some (ERet current (rcom_val) c') in
-                    Some (OVec tpc ts, ev)
+                    Some (OVec JUMP tpc ts, ev)
 
   | JAL,     _  => if belong current tni then
-                    Some (OVec tpc ts, None)
+                    Some (OVec JAL tpc ts, None)
                   else
                     let ev := do! c' <- get_tni_color tni;
                               do! p  <- get_proc_name tni;
                               Some (ECall current p (rcom_val) c') in
-                    Some (OVec tpc ts, ev)
-  | _,     _    => Some (OVec tpc ts, None)
+                    Some (OVec JAL tpc ts, ev)
+  | NOP,     _    => Some (OVec NOP tpc ts, None)
+  | CONST,     _    => Some (OVec CONST tpc ts, None)
+  | MOV,     _    => Some (OVec MOV tpc ts, None)
+  | BINOP b,     _    => Some (OVec (BINOP b) tpc ts, None)
+  | LOAD,     _    => Some (OVec LOAD tpc ts, None)
+  | STORE,     _    => Some (OVec STORE tpc ts, None)
+  | BNZ,     _    => Some (OVec BNZ tpc ts, None)
+  | _,     _    => None
   end.
 
-Definition get_trace_merged := @Merged.execN_trace concrete_int_32_mt instr_rules 1000.
-Definition get_trace_no_mp := @Merged.execN_trace concrete_int_32_mt instr_rules_empty 1000.
+Definition transfer_empty (iv : Symbolic.ivec lrc_tags) (evi : Symbolic.ev_inputs) : option (Symbolic.vovec lrc_tags (Symbolic.op iv) * option event) :=
+  match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
+  | Symbolic.IVec vop tpc ti ts tni =>
+    match vop, ts, ti, tni return option (Symbolic.vovec _ vop * option event) with
+    | (OP op), ts, ti, tni =>
+        do! out:((ovec _ op) * option event) <- instr_rules_empty (Symbolic.rcom_value evi) tpc ti ts tni;
+        let (ov, ev) := out in
+        Some (Symbolic.OVec op (trpc ov) (tr ov), ev)
+    (* Monitor stuff *)
+    | SERVICE, [hseq], ti, None => Some (tt, None)
+    |       _,      _,  _,    _ => None
+    end
+  end.
+
+
+Definition sym_empty : Symbolic.params :=
+  {|
+    Symbolic.ttypes := lrc_tags;
+    Symbolic.transfer := transfer_empty;
+    Symbolic.internal_state := [eqType of unit]
+  |}.
+
+Definition alloc_fun (st : @Symbolic.state mt sym_empty) : option (Symbolic.state sym_empty) :=
+  do! ra_val <- Symbolic.regs st ra;
+  let next_pc := (vala ra_val)@(taga (Symbolic.pc st)) in
+  (* TL TODO: Is using return address to compute calling component safe? *)
+  do! ra_atom <- Symbolic.mem st (vala ra_val);
+  let current_c := (color (taga ra_atom)) in
+  let prefix := (LRC.component_memory_prefix (ssrint.Posz (1 + current_c)) (Symbolic.comp_num st)) in
+  let mask := (LRC.component_memory_prefix (ssrint.Posz ((2 ^ (Symbolic.comp_num st))-1)) (Symbolic.comp_num st)) in
+  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
+  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
+  let max_addr := List.last (filter prefix_filter (domm (Symbolic.mem st))) (prefix) in
+  (* create the new bloc *)
+  let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c false) in
+  do! size <- Symbolic.regs st syscall_arg1;
+  do! length <- match word.int_of_word (vala size) with
+                | ssrint.Posz x => Some x
+                | ssrint.Negz _ => None
+                end;
+  let bloc :=
+      mkseq (fun n => ((word.addw max_addr (word.as_word (ssrint.Posz(n + 2)))), atom)) (* this + 2 is giving you one unallocated word between each block *)
+            length in
+  let mem' := unionm (Symbolic.mem st) (mkfmap bloc) in
+  (* return *)
+  do! addr <- (do! x <- List.head bloc;
+                 Some (fst x));
+  do! regs' <- updm (Symbolic.regs st) (syscall_ret) addr@Other;
+  Some (Symbolic.State sym_empty mem' regs' next_pc tt (Symbolic.comp_num st)).
+
+
+Definition table_empty : (Symbolic.syscall_table sym_empty) :=
+  [fmap ((word_of_nat alloc_label), (@Symbolic.Syscall mt sym_empty tt alloc_fun ) )].
+
+Definition mt := concrete_int_32_mt.
+Global Instance ops : machine_ops mt := concrete_int_32_ops.
+
 
 Definition nc := let component_count := 2 in (1+ Nat.log2 (1 + component_count)).
-Definition initial_state : @state concrete_int_32_mt :=
-  let pctag := build_tpc 0 in
-  {|mem := emptym ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; comp_num := nc|}.
 
+Definition initial_state {tf} : (@state mt ({| ttypes := lrc_tags; transfer := tf; internal_state := [eqType of unit] |} )) :=
+  let pctag := build_tpc 0 in
+  @State mt {| ttypes := lrc_tags; transfer := tf; internal_state := [eqType of unit] |}
+         emptym Merged.reg0 ((word_of_nat 0)@pctag) tt nc.
+
+Definition get_trace_no_mp := @execN_trace mt ops sym_empty table_empty 1000.
+Definition get_trace_merged := @execN_trace mt ops sym_lrc_merged Merged.table 1000.
+
+
+(*
+Definition initial_state {tf} : (@state mt ({| ttypes := lrc_tags; transfer := tf; internal_state := [eqType of unit] |} )) :=
+  let pctag := build_tpc 0 in
+  @State mt {| ttypes := lrc_tags; transfer := tf; internal_state := [eqType of unit] |}
+         emptym Merged.reg0 ((word_of_nat 0)@pctag) tt nc.
+*)
 
 Instance showValue : Show event :=
   {
