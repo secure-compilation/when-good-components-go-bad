@@ -232,12 +232,6 @@ Module Type Target_Sig.
   Local Axiom strong_det_sem2 :
     forall p s t1 t2 s1 s2,
       Step (CS.sem2 p) s t1 s1 -> Step (CS.sem2 p) s t2 s2 -> t1 = t2 /\ s1 = s2.
-  
-  Local Axiom trace_last_comp_initial_state :
-    forall p aUB g s t s',
-      (CS.initial_state p s) ->
-      (step (CS.sem_restricted_UB p aUB)) g s t s' ->
-      last_comp t = CS.current_comp s'.
 
   Local Axiom initial_state_main :
     forall p s,
@@ -260,10 +254,6 @@ Module Type Target_Sig.
       let step := step (CS.sem_restricted_UB p allowed_UB) in
       forall g s s' t,
         (step g s t s') \/ not (step g s t s').
-
-  Local Axiom get_program_behave_sem_restricted_UB :
-    forall p allowed_UB,
-      exists beh, program_behaves (CS.sem_restricted_UB p allowed_UB) beh.
  
   Local Axiom sem_restricted_UB_generalises_sem2 :
     forall p allowed_UB g s s' t,
