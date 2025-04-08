@@ -23,15 +23,8 @@ Import Intermediate.
 
 Require Import Source.Language.
 
-(*
-Record mem_tag : Type := MTag
-  { vtag : value_tag;
-    entry : option (Procedure.id * seq Component.id) }.
+(*** Tagged Language ***)
 
-
-
-Definition def_mem_tag (c : Component.id) := MTag Other None.
-*)
 Definition proc_label : Set := Component.id * Procedure.id.
 
 Definition plabel : Set := label +  proc_label.
@@ -246,6 +239,7 @@ Definition invalidate regs :=
   Qed.
 End Register.
 
+(*** Memory ***)
 
 Require Import Common.Memory.
 
@@ -376,6 +370,8 @@ Definition reserve_component_blocks p C Cmem procs_code
     (mapm (fun x => x.1.1) m).
 End Memory.
 
+(*** step functions/semantics ***)
+
 Definition state : Type := list Pointer.t * Memory.t * Register.t * Pointer.t * pc_tag.
 
 Definition stackless : Type := Memory.t * Register.t * Pointer.t * pc_tag.
@@ -470,15 +466,6 @@ Inductive check_pc_ret : Component.id -> mem_tag -> Prop :=
   entry tni = Some (pid,l) -> 
   check_comp_belongs c l -> check_pc_ret c tni.
 
-
-(*** !IMPORTANT: PROTECT Return Adress registers with tags in a 'linear' way,
-                 so that they can't be copied ***)
-(* make the code separated  by compartments in the compilation *)
-(* well-formedness & interfaces *)
-(*step for return *)
-(* where is return adress stored?*)
-(* TODO Add Jal for (c,pid) type (TrJalProc), but intra compartment ?? 
-todo? (in order to reduce UB), allow TrJalNat to different components *)
 
 Inductive step (cde : code) : state -> trace -> state -> Prop :=
 | Nop: forall st mem regs pc tg c pct,
@@ -784,6 +771,8 @@ Fixpoint execN (n: nat) (cde: code) (st: stackless) : option Z + nat :=
   end.
 
 
+(*** Compilation & execution ***)
+
 
 Definition head_tag (pr : Intermediate.program) (c : Component.id) (p : Procedure.id) : mem_tag :=
   let I := Intermediate.prog_interface pr in
@@ -817,15 +806,6 @@ Definition intermediate_to_transitional (pr : Intermediate.program) : code :=
 mkfmap (compile_component_list pr (elementsm (Intermediate.prog_procedures (pr)))).
 
 
-
-(*
-Definition pre_linearize (p : Intermediate.program) : code :=
- intermediate_to_transitional p. *)
-
-(* Record program : Type := mkProg
-    prog_code : code;
-    prog_buffers : NMap {fmap Block.id -> nat + seq value};
-    prog_main : bool } *)
 
 Definition run_transitional cd fuel p :=
     let mem  := Memory.prepare_procedures_initial_memory p in
@@ -866,240 +846,3 @@ match Compiler.compile_program p with
 | Some compiled_p => compile_and_run_from_intermediate compiled_p fuel
 | None => print_error ocaml_int_0
 end.
-
-(*
-Module I.
-  Import Intermediate.Machine.
-  Import Intermediate.CS.
-  Module CS := CS.
-End I.
-
-Definition is_initial_state (c: code) (s:state) : Prop :=
-  exists p, (c = pre_linearize p) ->
-  let (ics,tag) := s in
-  initial_state (I.CS.sem p) ics.
-
-Definition is_final_state (c: code) (s:state) : Prop :=
-  exists p, (c = pre_linearize p) ->
-  let (ics,tag) := s in
-  final_state (I.CS.sem p) ics.
-
-Section Semantics.
-  Variable p: Intermediate.program.
-  Let c := pre_linearize p.
-
-  
- (* Let G := prepare_global_env p.*)
-
-  Definition sem :=
-    @Semantics_gen state code step (is_initial_state c) (is_final_state c) c.
-
-  (*
-  Definition sem :=
-    @Semantics_gen state code step (initial_state p). *)
-
-End Semantics.
-
-Lemma forward_simulation_intermediate_transitional:
-  forall p, forward_simulation (I.CS.sem p) (sem p).
-Proof.
-  intro p.
-  eapply (Forward_simulation (lt) ).
-Admitted.
- *)
-
-
-(*
-Require Import Source.Examples.Identity.
-
-Eval compute in compile_and_run_from_source_ex identity 10.*)
-
-
-
-
-
-(*version for extraction : 
-Definition compile_and_run_from_source := 
-fun (p : Source.program) (fuel : nat) =>
-match Compiler.compile_program p with
-| Some compiled_p =>
-    match compile_run fuel compiled_p with
-    | Some n => print_ocaml_int (z2int n)
-    | None => print_error ocaml_int_1
-    end
-| None => print_error ocaml_int_0
-end.  *)
-
-
-
-(*
-Theorem eval_step_complete:
-  forall G st t st',
-    step G st t st' -> eval_step G st = Some (t, st').
-
-
-Theorem eval_step_sound:
-  forall G st t st',
-    eval_step G st = Some (t, st') -> step G st t st'. *)
-
-
-
-
-
-(*** BELOW : OLD COMPILATION PROCEDURE (WORKED WITH SINGLE CODE BLOCK, NOT 
-NECESSARY TO ADAPT DIRECTLY FROM THERE ***)
-
-(* Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) : mem_tag :=
-  let I := Intermediate.prog_interface (program cenv) in
-  let allowed_call_by (c' : Component.id) :=
-      Option.default false (do i <- getm I c ;
-                            do i' <- getm I c' ;
-                            Some ((p \in Component.export i) && ((c, p) \in Component.import i')))
-  in {| vtag := Other ;
-        color := c ;
-        entry := Some (p, filter allowed_call_by (domm I)) |}.
-
-
-Definition linearize_proc (cenv : compiler_env)
-           (c : Component.id) (p : Procedure.id) : code :=
-  let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
-                                    getm map p)
-  in (inr (ILabel (make_label cenv c p)), head_tag cenv c p) :: flatten (map (linearize_instr cenv c) code).
-
-Definition linearize_component (cenv : compiler_env) (c : Component.id) : code :=
-  let procs : seq Procedure.id :=
-      Option.default fset0 (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
-                            Some (domm map)) in
-  flatten (map (linearize_proc cenv c) procs).
-
-Definition linearize_code (cenv : compiler_env) : code :=
-  let main_code :=
-      [:: (inr (IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main) ; (inr IHalt, def_mem_tag Component.main)] in
-
-  let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
-  main_code ++ flatten (map (linearize_component cenv) components).
-
-
-Notation bufs := {fmap (nat * nat * nat) -> (value * mem_tag)}.
-
-Definition linearize_buf (cenv : compiler_env) (c : Component.id) (b : Block.id) : seq (value * mem_tag) :=
-  Option.default [::] (do map <- getm (Intermediate.prog_buffers (program cenv)) c ;
-                       do block <- getm map b ;
-                       Some match block with
-                            | inl n => repeat (Undef, def_mem_tag c) n
-                            | inr l => [seq (x, def_mem_tag c) | x <- l]
-                            end).
-
-Definition linearize_bufs (cenv : compiler_env) : bufs :=
-  let bufs' : NMap (NMap (NMap (value * mem_tag))) :=
-      mapim (fun c map => mapim (fun b _ => fmap_of_seq (linearize_buf cenv c b)) map)
-            (Intermediate.prog_buffers (program cenv))
-  in Tmp.mapk (fun c => match c with (x, (y, z)) => (x, y, z) end)
-              (uncurrym (mapm (fun m : NMap (NMap (value * mem_tag)) => uncurrym m) bufs')).
-
-Record prog :=
-  { procedures : code ;
-    buffers : bufs ;
-  }.
- 
-
-
-Definition max_label (p : Intermediate.program) : nat :=
-  let soup := (flatten (flatten (map codomm' (codomm' (Intermediate.prog_procedures p))))) in
-  let get_label i := match i with
-                    | ILabel l => Some l
-                    | _ => None
-                    end in
-  let labels := pmap get_label soup in foldl max 0 labels + 1.
-
-Definition max_proc_id (p : Intermediate.program) : nat :=
-  let componnent_max_proc_id (map : NMap Machine.code) : nat :=
-      foldl max 0 (domm map) in
-  let max_proc_ids := map componnent_max_proc_id (codomm' (Intermediate.prog_procedures p)) in
-  foldl max 0 max_proc_ids + 1.
-
-Definition linearize (p : Intermediate.program) : prog :=
-  let lmax := max_label p in
-  let pmax := max_proc_id p in
-  let cenv := {| program := p ;
-                 make_label := (fun c p => lmax + c * pmax + p) |} in
-  {| procedures := linearize_code_bis cenv ;
-     buffers    := linearize_bufs cenv |}.
-*)
-
-
-(* 
-
-
-Module Compartmentless_Pointer.
-  Definition t : Type := Block.id * Block.offset.
-
-  Definition block (p : t) : Block.id :=
-    let '(b, _) := p in b.
-
-  Definition offset (p : t) : Block.offset :=
-    let '( _, o) := p in o.
-
-  Definition eq (p1 p2 : t) : bool :=
-    let '( b1, o1) := p1 in
-    let '(b2, o2) := p2 in
- (Nat.eqb b1 b2) && (Z.eqb o1 o2).
-
-  Definition leq (p1 p2 : t) : option bool :=
-    let '(b1, o1) := p1 in
-    let '( b2, o2) := p2 in
-    if  (Nat.eqb b1 b2) then
-      Some ((o1 <=? o2) % Z)
-    else
-      None.
-
-  Definition add (ptr : t) (offset : Z) : t :=
-    let '( b, o) := ptr in (b, (o+offset)%Z).
-
-  Definition sub (ptr : t) (offset : Z) : t :=
-    let '(C, b, o) := ptr in (C, b, (o-offset)%Z).
-
-  Definition inc (ptr : t) : t := add ptr 1.
-
-  Lemma add_preserves_component:
-    forall p n, component (add p n) = component p.
-  Proof.
-    intros p n.
-    destruct p as [[C b] o].
-    reflexivity.
-  Qed.
-
-  Lemma add_preserves_block:
-    forall p n, block (add p n) = block p.
-  Proof.
-    intros p n.
-    destruct p as [[C b] o].
-    reflexivity.
-  Qed.
-
-  Lemma inc_preserves_component:
-    forall p, component (inc p) = component p.
-  Proof.
-    intros p.
-    destruct p as [[C b] o].
-    reflexivity.
-  Qed.
-
-  Lemma inc_preserves_block:
-    forall p, block (inc p) = block p.
-  Proof.
-    intros p.
-    destruct p as [[C b] o].
-    reflexivity.
-  Qed.
-
-  Lemma compose :
-    forall ptr,
-      (component ptr, block ptr, offset ptr) = ptr.
-  Proof.
-    now intros [[C b] o].
-  Qed.
-End Pointer.
-
-
-*)
