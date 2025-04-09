@@ -204,7 +204,7 @@ Definition binop_trans (b : Values.binop) : binop :=
 end.
     
 
-Definition instr_tagged_to_mp (i : instr_merged) (label_pos : nat -> nat) (pos : nat) : @Types.instr mt :=
+Definition instr_merged_to_mp (i : instr_merged) (label_pos : nat -> nat) (pos : nat) : @Types.instr mt :=
   match i with
   | MrNop | MrLabel _ => Nop mt
   | MrConst i r => Const i (word_of_nat (to_nat r))
@@ -220,7 +220,7 @@ Definition instr_tagged_to_mp (i : instr_merged) (label_pos : nat -> nat) (pos :
 
 Definition encode_instr_mp := @Types.encode_instr mt ops.
 
-Definition encode_instr i lp pos := encode_instr_mp (instr_tagged_to_mp i lp pos).
+Definition encode_instr i lp pos := encode_instr_mp (instr_merged_to_mp i lp pos).
 
 Definition encode_instr_atom x lp pos : matom := (encode_instr (fst x) lp pos)@(snd x).
 
