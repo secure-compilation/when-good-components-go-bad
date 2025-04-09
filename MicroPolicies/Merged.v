@@ -297,7 +297,7 @@ Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word_ordType
  *)
 
 
-Definition initial_state cde (p : Intermediate.program) : (Symbolic.state sp) :=
+Definition initial_state cde (p : Intermediate.program) : (Symbolic.state lrc_tags [eqType of unit]) :=
   let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))) in
   let mem0 := (initial_memory p) in
   let pctag := build_tpc 0 in
@@ -360,6 +360,7 @@ Definition sym_lrc_merged : Symbolic.params := {|
 
 
 
+(*
 Definition alloc_fun (st : @Symbolic.state mt sym_lrc_merged) : option (Symbolic.state sym_lrc_merged) :=
   do! ra_val <- Symbolic.regs st ra;
   let next_pc := (vala ra_val)@(taga (Symbolic.pc st)) in
@@ -386,15 +387,15 @@ Definition alloc_fun (st : @Symbolic.state mt sym_lrc_merged) : option (Symbolic
   do! addr <- (do! x <- List.head bloc;
                  Some (fst x));
   do! regs' <- updm (Symbolic.regs st) (syscall_ret) addr@Other;
-  Some (Symbolic.State sym_lrc_merged mem' regs' next_pc tt (Symbolic.comp_num st)).
+  Some (Symbolic.State sym_lrc_merged mem' regs' next_pc tt (Symbolic.comp_num st)). *)
 
 
-Definition table : (Symbolic.syscall_table sym_lrc_merged) :=
-  [fmap ((word_of_nat alloc_label), (@Symbolic.Syscall mt sym_lrc_merged tt alloc_fun ) )].
+Definition table : (Symbolic.syscall_table lrc_tags [eqType of unit]) :=
+  [fmap ((word_of_nat alloc_label), (@Symbolic.Syscall mt lrc_tags [eqType of unit] tt LRC.alloc_fun ) )].
 
-
+(*
 Definition alloc_addr : imm mt := shlw 1%w (as_word (ssrint.Posz 14)). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)
-Definition table_lrc : @Symbolic.syscall_table mt sym_lrc :=
+Definition table_lrc : @Symbolic.syscall_table mt lrc_tags [eqType of unit] :=
   [fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := LRC.alloc_fun |})].
-
+*)
 End WithClasses'.

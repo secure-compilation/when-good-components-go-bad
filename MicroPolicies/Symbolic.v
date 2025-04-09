@@ -151,7 +151,11 @@ Class params := {
   internal_state : eqType
 }.
 
-Context {sp : params}.
+Context {ttypes : tag_types}
+  {transfer : forall iv : ivec ttypes, ev_inputs -> option (vovec_ev ttypes (op iv)) }
+  {internal_state : eqType }.
+
+Definition sp: params := @Build_params ttypes transfer internal_state.
 
 Open Scope word_scope.
 
@@ -394,7 +398,7 @@ Module Exports.
 
 Import Symbolic.
 
-Definition state_eqb mt p : rel (@state mt p) :=
+Definition state_eqb mt p : rel (@state mt p [eqType of unit]) :=
   [rel s1 s2 | [&& mem s1 == mem s2,
                    regs s1 == regs s2,
                    pc s1 == pc s2,

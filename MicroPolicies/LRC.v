@@ -273,8 +273,8 @@ Context {mt : machine_types}
         {sregs : syscall_regs mt}.
 (* TL TODO: these notations inside a module? *)
 
-Notation state := (@Symbolic.state mt sym_lrc).
-Notation State := (@Symbolic.State mt sym_lrc).
+Notation state := (@Symbolic.state mt lrc_tags [eqType of unit]).
+Notation State := (@Symbolic.State mt lrc_tags [eqType of unit]).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).

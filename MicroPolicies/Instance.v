@@ -7,6 +7,7 @@ Require Import LRC.
 Require Import Types.
 Require Import Symbolic.
 Require Import Exec.
+Require Import Merged.
 
 Definition mt := concrete_int_32_mt.
 
@@ -21,17 +22,17 @@ Global Instance scr : syscall_regs mt := concrete_int_32_scr.
 
 Definition alloc_addr : imm mt := shlw 1%w (as_word 14). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)
 
-Definition table : @Symbolic.syscall_table mt sym_lrc :=
-  [fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})].
+Definition table := Merged.table.
+  (*[fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})]. *)
 
-Definition state := (@Symbolic.state mt sym_lrc).
-Definition stepf := (@Exec.stepf mt ops sym_lrc table).
+Definition state := (@Symbolic.state mt lrc_tags).
+Definition stepf := (@Exec.stepf mt ops lrc_tags transfer [eqType of unit] table).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
 
 (* Machine initialisation *)
-Definition reg0 {sp:Symbolic.params} (Other: (Symbolic.tag_type Symbolic.ttypes Symbolic.R)) : {fmap reg mt -> atom (mword mt) (Symbolic.tag_type Symbolic.ttypes Symbolic.R) } :=
+Definition reg0 {ttypes} (Other: (Symbolic.tag_type ttypes Symbolic.R)) : {fmap reg mt -> atom (mword mt) (Symbolic.tag_type ttypes Symbolic.R) } :=
   [fmap (as_word 0, Atom (as_word 0) Other)
       ; (as_word 1, Atom (as_word 0) Other)
       ; (as_word 2, Atom (as_word 0) Other)
@@ -46,7 +47,7 @@ Definition reg0 {sp:Symbolic.params} (Other: (Symbolic.tag_type Symbolic.ttypes 
       ; (as_word 19, Atom (as_word 0) Other)].
 
 
-Definition load {sp} {Other} {start_tag} {start_internal} (start : {fmap mword mt -> _ } * nat) nc : @Symbolic.state mt sp :=
+Definition load {ttypes} {internal:eqType} {Other} {start_tag} {start_internal: internal} (start : {fmap mword mt -> _ } * nat) nc : @Symbolic.state mt ttypes internal :=
   {| Symbolic.mem := fst start ;
      Symbolic.regs := reg0 Other;
      Symbolic.pc := {| vala := word.as_word (snd start) ; taga := start_tag |} ;
@@ -54,9 +55,7 @@ Definition load {sp} {Other} {start_tag} {start_internal} (start : {fmap mword m
      Symbolic.comp_num := nc|}.
 
 
-Require Import Merged.
-
-Definition step_eval_mp := (@Exec.stepf mt ops sym_lrc Merged.table_lrc).
-Definition step_eval_me := (@Exec.stepf mt ops Merged.sym_lrc_merged Merged.table).
-Definition step_mp := (@Symbolic.step mt ops sym_lrc Merged.table_lrc).
-Definition step_me := (@Symbolic.step mt ops Merged.sym_lrc_merged Merged.table).
+Definition step_eval_mp := (@Exec.stepf mt ops lrc_tags LRC.transfer [eqType of unit] table).
+Definition step_eval_me := (@Exec.stepf mt ops lrc_tags Merged.transfer [eqType of unit] table).
+Definition step_mp := (@Symbolic.step mt ops lrc_tags LRC.transfer [eqType of unit] table).
+Definition step_me := (@Symbolic.step mt ops lrc_tags Merged.transfer [eqType of unit] table).
