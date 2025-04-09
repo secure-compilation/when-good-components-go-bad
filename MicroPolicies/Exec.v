@@ -13,17 +13,27 @@ Import DoNotation.
 Section WithClasses.
 
 Context {mt : machine_types}
-        {ops : machine_ops mt}
-        {sp : Symbolic.params}.
+  {ops : machine_ops mt}.
 
-Variable table : @Symbolic.syscall_table mt sp.
+Notation vovec_ev tty vop := (Symbolic.vovec tty vop * option event)%type.
+
+Context {ttypes : Symbolic.tag_types}
+  {transfer : forall iv : Symbolic.ivec ttypes, Symbolic.ev_inputs -> option (vovec_ev ttypes (Symbolic.op iv)) }
+  {internal_state : eqType }.
+
+Variable table : @Symbolic.syscall_table mt ttypes internal_state.
 
 Import Symbolic.
 
 Local Open Scope word_scope.
 Local Notation "x .+1" := (x + 1).
 
-Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
+Notation next_state_updates_and_pc := (@next_state_updates_and_pc mt ops ttypes transfer internal_state).
+
+Notation next_state_updates := (@next_state_updates mt ops ttypes transfer internal_state).
+
+Definition stepf (st : state ttypes internal_state) :
+  option (state ttypes internal_state * option event) :=
   let 'State mem reg pc@tpc extra nc := st in
   match mem pc with
   | Some iti =>
@@ -97,7 +107,7 @@ Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
     match mem pc with
     | None =>
       do! sc <- table pc;
-      run_syscall sc st
+      @run_syscall _ _ ttypes transfer internal_state sc st
     | Some _ =>
       None
     end
@@ -106,7 +116,7 @@ Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
 Lemma stepP :
   forall st st' ev,
     stepf st = Some (st', ev) <->
-    step table st st' ev.
+    @step _ _ _ transfer _ table st st' ev.
 Proof.
   intros st st'. split; intros STEP.
   { destruct st as [mem reg [pc tpc] int].
@@ -159,7 +169,7 @@ Definition build_k_ivec st : option (k_ivec ttypes)  :=
     | Some i =>
       match decode_instr (vala i) with
         | Some op =>
-          let part := @IVec ttypes (opcode_of op) (pct st) (taga i) in
+          let part := @IVec ttypes (opcode_of op) (@pct _ _ internal_state st) (taga i) in
           match op return (hseq (tag_type ttypes) (inputs (opcode_of op)) ->
                            k_ivec ttypes) -> option (k_ivec ttypes) with
             | Nop => fun part => Some (part [hseq])

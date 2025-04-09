@@ -107,7 +107,7 @@ Definition coqstring_of_pc (pc : atom (mword mt) pc_tag) : string :=
 Definition coqstring_of_internal (_ : unit) : string := "".
 
 
-Definition coqstring_of_state (st : state) : string :=
+Definition coqstring_of_state (st : state [eqType of unit]) : string :=
 "============================
 " ++ coqstring_of_pc (Symbolic.pc st)
   ++ coqstring_of_internal (Symbolic.internal st)

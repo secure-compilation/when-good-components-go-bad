@@ -438,7 +438,8 @@ Instance showRegMap : Show ({fmap Types.reg concrete_int_32_mt ->
                    "" (elementsm reg))
   }.
 
-Instance showStateMP : Show (state) :=
+(*
+Instance showStateMP : Show (state [eqType of unit]) :=
   {
     show st :=
       let n := match (Types.taga (Symbolic.pc st)) with LRC.Level m => m end in
@@ -448,10 +449,10 @@ Instance showStateMP : Show (state) :=
         "pc: " ++ show (MicroPolicies.Types.vala (Symbolic.pc st)) ++
         "; level: " ++ show (ssrint.Posz n) ++ newline ++ "---------------------" ++
         newline
-  }.
+  }. *)
 
 
-Fixpoint execN (n: nat) (st: state) : option Z + nat :=
+Fixpoint execN (n: nat) (st: state [eqType of unit]) : option Z + nat :=
   match n with
   | O => inr 3
   | S n' =>
@@ -465,7 +466,7 @@ Fixpoint execN (n: nat) (st: state) : option Z + nat :=
   end.
 
 
-Fixpoint execN_me (n: nat) (st: Symbolic.state sym_lrc_merged) : option Z + nat :=
+Fixpoint execN_me (n: nat) (st: Symbolic.state LRC.lrc_tags [eqType of unit]) : option Z + nat :=
   match n with
   | O => inr 3
   | S n' =>
@@ -486,7 +487,7 @@ Definition compile_and_run_me (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load sym_lrc_merged LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
       match execN_me fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
@@ -502,7 +503,7 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.sym_lrc LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
       match execN fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
@@ -511,8 +512,8 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
   end
 .
 
-Fixpoint execN_and_show_mp (n: nat) (st: state) : option Z + nat :=
-  printer ( show st )
+Fixpoint execN_and_show_mp (n: nat) (st: state [eqType of unit]) : option Z + nat :=
+(*  printer ( show st ) *)
    
   match n with
   | O => inr 3
@@ -533,7 +534,7 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let merged_p := (transitional_to_merged inter_p (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.sym_lrc LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0) tt (merged_to_mp_backend inter_p merged_p) nc in
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
       match execN_and_show_mp fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
