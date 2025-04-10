@@ -21,15 +21,16 @@ Import DoNotation.
 Require Import String.
 Open Scope string.
 
+Notation state := (@Symbolic.state mt lrc_tags [eqType of unit]).
 
-Fixpoint execN_trace {mt ops sp table} (n: nat) (st: Symbolic.state sp) : trace :=
+Fixpoint execN_trace {transfer table} (n: nat) (st: state) : trace :=
   match n with
   | O => []
   | S n' =>
-    match (@Exec.stepf mt ops sp table) st with
+    match (@Exec.stepf _ _ _ transfer _ table) st with
     | None => []
-    | Some (st', None) => @execN_trace mt ops sp table n' st'
-    | Some (st', Some ev) => ev :: (@execN_trace mt ops sp table n' st')
+    | Some (st', None) => @execN_trace transfer table n' st'
+    | Some (st', Some ev) => ev :: (@execN_trace transfer table n' st')
     end
   end.
 
@@ -80,59 +81,18 @@ Definition transfer_empty (iv : Symbolic.ivec lrc_tags) (evi : Symbolic.ev_input
     end
   end.
 
-
-Definition sym_empty : Symbolic.params :=
-  {|
-    Symbolic.ttypes := lrc_tags;
-    Symbolic.transfer := transfer_empty;
-    Symbolic.internal_state := [eqType of unit]
-  |}.
-
-Definition alloc_fun (st : @Symbolic.state mt sym_empty) : option (Symbolic.state sym_empty) :=
-  do! ra_val <- Symbolic.regs st ra;
-  let next_pc := (vala ra_val)@(taga (Symbolic.pc st)) in
-  (* TL TODO: Is using return address to compute calling component safe? *)
-  do! ra_atom <- Symbolic.mem st (vala ra_val);
-  let current_c := (color (taga ra_atom)) in
-  let prefix := (LRC.component_memory_prefix (ssrint.Posz (1 + current_c)) (Symbolic.comp_num st)) in
-  let mask := (LRC.component_memory_prefix (ssrint.Posz ((2 ^ (Symbolic.comp_num st))-1)) (Symbolic.comp_num st)) in
-  let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
-  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
-  let max_addr := List.last (filter prefix_filter (domm (Symbolic.mem st))) (prefix) in
-  (* create the new bloc *)
-  let atom : matom := (word.as_word (ssrint.Posz 0))@(def_mem_tag current_c false) in
-  do! size <- Symbolic.regs st syscall_arg1;
-  do! length <- match word.int_of_word (vala size) with
-                | ssrint.Posz x => Some x
-                | ssrint.Negz _ => None
-                end;
-  let bloc :=
-      mkseq (fun n => ((word.addw max_addr (word.as_word (ssrint.Posz(n + 2)))), atom)) (* this + 2 is giving you one unallocated word between each block *)
-            length in
-  let mem' := unionm (Symbolic.mem st) (mkfmap bloc) in
-  (* return *)
-  do! addr <- (do! x <- List.head bloc;
-                 Some (fst x));
-  do! regs' <- updm (Symbolic.regs st) (syscall_ret) addr@Other;
-  Some (Symbolic.State sym_empty mem' regs' next_pc tt (Symbolic.comp_num st)).
-
-
-Definition table_empty : (Symbolic.syscall_table sym_empty) :=
-  [fmap ((word_of_nat alloc_label), (@Symbolic.Syscall mt sym_empty tt alloc_fun ) )].
-
 Definition mt := concrete_int_32_mt.
 Global Instance ops : machine_ops mt := concrete_int_32_ops.
 
 
 Definition nc := let component_count := 2 in (1+ Nat.log2 (1 + component_count)).
 
-Definition initial_state {tf} : (@state mt ({| ttypes := lrc_tags; transfer := tf; internal_state := [eqType of unit] |} )) :=
-  let pctag := build_tpc 0 in
-  @State mt {| ttypes := lrc_tags; transfer := tf; internal_state := [eqType of unit] |}
-         emptym Merged.reg0 ((word_of_nat 0)@pctag) tt nc.
+Definition initial_state (cde : code) : state :=
+  Merged.initial_state cde emptym
+    (fmap_of_seq (nseq 2 ({|Component.export := fset0; Component.import := fset0 |}))).
 
-Definition get_trace_no_mp := @execN_trace mt ops sym_empty table_empty 1000.
-Definition get_trace_merged := @execN_trace mt ops sym_lrc_merged Merged.table 1000.
+Definition get_trace_no_mp := @execN_trace transfer_empty table 1000.
+Definition get_trace_merged := @execN_trace LRC.transfer table 1000.
 
 
 (*
@@ -174,13 +134,13 @@ Definition trace_eq m t : bool :=
        (foldl (fun acc '(l, r) => andb acc (event_eq l r) ) true (zip m t)).
 
 Definition run_test c0 p0 c1 p1 := 
-  let m0_merged := (get_trace_merged (app c0 p0) initial_state) in
-  let m1_merged := (get_trace_merged (app c1 p1) initial_state) in
-  let m2_merged := (get_trace_merged (app c0 p1) initial_state) in
+  let m0_merged := (get_trace_merged (initial_state (app c0 p0))) in
+  let m1_merged := (get_trace_merged (initial_state (app c1 p1))) in
+  let m2_merged := (get_trace_merged (initial_state (app c0 p1))) in
   
-  let m0_empty := (get_trace_no_mp (app c0 p0) initial_state) in
-  let m1_empty := (get_trace_no_mp (app c1 p1) initial_state) in
-  let m2_empty := (get_trace_no_mp (app c0 p1) initial_state) in
+  let m0_empty := (get_trace_no_mp (initial_state (app c0 p0))) in
+  let m1_empty := (get_trace_no_mp (initial_state (app c1 p1))) in
+  let m2_empty := (get_trace_no_mp (initial_state (app c0 p1))) in
   (*
   printer (
       "---------------------------" ++ newline ++
@@ -203,7 +163,6 @@ Definition run_test c0 p0 c1 p1 :=
   else "test failed (a)"
     ).
 
-Definition mt := concrete_int_32_mt.
 
 (* run ops, then jump to 10 *)
 Definition context ops :=

@@ -13,7 +13,6 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import MicroPolicies.LRC.
 Require Import Tmp.
-Require Import Linearize.
 
 Require Import Lib.Extra.
 Require Import Lib.Monads.

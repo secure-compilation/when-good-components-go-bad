@@ -76,7 +76,7 @@ MicroPolicies/Recomposition.v
 
 
 I2MP/Tmp.v
-I2MP/Linearize.v
+# I2MP/Linearize.v
 # I2MP/Encode.v -- compilation error
 #   Jeremy: As far as I understand it, we shouldn't worry about the I2MP/Encode.v file
 #   that doesn't compile, because this is the level below the one we were interested in.
@@ -93,5 +93,5 @@ I2MP/Examples/NestedCalls.v
 
 MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
-#MicroPolicies/Helper.v
+MicroPolicies/Helper.v
 

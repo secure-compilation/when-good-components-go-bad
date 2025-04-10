@@ -174,8 +174,10 @@ Definition instr_translation (make_label : proc_label -> nat) (update_label : na
     | TrHalt => MrHalt :: nil
   end.
 
-Definition transitional_to_merged (p: Intermediate.program) (cde : Transitional.code) : code :=
-  let memory_size := memory_lengths (Intermediate.prog_buffers p) in
+Notation prog_buffers := (NMap {fmap Block.id -> nat + seq value}).
+
+Definition transitional_to_merged (pb : prog_buffers) (cde : Transitional.code) : code :=
+  let memory_size := memory_lengths (pb) in
   let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inl la) => la | _ => 0 end) l )) in
   let lmax := foldl Init.Nat.max 0 (codomm(mapm max_seq cde)) in
   let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inr (_,p)) => p | _ => 0 end) l )) in
@@ -240,17 +242,32 @@ Definition encode_code (cde : code) (pc0 : nat) : memory :=
 
 (*** Initialization/Compilation ***)
 
-Definition initial_memory (p : Intermediate.program) :=
+(* code adapted from I2MP/Linearize.v *)
+
+Notation bufs := {fmap (nat * nat * nat) -> (value * mem_tag)}.
+
+Definition linearize_buf (pb : prog_buffers) (c : Component.id) (b : Block.id) : seq (value * mem_tag) :=
+  Option.default [::] (do! map <- getm (pb) c ;
+                       do! block <- getm map b ;
+                       Some match block with
+                            | inl n => repeat (Undef, def_mem_tag c false) n
+                            | inr l => [seq (x, def_mem_tag c false) | x <- l]
+                            end).
+
+Definition linearize_bufs (pb : prog_buffers) : bufs :=
+  let bufs' : NMap (NMap (NMap (value * mem_tag))) :=
+      mapim (fun c map => mapim (fun b _ => fmap_of_seq (linearize_buf pb c b)) map) pb
+  in Tmp.mapk (fun c => match c with (x, (y, z)) => (x, y, z) end)
+              (uncurrym (mapm (fun m : NMap (NMap (value * mem_tag)) => uncurrym m) bufs')).
+
+
+Definition initial_memory (pb : prog_buffers) :=
   (* TODO: move default buffers to their respective compartments *)
-  let p := Linearize.linearize p in
-  let bufs := Linearize.buffers p in
+  let bufs := linearize_bufs pb in
     let base_adress c b :=
      (*  length of code + 1 + number of triples (c',b',_) such that (c', b') that occur before (c, b) *)
       (*length (Linearize.procedures p) + 1 +*)
-      length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
-                      (* TL TODO codomm doesn't typecheck... *)
-                     (* Invariant: Linearize.buffers is "continuous" *)
-                     ((Linearize.buffers p))))
+      length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end) bufs))
   in
   let concretize := (fun p => match p with
                               | (c, b, o) =>
@@ -284,8 +301,8 @@ Definition reg0 : {fmap reg mt -> (@ratom mt) } :=
 
 
 (* return the memory along with the first pc *)
-Definition merged_to_mp_backend (p: Intermediate.program) (cde : code) : memory * nat :=
-  let m := (initial_memory p) in
+Definition merged_to_mp_backend (pb : prog_buffers) (cde : code) : memory * nat :=
+  let m := (initial_memory pb) in
   let pc0 := size m in
   let c := (encode_code cde pc0) in
   (unionm c m, pc0).
@@ -297,9 +314,9 @@ Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word_ordType
  *)
 
 
-Definition initial_state cde (p : Intermediate.program) : (Symbolic.state lrc_tags [eqType of unit]) :=
-  let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface p))))) in
-  let mem0 := (initial_memory p) in
+Definition initial_state cde (pb : prog_buffers) (pi : Program.interface) : (Symbolic.state lrc_tags [eqType of unit]) :=
+  let nc := (1+ Nat.log2 (1 + (size (domm pi)))) in
+  let mem0 := (initial_memory pb) in
   let pctag := build_tpc 0 in
   {|mem := unionm (encode_code cde (size mem0)) mem0 ; regs := reg0 ; pc := (word_of_nat 0)@pctag ; internal := tt; comp_num := nc|}.
 
