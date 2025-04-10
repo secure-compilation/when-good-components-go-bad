@@ -62,23 +62,19 @@ Section RSC_DC_MD_Section.
       induction star2; intros s'0 t' star_s'0 nostep in_Ct disj; destruct star_s'0;
         destruct disj as (*[eq [final nofinal]] |*) [[eq [plus_s' nofinal]] | [ineq pref]]; try contradiction.
       + inversion plus_s'. eapply nostep. econstructor. eauto. unfold allowed_UB. auto.
-     (* + eapply (sd_final_nostep (Target.det_sem2 (program_link p Ct))); eauto.
-        eapply Target.sem_restricted_UB_generalises_sem2. exact H. *)
       + inv plus_s'. eapply nostep. econstructor. eauto. unfold allowed_UB. auto.
       + destruct pref. apply ineq. destruct t; auto; inversion H1.
       + eapply nostep. simpl. eapply SmallstepUB.step_UB_allowed. eauto. auto.
       + eapply nostep. simpl. eapply SmallstepUB.step_UB_allowed. eauto. auto.
-     (* + eapply nostep. simpl. eapply SmallstepUB.step_UB_allowed. eauto. auto. *)
-      + destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H1)). subst.
-          eapply IHstar2; eauto. left. split; [|split; auto].
-          {clear -eq. induction t0; auto. inversion eq. traceEq. }
-     (* + destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H1)). subst.
-          eapply IHstar2; eauto. left. split.
-          {clear -eq. induction t0; inversion eq; auto. } auto. *)
-      + destruct (Target.strong_det_sem2 H (Target.sem_restricted_UB_generalises_sem2 H1)). subst.
+      + subst. destruct ((sd_determ (Target.det_sem2 (program_link p Ct))) _ _ _ _ _ H (Target.sem_restricted_UB_generalises_sem2 H1)).
+        assert (s2 = s0) by (destruct H0; auto). subst.
+        eapply IHstar2; eauto. left. split; [|split; auto].
+        {clear -eq H0. destruct H0; inv eq; auto. }
+      + subst. destruct ((sd_determ (Target.det_sem2 (program_link p Ct))) _ _ _ _ _ H (Target.sem_restricted_UB_generalises_sem2 H1)).
+        assert (s2 = s0) by (destruct H0; auto). subst.
           eapply IHstar2; eauto. right. split.
-          {clear -ineq. intro. induction t0; auto. apply ineq. traceEq. }
-          destruct pref. exists x. clear -H0. induction t0; inversion H0; auto.
+          {clear -ineq H0. intro. destruct H0; eapply ineq; try rewrite H; eauto. }
+          destruct pref. exists x. clear -H0 H3. destruct H0; inversion H3; auto. 
   Qed.
 
  Lemma star_max_prefix: forall t s s',
@@ -99,8 +95,7 @@ Section RSC_DC_MD_Section.
   Proof.
     intros t s s' H1. induction H1.
     - left. econstructor.
-    - destruct ((Target.sem_restricted_UB_lem
-                   (globalenv (CS.sem_restricted_UB (program_link p Ct) (allowed_UB (prog_interface Ct))))) s1 s2 t1)
+    - destruct ((Target.sem_restricted_UB_lem (allowed_UB (prog_interface Ct)) H))
         as [step_no_UB12 | no_step_UB12].
       + destruct (IHstar) as [ stars'| [s'' [t' [t0 [t2_eq [undef [star [nofinal [nostep starend]]]]]]]]]; clear IHstar.
         * left; econstructor; eauto.
@@ -132,8 +127,8 @@ Section RSC_DC_MD_Section.
       + right. exists s1, [], (t). split; auto. split; [|split; [|split; [|split]]].
         -- intros [init star_s']. unfold undef_in. eapply (last_comp_in_interface_p init). eapply star_step. exact H. exact H1. 
            reflexivity. eauto. intros t' s'' step. clear -H step star_s' no_step_UB12. induction star_s'.
-           ++ eapply no_step_UB12. destruct (Target.strong_det_sem2 (Target.sem_restricted_UB_generalises_sem2 step) H). subst. auto.
-           ++ eapply no_step_UB12. destruct (Target.strong_det_sem2 (Target.sem_restricted_UB_generalises_sem2 step) H). subst. auto.
+           ++ eapply no_step_UB12. exists t', s''. auto.
+           ++ eapply no_step_UB12. exists t', s''. auto. 
            ++ destruct t.
               ** left. split. auto.
                  assert (t1 = []) by (induction t1; inversion H0; auto). subst.
@@ -142,7 +137,7 @@ Section RSC_DC_MD_Section.
               ** right. split; try now (intro eq; rewrite <- eq in H0; inversion H0). exists (t1 ** t2). traceEq.
         -- econstructor.
         -- intro. eapply (sd_final_nostep (Target.det_sem2 (program_link p Ct)) _ H2). exact H.
-        -- intros t' s' step. eapply no_step_UB12. destruct (Target.strong_det_sem2 (Target.sem_restricted_UB_generalises_sem2 step) H). subst. auto.
+        -- intros t' s' step. eapply no_step_UB12. exists t', s'. auto. 
         -- rewrite H0. econstructor; eauto.
   Qed.
 

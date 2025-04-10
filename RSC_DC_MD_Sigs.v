@@ -228,11 +228,11 @@ Module Type Target_Sig.
   Local Axiom det_sem1 : forall p, determinate (CS.sem1 p).
   Local Axiom det_sem2 : forall p, determinate (CS.sem2 p).
   Local Axiom det_sem_restricted : forall p aUB, determinate (CS.sem_restricted_UB p aUB).
-  
+  (*
   Local Axiom strong_det_sem2 :
     forall p s t1 t2 s1 s2,
       Step (CS.sem2 p) s t1 s1 -> Step (CS.sem2 p) s t2 s2 -> t1 = t2 /\ s1 = s2.
-
+   *)
   Local Axiom initial_state_main :
     forall p s,
       (CS.initial_state p s) ->
@@ -250,10 +250,10 @@ Module Type Target_Sig.
       CS.current_comp s = CS.current_comp s'.
   
   Local Axiom sem_restricted_UB_lem :
-    forall p allowed_UB,
-      let step := step (CS.sem_restricted_UB p allowed_UB) in
-      forall g s s' t,
-        (step g s t s') \/ not (step g s t s').
+    forall p allowed_UB s t s',
+      Step (CS.sem2 p) s t s' ->
+      let sem := (CS.sem_restricted_UB p allowed_UB) in
+      (Step sem s t s') \/ not (exists t s', Step sem s t s').
  
   Local Axiom sem_restricted_UB_generalises_sem2 :
     forall p allowed_UB g s s' t,

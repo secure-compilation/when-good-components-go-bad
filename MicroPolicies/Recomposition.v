@@ -24,6 +24,7 @@ Require Import MicroPolicies.Symbolic.
 Require Import MicroPolicies.Instance.
 Require Import MicroPolicies.LRC.
 Require Import MicroPolicies.Merged.
+Require Import Coq.micromega.Lia.
 
 Record program :=
   { prog_interface: Program.interface;
@@ -75,16 +76,16 @@ Section Recombination.
                                        | e :: [::] => step_mp s s' (Some e)
                                        | _ => False
                                        end).
-  Variable initial_state1: state -> Prop.
-  (* Definition initial_state1: state -> Prop := *)
-  (*   fun s => *)
-  (*     s = initialize prog. *)
-  Variable initial_state2: state -> Prop.
-  (* Definition initial_state2: state -> Prop := *)
-  (*   fun s => *)
-  (*     s = initialize prog'. *)
-  Variable initial_state3: state -> Prop.
-  Variable final_state: state -> Prop.
+   Definition initial_state1: state -> Prop :=
+     fun s => s = initial_state (code prog  ) (prog_buffers prog  ) (prog_interface prog  ). 
+
+   Definition initial_state2: state -> Prop :=
+     fun s => s = initial_state (code prog' ) (prog_buffers prog' ) (prog_interface prog' ). 
+
+   Definition initial_state3: state -> Prop :=
+     fun s => s = initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'').
+   
+  Variable final_state: state -> Prop. (*might be different between semantics*)
 
   Variable allowed_UB: state -> Prop.
 
@@ -106,18 +107,65 @@ Section Recombination.
           Smallstep.initial_state := initial_state3;
           Smallstep.final_state := final_state;
           Smallstep.globalenv := tt |}.
-
-  Lemma single_L1: single_events sem.
+  
+  Lemma det_L2 : determinate sem'.
   Proof.
+    econstructor; intros; unfold sem'  in *.
+    - simpl in *. unfold step1, step_me in *.
+      destruct t1, t2; try destruct t1; try destruct t2; try contradiction;
+        setoid_rewrite <- Exec.stepP in H; setoid_rewrite <- Exec.stepP in H0;
+        rewrite H in H0; inv H0; (split; [try destruct e0; try econstructor|done]).
+    - unfold single_events. intros.
+      destruct t; try destruct t; try contradiction; simpl; lia.
+    - simpl in *. unfold initial_state2 in *. subst. done.
+    - admit.
   Admitted.
+  
+  Lemma det_L3 : determinate sem''.
+  Proof.
+    econstructor; intros; unfold sem'  in *.
+    - simpl in *. unfold step1, step_me in *.
+      destruct t1, t2; try destruct t1; try destruct t2; try contradiction;
+        setoid_rewrite <- Exec.stepP in H; setoid_rewrite <- Exec.stepP in H0;
+        rewrite H in H0; inv H0; (split; [try destruct e0; try econstructor|done]).
+    - unfold single_events. intros.
+      destruct t; try destruct t; try contradiction; simpl; lia.
+    - simpl in *. unfold initial_state3 in *. subst. done.
+    - admit.
+  Admitted.
+
+  
+  Ltac left_subst :=
+    match goal with
+    | H : ?a = ?b, H0 : ?a = ?c |- _  =>
+        try (rewrite H0 in H; inv H)
+    end.
+  
+  Lemma det_L1 : determinate sem.
+  Proof.
+    econstructor; intros; unfold sem'  in *.
+    - simpl in *. (*unfold step1, step2, step_mp, step_me in *. *)
+      destruct H, H0 ; [|clear H0| clear H| clear H1 H2];
+        unfold step1, step2, step_mp, step_me in *;
+        destruct t, t0; try destruct t; try destruct t0; try contradiction;
+        (do 2 (match goal with | H : step _ _ _ _ |- _ => setoid_rewrite <- Exec.stepP in H end));
+        left_subst; try (split; [try destruct e; try econstructor|try done]).
+    - unfold single_events. intros.
+      destruct H; unfold step1, step2, step_mp, step_me in *;
+        destruct t; try destruct t; try contradiction;
+        (match goal with | H : step _ _ _ _ |- _ => setoid_rewrite <- Exec.stepP in H end); simpl; lia.
+    - simpl in *. unfold initial_state1 in *. subst. done.
+    - admit.
+  Admitted.
+  
+  Lemma single_L1: single_events sem.
+  Proof. eapply sd_traces. exact det_L1. Qed. 
 
   Lemma single_L2: single_events sem'.
-  Proof.
-  Admitted.
+  Proof. eapply sd_traces. exact det_L2. Qed. 
 
   Lemma single_L3: single_events sem''.
-  Proof.
-  Admitted.
+  Proof. eapply sd_traces. exact det_L3. Qed. 
 
   Theorem simulation:
     @threeway_simulation sem sem' sem'' single_L1 single_L2 single_L3.
