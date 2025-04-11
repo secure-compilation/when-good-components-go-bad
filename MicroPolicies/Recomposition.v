@@ -92,15 +92,13 @@ Record well_formed_program (p: program) := {
     wfprog_well_formed_buffers:
     forall C, prog_interface p C ->
          has_required_local_buffers p C;
-    (* iff the main component is defined, so is the main procedure
-       RB: Changed from a simple conditional. *)
+    (* iff the main component is defined, so is the main procedure *)
     wfprog_main_existence:
     Component.main \in domm (prog_interface p) <-> prog_main p
   }.
 
-
 (* Main simulation theorem. *)
-Section Recombination.
+Section Recomposition.
   Variables p c p' c' : program.
 
   Hypothesis Hwfp  : well_formed_program p. 
@@ -196,7 +194,8 @@ Section Recombination.
     - unfold single_events. intros.
       destruct t; try destruct t; try contradiction; simpl; lia.
     - simpl in *. unfold initial_state2 in *. subst. done.
-    - simpl in *. intros t s' step. unfold step1, step_me in step. destruct t; try destruct t; try contradiction;
+    - simpl in *. intros t s' step. unfold step1, step_me in step.
+      destruct t; try destruct t; try contradiction;
         setoid_rewrite <- Exec.stepP in step; unfold Exec.stepf in step;
         destruct s, pc0; unfold final_state_me in H; destruct (mem0 vala); try auto; destruct a;
         destruct H as [eq ?]; rewrite eq in step; simpl in step; inversion step.
@@ -243,6 +242,44 @@ Section Recombination.
         destruct H as [eq ?]; unfold Types.decode_instr in step; simpl in step; rewrite eq in step; simpl in step; inversion step.
   Qed.
 
+  Section SimulationRelations.
+
+    Variant side := Left | Right.
+
+    Definition color_of: state -> option Component.id :=
+      fun '(Symbolic.State m _ (Types.Atom pc _) _ _) =>
+        match (m pc) with
+        | None => None
+        | Some (Types.Atom _ tag) => Some (color tag)
+        end.
+
+    Definition side_of (s: state): option side :=
+        do! c <- color_of s;
+           if c \in domm ip then
+             Some Left
+           else
+             Some Right.
+
+    Definition stack_value := Types.atom (Types.mword mt) value_tag.
+
+    Record metadata :=
+      { stack: seq (stack_value * stack_value * stack_value)%type;
+        offset1: NMap Z;
+        offset2: NMap Z;
+        offset1_complete: domm offset1 = domm ip;
+        offset2_complete: domm offset2 = domm ic;
+      }.
+
+    Variant common_equiv: metadata -> state -> state -> state -> Prop :=
+    .
+    Variant strong_equiv (i: side): metadata -> state -> state -> Prop :=
+    .
+    Variant weak_equiv (i: side): metadata -> state -> state -> Prop :=
+    .
+
+
+  End SimulationRelations.
+
   Theorem simulation:
     @threeway_simulation sem sem' sem'' (sd_traces det_sem) (sd_traces det_sem') (sd_traces det_sem'').
   Proof.
@@ -279,7 +316,7 @@ Section Recombination.
            assert (init: Smallstep.initial_state sem'' s3) by done).
     - apply (does_FTbc (init) star_sem'').
     - apply (does_FGoes_wrong (init) star_sem'').
-      + simpl. intros t' s'' step. admit. (* we should use one of the "diagram properties" here. *)
+      + admit.
       + admit. (* we should use properties of match_states and final_states here. *)
     - apply (does_FTerminates (init) star_sem'').
       admit. (* we should use properties of match_states and final_states here. *)
@@ -289,12 +326,13 @@ Section Recombination.
     forall m,
       does_prefix sem   (FGoes_wrong m) ->
       does_prefix sem'  (FTbc m) ->
+      Common.Blame.undef_in m ip ->
       does_prefix sem'' (FGoes_wrong m).
   Proof.
     setoid_rewrite (does_prefix_equiv det_sem).
     setoid_rewrite (does_prefix_equiv det_sem').
     setoid_rewrite (does_prefix_equiv det_sem'').
-    intros m dp_sem dp_sem'.
+    intros m dp_sem dp_sem' undef_m_ip.
     inversion dp_sem; inversion dp_sem';
       try (match goal with | H : (forall s : Smallstep.state _, ~ Smallstep.initial_state _ s) |- _ =>
                                exfalso; eapply H; simpl; unfold initial_state2; unfold initial_state1; eauto end).
@@ -310,5 +348,4 @@ Section Recombination.
     - admit. (* we should use properties of match_states and final_states here. *)
   Admitted.
 
-
-End Recombination.
+End Recomposition.
