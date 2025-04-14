@@ -299,11 +299,12 @@ Hypothesis step_event:
   exists s3' M', Plus L3 s3 (e :: nil) s3' /\ (* using Plus here because we know if an event is emitted then we've done at least one step *)
             match_states M' s1' s2' s3'.
 
-Lemma threeway_simulation_diagram:
-  @threeway_simulation L1 L2 L3 single_L1 single_L2 single_L3.
+Lemma threeway_simulation_properties:
+  @tsim_properties L1 L2 L3 single_L1 single_L2 single_L3
+    (fun s1 s2 s3 => exists M, match_states M s1 s2 s3).
 Proof.
-  eapply Threeway_simulation with
-    (match_states := fun s1 s2 s3 => exists M, match_states M s1 s2 s3).
+(*  eapply Threeway_simulation with *)
+    
   econstructor; eauto.
   - intros.
     exploit match_initial_states; eauto.
@@ -334,4 +335,10 @@ Proof.
       eexists; eauto using match_states_right.
 Qed.
 
+Corollary threeway_simulation_diagram:
+  @threeway_simulation L1 L2 L3 single_L1 single_L2 single_L3.
+Proof.
+  econstructor. eapply threeway_simulation_properties.
+Qed.
+  
 End THREEWAY_SIMU_DIAGRAM.
