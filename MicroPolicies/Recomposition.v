@@ -249,16 +249,16 @@ Section Recomposition.
 
     Variant side := Left | Right.
 
-    Definition other_side s := match s with Left => Right | Right => Left end.
+    Definition other_side s :=
+      match s with Left => Right | Right => Left end.
 
     Definition side_of (s: state): option side :=
-        do! c <- color_of s;
-           if c \in domm ip then
-             Some Left
-           else
-             Some Right.
+      do! c <- color_of s;
+      if c \in domm ip then
+        Some Left
+      else
+        Some Right.
 
-    
     Definition is_relevant_comp i c : Prop :=
       match i with
       | Left => c \in domm ip
@@ -273,64 +273,124 @@ Section Recomposition.
       | e :: l => if (f e) then Some n else find_rank' f l (S n)
       end.
 
-    Definition find_rank {T} (f: pred T) (l: seq T) : option nat := find_rank' f l 0.
-    (* Todo: write a lemma (about find_rank) usable along get_procedures and well_formed_program *)
-    
+    (* [find_rank f l] finds the location of the first element
+     that satisfies [f] in list [l] *)
+    Definition find_rank {T} (f: pred T) (l: seq T): option nat :=
+      find_rank' f l 0.
+    (* Todo: write a lemma (about find_rank) usable
+       along get_procedures and well_formed_program *)
+
+
+    (* [p0 prog C] finds the first location of
+       [C]'s code in the code of the program *)
     Definition p0 (prog: program) (comp: Component.id): option nat :=
       do! start <- find_rank (fun '(_,tag) => color tag == comp) (code prog);
       Some (start + size (domm (@initial_memory mt (prog_buffers prog)))).
     
     Definition offset1: NMap ssrint.int :=
-      mkfmapfp (fun comp => do! p_s3 <- p0 prog'' comp; 
-                         do! p_s1 <- p0 prog comp;
-                         Some (encode_int (Z.pos_sub (Pos.of_nat p_s3) (Pos.of_nat p_s1)))) (domm ip).
-    
-    Definition offset2: NMap ssrint.int := 
-      mkfmapfp (fun comp => do! p_s3 <- p0 prog'' comp; 
-                         do! p_s2 <- p0 prog comp;
-                         Some (encode_int (Z.pos_sub (Pos.of_nat p_s3) (Pos.of_nat p_s2)))) (domm ip).
-    
-    Record metadata :=
-      { stack: seq (stack_value * stack_value * stack_value * Component.id )%type;
-        (*
-        offset1: NMap ssrint.int;
-        offset2: NMap ssrint.int;
-        offset1_complete: domm offset1 = domm ip;
-        offset2_complete: domm offset2 = domm ic; *)
-      }.
+      mkfmapfp (fun comp =>
+                  do! p_s3 <- p0 prog'' comp;
+                  do! p_s1 <- p0 prog comp;
+                  Some (encode_int (Z.of_nat p_s3 - Z.of_nat p_s1)))
+        (domm ip).
 
-    Fixpoint correct_levels (s : seq (stack_value * stack_value * stack_value * Component.id )) : Prop :=
+    Definition offset2: NMap ssrint.int := 
+      mkfmapfp (fun comp =>
+                  do! p_s3 <- p0 prog'' comp;
+                  do! p_s2 <- p0 prog comp;
+                  Some (encode_int (Z.of_nat p_s3 - Z.of_nat p_s2)))
+        (domm ip). (* JT: I think this should be [domm ic] *)
+
+    Definition stack: Type := seq (stack_value * stack_value * stack_value * Component.id).
+    Definition metadata := stack.
+    (* Record metadata := *)
+    (*   { stack: seq (stack_value * stack_value * stack_value * Component.id )%type; *)
+    (*     (* *)
+    (*     offset1: NMap ssrint.int; *)
+    (*     offset2: NMap ssrint.int; *)
+    (*     offset1_complete: domm offset1 = domm ip; *)
+    (*     offset2_complete: domm offset2 = domm ic; *) *)
+    (*   }. *)
+
+    (* Stack invariant *)
+    Fixpoint correct_levels (s: seq (stack_value * stack_value * stack_value * Component.id )): Prop :=
       match s with
       | [] => True
       | ((Types.Atom _ t1), (Types.Atom _ t2), (Types.Atom _ t3), c) :: s' =>
-          t1 = t2 /\ t2 = t3 /\ t1 = Ret (size s') /\ (c \in domm ip \/ c \in domm ic) /\ correct_levels s'
+          t1 = t2 /\ t2 = t3
+        /\ t1 = Ret (size s')
+        /\ (c \in domm ip \/ c \in domm ic)
+        /\ correct_levels s'
       end.
 
+    (* JT: This seems suspicious for several reasons.
+
+       (1) this should not appear in a post-condition: there is no reason that I can
+           see for us wanting to prove a particular stack value appears
+           "somewhere" in the state, without knowing where.
+
+       (2) if this appears in a pre-condition, then we should somehow always be
+           able to tell where it comes from. And the memory or register relation should
+           always be there to tell us how to relate the values. *)
     Definition contains_value (s : state) (v : stack_value) : Prop :=
-      (exists w v', mem s w = Some v' /\ v = Types.Atom (Types.vala v') (vtag (Types.taga v')) ) \/
-        (exists w v', regs s w = Some v' /\ v = Types.Atom (Types.vala v') (Types.taga v') ).
-    
+      (exists w v',
+          mem s w = Some v'
+        /\ v = Types.Atom (Types.vala v') (vtag (Types.taga v')))
+      \/
+      (exists w, regs s w = Some v).
+
     Definition get_offset i comp :=
       match i with
       | Left => offset1 comp
       | Right => offset2 comp
       end.
 
-    Definition points_to_comp_code (s : state) (v : stack_value) (comp : Component.id) : Prop :=
-      Option.apply (fun memval => color (Types.taga (memval)) = comp) False (mem s (Types.vala v)).
+    (* Definition points_to_comp_code (s : state) (v : stack_value) (comp : Component.id) : Prop := *)
+    (*   Option.apply (fun memval => color (Types.taga (memval)) = comp) False (mem s (Types.vala v)). *)
+    (* (* this might need to check that is_code is true in some conditions *) *)
+
+    Definition points_to_comp_code (m: memory) (v: Types.mword mt) (comp : Component.id) : Prop :=
+      Option.apply (fun memval => color (Types.taga (memval)) = comp) False (m v).
     (* this might need to check that is_code is true in some conditions *)
-    
+
     Definition well_formed_metadata (i : side) (m: metadata) s s' : Prop :=
-        (correct_levels (stack m) /\
+        (correct_levels m /\
            forall v1 v2 v3 v c off,
-             In (v1, v2, v3, c) (stack m) ->
+             In (v1, v2, v3, c) m ->
              (match i with Left => v1 | Right => v2 end) = v ->
              get_offset i c = Some off ->
-             points_to_comp_code s v c /\
-               points_to_comp_code s' v3 c /\
+             points_to_comp_code (mem s) (Types.vala v) c /\
+               points_to_comp_code (mem s') (Types.vala v3) c /\
                (is_relevant_comp i c -> contains_value s v -> contains_value s' v3) /\
                (is_relevant_comp i c -> (Types.vala v3) = addw (Types.vala v) (as_word off))).
     (* todo : sanity check *)
+
+
+    (* JT: It would be easier to use inductive predicates for the stack invariant. Here's my attempt: *)
+    Inductive wf_stack (m1 m2 m3: memory): nat -> stack -> Prop :=
+    | wf_stack_empty:
+        wf_stack m1 m2 m3 0 []
+    | wf_stack_cons_left: forall n st v1 v2 v3 C off,
+      forall (SIDE: is_relevant_comp Left C)
+        (OFF_C: get_offset Left C = Some off)
+        (PTS_CODE1: points_to_comp_code m1 v1 C)
+        (PTS_COD22: points_to_comp_code m2 v2 C)
+        (PTS_CODE3: points_to_comp_code m3 v3 C)
+        (VALA_OFF: v3 = addw v1 (as_word off))
+        (WF_ST: wf_stack m1 m2 m3 n st),
+        wf_stack m1 m2 m3 (n+1)
+          ((Types.Atom v1 (Ret n), Types.Atom v2 (Ret n), Types.Atom v3 (Ret n), C) :: st)
+    | wf_stack_cons_right: forall n st v1 v2 v3 C off,
+      forall (SIDE: is_relevant_comp Right C)
+        (OFF_C: get_offset Right C = Some off)
+        (PTS_CODE1: points_to_comp_code m1 v1 C)
+        (PTS_COD22: points_to_comp_code m2 v2 C)
+        (PTS_CODE3: points_to_comp_code m3 v3 C)
+        (VALA_OFF: v3 = addw v2 (as_word off))
+        (WF_ST: wf_stack m1 m2 m3 n st),
+        wf_stack m1 m2 m3 (n+1)
+          ((Types.Atom v1 (Ret n), Types.Atom v2 (Ret n), Types.Atom v3 (Ret n), C) :: st)
+    .
 
     Notation data := (Types.atom (Types.mword mt) mem_tag).
     
