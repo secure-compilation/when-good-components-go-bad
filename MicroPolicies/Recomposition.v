@@ -94,7 +94,10 @@ Record well_formed_program (p: program) := {
          has_required_local_buffers p C;
     (* iff the main component is defined, so is the main procedure *)
     wfprog_main_existence:
-    Component.main \in domm (prog_interface p) <-> prog_main p
+    Component.main \in domm (prog_interface p) <-> prog_main p;
+    (*wfprog_main_start:
+    Component.main \in domm (prog_interface p) <->
+                         exists v, nth_error (code p) 0 = Some v /\ color (snd v) = Component.main *)
   }.
 
 (* Main simulation theorem. *)
@@ -299,7 +302,7 @@ Section Recomposition.
                   do! p_s3 <- p0 prog'' comp;
                   do! p_s2 <- p0 prog comp;
                   Some (encode_int (Z.of_nat p_s3 - Z.of_nat p_s2)))
-        (domm ip). (* JT: I think this should be [domm ic] *)
+        (domm ic).
 
     Definition stack: Type := seq (stack_value * stack_value * stack_value * Component.id).
     Definition metadata := stack.
@@ -312,6 +315,7 @@ Section Recomposition.
     (*     offset2_complete: domm offset2 = domm ic; *) *)
     (*   }. *)
 
+    (*
     (* Stack invariant *)
     Fixpoint correct_levels (s: seq (stack_value * stack_value * stack_value * Component.id )): Prop :=
       match s with
@@ -337,7 +341,8 @@ Section Recomposition.
           mem s w = Some v'
         /\ v = Types.Atom (Types.vala v') (vtag (Types.taga v')))
       \/
-      (exists w, regs s w = Some v).
+        (exists w, regs s w = Some v).
+    *)
 
     Definition get_offset i comp :=
       match i with
@@ -353,16 +358,14 @@ Section Recomposition.
       Option.apply (fun memval => color (Types.taga (memval)) = comp) False (m v).
     (* this might need to check that is_code is true in some conditions *)
 
-    Definition well_formed_metadata (i : side) (m: metadata) s s' : Prop :=
-        (correct_levels m /\
-           forall v1 v2 v3 v c off,
-             In (v1, v2, v3, c) m ->
-             (match i with Left => v1 | Right => v2 end) = v ->
-             get_offset i c = Some off ->
-             points_to_comp_code (mem s) (Types.vala v) c /\
-               points_to_comp_code (mem s') (Types.vala v3) c /\
-               (is_relevant_comp i c -> contains_value s v -> contains_value s' v3) /\
-               (is_relevant_comp i c -> (Types.vala v3) = addw (Types.vala v) (as_word off))).
+    Definition well_formed_metadata (i : side) (m: metadata) mem mem' : Prop :=
+      forall v1 v2 v3 v c off,
+        In (v1, v2, v3, c) m ->
+        (match i with Left => v1 | Right => v2 end) = v ->
+        get_offset i c = Some off ->
+        points_to_comp_code (mem) (Types.vala v) c
+        /\ points_to_comp_code (mem') (Types.vala v3) c
+        /\ (is_relevant_comp i c -> (Types.vala v3) = addw (Types.vala v) (as_word off)).
     (* todo : sanity check *)
 
 
@@ -404,8 +407,8 @@ Section Recomposition.
             | InternalJump => Option.apply (fun off => v1 = addw v2 (as_word off)) False (get_offset i comp)
             | Ret _ =>
                 match i with
-                | Left  => exists sv', In (d, sv', d', comp) (stack m)
-                | Right => exists sv', In (sv', d, d', comp) (stack m)
+                | Left  => exists sv', In (d, sv', d', comp) (m)
+                | Right => exists sv', In (sv', d, d', comp) (m)
                 end
             end
       end.
@@ -446,14 +449,15 @@ Section Recomposition.
         ((mem s' (addw w (as_word off)) = Some v) <-> (mem s w = Some v)).
     
     Variant common_equiv: metadata -> state -> state -> state -> Prop :=
-        common_equiv_def : forall m s1 s2 s3,
-            combined_codes Left  m s1 s3 ->
-            combined_codes Right m s2 s3 ->
-            common_equiv m s1 s2 s3
+      common_equiv_def : forall m s1 s2 s3,
+          wf_stack (mem s1) (mem s2) (mem s3) (PCTagEq.nat_of_pc_tag (Types.taga (pc s3))) m ->
+          combined_codes Left  m s1 s3 ->
+          combined_codes Right m s2 s3 ->
+          common_equiv m s1 s2 s3
     .
     Variant strong_equiv (i: side): metadata -> state -> state -> Prop :=
       strong_equiv_def : forall m s s',
-          well_formed_metadata i m s s' ->
+          well_formed_metadata i m (mem s) (mem s') ->
           same_pc i s s' ->
           color_of s = color_of s' ->
           side_of s' = Some i ->
@@ -464,7 +468,7 @@ Section Recomposition.
 
     Variant weak_equiv (i: side): metadata -> state -> state -> Prop :=
       weak_equiv_def : forall m s s',
-          well_formed_metadata i m s s' ->
+          well_formed_metadata i m (mem s) (mem s') ->
           color_of s = color_of s' ->
           side_of s' = Some (other_side i) ->
           memory_match i m s s' ->
@@ -478,6 +482,19 @@ Section Recomposition.
     (strong_equiv Left) (strong_equiv Right) (weak_equiv Left) (weak_equiv Right)).
 
   
+  Lemma initial_memory_domm: forall b,
+      domm (@initial_memory mt b) = fset (map word_of_nat (List.seq 0 (size (@initial_memory mt b)))).
+  Proof.
+    intros.
+  Admitted.
+  
+  Lemma encode_code_domm: forall cd pc,
+      domm (encode_code cd pc) = fset (map word_of_nat (List.seq pc (size cd))).
+  Proof.
+    intros.
+  Admitted.
+  
+  
   Lemma match_initial_states:
   forall s1, Smallstep.initial_state sem s1 ->
   forall s2, Smallstep.initial_state sem' s2 ->
@@ -486,12 +503,30 @@ Section Recomposition.
     intros s1 init1 s2 init2.
     unfold Smallstep.initial_state, sem, sem' in init1, init2. simpl in init1. unfold initial_state1, initial_state2 in *.
     remember (initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'')) as s3.
-    exists s3. exists ({|stack := []|}).
+    exists s3. exists [].
     split; try (simpl; unfold initial_state3; done).
     remember (prog_main p) as main. destruct main; [eapply match_states_left | eapply match_states_right]; econstructor; simpl.
-    - unfold combined_codes. intros.
+    - rewrite Heqs3. simpl. econstructor.
+    - unfold combined_codes. intros. admit.
+    - unfold combined_codes. intros. admit.
+    - unfold well_formed_metadata. intros. inv H.
+    - unfold same_pc.
+      assert (color_eq: color_of s1 = Some 0).
+      { unfold initial_state in init1. simpl in init1. destruct s1. inv init1.
+        unfold color_of. subst.
+        pose proof (initial_memory_domm (unionm (prog_buffers p) (prog_buffers c))).
+        remember (initial_memory (unionm (prog_buffers p) (prog_buffers c))) as im.
+        rewrite unionmE.
+        assert (eq: (encode_code (code p ++ code c) (size im) (word_of_nat (size im))) = None).
+        { setoid_rewrite (rwP dommPn). rewrite encode_code_domm. unfold mt.
+          remember (size (code p ++ code c)) as n. (* setoid_rewrite <- (rwP memPn). simpl.
+          intros x x_in. clear -x_in.
+          induction n.
+          - simpl in *. rewrite <- fset0E in *. rewrite in_fset0 in x_in. done. *) admit. }
+        admit.
+      }      
   Admitted.
-
+(*
   Lemma strong_equiv_event_lemma:
   forall s1 t  s1', Step sem s1 t  s1' ->
   forall s3 t' s3', Step sem'' s3 t' s3' ->
@@ -509,7 +544,8 @@ Section Recomposition.
         remember (?a) as e;
         destruct e; unfold Option.bind, oapp in H; try (inversion H; done)
     end.
-    
+ *)
+    (*
   Lemma strong_equiv_exec_lemma:
   forall s1 t s1', Step sem s1 t s1' ->
   forall s3 M, strong_equiv Left M s1 s3 ->
@@ -531,7 +567,8 @@ Section Recomposition.
       + inversion Hmergeable_ifaces as [[_ fdisj] _]. exact fdisj.
       + exact allowed.
       + done.
-    - destruct s3' as [[s3' ev]|].
+    - admit.
+      (* destruct s3' as [[s3' ev]|].
       + exists s3'. simpl in *. unfold step1, step_me in *.
         remember (match t with | [] => None | e :: _ => Some e end) as e.
         assert ((length t <= 1)%coq_nat : Prop).
@@ -549,7 +586,7 @@ Section Recomposition.
             destruct e, ev; inversion H4; auto. }
           subst. auto.
           
-        }
+        } 
         (*destruct st.
           - eapply (@step_nop _ _ _ _ _ _ s3 s3).
             + destruct s3. simpl. by case.reflexivity.
@@ -623,10 +660,73 @@ Section Recomposition.
                 unfold tag_type, mem_tag_type, concrete_int_32_mt, lrc_tags in *.
                 simpl in *.
                 rewrite <- Heqinst in H. inversion H.
-             ++ admit.
-          -- admit.
+             ++ admit. (* ?????? *)
+          -- admit. *)
   Admitted.
-    
+     *)
+  
+  Lemma mem_write_preserves_equiv_left:
+    forall s1 s2 s3 M s1' s3' w v m1' m3' pc1' pc3',
+      strong_equiv Left M s1 s3 ->
+      weak_equiv Right M s2 s3 ->
+      common_equiv M s1 s2 s3 ->
+      (forall v', (mem s1 w) = Some v' \/ (mem s3 w) = Some v' -> (color (Types.taga v)) = (color (Types.taga v'))) ->
+      updm (mem s1) w v = Some m1' ->
+      updm (mem s3) w v = Some m3' ->
+      s1' = State _ _ m1' (regs s1) (pc1') tt (comp_num s1) ->
+      s3' = State _ _ m3' (regs s3) (pc3') tt (comp_num s3) ->
+      same_pc Left s1' s3' ->
+      strong_equiv Left M s1' s3'
+      /\ weak_equiv Right M s2 s3'
+      /\ common_equiv M s1' s2 s3'.
+  Proof.
+    intros s1 s2 s3 M s1' s3' w v m1' m3' pc1' pc3' strong weak common same_color eq_m1 eq_m3 eq_s1' eq_s3' same_pc'.
+    split; [|split].
+    - destruct strong as [? ? ? wf_m pc_s1_s3  color_eq side_eq mem_match reg_match].
+      econstructor; auto.
+      + intros ? ? ? ? comp ? in_m veq off_eq. subst v0. unfold mem. rewrite eq_s1' eq_s3'. simpl.
+        pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
+        unfold points_to_comp_code. rewrite setmE. rewrite setmE. split; [|split].
+        * remember (@eq_op (Ord.eqType _) (Types.vala v1) w) as cond. destruct cond.
+          -- assert (eq: Types.vala v1 = w). { eapply (@contraNeq (Ord.eqType _) false); auto. intro ineq.
+             exfalso. destruct ineq. eapply no_fixpoint_negb. eauto. }
+            pose proof (wf_m _ _ _ v1 _ off in_m) as conj. simpl in conj.
+            destruct (conj) as [points_s [points_s' off_cond]]; auto.
+            unfold points_to_comp_code in points_s. rewrite eq in points_s.
+            remember (mem s w) as v'.  simpl in *. rewrite <- Heqv' in points_s.
+            destruct v' as [v'|]; try contradiction.
+            rewrite (same_color v'); auto.
+          -- eapply wf_m; eauto.
+        * remember (@eq_op (Ord.eqType _) (Types.vala v3) w) as cond. destruct cond.
+          -- assert (eq: Types.vala v3 = w). { eapply (@contraNeq (Ord.eqType _) false); auto. intro ineq.
+             exfalso. destruct ineq. eapply no_fixpoint_negb. eauto. }
+            pose proof (wf_m _ _ _ v1 _ off in_m) as conj. simpl in conj.
+            destruct (conj) as [points_s [points_s' off_cond]]; auto.
+            unfold points_to_comp_code in points_s'. simpl.
+            remember (mem s' (Types.vala v3)) as v'.
+            simpl in *. rewrite <- Heqv' in points_s'.
+            destruct v' as [v'|]; try contradiction.
+            rewrite (same_color v'); auto. rewrite <- eq. auto.
+          -- eapply wf_m; eauto.
+        * intro comp_in_ip. eapply (wf_m _ _ _ _ _ _ in_m); auto.
+      + destruct common as [? ? ? ? wfst code_left code_right].
+        unfold same_pc in same_pc'.
+        remember (color_of s1') as cs1'. destruct cs1' as [c1|]; try contradiction. simpl in same_pc'.
+        remember (offset1 c1) as off. destruct off as [off|]; try contradiction. simpl in same_pc'.
+        rewrite Heqcs1'.
+        unfold color_of. rewrite eq_s1' eq_s3'. simpl. rewrite eq_s1' eq_s3' in same_pc'. simpl in same_pc'.
+        destruct pc1' as [pc1 t1]. destruct pc3' as [pc3 t3]. simpl in *. rewrite same_pc'.
+        pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
+        rewrite setmE. rewrite setmE. (* todo *)
+        admit.
+        
+      + admit.
+      + admit.
+      + admit.
+    - admit.
+    -admit.
+  Admitted.
+      
   Lemma step_silent_strong1:
   forall s1 s1', Step sem s1 E0 s1' ->
   forall s2 s3 M, strong_equiv Left M s1 s3 ->
@@ -638,8 +738,9 @@ Section Recomposition.
               common_equiv M' s1' s2 s3'.
   Proof.
     intros s1 s1' step_s1 s2 s3 M strong weak common. simpl in step_s1.
+    
     remember E0 as t.
-    remember (@Exec.stepf _ _ _ Merged.transfer _ table s3) as s3'.
+    (*remember (@Exec.stepf _ _ _ Merged.transfer _ table s3) as s3'.*)
     destruct step_s1 as [s1 ? s1' step_2 allowed | s1 ? s1' step_1 step_2]; subst t.
     - exfalso. unfold allowed_UB in *.
       destruct strong as [m s1 s3 wf_m pc_s1_s3  color_eq side_eq mem_match reg_match].
@@ -650,7 +751,15 @@ Section Recomposition.
       + inversion Hmergeable_ifaces as [[_ fdisj] _]. exact fdisj.
       + exact allowed.
       + done. 
-    - destruct s3' as [[s3' ev]|].
+    - inversion step_1; eexists; exists M; (split; [|split; [|split]]).
+
+      
+  + econstructor; try eapply step_nop.
+    (*
+    destruct common as [? ? ? ? wfst code_left code_right]. 
+    destruct (strong_equiv_exec_lemma step_s1 strong code_left) as [s3' step_s3].
+    exists s3
+      destruct s3' as [[s3' ev]|].
       + destruct ev.
         * exfalso. admit.
         * exists s3', M. split; [|split; [|split]].
@@ -658,28 +767,35 @@ Section Recomposition.
              pose proof (esym Heqs3') as eq. clear Heqs3'.
              setoid_rewrite Exec.stepP in eq. simpl. unfold step1, step_me, Instance.table. eauto.
              econstructor. eauto.
-          -- econstructor; try econstructor.
-             ++ destruct strong. destruct H. auto.
-             ++ destruct strong. destruct H as [? prop]. admit. (* hard *)
+          -- econstructor.
+             ++ split; [|split]; try unfold points_to_comp_code.
+                ** admit. (* ok *)
+                ** admit. (* ok *)
+                ** admit. (* ok *)
              ++ admit. (* tedious but simple *)
              ++ admit. (* tedious but simple *)
              ++ admit. (* tedious but simple *)
-             ++ admit. 
-             ++ admit. 
-             ++ admit. 
-             ++ admit.
-          -- econstructor; try econstructor.
-             ++ destruct strong. destruct H. auto.
-             ++ destruct strong. destruct H as [? prop]. admit. (* hard *)
+             ++ admit. (* large case analysis *) 
+             ++ admit. (* large case analysis *) 
+          -- econstructor.
+             ++ split; [|split]; try unfold points_to_comp_code.
+                ** admit. (* ok *)
+                ** admit. (* ok *)
+                ** admit. (* ok *)
              ++ admit. (* tedious but simple *)
-             ++ simpl. admit. (* tedious but simple *)
-             ++ admit. 
-             ++ admit. 
-          -- econstructor; try econstructor.
-             ++ admit. 
-             ++ admit. 
-             ++ admit. 
-             ++ admit. 
+             ++ admit. (* tedious but simple *)
+             ++ admit. (* large case analysis *) 
+          -- destruct common as [? ? ? ? wfst code_left code_right]. econstructor.
+             ++ assert (eq: Types.taga (pc s3) = Types.taga (pc s3')) by admit.
+                rewrite <- eq.
+                remember (PCTagEq.nat_of_pc_tag (Types.taga (pc s3))) as lvl.
+                clear - step_1 Heqs3' wfst. 
+                induction wfst.
+                ** econstructor.
+                ** eapply wf_stack_cons_left; eauto. admit. admit. (* large case analysis *)
+                ** eapply wf_stack_cons_right; eauto. admit. admit. (* large case analysis *)
+             ++ admit. (* large case analysis *)
+             ++ admit. (* large case analysis *)
       + exfalso.
         assert (ex: exists s3' ev, @Exec.stepf _ _ _ transfer _ table s3 = Some (s3', ev)).
         { unfold step2, step1, step_mp, step_me in step_1, step_2. simpl in step_1, step_2.
@@ -712,7 +828,7 @@ Section Recomposition.
             admit.
             admit.
         }
-        destruct ex as [? [? eq]]. rewrite eq in Heqs3'. inversion Heqs3'.
+        destruct ex as [? [? eq]]. rewrite eq in Heqs3'. inversion Heqs3'. *)
   Admitted.
       (*Set Printing All.*) 
 
