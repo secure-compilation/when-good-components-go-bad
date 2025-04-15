@@ -395,7 +395,6 @@ Section Recomposition.
       strong_equiv_def : forall m s s',
           well_formed_metadata i m s s' ->
           same_pc i s s' ->
-          color_of s <> None ->
           color_of s = color_of s' ->
           side_of s' = Some i ->
           memory_match i m s s' ->
@@ -433,6 +432,141 @@ Section Recomposition.
     - unfold combined_codes. intros.
   Admitted.
 
+  Lemma strong_equiv_event_lemma:
+  forall s1 t  s1', Step sem s1 t  s1' ->
+  forall s3 t' s3', Step sem'' s3 t' s3' ->
+  forall M, strong_equiv Left M s1 s3 ->
+       combined_codes Left M s1 s3 ->
+       t = t'.
+  Proof.
+    intros s1 t s1' step_s1 s3 t' s3' step_s3 M strong.
+  Admitted.
+
+  Ltac collapse_do :=
+    let e := fresh in
+    match goal with
+    | H : (Option.bind _ ?a) = _ |- _ =>
+        remember (?a) as e;
+        destruct e; unfold Option.bind, oapp in H; try (inversion H; done)
+    end.
+    
+  Lemma strong_equiv_exec_lemma:
+  forall s1 t s1', Step sem s1 t s1' ->
+  forall s3 M, strong_equiv Left M s1 s3 ->
+           (* weak_equiv Right M s2 s3 -> *)
+       combined_codes Left M s1 s3 ->
+  exists s3', Step sem'' s3 t s3'.
+  Proof.
+    intros s1 t s1' step_s1 s3 M strong common. 
+    remember (@Exec.stepf _ _ _ Merged.transfer _ table s3) as s3'.
+    inversion step_s1 as [? ? ? step_2 allowed | ? ? ? step_1 step_2].
+    - exfalso. unfold allowed_UB in *.
+      destruct strong as [m s1 s3 wf_m pc_s1_s3  color_eq side_eq mem_match reg_match].
+      rewrite color_eq in allowed. remember (color_of s3) as comp.
+      destruct comp; try contradiction. simpl in *. unfold side_of in side_eq.
+      rewrite <- Heqcomp in side_eq. simpl in side_eq.
+      remember (i \in domm ip) as cond. simpl in *. unfold Component.id in *.
+      rewrite <- Heqcond in side_eq.
+      destruct cond; try inversion side_eq. eapply Machine.Intermediate.fdisjoint_partition_notinboth.
+      + inversion Hmergeable_ifaces as [[_ fdisj] _]. exact fdisj.
+      + exact allowed.
+      + done.
+    - destruct s3' as [[s3' ev]|].
+      + exists s3'. simpl in *. unfold step1, step_me in *.
+        remember (match t with | [] => None | e :: _ => Some e end) as e.
+        assert ((length t <= 1)%coq_nat : Prop).
+        { assert (sin: single_events sem) by eapply (sd_traces det_sem). eapply sin. exact step_s1. }
+        assert (st: @step _ _ _ transfer _ Instance.table s1 s1' e).
+        { destruct t; try destruct t; try contradiction; try subst; try auto. } 
+        assert (@step _ _ _ transfer _ Instance.table s3 s3' e).
+        { pose proof esym Heqs3' as eq.
+          setoid_rewrite Exec.stepP in eq.
+          assert (ev = e).
+          { assert (t = choice.seq_of_opt e) by (
+                destruct t; try destruct t; try (inversion step_1; done); subst; auto).
+            assert (st3: Step sem'' s3 (choice.seq_of_opt ev) s3') by (simpl; destruct ev; auto).
+            pose proof (strong_equiv_event_lemma step_s1 st3 strong common). rewrite H3 in H4.
+            destruct e, ev; inversion H4; auto. }
+          subst. auto.
+          
+        }
+        (*destruct st.
+          - eapply (@step_nop _ _ _ _ _ _ s3 s3).
+            + destruct s3. simpl. by case.reflexivity.
+                admit.
+          - eapply step_const. admit.
+          - eapply step_mov. admit.
+          - eapply step_binop. admit.
+          - eapply step_load. admit.
+          - eapply step_store. admit.
+          - eapply step_jump. admit.
+          - eapply step_bnz; admit.
+          - eapply step_jal; admit.
+          - eapply step_syscall; admit. *)
+        destruct t; try destruct t; try contradiction; try subst; try auto.
+      + exfalso. subst.
+        unfold step1, step_me, Instance.table in step_1.
+        remember (match t with | [] => None | e :: _ => Some e end) as e.
+        assert (st: @step _ _ _ transfer _ Instance.table s1 s1' e).
+        { destruct t; try destruct t; try contradiction; try subst; try auto. }
+        setoid_rewrite <- Exec.stepP in st. clear -common strong st Heqs3'. 
+        unfold Exec.stepf in st. remember (id s1) as s. destruct s.
+        remember (id pc0) as pc. destruct pc.
+        remember (mem0 vala) as inst.
+        destruct inst.
+        * admit. 
+        * remember (Instance.table vala) as tb_vala. destruct tb_vala;
+            unfold Option.bind, oapp in *; try (inversion st; done).
+          rewrite Heqs in st.
+          unfold run_syscall in st. remember (evi s1) as ev.
+          destruct ev; unfold Option.bind, oapp in *; try (inversion st; done).
+          remember (transfer
+           {|
+           op := Types.SERVICE;
+           tpc := Types.taga (pc s1);
+           ti := entry_tag s;
+           ts := [hseq];
+           tni := None |} e0) as t. 
+          destruct t; unfold Option.bind, oapp in *; try (inversion st; done).
+          remember (Symbolic.sem s s1) as res. 
+          destruct res; unfold Option.bind, oapp in *; try (inversion st; done).
+          inversion st. subst s0 e.
+          rewrite Heqs in strong, common. unfold Exec.stepf in Heqs3'.
+          remember (id s3) as s'. destruct s'.
+          rewrite Heqs' in strong, common.
+          remember (id pc1) as pc'. destruct pc'.
+          remember (mem1 vala0) as inst.
+          destruct inst.
+          -- clear - strong common Heqs Heqs' Heqinst Heqinst0.
+             destruct strong as [m s1 s3 wf_m pc_s1_s3  color_eq side_eq mem_match reg_match].
+             unfold same_pc in pc_s1_s3. remember (color_of s1) as comp.
+             destruct comp as [comp|]; try (inversion pc_s1_s3; done). simpl in pc_s1_s3.
+             remember (offset1 comp) as off.
+             destruct off as [off|]; try (inversion pc_s1_s3; done). simpl in pc_s1_s3.
+             rewrite <- Heqs in pc_s1_s3.  simpl in pc_s1_s3.
+             rewrite <- Heqs' in pc_s1_s3. simpl in pc_s1_s3.
+             remember (is_code (Types.taga a)) as cond. destruct cond.
+             ++ unfold side_of in side_eq. rewrite <- color_eq in side_eq. simpl in side_eq.
+                assert (comp_in_p: comp \in domm ip).
+                { clear -side_eq.
+                  remember (comp \in domm ip) as cond. simpl in *. unfold Component.id in *.
+                  rewrite <- Heqcond in side_eq.
+                  destruct cond; try inversion side_eq. auto. }
+                pose proof (common vala a off comp comp_in_p (esym Heqoff)).
+                destruct H as [L R]; auto. 
+                { unfold color_of in color_eq. rewrite <- Heqs' in color_eq.
+                rewrite <- Heqinst0 in color_eq.
+                simpl in color_eq. destruct a. inversion color_eq. done. }
+                rewrite pc_s1_s3 in Heqinst0.
+                rewrite <- Heqs' in L. rewrite <- Heqs in L. simpl in L.
+                pose proof (L (esym Heqinst0)). clear -H Heqinst.
+                unfold tag_type, mem_tag_type, concrete_int_32_mt, lrc_tags in *.
+                simpl in *.
+                rewrite <- Heqinst in H. inversion H.
+             ++ admit.
+          -- admit.
+  Admitted.
+    
   Lemma step_silent_strong1:
   forall s1 s1', Step sem s1 E0 s1' ->
   forall s2 s3 M, strong_equiv Left M s1 s3 ->
@@ -448,7 +582,7 @@ Section Recomposition.
     remember (@Exec.stepf _ _ _ Merged.transfer _ table s3) as s3'.
     destruct step_s1 as [s1 ? s1' step_2 allowed | s1 ? s1' step_1 step_2]; subst t.
     - exfalso. unfold allowed_UB in *.
-      destruct strong as [m s1 s3 wf_m pc_s1_s3 color_ineq color_eq side_eq mem_match reg_match].
+      destruct strong as [m s1 s3 wf_m pc_s1_s3  color_eq side_eq mem_match reg_match].
       rewrite color_eq in allowed. remember (color_of s3) as comp.
       destruct comp; try contradiction. simpl in *. unfold side_of in side_eq. rewrite <- Heqcomp in side_eq. simpl in side_eq.
       remember (i \in domm ip) as cond. simpl in *. unfold Component.id in *. rewrite <- Heqcond in side_eq.
@@ -457,20 +591,68 @@ Section Recomposition.
       + exact allowed.
       + done. 
     - destruct s3' as [[s3' ev]|].
-      + exists s3', M. admit.
-      + exfalso. unfold step2, step1, step_mp, step_me in step_1, step_2. simpl in step_1, step_2.
-        setoid_rewrite <- Exec.stepP in step_1. setoid_rewrite <- Exec.stepP in step_2.
-        destruct strong as [m s1 s3 wf_m pc_s1_s3 color_ineq color_eq side_eq mem_match reg_match].
-        unfold same_pc in *.
-        destruct (color_of s1) as [comp|]; try contradiction; simpl in pc_s1_s3.
-        remember (offset1 comp) as off.
-        destruct off as [off|]; try contradiction; simpl in pc_s1_s3.
-        destruct common as [m s1 s2 s3 code_s1 code_s2].
-        remember (mem s1 (Types.vala (pc s1))) as instr.
-        destruct instr. admit. unfold Exec.stepf in step_1. destruct s1, pc0. simpl in *. rewrite <- Heqinstr in step_1.
-        simpl in step_1. inversion step_1.
-        destruct (code_s1 (pc s1) _ off comp).
-        admit.
+      + destruct ev.
+        * exfalso. admit.
+        * exists s3', M. split; [|split; [|split]].
+          -- eapply (plus_left _ []).  
+             pose proof (esym Heqs3') as eq. clear Heqs3'.
+             setoid_rewrite Exec.stepP in eq. simpl. unfold step1, step_me, Instance.table. eauto.
+             econstructor. eauto.
+          -- econstructor; try econstructor.
+             ++ destruct strong. destruct H. auto.
+             ++ destruct strong. destruct H as [? prop]. admit. (* hard *)
+             ++ admit. (* tedious but simple *)
+             ++ admit. (* tedious but simple *)
+             ++ admit. (* tedious but simple *)
+             ++ admit. 
+             ++ admit. 
+             ++ admit. 
+             ++ admit.
+          -- econstructor; try econstructor.
+             ++ destruct strong. destruct H. auto.
+             ++ destruct strong. destruct H as [? prop]. admit. (* hard *)
+             ++ admit. (* tedious but simple *)
+             ++ simpl. admit. (* tedious but simple *)
+             ++ admit. 
+             ++ admit. 
+          -- econstructor; try econstructor.
+             ++ admit. 
+             ++ admit. 
+             ++ admit. 
+             ++ admit. 
+      + exfalso.
+        assert (ex: exists s3' ev, @Exec.stepf _ _ _ transfer _ table s3 = Some (s3', ev)).
+        { unfold step2, step1, step_mp, step_me in step_1, step_2. simpl in step_1, step_2.
+          setoid_rewrite <- Exec.stepP in step_1. setoid_rewrite <- Exec.stepP in step_2.
+          clear -strong common step_1.
+          destruct strong as [m s1 s3 wf_m pc_s1_s3 color_eq side_eq mem_match reg_match].
+          unfold same_pc in *.
+          destruct (color_of s1) as [comp|]; try contradiction; simpl in pc_s1_s3.
+          remember (offset1 comp) as off.
+          destruct off as [off|]; try contradiction; simpl in pc_s1_s3.
+          destruct common as [m s1 s2 s3 code_s1 code_s2].
+          remember (mem s1 (Types.vala (pc s1))) as instr.
+          destruct instr.
+          - admit.
+          - unfold Exec.stepf in step_1. destruct s1, pc0. simpl in *. rewrite <- Heqinstr in step_1.
+            simpl in step_1. unfold Instance.table in step_1.
+            unfold Option.bind, oapp in *. remember (table vala) as tbl_vala.
+            unfold mt, concrete_int_32_mt in step_1.
+            unfold mt, concrete_int_32_mt in Heqtbl_vala. simpl in *.
+            rewrite <- Heqtbl_vala in step_1.
+            destruct tbl_vala; try (inversion step_1; done).
+            unfold run_syscall, evi in *. simpl in *.
+            remember (regs0 (as_word (ssrint.Posz 1))) as tmp.
+            destruct tmp; simpl in *; try (inversion step_1; done).
+            assert (eq: mem s3 (Types.vala (pc s3)) = None).
+            { unfold memory_match in mem_match. simpl in mem_match.
+              admit. }
+            unfold Exec.stepf. destruct s3, pc0.
+            simpl in *.
+            admit.
+            admit.
+        }
+        destruct ex as [? [? eq]]. rewrite eq in Heqs3'. inversion Heqs3'.
   Admitted.
       (*Set Printing All.*) 
 
