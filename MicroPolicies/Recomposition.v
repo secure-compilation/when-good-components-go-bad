@@ -25,6 +25,7 @@ Require Import MicroPolicies.Instance.
 Require Import MicroPolicies.LRC.
 Require Import MicroPolicies.Merged.
 Require Import Coq.micromega.Lia.
+Require Import Coq.Program.Equality.
 
 Require Import MicroPolicies.Utils.
 Import DoNotation.
@@ -256,6 +257,8 @@ Section Recomposition.
         destruct H as [eq ?]; unfold Types.decode_instr in step; simpl in step; rewrite eq in step; simpl in step; inversion step.
   Qed.
 
+  (*** Equivalence Relations ***)
+  
   Section SimulationRelations.
 
     Variant side := Left | Right.
@@ -313,53 +316,12 @@ Section Recomposition.
 
     Definition stack: Type := seq (stack_value * stack_value * stack_value * Component.id).
     Definition metadata := stack.
-    (* Record metadata := *)
-    (*   { stack: seq (stack_value * stack_value * stack_value * Component.id )%type; *)
-    (*     (* *)
-    (*     offset1: NMap ssrint.int; *)
-    (*     offset2: NMap ssrint.int; *)
-    (*     offset1_complete: domm offset1 = domm ip; *)
-    (*     offset2_complete: domm offset2 = domm ic; *) *)
-    (*   }. *)
-
-    (*
-    (* Stack invariant *)
-    Fixpoint correct_levels (s: seq (stack_value * stack_value * stack_value * Component.id )): Prop :=
-      match s with
-      | [] => True
-      | ((Types.Atom _ t1), (Types.Atom _ t2), (Types.Atom _ t3), c) :: s' =>
-          t1 = t2 /\ t2 = t3
-        /\ t1 = Ret (size s')
-        /\ (c \in domm ip \/ c \in domm ic)
-        /\ correct_levels s'
-      end.
-
-    (* JT: This seems suspicious for several reasons.
-
-       (1) this should not appear in a post-condition: there is no reason that I can
-           see for us wanting to prove a particular stack value appears
-           "somewhere" in the state, without knowing where.
-
-       (2) if this appears in a pre-condition, then we should somehow always be
-           able to tell where it comes from. And the memory or register relation should
-           always be there to tell us how to relate the values. *)
-    Definition contains_value (s : state) (v : stack_value) : Prop :=
-      (exists w v',
-          mem s w = Some v'
-        /\ v = Types.Atom (Types.vala v') (vtag (Types.taga v')))
-      \/
-        (exists w, regs s w = Some v).
-    *)
 
     Definition get_offset i comp :=
       match i with
       | Left => offset1 comp
       | Right => offset2 comp
       end.
-
-    (* Definition points_to_comp_code (s : state) (v : stack_value) (comp : Component.id) : Prop := *)
-    (*   Option.apply (fun memval => color (Types.taga (memval)) = comp) False (mem s (Types.vala v)). *)
-    (* (* this might need to check that is_code is true in some conditions *) *)
 
     Definition points_to_comp_code (m: memory) (v: Types.mword mt) (comp : Component.id) : Prop :=
       Option.apply (fun memval => color (Types.taga (memval)) = comp /\ is_code (taga memval)) False (m v).
@@ -495,284 +457,91 @@ Section Recomposition.
   Notation match_states := (match_states sem sem' sem'' (common_equiv)
     (strong_equiv Left) (strong_equiv Right) (weak_equiv Left) (weak_equiv Right)).
 
-  
-  Lemma initial_memory_domm: forall b,
-      domm (@initial_memory mt b) = fset (map word_of_nat (List.seq 0 (size (@initial_memory mt b)))).
-  Proof.
-    intros.
-  Admitted.
-  
-  Lemma encode_code_domm: forall cd pc,
-      domm (encode_code cd pc) = fset (map word_of_nat (List.seq pc (size cd))).
-  Proof.
-    intros.
-  Admitted.
-  
-  
-  Lemma match_initial_states:
-  forall s1, Smallstep.initial_state sem s1 ->
-  forall s2, Smallstep.initial_state sem' s2 ->
-  exists s3 M, Smallstep.initial_state sem'' s3 /\ match_states M s1 s2 s3.
-  Proof.
-    intros s1 init1 s2 init2.
-    unfold Smallstep.initial_state, sem, sem' in init1, init2. simpl in init1. unfold initial_state1, initial_state2 in *.
-    remember (initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'')) as s3.
-    rename Heqs3 into init3.
-    exists s3. exists [].
-    split; try (simpl; unfold initial_state3; done).
-    remember (prog_main p) as main. destruct main; [eapply match_states_left | eapply match_states_right]; try (eapply common_equiv_def || econstructor); simpl.
-    - unfold initial_state in init1. simpl in init1. destruct s1. inv init1. simpl. done.
-    - unfold initial_state in init2. simpl in init2. destruct s2. inv init2. simpl. done.
-    - unfold initial_state in init3. simpl in init3. destruct s3. inv init3. simpl. done.
-    - rewrite init3. simpl. econstructor.
-    - unfold combined_codes. intros. admit.
-    - unfold combined_codes. intros. admit.
-    - unfold well_formed_metadata. intros. inv H.
-    - unfold same_pc.
-      assert (color_eq: color_of s1 = Some 0).
-      { unfold initial_state in init1. simpl in init1. destruct s1. inv init1.
-        unfold color_of. subst.
-        pose proof (initial_memory_domm (unionm (prog_buffers p) (prog_buffers c))).
-        remember (initial_memory (unionm (prog_buffers p) (prog_buffers c))) as im.
-        rewrite unionmE.
-        assert (eq: (encode_code (code p ++ code c) (size im) (word_of_nat (size im))) = None).
-        { setoid_rewrite (rwP dommPn). rewrite encode_code_domm. unfold mt.
-          remember (size (code p ++ code c)) as n. (* setoid_rewrite <- (rwP memPn). simpl.
-          intros x x_in. clear -x_in.
-          induction n.
-          - simpl in *. rewrite <- fset0E in *. rewrite in_fset0 in x_in. done. *) admit. }
-        admit.
-      }      
-  Admitted.
+  (*** Tactics ***)
+
   
   Ltac eq_op_to_eq :=
     let ineq := fresh in
     eapply (@contraNeq (Ord.eqType _) false); auto; intro ineq; exfalso; destruct ineq; eapply no_fixpoint_negb; eauto.
-  (*
-  Lemma mem_write_preserves_equiv_left:
-    forall s1 s2 s3 M s1' s3' w v m1' m3' pc1' pc3',
-      strong_equiv Left M s1 s3 ->
-      weak_equiv Right M s2 s3 ->
-      common_equiv M s1 s2 s3 ->
-      (forall i, data_match' i M v v) ->
-      is_relevant_comp Left (color (taga v)) ->
-      (forall v', (mem s1 w) = Some v' \/ (mem s3 w) = Some v' -> (color (taga v)) = (color (taga v'))) ->
-      (forall d, mem s3 w = Some d -> not (is_code (taga d))) ->
-      (forall d, mem s1 w = Some d -> not (is_code (taga d))) ->
-      not (is_code (taga v)) ->
-      updm (mem s1) w v = Some m1' ->
-      updm (mem s3) w v = Some m3' ->
-      s1' = State _ _ m1' (regs s1) (pc1') tt (comp_num s1) ->
-      s3' = State _ _ m3' (regs s3) (pc3') tt (comp_num s3) ->
-      vala pc1' = addw (vala (pc s1)) onew -> 
-      vala pc3' = addw (vala (pc s3)) onew ->
-      taga pc1' = taga (pc s1) ->
-      taga pc3' = taga (pc s3) ->
-      color_of s1 = color_of s1' ->
-      color_of s3 = color_of s3' ->
-      strong_equiv Left M s1' s3'
-      /\ weak_equiv Right M s2 s3'
-      /\ common_equiv M s1' s2 s3'.
-  Proof.
-    intros s1 s2 s3 M s1' s3' w v m1' m3' pc1' pc3' strong weak common v_match v_relevant same_color no_code_w_s3 no_code_w_s1
-      no_code_v eq_m1 eq_m3 eq_s1' eq_s3' pc1_eq pc3_eq pc1_tag pc3_tag color_s1 color_s3.
-    split; [|split].
-    - destruct strong as [? ? ? wf_m pc_s1_s3  color_eq side_eq mem_match reg_match].
-      econstructor; auto.
-      + intros ? ? ? ? comp ? in_m veq off_eq. subst v0. unfold mem. rewrite eq_s1' eq_s3'. simpl.
-        pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
-        unfold points_to_comp_code, points_to_comp_code'. rewrite setmE. rewrite setmE. split; [|split].
-        * remember (@eq_op (Ord.eqType _) (Types.vala v1) w) as cond. destruct cond.
-          -- assert (eq: Types.vala v1 = w) by eq_op_to_eq.
-            pose proof (wf_m _ _ _ v1 _ off in_m) as conj. simpl in conj.
-            destruct (conj) as [points_s [points_s' off_cond]]; auto.
-            unfold points_to_comp_code' in points_s. rewrite eq in points_s.
-            remember (mem s w) as v'.  simpl in *. rewrite <- Heqv' in points_s.
-            destruct v' as [v'|]; try contradiction.
-            simpl in points_s. destruct points_s as [comp_eq disj].
-            rewrite (same_color v'); auto. split; auto. destruct disj as [[? ?] | ?] ; inversion H.
-            exfalso. eapply no_code_w_s1; eauto.
-          -- eapply wf_m; eauto.
-        * remember (@eq_op (Ord.eqType _) (Types.vala v3) w) as cond. destruct cond.
-          -- assert (eq: Types.vala v3 = w) by eq_op_to_eq.
-            pose proof (wf_m _ _ _ v1 _ off in_m) as conj. simpl in conj.
-            destruct (conj) as [points_s [points_s' off_cond]]; auto.
-            unfold points_to_comp_code in points_s'. simpl.
-            remember (mem s' (Types.vala v3)) as v'.
-            simpl in *. rewrite <- Heqv' in points_s'.
-            destruct v' as [v'|]; try contradiction. simpl in points_s'.
-            rewrite eq in Heqv'. exfalso. eapply (no_code_w_s3). exact (esym Heqv'). destruct points_s'; auto.
-          -- eapply wf_m; eauto.
-        * intro comp_in_ip. eapply (wf_m _ _ _ _ _ _ in_m); auto.
-      + destruct common as [? ? ? ? wfst code_left code_right].
-        unfold same_pc in *. rewrite <- color_s1.
-        remember (color_of s1) as cs1. destruct cs1 as [c1|]; try contradiction. simpl. simpl in pc_s1_s3.
-        remember (offset1 c1) as off. destruct off as [off|]; try contradiction. simpl. simpl in pc_s1_s3.
-        rewrite eq_s1' eq_s3'. simpl. rewrite pc1_eq pc3_eq.      
-        destruct pc_s1_s3 as [[eq1 eq2]|pc_s1_s3].
-        * left. split; [rewrite eq1| rewrite eq2]; done.
-        rewrite pc_s1_s3.
-        rewrite <- addwA. rewrite (@addwC _ (as_word off) onew). rewrite addwA. done.
-      + rewrite <- color_s1. rewrite <- color_s3. done.
-      + unfold side_of in *. rewrite <- color_s3. done.
-      + unfold memory_match in *. rewrite eq_s1' eq_s3'. simpl.
-        intros. 
-        pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
-        rewrite setmE. rewrite setmE.
-        remember (@eq_op (Ord.eqType _) w0 w) as cond. destruct cond.
-        * split; intro eq; inv eq; exists d; split; auto.
-        * apply mem_match; auto.
-      + unfold registers_match in *. rewrite <- color_s1. rewrite eq_s1' eq_s3'. simpl. done.
-    - destruct weak as [? ? ? wf_m color_eq side_s' mem_match].
-      econstructor.
-      + intros ? ? ? ? comp ? in_m veq off_eq. subst v0. rewrite eq_s3'. simpl.
-        pose proof (updm_set eq_m3). subst m3'.
-        unfold points_to_comp_code. rewrite setmE. split; [|split].
-        * remember (@eq_op (Ord.eqType _) (Types.vala v1) w) as cond. destruct cond.
-          -- assert (eq: Types.vala v1 = w) by eq_op_to_eq.
-             pose proof (wf_m _ _ _ v2 _ off in_m) as conj. simpl in conj.
-             destruct (conj) as [points_s [points_s' off_cond]]; auto.
-          -- eapply wf_m; eauto.
-        * remember (@eq_op (Ord.eqType _) (Types.vala v3) w) as cond. destruct cond.
-          -- assert (eq: Types.vala v3 = w) by eq_op_to_eq.
-             pose proof (wf_m _ _ _ v2 _ off in_m) as conj. simpl in conj.
-             destruct (conj) as [points_s [points_s' off_cond]]; auto.
-             unfold points_to_comp_code in points_s'. simpl.
-             remember (mem s' (Types.vala v3)) as v'.
-             simpl in *. rewrite <- Heqv' in points_s'.
-             destruct v' as [v'|]; try contradiction. simpl in points_s'.
-             rewrite eq in Heqv'. exfalso. eapply (no_code_w_s3). exact (esym Heqv'). destruct points_s'; auto.
-          -- eapply wf_m; eauto.
-        * intro comp_in_ip. eapply (wf_m _ _ _ _ _ _ in_m); auto.
-      + rewrite <- color_s3. done.
-      + unfold side_of in *. rewrite <- color_s3. done.
-      + unfold memory_match in *. rewrite eq_s3'. simpl.
-        intros. pose proof (updm_set eq_m3). subst m3'.
-        rewrite setmE.
-        remember (@eq_op (Ord.eqType _) w0 w) as cond. destruct cond.
-        * assert (eq_w: w0 = w) by eq_op_to_eq.
-          subst. simpl in mem_match. split; intro eq; inv eq; exfalso.
-          -- remember (mem s' w) as v_opt. destruct v_opt as [v|].
-             ++ assert (color (taga d) = color (taga v)) by (eapply same_color; auto). simpl in v_relevant.
-                { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
-                  inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
-             ++ simpl in v_relevant. 
-                { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
-                  inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
-          -- pose proof (mem_match w d H H0) as [_ d_impl].
-             destruct (d_impl H2) as [d' [d_d'_match eq_d']].
-             assert (d'_color: color (taga v) = color (taga d')) by (eapply same_color; auto).
-             rewrite d'_color in v_relevant. assert (d'_color_bis: (color (taga d') = color (taga d))).
-             { destruct d, d'. simpl. unfold data_match' in d_d'_match. destruct d_d'_match. subst. done. }
-             rewrite <- d'_color_bis in H0. simpl in *. 
-             { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
-               inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
-        * apply mem_match; auto.
-    - destruct common as [? ? ? ? n tag_pc1 tag_pc2 tag_pc3 wfst code_left code_right]. 
-      econstructor; eauto.
-      + rewrite eq_s1'. simpl. rewrite pc1_tag. done.
-      + rewrite eq_s3'. simpl. rewrite pc3_tag. done. 
-      + rewrite eq_s3'. simpl. clear strong weak code_left code_right v_match tag_pc1 tag_pc2 tag_pc3.
-        simpl in *. 
-        induction wfst; intros.
-        * eapply wf_stack_empty; eauto.
-        * eapply wf_stack_cons_left; eauto.
-          -- rewrite eq_s1'. simpl. pose proof (updm_set eq_m1). subst m1'.
-             unfold points_to_comp_code'. rewrite setmE. 
-             remember (@eq_op (Ord.eqType _) v1 w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
-             destruct cond; try exact PTS_CODE1.
-             assert (eq_w: v1 = w) by eq_op_to_eq. subst v1.
-             exfalso. unfold points_to_comp_code' in PTS_CODE1.
-             remember (mem s1 w) as v'. destruct v'; try contradiction. simpl in PTS_CODE1.
-             destruct PTS_CODE1 as [color_a [[_ side_of_C] | code_a]].
-             ++ simpl in SIDE. unfold side_of' in side_of_C. inversion SIDE. rewrite H0 in side_of_C. inv side_of_C.
-             ++ eapply no_code_w_s1. exact (esym Heqv'). auto.
-          -- simpl. pose proof (updm_set eq_m3). subst m3'.
-             unfold points_to_comp_code. rewrite setmE. 
-             remember (@eq_op (Ord.eqType _) v3 w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
-             destruct cond; try exact PTS_CODE3.
-             assert (eq_w: v3 = w) by eq_op_to_eq. subst w.
-             exfalso. unfold points_to_comp_code in PTS_CODE3.
-             remember (mem s3 v3) as v'. destruct v'; try contradiction. simpl in PTS_CODE3.
-             destruct PTS_CODE3 as [color_a code_a].
-             eapply no_code_w_s3. exact (esym Heqv'). auto.
-        * eapply wf_stack_cons_right; eauto.
-          -- rewrite eq_s1'. simpl. pose proof (updm_set eq_m1). subst m1'.
-             unfold points_to_comp_code'. rewrite setmE. 
-             remember (@eq_op (Ord.eqType _) v1 w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
-             destruct cond; try exact PTS_CODE1.
-             assert (eq_w: v1 = w) by eq_op_to_eq. subst v1. simpl.
-             unfold points_to_comp_code' in PTS_CODE1.
-             remember (mem s1 w) as v'. destruct v' as [v'|]; try contradiction. simpl in PTS_CODE1.
-             rewrite (same_color v'); try left; auto. destruct PTS_CODE1 as [eqC disj]. split; auto.
-             left. split; auto. unfold side_of'. simpl in SIDE.
-             assert (cond_eq: C \in domm ip = false).
-             { assert (~ C \in domm ip). intro. 
-               { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
-                 inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
-               remember (C \in domm ip) as cond. destruct cond; auto. destruct H. done. } 
-             rewrite cond_eq. done.
-          -- simpl. pose proof (updm_set eq_m3). subst m3'.
-             unfold points_to_comp_code. rewrite setmE. 
-             remember (@eq_op (Ord.eqType _) v3 w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
-             destruct cond; try exact PTS_CODE3.
-             assert (eq_w: v3 = w) by eq_op_to_eq. subst w.
-             exfalso. unfold points_to_comp_code in PTS_CODE3.
-             remember (mem s3 v3) as v'. destruct v'; try contradiction. simpl in PTS_CODE3.
-             destruct PTS_CODE3 as [color_a code_a].
-             eapply no_code_w_s3. exact (esym Heqv'). auto. 
-      + unfold combined_codes. intros w' v' off comp relevant_comp offset v'_code v'_color.
-        remember (addw w' (as_word off)) as w''. 
-        remember (@eq_op (Ord.eqType _) w'' w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
-        destruct cond.
-        * assert (eq_w: w'' = w) by eq_op_to_eq.
-          split; intro eq; exfalso.
-          -- rewrite eq_s3' in eq. simpl in eq.
-             pose proof (updm_set eq_m3). subst m3'. subst w. rewrite setmE in eq. rewrite <- Heqcond in eq.
-             inv eq. tauto.
-          -- subst w. remember (@eq_op (Ord.eqType _) w' w'') as cond'. unfold mt, concrete_int_32_mt, word_size in Heqcond'.
-             destruct cond'.
-             ** assert (eq_w: w'' = w') by eq_op_to_eq. subst w'.
-                rewrite eq_s1' in eq. simpl in eq.
-                pose proof (updm_set eq_m1). subst m1'. rewrite setmE in eq. rewrite <- Heqcond in eq.
-                inv eq. tauto.
-             ** rewrite eq_s1' in eq. simpl in eq.
-                pose proof (updm_set eq_m1). subst m1'. rewrite setmE in eq. rewrite <- Heqcond' in eq.
-                pose proof (code_left w' v' off comp relevant_comp offset v'_code v'_color) as [_ impl].
-                rewrite <- Heqw'' in impl.
-                eapply (no_code_w_s3); eauto.
-        * rewrite eq_s3'. simpl. pose proof (updm_set eq_m3). subst m3'. rewrite setmE. rewrite <- Heqcond.
-          remember (@eq_op (Ord.eqType _) w' w) as cond'. unfold mt, concrete_int_32_mt, word_size in Heqcond'.
-          destruct cond'.
-          -- assert (eq_w: w' = w) by eq_op_to_eq. subst w. 
-             rewrite eq_s1'. simpl.
-             pose proof (updm_set eq_m1). subst m1'. rewrite setmE. rewrite <- Heqcond'.
-             pose proof (code_left w' v' off comp relevant_comp offset v'_code v'_color) as equiv.
-             rewrite <- Heqw'' in equiv. setoid_rewrite equiv.
-             split; intro eq.
-             ++ exfalso. eapply (no_code_w_s1); eauto.
-             ++ inversion eq. subst v'. exfalso. tauto.
-          -- rewrite eq_s1'. simpl.
-             pose proof (updm_set eq_m1). subst m1'. rewrite setmE. rewrite <- Heqcond'. rewrite Heqw''.
-             eapply code_left; eauto.
-      + unfold combined_codes. intros w' v' off comp relevant_comp offset v'_code v'_color.
-        setoid_rewrite <- (code_right w' v' off comp relevant_comp offset v'_code v'_color).
-        remember (addw w' (as_word off)) as w''. 
-        remember (@eq_op (Ord.eqType _) w'' w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
-        destruct cond.
-        * assert (eq_w: w'' = w) by eq_op_to_eq.
-          split; intro eq; exfalso.
-          -- rewrite eq_s3' in eq. simpl in eq.
-             pose proof (updm_set eq_m3). subst m3'. subst w. rewrite setmE in eq. rewrite <- Heqcond in eq.
-             inv eq. tauto.
-          -- subst w. eapply no_code_w_s3; eauto.
-        * rewrite eq_s3'. simpl. 
-          pose proof (updm_set eq_m3). subst m3'. rewrite setmE. rewrite <- Heqcond. done. 
-  Qed.
-*)
+  
   Ltac oapp_False :=
     let b := fresh in
     match goal with | H: oapp _ False ?v |- _ => remember v as b; destruct b; try contradiction; simpl in H; try subst b end.
+
+
+  
+  Ltac resolve_register s s' reg_match (*: registers_match i M s s' *) NEXT color_s r :=
+    remember (regs s r) as rv_tmp eqn:Heqrv; simpl in *; try rewrite <- Heqrv in NEXT;
+    destruct rv_tmp as [rv|]; simpl in *; try (inversion NEXT; done);
+    try (destruct (reg_match _ r rv color_s) as [_ impl];
+         destruct (impl (esym Heqrv)) as [d' [d'_match d'_eq]]; rewrite d'_eq; simpl; clear impl).
+
+  
+  Ltac resolve_memory s s' i mem_match (*: registers_match i M s s' *) NEXT w :=
+    remember (mem s w) as wv_tmp eqn:Heqwv; simpl in *; rewrite <- Heqwv in NEXT;
+    destruct wv_tmp as [wv|]; simpl in *; try (inversion NEXT; done);
+    try (assert (not_code: ~ is_code (taga wv)) by shelve;
+         assert (relevant_comp: is_relevant_comp i (color (taga wv))) by shelve;
+         destruct (mem_match w wv not_code relevant_comp) as [_ impl];
+         destruct (impl (esym Heqwv)) as [d'' [d''_match d''_eq]]; rewrite d''_eq; simpl; clear impl).
+  
+  Ltac unfold_match :=
+    let a := fresh "a" in
+    match goal with
+    | H : (match ?cond as _ return _ with _ => _ end) = _  |- _ => try(remember cond as a; destruct a);
+                                                                simpl in H; try (inversion H; done)
+    | H : _ = (match ?cond as _ return _ with _ => _ end)  |- _ => try(remember cond as a; destruct a);
+                                                                simpl in H; try (inversion H; done)
+    end.
+  Ltac unfold_match' H :=
+    let a := fresh "a" in
+    match (type of H) with
+    | (match ?cond as _ return _ with _ => _ end) = _ => try(remember cond as a; destruct a);
+                                                       simpl in H; try (inversion H; done)
+    | _ = (match ?cond as _ return _ with _ => _ end) => try(remember cond as a; destruct a);
+                                                       simpl in H; try (inversion H; done)
+    end.
+  Ltac unfold_match_right1 :=
+    let a := fresh "a" in
+    match goal with
+    | H : _ = (match ?cond as _ return _ with _ => _ end) _  |- _ => try(remember cond as a; destruct a);
+                                                                  simpl in H; try (inversion H; done)
+    end.
+  Ltac unfold_match_right2 :=
+    let a := fresh "a" in
+    match goal with
+    | H : _ = (match ?cond as _ return _ with _ => _ end) _ _  |- _ => try(remember cond as a; destruct a);
+                                                                    simpl in H; try (inversion H; done)
+    end.
+  Ltac unfold_match_left1 :=
+    let a := fresh "a" in
+    match goal with
+    | H : (match ?cond as _ return _ with _ => _ end) _ = _  |- _ => try(remember cond as a; destruct a);
+                                                                  simpl in H; try (inversion H; done)
+    end.
+  Ltac unfold_bind :=
+    let a := fresh "a" in
+    match goal with
+    | H : Some _ = (Option.bind ?f ?v) |- _ => remember v as a; destruct a; simpl in H; try (inversion H; done)
+    | H : (Option.bind ?f ?v) = Some _ |- _ => remember v as a; destruct a; simpl in H; try (inversion H; done)
+    end.
+
+  Ltac simplify_some :=
+    match goal with
+    | H : Some ?a = Some _ |- _ => inversion H; clear H; subst a
+    | H : Some (?a, ?b) = Some _ |- _ => inversion H; clear H; try subst a; try subst b
+    | H : (?a, ?b) = (_, _) |- _ => inversion H; clear H; try subst a; try subst b
+    end.
+
+  Ltac destruct_unit :=
+    match goal with
+    | u: unit |- _ => destruct u
+    end.
+
+  Ltac unfold_all :=
+    repeat (simpl in *;(simplify_some || unfold_bind || destruct_unit || unfold_match_right2 || unfold_match_right1)).
+
+  (*** Equivalence preservation lemmas ***)
   
   Lemma preserves_equiv_left_pc_incr :
     forall s1 s2 s3 M s1' s3' pc1' pc3',
@@ -1067,79 +836,60 @@ Section Recomposition.
       eapply common_equiv_def with (n := n); 
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence.
   Qed.
-       
-  Ltac resolve_register s s' reg_match (*: registers_match i M s s' *) NEXT color_s r :=
-    remember (regs s r) as rv_tmp eqn:Heqrv; simpl in *; try rewrite <- Heqrv in NEXT;
-    destruct rv_tmp as [rv|]; simpl in *; try (inversion NEXT; done);
-    try (destruct (reg_match _ r rv color_s) as [_ impl];
-         destruct (impl (esym Heqrv)) as [d' [d'_match d'_eq]]; rewrite d'_eq; simpl; clear impl).
 
   
-  Ltac resolve_memory s s' i mem_match (*: registers_match i M s s' *) NEXT w :=
-    remember (mem s w) as wv_tmp eqn:Heqwv; simpl in *; rewrite <- Heqwv in NEXT;
-    destruct wv_tmp as [wv|]; simpl in *; try (inversion NEXT; done);
-    try (assert (not_code: ~ is_code (taga wv)) by shelve;
-         assert (relevant_comp: is_relevant_comp i (color (taga wv))) by shelve;
-         destruct (mem_match w wv not_code relevant_comp) as [_ impl];
-         destruct (impl (esym Heqwv)) as [d'' [d''_match d''_eq]]; rewrite d''_eq; simpl; clear impl).
+  (*** Diagrams ***)
   
-  Ltac unfold_match :=
-    let a := fresh "a" in
-    match goal with
-    | H : (match ?cond as _ return _ with _ => _ end) = _  |- _ => try(remember cond as a; destruct a);
-                                                                simpl in H; try (inversion H; done)
-    | H : _ = (match ?cond as _ return _ with _ => _ end)  |- _ => try(remember cond as a; destruct a);
-                                                                simpl in H; try (inversion H; done)
-    end.
-  Ltac unfold_match' H :=
-    let a := fresh "a" in
-    match (type of H) with
-    | (match ?cond as _ return _ with _ => _ end) = _ => try(remember cond as a; destruct a);
-                                                                simpl in H; try (inversion H; done)
-    | _ = (match ?cond as _ return _ with _ => _ end) => try(remember cond as a; destruct a);
-                                                                simpl in H; try (inversion H; done)
-    end.
-  Ltac unfold_match_right1 :=
-    let a := fresh "a" in
-    match goal with
-    | H : _ = (match ?cond as _ return _ with _ => _ end) _  |- _ => try(remember cond as a; destruct a);
-                                                                    simpl in H; try (inversion H; done)
-    end.
-  Ltac unfold_match_right2 :=
-    let a := fresh "a" in
-    match goal with
-    | H : _ = (match ?cond as _ return _ with _ => _ end) _ _  |- _ => try(remember cond as a; destruct a);
-                                                                    simpl in H; try (inversion H; done)
-    end.
-  Ltac unfold_match_left1 :=
-    let a := fresh "a" in
-    match goal with
-    | H : (match ?cond as _ return _ with _ => _ end) _ = _  |- _ => try(remember cond as a; destruct a);
-                                                                  simpl in H; try (inversion H; done)
-    end.
-  Ltac unfold_bind :=
-    let a := fresh "a" in
-    match goal with
-    | H : Some _ = (Option.bind ?f ?v) |- _ => remember v as a; destruct a; simpl in H; try (inversion H; done)
-    | H : (Option.bind ?f ?v) = Some _ |- _ => remember v as a; destruct a; simpl in H; try (inversion H; done)
-    end.
-
-  Ltac simplify_some :=
-    match goal with
-    | H : Some ?a = Some _ |- _ => inversion H; clear H; subst a
-    | H : Some (?a, ?b) = Some _ |- _ => inversion H; clear H; try subst a; try subst b
-    | H : (?a, ?b) = (_, _) |- _ => inversion H; clear H; try subst a; try subst b
-    end.
-
-  Ltac destruct_unit :=
-    match goal with
-    | u: unit |- _ => destruct u
-    end.
-
-  Ltac unfold_all :=
-    repeat (simpl in *;(simplify_some || unfold_bind || destruct_unit || unfold_match_right2 || unfold_match_right1)).
-
-Require Import Coq.Program.Equality.
+  
+  Lemma initial_memory_domm: forall b,
+      domm (@initial_memory mt b) = fset (map word_of_nat (List.seq 0 (size (@initial_memory mt b)))).
+  Proof.
+    intros.
+  Admitted.
+  
+  Lemma encode_code_domm: forall cd pc,
+      domm (encode_code cd pc) = fset (map word_of_nat (List.seq pc (size cd))).
+  Proof.
+    intros.
+  Admitted.
+  
+  
+  Lemma match_initial_states:
+  forall s1, Smallstep.initial_state sem s1 ->
+  forall s2, Smallstep.initial_state sem' s2 ->
+  exists s3 M, Smallstep.initial_state sem'' s3 /\ match_states M s1 s2 s3.
+  Proof.
+    intros s1 init1 s2 init2.
+    unfold Smallstep.initial_state, sem, sem' in init1, init2. simpl in init1. unfold initial_state1, initial_state2 in *.
+    remember (initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'')) as s3.
+    rename Heqs3 into init3.
+    exists s3. exists [].
+    split; try (simpl; unfold initial_state3; done).
+    remember (prog_main p) as main. destruct main; [eapply match_states_left | eapply match_states_right]; try (eapply common_equiv_def || econstructor); simpl.
+    - unfold initial_state in init1. simpl in init1. destruct s1. inv init1. simpl. done.
+    - unfold initial_state in init2. simpl in init2. destruct s2. inv init2. simpl. done.
+    - unfold initial_state in init3. simpl in init3. destruct s3. inv init3. simpl. done.
+    - rewrite init3. simpl. econstructor.
+    - unfold combined_codes. intros. admit.
+    - unfold combined_codes. intros. admit.
+    - unfold well_formed_metadata. intros. inv H.
+    - unfold same_pc.
+      assert (color_eq: color_of s1 = Some 0).
+      { unfold initial_state in init1. simpl in init1. destruct s1. inv init1.
+        unfold color_of. subst.
+        pose proof (initial_memory_domm (unionm (prog_buffers p) (prog_buffers c))).
+        remember (initial_memory (unionm (prog_buffers p) (prog_buffers c))) as im.
+        rewrite unionmE.
+        assert (eq: (encode_code (code p ++ code c) (size im) (word_of_nat (size im))) = None).
+        { setoid_rewrite (rwP dommPn). rewrite encode_code_domm. unfold mt.
+          remember (size (code p ++ code c)) as n. (* setoid_rewrite <- (rwP memPn). simpl.
+          intros x x_in. clear -x_in.
+          induction n.
+          - simpl in *. rewrite <- fset0E in *. rewrite in_fset0 in x_in. done. *) admit. }
+        admit.
+      }      
+  Admitted.
+  
   
   Lemma step_silent_strong1:
   forall s1 s1', Step sem s1 E0 s1' ->
@@ -1332,6 +1082,9 @@ Require Import Coq.Program.Equality.
       + admit.
       + admit.
   Admitted.
+
+
+  (*** Final Proofs ***)
       
   Theorem tsim_properties_match_states:
     @tsim_properties sem sem' sem'' (sd_traces det_sem) (sd_traces det_sem') (sd_traces det_sem'')
