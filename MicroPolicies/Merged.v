@@ -335,10 +335,7 @@ Definition instr_rules (rcom_val : Z)
   (ts : hseq _ (inputs op))
   tni :=
   (* checks that we're not executing data *)
-  do! _ <- match tni with
-         | None => Some tt
-         | Some mtag => if (is_code mtag) then Some tt else None
-         end;
+  do! _ <- if (is_code ti) then Some tt else None;
   (* checks that we're not reading/writing code *)
   do! _ <- match op, ts  with
           | STORE,   [hseq _; _; ts]
