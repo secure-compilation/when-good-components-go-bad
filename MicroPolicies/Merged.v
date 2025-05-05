@@ -231,6 +231,7 @@ Definition findopt {A : Type} (pred : A -> bool) l : option nat :=
                     end) None l.
 
 Definition encode_code (cde : code) (pc0 : nat) : memory :=
+  let cde := cde ++ [(MrHalt, MTag Other Component.main None true )] in
   let code_length := size cde in
   let offset := pc0 + code_length in
   let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in
