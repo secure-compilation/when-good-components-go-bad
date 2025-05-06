@@ -206,7 +206,7 @@ Definition binop_trans (b : Values.binop) : binop :=
 end.
     
 
-Definition instr_merged_to_mp (i : instr_merged) (label_pos : nat -> nat) (pos : nat) : @Types.instr mt :=
+Definition instr_merged_to_mp (i : instr_merged) (label_pos : nat -> nat -> nat) (pos : nat) : @Types.instr mt :=
   match i with
   | MrNop | MrLabel _ => Nop mt
   | MrConst i r => Const i (word_of_nat (to_nat r))
@@ -215,8 +215,8 @@ Definition instr_merged_to_mp (i : instr_merged) (label_pos : nat -> nat) (pos :
   | MrLoad r1 r2 => Load (word_of_nat (to_nat r1)) (word_of_nat (to_nat r2))
   | MrStore r1 r2 => Store (word_of_nat (to_nat r1)) (word_of_nat (to_nat r2))
   | MrJump r => Jump (word_of_nat (to_nat r))
-  | MrBnz r l => Bnz (word_of_nat (to_nat r)) (word_of_nat ((label_pos l) - pos))
-  | MrJal l => Jal (word_of_nat (label_pos l))
+  | MrBnz r l => Bnz (word_of_nat (to_nat r)) (word_of_nat ((label_pos l pos) - pos))
+  | MrJal l => Jal (word_of_nat (label_pos l pos))
   | MrHalt => Halt mt
   end.
 
@@ -235,9 +235,9 @@ Definition encode_code (cde : code) (pc0 : nat) : memory :=
   let code_length := size cde in
   let offset := pc0 + code_length in
   let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in
-  let lp := (fun l => match (findopt (is_label l) cde ) with
+  let lp := (fun l default => match (findopt (is_label l) cde ) with
                    | Some (n) => pc0 + n
-                   | _ => l end) in
+                   | _ => default end) in
   let f := (fun x acc => ((encode_instr_atom x lp (offset - 1 - (snd acc))) :: (fst acc), S (snd acc)) ) in
   Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (fst (foldr f ([], 0) cde))).
 
