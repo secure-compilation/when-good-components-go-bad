@@ -434,12 +434,58 @@ Section Recomposition.
         \/ exists v', (mem s (addw w onew) = Some v' /\ is_code (taga v'))
     .
 
-    Definition memory_prefix_condition (m:memory) nc :=
+    (* necessary invariants for the allocation case *)
+    Definition memory_prefix_condition (mem:memory) nc :=
       forall current_c,
         let prefix := (@component_memory_prefix mt (ssrint.Posz(1 + current_c)) nc) in
         let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in
         let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in
-        filter prefix_filter (domm (m)) = fsetD (domm (filterm (fun w v => color (taga v) == current_c) (m))) (domm (initial_memory (prog_buffers prog))).
+        let comp_filter := (fun w v => andb (color (taga v) == current_c) (negb (is_code (taga v)))) in
+        filter prefix_filter (domm (mem)) =
+          fsetD (domm (filterm comp_filter (mem))) (domm (initial_memory (prog_buffers prog))).
+
+    Definition code_prefix_condition (mem:memory) nc :=
+      forall w v,
+        mem w = Some v ->
+        is_code (taga v) ->
+        let prefix := (@component_memory_prefix mt (ssrint.Posz(0)) nc) in
+        let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in
+        ((word.andw w mask) == prefix).
+
+    Definition alloc_no_code (mem: memory) :=
+      forall v: atom (mword mt) _,
+        mem (word_of_nat alloc_label) = Some v ->
+        ~ is_code (taga v).
+
+    (* necessary invariants for the JMP and JAL cases *)
+    Definition address_correctness w t (mem: memory) :=
+      match t with
+      | Ret _ | InternalJump => exists (v: atom (mword mt) _), mem w = Some v /\ is_code (taga v)
+      | Other | Invalidated => True
+      end.
+
+    Definition memory_address_correctness (i: side) (s: state) :=
+      forall v w,
+        is_relevant_comp i (color (taga v)) ->
+         mem s w = Some v ->
+         address_correctness (vala v) (vtag (taga v)) (mem s).
+
+    Definition register_address_correctness (i: side) (s: state) :=
+      forall v r,
+         regs s r = Some v ->
+         address_correctness (vala v) (taga v) (mem s).
+
+    (* necessary invariant for the BNZ case *)
+    Definition BNZ_correctness (mem: memory) : Prop :=
+      forall w, forall v: atom (mword mt) _,
+        mem w = Some v ->
+        is_code (taga v) ->
+        (match (decode_instr (vala v)) with
+         | Some (Bnz _ n) =>
+             exists (v': atom (mword mt) _),
+             mem (addw w (swcast n)) = Some v' /\ is_code (taga v')
+         | _ => True
+         end).
     
     Variant common_equiv: metadata -> state -> state -> state -> Prop :=
       common_equiv_def : forall m s1 s2 s3 n,
@@ -499,21 +545,6 @@ Section Recomposition.
   Ltac oapp_False :=
     let b := fresh in
     match goal with | H: oapp _ False ?v |- _ => remember v as b; destruct b; try contradiction; simpl in H; try subst b end.
-
-  Ltac resolve_register s s' reg_match (*: registers_match i M s s' *) NEXT color_s r :=
-    remember (regs s r) as rv_tmp eqn:Heqrv; simpl in *; try rewrite <- Heqrv in NEXT;
-    destruct rv_tmp as [rv|]; simpl in *; try (inversion NEXT; done);
-    try (destruct (reg_match _ r rv color_s) as [_ impl];
-         destruct (impl (esym Heqrv)) as [d' [d'_match d'_eq]]; rewrite d'_eq; simpl; clear impl).
-
-  
-  Ltac resolve_memory s s' i mem_match (*: registers_match i M s s' *) NEXT w :=
-    remember (mem s w) as wv_tmp eqn:Heqwv; simpl in *; rewrite <- Heqwv in NEXT;
-    destruct wv_tmp as [wv|]; simpl in *; try (inversion NEXT; done);
-    try (assert (not_code: ~ is_code (taga wv)) by shelve;
-         assert (relevant_comp: is_relevant_comp i (color (taga wv))) by shelve;
-         destruct (mem_match w wv not_code relevant_comp) as [_ impl];
-         destruct (impl (esym Heqwv)) as [d'' [d''_match d''_eq]]; rewrite d''_eq; simpl; clear impl).
   
   Ltac unfold_match :=
     let a := fresh "a" in
