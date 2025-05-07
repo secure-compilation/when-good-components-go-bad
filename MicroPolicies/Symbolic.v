@@ -287,11 +287,17 @@ Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
 Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state_ev :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
-Definition make_hseq {I : Set} {f : I -> Type} (t : I ) (l : list (f t))  : (hseq f (nseq (size l) t)).
+Definition make_hseq {I : Set} {f : I -> Type} (t : I ) (l : list (f t)) : (hseq f (nseq (size l) t)) :=
+  (@list_rect (f t) (fun l0 : list (f t) => @hseq I f (@nseq I (@size (f t) l0) t))
+  (HSeqNil : @hseq I f (@nseq I (@size (f t) (@nil (f t))) t))
+  (fun (a : f t) (l0 : list (f t)) (IHl : @hseq I f (@nseq I (@size (f t) l0) t)) =>
+     @HSeqCons (f t) (@hseq I f (@nseq I (@size (f t) l0) t)) a IHl)) l.
+(*
   induction l.
   + simpl ; try exact HSeqNil.
   + simpl. exact (HSeqCons a IHl).
 Qed.
+*)
 
 
 (* return an hseq containing the tags of all registers apart from RA and RCOM, plus top_reg *)
