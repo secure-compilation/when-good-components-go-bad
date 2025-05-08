@@ -288,6 +288,7 @@ Definition component_memory_prefix (c : int) (nc : nat) :=
 (* a syscall don't change the pc level *)
 Definition alloc_fun (st : state) : option state :=
   do! ra_val <- regs st ra;
+  do! _ <- is_jump (taga ra_val);
   let next_pc := (vala ra_val)@(taga (pc st)) in
   (* TL TODO: Is using return address to compute calling component safe? *)
   do! ra_atom <- mem st (vala ra_val);

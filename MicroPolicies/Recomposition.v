@@ -1306,7 +1306,8 @@ Section Recomposition.
     remember E0 as t.
     destruct step_s1 as [s1 ? s1' step_2 allowed | s1 ? s1' step_1 step_2]; subst t.
     - unfold allowed_UB in *.
-      destruct strong as [m s1 s3 wf_m pc_s1_s3 color_eq side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
+      inversion strong as [m ? ? wf_m pc_s1_s3 color_eq side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
+      subst m s s'.
       rewrite color_eq in allowed. remember (color_of s3) as comp.
       destruct comp.
       + exfalso. simpl in *. rewrite color_eq in m_compat. simpl in *. rewrite m_compat in side_eq. unfold side_of in *.
@@ -1316,20 +1317,24 @@ Section Recomposition.
         * inversion Hmergeable_ifaces as [[_ fdisj] _]. exact fdisj.
         * exact allowed.
         * done.
-      + admit.
+      + assert (step_1: step1 tt s1 E0 s1'). admit.
+        clear wf_m pc_s1_s3 side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match allowed Heqcomp.
+        rename color_eq into PC_None. shelve.
     (* todo: this must be an alloc case. todo : unfold everything, *)
     (*collapse absurd configuration, and use the same proof as in the last case*)
-    - remember (id s3) as s3'. simpl in Heqs3'. destruct s3' as [mem3 regs3 [pc3_val pc3_tag] internal3 cn3].
-      rename Heqs3' into eq_s3. rewrite eq_s3 in strong weak common. rewrite eq_s3.
-      inversion strong as [? ? ? wf_m pc_s1_s3 color_eq side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
-      inversion common as [? ? ? ? n tag_pc1 tag_pc2 tag_pc3 wfst
-                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
-      subst s0 s4 s5 m m0.
-      inversion step_1; unfold step1; unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules in *.
+    - Unshelve.
+      all: remember (id s3) as s3'; simpl in Heqs3'; destruct s3' as [mem3 regs3 [pc3_val pc3_tag] internal3 cn3].
+      all: rename Heqs3' into eq_s3; rewrite eq_s3 in strong weak common; rewrite eq_s3;
+        inversion strong as [? ? ? wf_m pc_s1_s3 color_eq side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
+      all: inversion common as [? ? ? ? n tag_pc1 tag_pc2 tag_pc3 wfst
+                                 [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
+                                 [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
+                                 [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+      all: subst s0 s4 s5 m m0.
+      all: inversion step_1; unfold step1; unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules in *.
       all: unfold_all; try unfold_match; unfold_all.
       all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *. (* eliminates many goals *)
+      all: try (rewrite ST in PC_None; unfold color_of in PC_None; rewrite PC in PC_None; try (inversion PC_None; done || clear PC_None)).
       all: try (assert (tpc1 = tpc0) by (clear -Heqa2; unfold_match' Heqa2); subst tpc1).
       all: try (assert (ts0 = (ts (mvec None)) ) by
                (unfold mvec in *; simpl; clear -Heqa2; unfold_match' Heqa2; try (inversion Heqa2; subst b); eapply ivec_eq_inv in Heqa2;
@@ -1346,10 +1351,12 @@ Section Recomposition.
                        rewrite inst in instr_is_halt; done end) |
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
       all: unfold check_belong, belong, reg_clear_list in *.
-      all: try (match (type of Heqa2) with
+      
+      7-8: try (match (type of Heqa2) with
                   (_ = match ?m ?w with _ => _ end)
                   => eapply (@modusponens (exists res, m w = Some res)); [|intros [res res_eq]; rewrite res_eq in Heqa2]
                 end).
+      11: remember (mem0 pc') as next_pc_content; destruct next_pc_content.
       all: try (match goal with
                   |- exists _ _, _ => repeat (unfold_all || unfold_match || rewrite orb_false_r in Heqa4) end).
       all: convert_eq_op.
@@ -1800,9 +1807,24 @@ Section Recomposition.
         subst. unfold_match' Heqa5. unfold is_code in Heqa3. unfold_match' Heqa3. pose proof (bnz_s1 _ _ PC) as H.
         simpl in H. simpl in *. rewrite <- Heqa1 in H. simpl in *. rewrite H2 in H. destruct H as [? [? ?]]; auto. eauto.
       + admit. (*BNZ*)
-      + unfold pc' in *. subst. unfold_match' Heqa5. unfold is_code in Heqa3. unfold_match' Heqa3. pose proof (bnz_s1 _ _ PC) as H.
-        simpl in H. simpl in *. rewrite <- Heqa1 in H. simpl in *. rewrite H2 in H. admit. (* this proof no longer works. *)
-      + admit. (*JAL*)
+      + (*normal JAL*)
+        unfold pc' in *. subst. pose proof (bnz_s1 _ _ PC) as JALcond. simpl in JALcond.
+        (match goal with
+         | op: _ = op_of_word _, inst: instr_of_args _ = _ |- _
+           => simpl; rewrite <- op in JALcond; simpl in JALcond; rewrite inst in JALcond
+         end). destruct JALcond as [[? [next_pc_content' next_pc_code]] | imm_alloc_eq ]; auto.
+        2: { exfalso. subst imm. inversion Heqa2. destruct a as [va ta]. simpl in *. subst ta.
+             eapply alloc_mem_s1. exact (esym Heqnext_pc_content). admit. (* need stronger hypothesis *) }
+        simpl in *.
+        admit.
+      + (*JAL to alloc*)
+        unfold pc' in *. subst. pose proof (bnz_s1 _ _ PC) as JALcond. simpl in JALcond.
+        (match goal with
+         | op: _ = op_of_word _, inst: instr_of_args _ = _ |- _
+           => simpl; rewrite <- op in JALcond; simpl in JALcond; rewrite inst in JALcond
+         end). destruct JALcond as [[? [tmp_eq next_pc_code]] | imm_alloc_eq ]; auto.
+        { exfalso. rewrite <- Heqnext_pc_content in tmp_eq. inversion tmp_eq. }
+        admit.        
       + destruct pc_s1_s3 as [s1 s3 pc_s1_s3 eq_none|s1 s3 ? ? eq_comp eq_off pc_s1_s3].
         2: { subst. unfold color_of in eq_comp. rewrite PC in eq_comp. inversion eq_comp. }
         unfold run_syscall in *.
@@ -1812,7 +1834,37 @@ Section Recomposition.
         assert (exists s3', alloc_fun s3 = Some s3') as [s3' s3'_eq].
         { unfold Symbolic.sem in *. eexists.
           unfold alloc_fun in *. repeat (unfold_all || unfold_match).
-          do 2 deduce_reg reg_match. destruct a0, x, H. admit.
+          do 2 deduce_reg reg_match. unfold is_jump in *.
+          destruct a0 as [va ?]. destruct x as [vx ?]. destruct H.
+          subst taga0. destruct taga; simpl in Heqa4; try (inversion Heqa4; done).
+          simpl. oapp_False. pose proof (esym HeqH) as eq_off. clear HeqH.
+          subst s1 s3. simpl in *.
+          pose proof (s_reg_cor _ _ (esym Heqa3)) as corr. simpl in corr. destruct corr as [v [eqv v_is_code]].
+          rewrite <- Heqa5 in eqv. simplify_some. destruct v as [vv vt]. destruct vt. destruct is_code; try (inversion v_is_code; done).
+          simpl in *.
+          fail. (* this caused a crash *)
+          match goal with
+          | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
+                  code_left: combined_codes Left _ _, code: is_true ?isc,
+                      Heqi': Some ?v@(MTag ?vt ?comp ?e ?isc) = ?mem0 ?w  |-
+              context[(?mem3 _)] =>
+              (remember (MTag vt comp e isc) as t;
+               unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
+               match goal with
+               | H : true = (@in_mem ?T ?comp ?s) |- _ =>
+                   assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
+                   assert (t_color: LRC.color t = comp) by (subst; auto);
+                   assert (t_code : LRC.is_code t) by (subst; done);
+                   destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
+                   try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
+                   rewrite <- pc_s1_s3 in impl;
+                   repeat (rewrite (addwC onew _) in impl);
+                   rewrite (impl Heqi'); subst; clear impl; done
+               end)
+          end.
+          deduce_code.
+
+          admit.
           (* hypothesis on the tag of RA is needed to proceed here. *)
         }
         exists s3'; exists M. simpl.
@@ -1825,6 +1877,7 @@ Section Recomposition.
           -- eapply star_refl.
           -- done.
         * admit. (* TODO: need standalone lemma just for this alloc case *)
+      + admit. (* exact same proof as above *)
   Admitted.
 
 
