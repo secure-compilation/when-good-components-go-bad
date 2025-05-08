@@ -1806,7 +1806,21 @@ Section Recomposition.
       + unfold pc' in *. subst. unfold_match' Heqa5. unfold is_code in Heqa3. unfold_match' Heqa3. pose proof (bnz_s1 _ _ PC) as H.
         simpl in H. simpl in *. rewrite <- Heqa1 in H. simpl in *. rewrite H2 in H. destruct H as [? [? ?]]; auto. eauto.
       + admit. (*JAL*)
-      + admit. (*ALLOC*)
+      + unfold side_of in side_eq. unfold_bind. subst. unfold color_of in color_eq. rewrite PC in color_eq. inversion color_eq.
+        (* ^ this proves that the alloc case is contradictory *)
+        
+(*
+        destruct pc_s1_s3 as [s1 s3 pc_s1_s3 eq_none|s1 s3 ? ? eq_comp eq_off pc_s1_s3].
+        2: { subst. unfold color_of in eq_comp. rewrite PC in eq_comp. inversion eq_comp. }
+        eexists; exists M. simpl.
+        split.
+        * eapply (plus_left _ [::]); try eapply step_syscall; eauto.
+          -- eapply (etrans _ (PC)).
+          -- subst. simpl in *. rewrite <- pc_s1_s3. eauto.
+          -- unfold run_syscall in *.
+             unfold evi in *. repeat unfold_bind. inversion CALL. subst s1'. simpl.
+             simpl in Heqa0. unfold Instance.table, table in *. simpl in GETCALL.
+             rewrite setmE in GETCALL. unfold_match' GETCALL. repeat simplify_some. *)
   Admitted.
 
 
