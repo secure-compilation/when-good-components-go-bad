@@ -301,6 +301,7 @@ Definition alloc_fun (st : state) : option state :=
   (* create the new bloc *)
   let atom : matom := (word.as_word 0)@(def_mem_tag current_c false) in
   do! size <- regs st syscall_arg1;
+  do! _ <- is_other (taga size);
   if (negb (prefix_filter (addw (vala size) max_addr))) then None else (* fail if overlaping with the next compartment's prefix *)
   do! length <- match word.int_of_word (vala size) with
                 | Posz x => Some x
