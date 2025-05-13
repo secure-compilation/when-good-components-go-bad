@@ -661,6 +661,172 @@ Section Recomposition.
     | |- (match ?cond as _ return _ with _ => _ end) => remember cond as a; destruct a
     end.
 
+  
+  
+  Ltac deduce_color_eq :=
+    unfold color_of; subst; simpl;
+    repeat
+      match goal with
+      | |- Some (_ ?t) = _ => subst t; simpl
+      | |- _ = Some (_ ?t) => subst t; simpl
+      | |- match (setm _ _ _) with _ => _ end = _ => rewrite setmE; goal_match_bind_step
+      | |- _ = match (setm _ _ _) with _ => _ end => rewrite setmE; goal_match_bind_step
+      | |- match (mem ?s ?w) with _ => _ end = _ => subst s
+      | |- _ = match (mem ?s ?w) with _ => _ end => subst s
+      | H: (?m ?v) = _ |- match (?m ?w) with _ => _ end = _ => rewrite H
+      | H: (?m ?v) = _ |- _ = match (?m ?w) with _ => _ end => rewrite H
+      | H: _ = (?m ?v) |- match (?m ?w) with _ => _ end = _ => rewrite <- H
+      | H: _ = (?m ?v) |- _ = match (?m ?w) with _ => _ end => rewrite <- H
+      end; try done.
+
+  Ltac deduce_reg reg_match :=
+    let impl := fresh "impl" in
+    let d_eq := fresh "d_eq" in
+    match goal with
+    | H: (getm ?m' ?w = Some ?v) |- context[(getm ?m ?w) = _] =>
+        pose proof (reg_match w v) as [_ impl];
+        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (Some ?v = getm ?m' ?w) |- context[(getm ?m ?w) = _] =>
+        pose proof (reg_match w v) as [_ impl];
+        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (getm ?m' ?w = Some ?v) |- context[Option.bind _ (getm ?m ?w)] =>
+        pose proof (reg_match w v) as [_ impl];
+        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (Some ?v = getm ?m' ?w) |- context[Option.bind _ (getm ?m ?w)] =>
+        pose proof (reg_match w v) as [_ impl];
+        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (Some ?v = getm ?m' ?w) |- context[match (getm ?m ?w) with _ => _ end] =>
+        pose proof (reg_match w v) as [_ impl];
+        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (getm ?m' ?w = Some ?v) |- context[match (getm ?m ?w) with _ => _ end] =>
+        pose proof (reg_match w v) as [_ impl];
+        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (Some ?v = getm ?m' ?w) |- context[isSome (getm ?m ?w)] =>
+        pose proof (reg_match w v) as [_ impl]; simpl in impl;
+        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    | H: (getm ?m' ?w = Some ?v) |- context[isSome (getm ?m ?w)] =>
+        pose proof (reg_match w v) as [_ impl]; simpl in impl;
+        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
+    end.
+
+  Ltac deduce_code :=
+    let comp_in := fresh "comp_in" in
+    let t := fresh "t" in
+    let t_color := fresh "t_color" in
+    let t_code  := fresh "t_code" in
+    let impl  := fresh "impl" in
+    repeat
+      match goal with
+      | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
+              code_left: combined_codes Left _ _, code: is_true ?isc,
+                  Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
+                    color_eq : _ = match (?mem3 _) with _ => _ end |-
+          match (?mem3 _) with _ => _ end = _  =>
+          (remember (MTag vt comp e isc) as t;
+           unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
+           match goal with
+           | H : true = (@in_mem ?T ?comp ?s) |- _ =>
+               assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
+               assert (t_color: LRC.color t = comp) by (subst; auto);
+               assert (t_code : LRC.is_code t) by (subst; done);
+               destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
+               try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
+               rewrite <- pc_s1_s3 in impl;
+               repeat (rewrite (addwC onew _) in impl);
+               rewrite (impl Heqi'); subst; clear impl; done
+           end) || clear Heqi'
+      | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
+              code_left: combined_codes Left _ _, code: is_true ?isc,
+                  Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
+                    color_eq : _ = match (?mem3 _) with _ => _ end |-
+          _ = match (?mem3 _) with _ => _ end =>
+          (remember (MTag vt comp e isc) as t;
+           unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
+           match goal with
+           | H : true = (@in_mem ?T ?comp ?s) |- _ =>
+               assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
+               assert (t_color: LRC.color t = comp) by (subst; auto);
+               assert (t_code : LRC.is_code t) by (subst; done);
+               destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
+               try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
+               rewrite <- pc_s1_s3 in impl;
+               repeat (rewrite (addwC onew _) in impl);
+               rewrite (impl Heqi'); subst; clear impl; done
+           end) || clear Heqi'
+      | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
+              code_left: combined_codes Left _ _, code: is_true ?isc,
+                  Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
+                    color_eq : _ = match (?mem3 _) with _ => _ end |-
+          ?mem3 _ = _  =>
+          (remember (MTag vt comp e isc) as t;
+           unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
+           match goal with
+           | H : true = (@in_mem ?T ?comp ?s) |- _ =>
+               assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
+               assert (t_color: LRC.color t = comp) by (subst; auto);
+               assert (t_code : LRC.is_code t) by (subst; done);
+               destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
+               try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
+               rewrite <- pc_s1_s3 in impl;
+               repeat (rewrite (addwC onew _) in impl);
+               rewrite (impl Heqi'); subst; clear impl; done
+           end) || clear Heqi'
+      | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
+              code_left: combined_codes Left _ _, code: is_true ?isc,
+                  Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
+                    color_eq : _ = match (?mem3 _) with _ => _ end |-
+          _ = ?mem3 _  =>
+          (remember (MTag vt comp e isc) as t;
+           unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
+           match goal with
+           | H : true = (@in_mem ?T ?comp ?s) |- _ =>
+               assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
+               assert (t_color: LRC.color t = comp) by (subst; auto);
+               assert (t_code : LRC.is_code t) by (subst; done);
+               destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
+               try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
+               rewrite <- pc_s1_s3 in impl;
+               repeat (rewrite (addwC onew _) in impl);
+               rewrite (impl Heqi'); subst; clear impl; done
+           end) || clear Heqi'
+      end.
+
+  Ltac deduce_mem mem_match :=
+    (let impl := fresh "impl" in
+     let d_eq := fresh "d_eq" in
+     match goal with
+     | PC: (?mem0 ?pc0 = Some _), color_eq: match (?mem0 ?pc0) with _ => _ end = match _ with _ => _ end,
+           side_eq : side_of _ = _, H: (getm ?m' ?w = Some ?v) |- context[(getm ?m ?w)] =>
+         pose proof (mem_match w v) as [_ impl]; simpl;
+         [ auto | clear - PC color_eq side_eq; rewrite PC in color_eq; unfold side_of in *;
+                  unfold_all; repeat unfold_match
+         | destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl]
+     end).    
+
+  Ltac deduce_equality s_eq :=
+    let v := fresh "v" in
+    let t := fresh "t" in
+    let vt_match := fresh "vt_match" in
+    let vt_eq := fresh "vt_eq" in
+    (match goal with
+     | reg_match: (registers_match _ _ ?s ?s'), ST: ?s = _ |- _
+       =>( match (type of s_eq) with
+          | (?m ?r) = Some ?old_v => destruct (reg_match r old_v) as [_ impl]; rewrite ST in impl; 
+                                    destruct (impl s_eq) as [[v t] [vt_match vt_eq]]; clear impl
+          end)
+     end) ||
+      (match goal with
+       | mem_match: (memory_match _ _ ?s ?s'),
+           color_eq: Some ?color = color_of ?s', side_eq : side_of _ = _, ST: ?s = _ |- _ =>
+           ( match (type of s_eq) with
+             | (?m ?w) = Some ?old_v =>
+                 pose proof (mem_match w old_v) as [_ impl]; simpl;
+                 [ auto | clear - color_eq side_eq; unfold side_of in *; try rewrite <- color_eq in side_eq;
+                          unfold_all; repeat unfold_match
+                 | rewrite ST in impl; destruct (impl s_eq) as [[v t] [vt_match vt_eq]]; clear impl]
+             end)
+       end).
+  
   (*** Equivalence preservation lemmas ***)
   
   Lemma preserves_equiv_left_pc_incr :
@@ -1456,171 +1622,6 @@ Section Recomposition.
       }      
   Admitted.
 
-  
-  Ltac deduce_color_eq :=
-    unfold color_of; subst; simpl;
-    repeat
-      match goal with
-      | |- Some (_ ?t) = _ => subst t; simpl
-      | |- _ = Some (_ ?t) => subst t; simpl
-      | |- match (setm _ _ _) with _ => _ end = _ => rewrite setmE; goal_match_bind_step
-      | |- _ = match (setm _ _ _) with _ => _ end => rewrite setmE; goal_match_bind_step
-      | |- match (mem ?s ?w) with _ => _ end = _ => subst s
-      | |- _ = match (mem ?s ?w) with _ => _ end => subst s
-      | H: (?m ?v) = _ |- match (?m ?w) with _ => _ end = _ => rewrite H
-      | H: (?m ?v) = _ |- _ = match (?m ?w) with _ => _ end => rewrite H
-      | H: _ = (?m ?v) |- match (?m ?w) with _ => _ end = _ => rewrite <- H
-      | H: _ = (?m ?v) |- _ = match (?m ?w) with _ => _ end => rewrite <- H
-      end; try done.
-
-  Ltac deduce_reg reg_match :=
-    let impl := fresh "impl" in
-    let d_eq := fresh "d_eq" in
-    match goal with
-    | H: (getm ?m' ?w = Some ?v) |- context[(getm ?m ?w) = _] =>
-        pose proof (reg_match w v) as [_ impl];
-        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (Some ?v = getm ?m' ?w) |- context[(getm ?m ?w) = _] =>
-        pose proof (reg_match w v) as [_ impl];
-        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (getm ?m' ?w = Some ?v) |- context[Option.bind _ (getm ?m ?w)] =>
-        pose proof (reg_match w v) as [_ impl];
-        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (Some ?v = getm ?m' ?w) |- context[Option.bind _ (getm ?m ?w)] =>
-        pose proof (reg_match w v) as [_ impl];
-        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (Some ?v = getm ?m' ?w) |- context[match (getm ?m ?w) with _ => _ end] =>
-        pose proof (reg_match w v) as [_ impl];
-        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (getm ?m' ?w = Some ?v) |- context[match (getm ?m ?w) with _ => _ end] =>
-        pose proof (reg_match w v) as [_ impl];
-        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (Some ?v = getm ?m' ?w) |- context[isSome (getm ?m ?w)] =>
-        pose proof (reg_match w v) as [_ impl]; simpl in impl;
-        destruct (impl (esym H)) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    | H: (getm ?m' ?w = Some ?v) |- context[isSome (getm ?m ?w)] =>
-        pose proof (reg_match w v) as [_ impl]; simpl in impl;
-        destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl
-    end.
-
-  Ltac deduce_code :=
-    let comp_in := fresh "comp_in" in
-    let t := fresh "t" in
-    let t_color := fresh "t_color" in
-    let t_code  := fresh "t_code" in
-    let impl  := fresh "impl" in
-    repeat
-    match goal with
-    | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
-            code_left: combined_codes Left _ _, code: is_true ?isc,
-                Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
-                  color_eq : _ = match (?mem3 _) with _ => _ end |-
-        match (?mem3 _) with _ => _ end = _  =>
-        (remember (MTag vt comp e isc) as t;
-         unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
-         match goal with
-         | H : true = (@in_mem ?T ?comp ?s) |- _ =>
-             assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
-             assert (t_color: LRC.color t = comp) by (subst; auto);
-             assert (t_code : LRC.is_code t) by (subst; done);
-             destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
-             try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
-             rewrite <- pc_s1_s3 in impl;
-             repeat (rewrite (addwC onew _) in impl);
-             rewrite (impl Heqi'); subst; clear impl; done
-         end) || clear Heqi'
-    | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
-            code_left: combined_codes Left _ _, code: is_true ?isc,
-                Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
-                  color_eq : _ = match (?mem3 _) with _ => _ end |-
-        _ = match (?mem3 _) with _ => _ end =>
-        (remember (MTag vt comp e isc) as t;
-         unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
-         match goal with
-         | H : true = (@in_mem ?T ?comp ?s) |- _ =>
-             assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
-             assert (t_color: LRC.color t = comp) by (subst; auto);
-             assert (t_code : LRC.is_code t) by (subst; done);
-             destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
-             try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
-             rewrite <- pc_s1_s3 in impl;
-             repeat (rewrite (addwC onew _) in impl);
-             rewrite (impl Heqi'); subst; clear impl; done
-         end) || clear Heqi'
-    | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
-            code_left: combined_codes Left _ _, code: is_true ?isc,
-                Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
-                  color_eq : _ = match (?mem3 _) with _ => _ end |-
-        ?mem3 _ = _  =>
-        (remember (MTag vt comp e isc) as t;
-         unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
-         match goal with
-         | H : true = (@in_mem ?T ?comp ?s) |- _ =>
-             assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
-             assert (t_color: LRC.color t = comp) by (subst; auto);
-             assert (t_code : LRC.is_code t) by (subst; done);
-             destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
-             try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
-             rewrite <- pc_s1_s3 in impl;
-             repeat (rewrite (addwC onew _) in impl);
-             rewrite (impl Heqi'); subst; clear impl; done
-         end) || clear Heqi'
-    | eq_off: (_ _ = Some ?off), side_eq: side_of _ = _, pc_s1_s3: _ = (addw _ (as_word ?off)),
-            code_left: combined_codes Left _ _, code: is_true ?isc,
-                Heqi': ?mem0 ?w = Some ?v@(MTag ?vt ?comp ?e ?isc),
-                  color_eq : _ = match (?mem3 _) with _ => _ end |-
-        _ = ?mem3 _  =>
-        (remember (MTag vt comp e isc) as t;
-         unfold combined_codes, side_of in *; unfold_all; repeat unfold_match;
-         match goal with
-         | H : true = (@in_mem ?T ?comp ?s) |- _ =>
-             assert (comp_in: @in_mem T comp s) by (rewrite <- H; done); 
-             assert (t_color: LRC.color t = comp) by (subst; auto);
-             assert (t_code : LRC.is_code t) by (subst; done);
-             destruct (code_left w (v@t) off comp comp_in eq_off t_code t_color) as [_ impl];
-             try (rewrite (addwC _ onew) in impl; rewrite <- (addwA _ _ _) in impl);
-             rewrite <- pc_s1_s3 in impl;
-             repeat (rewrite (addwC onew _) in impl);
-             rewrite (impl Heqi'); subst; clear impl; done
-         end) || clear Heqi'
-    end.
-
-  Ltac deduce_mem mem_match :=
-    (let impl := fresh "impl" in
-     let d_eq := fresh "d_eq" in
-     match goal with
-     | PC: (?mem0 ?pc0 = Some _), color_eq: match (?mem0 ?pc0) with _ => _ end = match _ with _ => _ end,
-           side_eq : side_of _ = _, H: (getm ?m' ?w = Some ?v) |- context[(getm ?m ?w)] =>
-         pose proof (mem_match w v) as [_ impl]; simpl;
-         [ auto | clear - PC color_eq side_eq; rewrite PC in color_eq; unfold side_of in *;
-                  unfold_all; repeat unfold_match
-         | destruct (impl H) as [? [? d_eq]]; rewrite d_eq; simpl; clear impl]
-     end).    
-
-  Ltac deduce_equality s_eq :=
-    let v := fresh "v" in
-    let t := fresh "t" in
-    let vt_match := fresh "vt_match" in
-    let vt_eq := fresh "vt_eq" in
-    (match goal with
-     | reg_match: (registers_match _ _ ?s ?s'), ST: ?s = _ |- _
-       =>( match (type of s_eq) with
-          | (?m ?r) = Some ?old_v => destruct (reg_match r old_v) as [_ impl]; rewrite ST in impl; 
-                                    destruct (impl s_eq) as [[v t] [vt_match vt_eq]]; clear impl
-          end)
-     end) ||
-      (match goal with
-       | mem_match: (memory_match _ _ ?s ?s'),
-           color_eq: Some ?color = color_of ?s', side_eq : side_of _ = _, ST: ?s = _ |- _ =>
-           ( match (type of s_eq) with
-             | (?m ?w) = Some ?old_v =>
-                 pose proof (mem_match w old_v) as [_ impl]; simpl;
-                 [ auto | clear - color_eq side_eq; unfold side_of in *; try rewrite <- color_eq in side_eq;
-                          unfold_all; repeat unfold_match
-                 | rewrite ST in impl; destruct (impl s_eq) as [[v t] [vt_match vt_eq]]; clear impl]
-             end)
-       end).
-  
   Lemma step_silent_strong1:
     forall s1 s1', Step sem s1 E0 s1' ->
     forall s2 s3 M, strong_equiv Left M s1 s3 ->
@@ -1683,7 +1684,8 @@ Section Recomposition.
       
       7-8: try (match (type of Heqa2) with
                   (_ = match ?m ?w with _ => _ end)
-                  => eapply (@modusponens (exists res, m w = Some res)); [|intros [res res_eq]; rewrite res_eq in Heqa2]
+                  => eapply (@modusponens (exists res, m w = Some res /\ (is_code (taga res))));
+                    [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2]
                 end).
       11: remember (mem0 pc') as next_pc_content; destruct next_pc_content.
       all: try (match goal with
@@ -2118,7 +2120,7 @@ Section Recomposition.
           repeat (unfold check_ret in *; (unfold_all || unfold_match)); eauto.
         remember t1 as t1'.
         destruct t1; subst t1'; try (destruct Hyp as [?|Hyp]; try destruct Hyp; done);
-          simpl in cor_RW; destruct cor_RW as [? [? ?]]; eauto.
+          simpl in cor_RW; destruct cor_RW as [? [? [? ?]]]; eauto.
       + admit. (*JMP*)
       + remember pc' as w'. unfold pc' in Heqw'.
         match (type of Heqw') with
@@ -2126,7 +2128,66 @@ Section Recomposition.
         end. destruct cond; subst w'; try (rewrite Heqi'; eauto).
         subst. unfold_match' Heqa5. unfold is_code in Heqa3. unfold_match' Heqa3. pose proof (bnz_s1 _ _ PC) as H.
         simpl in H. simpl in *. rewrite <- Heqa1 in H. simpl in *. rewrite H2 in H. destruct H as [? [? ?]]; auto. eauto.
-      + admit. (*BNZ*)
+      + inversion Heqa2.
+        deduce_equality RW.
+        destruct res as [resv rest]. simpl in H0.
+        subst rest.
+        destruct vt_match as [? match_t]. subst t1. destruct t; unfold is_other in *; try congruence. subst w.
+        remember (@eq_op (mword_eqType _) v zerow) as cond.
+        remember (pc3_val + (if cond then 1 else swcast n0))%w as pc3'.
+        eexists. exists M. simpl.
+        split.
+        * eapply (plus_left _ [::]); try eapply step_bnz. eauto.
+          -- eapply (etrans _ (PC)).
+          -- (match goal with
+              | op: _ = op_of_word _, inst: instr_of_args _ = _ |- _
+                => simpl; rewrite <- op; simpl; rewrite inst; done
+              end).
+          -- rewrite <- eq_s3 in vt_eq. eauto.
+          -- unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules in *.
+             unfold evi in *. unfold_all.
+             deduce_reg reg_match.
+             subst s1 s3 color. simpl in *. deduce_code.
+             simpl in *.
+             rewrite <- Heqcond.
+             rewrite <- Heqpc3'.
+             assert (pc'_eq: pc3' = (pc' + as_word off)%w).
+             { clear -pc_s1_s3 Heqpc3' Heqcond. unfold pc'. subst.
+               rewrite <- addwA. rewrite (addwC (as_word _) (if _ then _ else _)).
+               rewrite addwA. reflexivity. }
+             clear pc_s1_s3.
+             match type of (res_eq) with (_ = Some (_@?t)) => assert (res_col: color t = M.2) by done end.
+             match type of (res_eq) with (_ = Some (_@?t)) => assert (res_code': LRC.is_code t) by (simpl; done) end.
+             assert (rel: is_relevant_comp Left M.2). { clear - side_eq. unfold side_of in *. unfold_match' side_eq. }
+             pose proof ((snd (code_left pc' (resv@_) off _ rel eq_off res_code' res_col)) (res_eq)) as pc3'eq.
+             simpl in pc3'eq. rewrite <- pc'_eq in pc3'eq. rewrite pc3'eq. simpl.
+             unfold check_belong. simpl. rewrite eq_refl. simpl. rewrite vt_eq. simpl.
+             unfold updm. rewrite vt_eq. simpl. reflexivity.
+          -- destruct cond; eapply star_refl.
+          -- done.
+        * eapply preserves_equiv_left_reg_write with (r := r) (v := v@Other) (v' := (v@Other)).
+          eapply preserves_equiv_left_pc_incr with (pc1' := (pc')@(taga (pc s1)))
+                                                   (pc3' := (pc3')@(taga (pc s3))); auto. eauto.
+          all: simpl; try trivial.
+          all: try (deduce_color_eq; try (simpl in *; rewrite PC in color_eq; deduce_code); done).
+          all: unfold updm.
+          all: try done.
+          -- subst. simpl. eapply same_pc_normal. deduce_color_eq.
+             simpl. eauto. simpl in *.
+             rewrite pc_s1_s3. unfold pc'. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) _). rewrite addwA. done.
+          -- subst color s1 s3.
+             assert (pc'_eq: pc3' = (pc' + as_word off)%w).
+             {subst. simpl in *. subst. unfold pc'. subst.
+               rewrite <- addwA. rewrite (addwC (as_word _) (if _ then _ else _)).
+               rewrite addwA. reflexivity. }
+             match type of (res_eq) with (_ = Some (_@?t)) => assert (res_col: LRC.color t = M.2) by done end.
+             match type of (res_eq) with (_ = Some (_@?t)) => assert (res_code': LRC.is_code t) by (simpl; done) end.
+             assert (rel: is_relevant_comp Left M.2). { subst. clear - side_eq. unfold side_of in *. unfold_match' side_eq. }
+             pose proof ((snd (code_left pc' (resv@_) off _ rel eq_off res_code' res_col)) (res_eq)) as pc3'eq.
+             simpl in pc3'eq. rewrite <- pc'_eq in pc3'eq. simpl in *.
+             rewrite pc3'eq. rewrite <- color_eq. rewrite PC. done.
+          -- subst s1. rewrite RW. simpl. rewrite RW in Heqa0. simplify_some. done.
+          -- rewrite vt_eq. simpl. subst. done.
       + (*normal JAL*)
         unfold pc' in *. subst. pose proof (bnz_s1 _ _ PC) as JALcond. simpl in JALcond.
         (match goal with
