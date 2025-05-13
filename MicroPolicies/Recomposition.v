@@ -1680,7 +1680,7 @@ Section Recomposition.
                      => simpl in instr_is_halt;  rewrite <- op in instr_is_halt; simpl in instr_is_halt;
                        rewrite inst in instr_is_halt; done end) |
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
-      all: unfold check_belong, belong, reg_clear_list in *.
+      all: unfold check_belong, belong, reg_clear_list, option_of_list_option in *.
       
       7-8: try (match (type of Heqa2) with
                   (_ = match ?m ?w with _ => _ end)

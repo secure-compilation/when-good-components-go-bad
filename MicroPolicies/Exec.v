@@ -85,7 +85,8 @@ Definition stepf (st : state ttypes internal_state) :
     | Jump r =>
       do! a <- reg r;
       let: w@t1 := a in
-      let mvec := IVec JUMP tpc ti (reg_clear_list reg  t1) in
+      do! l <- reg_clear_list reg t1;
+      let mvec := IVec JUMP tpc ti l in
       next_state_updates_and_pc st mvec ((RegRead r) :: reg_clear_read) w
     | Bnz r n =>
       do! a <- reg r;
@@ -97,7 +98,8 @@ Definition stepf (st : state ttypes internal_state) :
     | Jal i =>
       do! oldtold <- reg ra;
       let: _@told := oldtold in
-      let mvec := IVec JAL tpc ti (reg_clear_list reg  told) in
+      do! l <- reg_clear_list reg told;
+      let mvec := IVec JAL tpc ti l in
       let pc' := swcast i in
       next_state_updates_and_pc st mvec ((RegWrite ra (pc.+1)) :: reg_clear_read) pc'
     | JumpEpc | AddRule | GetTag _ _ | PutTag _ _ _ | Halt =>
@@ -197,13 +199,15 @@ Definition build_k_ivec st : option (k_ivec ttypes)  :=
               Some (part [hseq (taga w1); (taga w2); (taga w3)])
             | Jump  r => fun part =>
               do! w <- regs st r;
-              Some (part (reg_clear_list (regs st) (taga w)))
+              do! l <- reg_clear_list (regs st) (taga w);
+              Some (part l)
             | Bnz  r n => fun part =>
               do! w <- regs st r;
               Some (part [hseq taga w])
             | Jal  r => fun part =>
               do! old <- regs st ra;
-              Some (part (reg_clear_list (regs st) (taga old)))
+              do! l <- reg_clear_list (regs st) (taga old);
+              Some (part l)
             | JumpEpc => fun _ => None
             | AddRule => fun _ => None
             | GetTag _ _ => fun _ => None
