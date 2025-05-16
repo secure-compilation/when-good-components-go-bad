@@ -784,13 +784,14 @@ Section Recomposition.
       same_pc Left s1' s3' ->
       taga pc1' = taga (pc s1) ->
       taga pc3' = taga (pc s3) ->
-      color_of s1 = color_of s1' ->
-      color_of s3 = color_of s3' ->
+      color_of s1' = color_of s3' ->
+      compatible (color_of s1') M.2 ->
+      compatible (color_of s3') M.2 ->
       strong_equiv Left M s1' s3'
       /\ weak_equiv Right M s2 s3'
       /\ common_equiv M s1' s2 s3'.
   Proof.
-    intros s1 s2 s3 M s1' s3' pc1' pc3' equiv eq_s1' eq_s3' pc1'_pc3' pc1_tag pc3_tag color_s1 color_s3.
+    intros s1 s2 s3 M s1' s3' pc1' pc3' equiv eq_s1' eq_s3' pc1'_pc3' pc1_tag pc3_tag col_eq color_s1 color_s3.
     destruct equiv as [strong [weak common]].
     split; [|split].
     - destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
@@ -1592,8 +1593,6 @@ Section Recomposition.
           inversion step_2; try( rewrite ST PC in color_eq; inversion color_eq; done). eapply step_syscall; eauto.
         * clear wf_m comp_num pc_s1_s3 side_eq m_compat s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match allowed Heqcomp.
           rename color_eq into PC_None. shelve.
-    (* todo: this must be an alloc case. todo : unfold everything, *)
-    (*collapse absurd configuration, and use the same proof as in the last case*)
     - Unshelve.
       all: remember (id s3) as s3'; simpl in Heqs3'; destruct s3' as [mem3 regs3 [pc3_val pc3_tag] internal3 cn3].
       all: rename Heqs3' into eq_s3; rewrite eq_s3 in strong weak common; rewrite eq_s3;
@@ -1663,10 +1662,13 @@ Section Recomposition.
           -- rewrite <- eq_s3. simpl. done.
           -- rewrite ST. eapply same_pc_normal; simpl; eauto.
              ++ rewrite Heqi'. simpl. done.
-             ++ subst. simpl in *. rewrite pc_s1_s3. simpl. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) onew). rewrite addwA. done.
-          -- rewrite ST. simpl. rewrite PC Heqi'. simpl. done.
-          -- deduce_color_eq. simpl in *. rewrite PC in color_eq. simpl in *. rewrite <- color_eq.
-             unfold side_of in side_eq. unfold_match' side_eq.
+             ++ subst. simpl in *. rewrite pc_s1_s3. simpl. rewrite <- (addwA pc0 _).
+                rewrite (addwC (as_word _) onew). rewrite addwA. done.
+          -- subst. simpl. rewrite Heqi'. unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq. trivial.
+          -- unfold compatible. subst. simpl. rewrite Heqi'. trivial.
+          -- unfold compatible. subst. simpl.
+             unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
              deduce_equality Heqi'. rewrite vt_eq. trivial.
       + eexists; exists M. simpl.
         split.
@@ -1700,10 +1702,12 @@ Section Recomposition.
           -- subst. simpl. eapply same_pc_normal. deduce_color_eq.
              simpl. eauto. simpl in *.
              rewrite pc_s1_s3. simpl. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) onew). rewrite addwA. done.
-          -- deduce_color_eq. (* color *)
-          -- deduce_color_eq. simpl in *.
-             rewrite PC in color_eq. unfold side_of in side_eq. unfold_match' side_eq. deduce_equality Heqi'.
-             rewrite vt_eq. rewrite color_eq. trivial.
+          -- deduce_color_eq. unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq. trivial.
+          -- unfold compatible. subst. simpl. rewrite Heqi'. trivial.
+          -- unfold compatible. subst. simpl.
+             unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq. trivial.
           -- unfold updm. simpl.
              rewrite ST OLD. simpl. done.
           -- unfold updm. simpl. subst. deduce_reg reg_match. done.
@@ -1751,10 +1755,12 @@ Section Recomposition.
           -- subst. simpl. eapply same_pc_normal. deduce_color_eq.
              simpl. eauto. simpl in *.
              rewrite pc_s1_s3. simpl. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) onew). rewrite addwA. done.
-          -- subst. simpl in *. unfold side_of in side_eq. unfold_match' side_eq.
-             deduce_equality PC.
-             deduce_equality Heqi'.
-             rewrite vt_eq1 vt_eq2. trivial.
+          -- deduce_color_eq. unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq1. trivial.
+          -- unfold compatible. subst. simpl. rewrite Heqi'. trivial.
+          -- unfold compatible. subst. simpl.
+             unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq1. trivial.
           -- unfold data_match in *. split; auto. destruct vt_match0. subst new_t1. destruct t1; simpl; done.
           -- subst. destruct t1; simpl; auto.
           -- subst. destruct t1; simpl; auto.
@@ -1828,8 +1834,11 @@ Section Recomposition.
           -- rewrite ST. eapply same_pc_normal; simpl; eauto.
              ++ rewrite Heqi'. simpl. rewrite <- eq_comp. deduce_color_eq.
              ++ rewrite pc_s1_s3 ST. simpl. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) onew). rewrite addwA. done.
-          -- rewrite <- color_eq, eq. 
-             unfold side_of in side_eq. unfold_match' side_eq. subst. simpl in *.
+          -- deduce_color_eq. unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq2. trivial.
+          -- unfold compatible. subst. simpl. rewrite Heqi'. trivial.
+          -- unfold compatible. subst. simpl.
+             unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
              deduce_equality Heqi'. rewrite vt_eq2. trivial.
           -- split; auto.
           -- split; auto. subst w'. destruct cond; auto. convert_eq_op. rewrite R1W in R2W. simplify_some. done.
@@ -1913,7 +1922,11 @@ Section Recomposition.
           -- rewrite ST. eapply same_pc_normal; simpl; eauto.
              ++ rewrite Heqi'. simpl. rewrite <- eq_comp. deduce_color_eq.
              ++ rewrite pc_s1_s3 ST. simpl. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) onew). rewrite addwA. done.
-          -- unfold side_of in side_eq. unfold_match' side_eq. subst. simpl in *. rewrite <- color_eq.
+          -- deduce_color_eq. unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq2. trivial.
+          -- unfold compatible. subst. simpl. rewrite Heqi'. trivial.
+          -- unfold compatible. subst. simpl.
+             unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
              deduce_equality Heqi'. rewrite vt_eq2. trivial.
           -- split; auto. simpl. split; auto. subst. destruct vtag1; unfold is_address; auto. destruct vt_match0. simpl in *.
              destruct H0. done.
@@ -2017,7 +2030,11 @@ Section Recomposition.
           -- rewrite ST. eapply same_pc_normal; simpl; eauto.
              ++ rewrite Heqi'. simpl. rewrite <- eq_comp. deduce_color_eq.
              ++ rewrite pc_s1_s3 ST. simpl. rewrite <- (addwA pc0 _). rewrite (addwC (as_word _) onew). rewrite addwA. done.
-          -- unfold side_of in side_eq. unfold_match' side_eq. subst. simpl in *. rewrite <- color_eq.
+          -- deduce_color_eq. unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
+             deduce_equality Heqi'. rewrite vt_eq2. trivial.
+          -- unfold compatible. subst. simpl. rewrite Heqi'. trivial.
+          -- unfold compatible. subst. simpl.
+             unfold side_of in side_eq. unfold_match' side_eq. simpl in *.
              deduce_equality Heqi'. rewrite vt_eq2. trivial.
           -- inversion vt_match. subst. simpl. unfold data_match'. split; auto.
           -- clear -eq side_eq. unfold side_of in *. inv side_eq. unfold_match.
@@ -2190,15 +2207,23 @@ Section Recomposition.
           all: try done.
           -- subst. simpl. eapply same_pc_normal. deduce_color_eq. inversion Heqa2. destruct res. simpl in *. subst. done.
              eauto. done.
-          -- rewrite res_eq PC. inversion Heqa2. destruct res. simpl in *. subst. done.
-          -- rewrite <- color_eq. rewrite PC. simpl.
+          -- rewrite res_eq. simpl.
              remember (w + as_word off)%w as v. simpl in *. rewrite <- Heqv in vt_eq. fold (@as_word (word_size mt) off).
              pose proof Heqv as tmp. unfold as_word in tmp. rewrite <- tmp. clear tmp.
              pose proof (s'_reg_cor (v@InternalJump) r). simpl in H.
              destruct (H vt_eq) as [memv [memveq memvcode]]. rewrite memveq. destruct memv.
              unfold side_of in *. unfold_match' side_eq. simpl in *. inversion Heqa2.
              destruct res as [rv rt]. simpl in *. subst rt.
-             deduce_equality res_eq. rewrite memveq in vt_eq10. simplify_some. subst. simpl. trivial.
+             deduce_equality res_eq. rewrite memveq in vt_eq10. simplify_some. trivial.
+          -- rewrite res_eq. destruct res. inversion Heqa2. subst. unfold compatible. simpl. trivial.
+          -- unfold compatible.
+             remember (w + as_word off)%w as v. simpl in *. rewrite <- Heqv in vt_eq. fold (@as_word (word_size mt) off).
+             pose proof Heqv as tmp. unfold as_word in tmp. rewrite <- tmp. clear tmp.
+             pose proof (s'_reg_cor (v@InternalJump) r). simpl in H.
+             destruct (H vt_eq) as [memv [memveq memvcode]]. rewrite memveq. destruct memv.
+             unfold side_of in *. unfold_match' side_eq. simpl in *. inversion Heqa2.
+             destruct res as [rv rt]. simpl in *. subst rt.
+             deduce_equality res_eq. rewrite memveq in vt_eq10. simplify_some. trivial.
       + remember pc' as w'. unfold pc' in Heqw'.
         match (type of Heqw') with
           _ = (_ _ (match ?c as _ with _ => _ end)) => remember c as cond
@@ -2257,9 +2282,11 @@ Section Recomposition.
           all: try done.
           -- subst. simpl. eapply same_pc_normal. deduce_color_eq.
              simpl. eauto. simpl in *. trivial.
-          -- subst. simpl in *. rewrite <- color_eq. rewrite next_pc_eq PC H0. trivial.
-          -- subst s1. rewrite RW. simpl. rewrite RW in Heqa0. simplify_some. done.
-          -- rewrite vt_eq. simpl. subst. done.
+          -- subst. simpl in *. rewrite next_pc_eq res_eq H0. trivial.
+          -- unfold compatible. subst s1. simpl. rewrite res_eq. trivial.
+          -- unfold compatible. subst s3. simpl. rewrite next_pc_eq H0. trivial.
+          -- subst. simpl in *. rewrite <- Heqa0. simpl. rewrite <- Heqa0 in RW. simplify_some. trivial.
+          -- rewrite vt_eq. simpl. subst. trivial.
       + (*normal JAL*)
         (* we start by proving that pc' points to code *)
         unfold pc' in *. rewrite ST in bnz_s1, PC, alloc_mem_s1. pose proof (bnz_s1 _ _ PC) as JALcond.
@@ -2350,8 +2377,12 @@ Section Recomposition.
           all: unfold updm.
           all: try done.
           -- subst. simpl. eapply same_pc_normal. deduce_color_eq. simpl. eauto. simpl. done.
-          -- split; auto. simpl. rewrite eq_off. simpl. rewrite <- addwA. rewrite (addwC (as_word _)).
-             rewrite addwA. trivial.
+          -- rewrite <- Heqnext_pc_content. unfold compatible. trivial.
+          -- rewrite deq. unfold compatible. trivial. 
+          -- pose proof (end_s3 _ _ vt_eq10). simpl in H. revert H. decode_instr_eq.
+             intro H. destruct H; auto; try contradiction.
+             split; auto. simpl. rewrite eq_off. simpl.
+             rewrite <- addwA. rewrite (addwC (as_word _) onew). rewrite addwA. trivial.
           -- rewrite Heqi'. eexists. split; eauto.
           -- pose proof (end_s3 _ _ vt_eq10). simpl in H. revert H. decode_instr_eq.
              intro H. destruct H; auto; try contradiction.
@@ -2449,12 +2480,11 @@ Section Recomposition.
                                                    (pc3' := (word_of_nat alloc_label)%w@(Level n)).
           eauto. auto. auto.
           all: simpl; try trivial.
-          all: try (deduce_color_eq; done).
           all: unfold updm.
-          all: try done.
           -- subst. simpl. eapply same_pc_alloc; simpl. trivial. exact alloc_mem_s1.
-          -- rewrite PC. rewrite alloc_mem_s1. admit.
-          -- rewrite vt_eq10. rewrite alloc_mem_s3. admit. (* both admit require less strict conditions from the lemmas *)
+          -- rewrite alloc_mem_s1. rewrite alloc_mem_s3. done.
+          -- rewrite alloc_mem_s1. unfold compatible. trivial.
+          -- rewrite alloc_mem_s3. unfold compatible. trivial.
           -- split;auto. simpl. rewrite eq_off. simpl. rewrite <- addwA. rewrite (addwC _ onew).
              rewrite addwA. trivial.
           -- rewrite Heqi'. eexists. split; eauto.
