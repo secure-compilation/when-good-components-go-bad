@@ -97,7 +97,7 @@ Definition coqstring_of_mem (mem : { fmap mword mt -> matom }) : string :=
 
 Definition coqstring_of_pc_tag (t : pc_tag) : string :=
   match t with
-  | Level n => "Level " ++ coqstring_of_nat n
+  | Level n c => "Level " ++ coqstring_of_nat n ++ coqstring_of_nat c
   end.
 
 Definition coqstring_of_pc (pc : atom (mword mt) pc_tag) : string :=

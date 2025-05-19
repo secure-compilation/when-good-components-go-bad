@@ -41,7 +41,8 @@ Definition instr_rules_empty (rcom_val : Z)
   (ts : hseq (tag_type lrc_tags) (outputs op))
   (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op * option event) :=
   let current := match ti with {| color := c |} => c end in
-  let level := match tpc with Level n => n end in
+  let (level, c') := match tpc with Level n c'=> (n, c') end in
+  do! _ <- (if (current == c') then Some tt else None);
   match op, ts return option (ovec _ op * option event) with
   | JUMP,    _  => if belong current tni then
                     Some (OVec JUMP tpc ts, None)

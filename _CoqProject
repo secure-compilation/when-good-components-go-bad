@@ -72,7 +72,6 @@ MicroPolicies/Exec.v
 MicroPolicies/LRC.v
 MicroPolicies/Instance.v
 MicroPolicies/Printer.v
-MicroPolicies/Recomposition.v
 
 
 I2MP/Tmp.v
@@ -93,5 +92,6 @@ I2MP/Examples/NestedCalls.v
 
 MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
-MicroPolicies/Helper.v
+#MicroPolicies/Helper.v
 
+MicroPolicies/Recomposition.v

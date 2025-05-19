@@ -319,7 +319,7 @@ Definition initial_state cde (pb : prog_buffers) (pi : Program.interface) : (Sym
   let nc := (1+ Nat.log2 (1 + (size (domm pi)))) in
   let mem0 := (initial_memory pb) in
   let pc0 := (size mem0) in
-  let pctag := build_tpc 0 in
+  let pctag := build_tpc 0 Component.main in
   {|mem := unionm (encode_code cde pc0) mem0 ; regs := reg0 ; pc := (word_of_nat pc0)@pctag ; internal := tt; comp_num := nc|}.
 
 End WithClasses.

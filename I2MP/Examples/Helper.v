@@ -488,7 +488,7 @@ Definition compile_and_run_me (p: Source.program) (fuel:nat) :=
       let bufs := (Intermediate.prog_buffers inter_p) in
       let merged_p := (transitional_to_merged bufs (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0) tt (merged_to_mp_backend bufs merged_p) nc in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) nc in
       match execN_me fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
@@ -505,7 +505,7 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
       let bufs := (Intermediate.prog_buffers inter_p) in
       let merged_p := (transitional_to_merged bufs (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0) tt (merged_to_mp_backend bufs merged_p) nc in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) nc in
       match execN fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
@@ -537,7 +537,7 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
       let bufs := (Intermediate.prog_buffers inter_p) in
       let merged_p := (transitional_to_merged bufs (intermediate_to_transitional inter_p)) in
       let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0) tt (merged_to_mp_backend bufs merged_p) nc in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) nc in
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
       match execN_and_show_mp fuel st with
     | inl (Some n) => print_ocaml_int (z2int n)

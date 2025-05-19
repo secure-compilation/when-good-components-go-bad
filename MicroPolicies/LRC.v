@@ -36,15 +36,15 @@ Definition value_tag_eqMixin := CanEqMixin nat_of_value_tagK.
 Canonical value_tag_eqType := EqType value_tag value_tag_eqMixin.
 End ValueTagEq.
 
-Inductive pc_tag : Type := Level : nat -> pc_tag.
+Inductive pc_tag : Type := Level : nat  -> Component.id -> pc_tag.
 
 Module Import PCTagEq.
 Definition nat_of_pc_tag t :=
   match t with
-  | Level n => n
+  | Level n c => (n, c)
   end.
 
-Definition pc_tag_of_nat n := Level n.
+Definition pc_tag_of_nat '(n, c) := Level n c.
 
 Lemma nat_of_pc_tagK : cancel nat_of_pc_tag pc_tag_of_nat.
 Proof. by case. Qed.
@@ -145,7 +145,7 @@ Definition switch_val (m : tag_type lrc_tags M)
 
 
 (* TL TODO: without this, I get a type error *)
-Definition build_tpc (n : nat) : tag_type lrc_tags P := Level n.
+Definition build_tpc (n : nat) c : tag_type lrc_tags P := Level n c.
 
 Definition is_not_invalid (t:value_tag) : option unit :=
   match t with | Invalidated => None  | _ => Some tt end.
@@ -171,7 +171,8 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
            (ts : hseq (tag_type lrc_tags) (inputs op))
            (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op * option event) :=
   let current := match ti with {| color := c |} => c end in
-  let level := match tpc with Level n => n end in
+  let (level, current') := match tpc with Level n c'=> (n, c') end in
+  do! _ <- (if (current == current') then Some tt else None);
   match op, ts return option (ovec _ op * option event) with
   | NOP,     [hseq]            => do! _ <- check_belong current tni;
                                      Some (OVec NOP       tpc [hseq], None)
@@ -218,20 +219,20 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
                                    (*          (unique Ret n)                              *)
-                                   let ev := do! c' <- get_tni_color tni;
-                                             Some (ERet current (rcom_value evi) c') in
+                                   do! c' <- get_tni_color tni;
+                                   let ev := Some (ERet current (rcom_value evi) c') in
                                    do! _ <- check_ret level.-1 tp;
-                                   Some (OVec JUMP (build_tpc level.-1)
+                                   Some (OVec JUMP (build_tpc (level.-1) c')
                                            (HSeqCons Other reg_invalidate_hseq), ev)
 
   | JAL,     HSeqCons tra next    => if belong current tni then
                                    Some (OVec JAL tpc (HSeqCons InternalJump next), None)
                                  else
-                                   let ev := do! c' <- get_tni_color tni;
-                                             do! p  <- get_proc_name tni;
-                                                 Some (ECall current p (rcom_value evi) c') in
+                                   do! c' <- get_tni_color tni;
+                                   let ev := do! p  <- get_proc_name tni;
+                                             Some (ECall current p (rcom_value evi) c') in
                                    do! _ <- check_entry current tni;
-                                   Some (OVec JAL (build_tpc level.+1)
+                                   Some (OVec JAL (build_tpc (level.+1) c')
                                            (HSeqCons (Ret level) reg_invalidate_hseq), ev)
 
   | _,     _                   => None
