@@ -287,68 +287,9 @@ Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
 Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state_ev :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
-Definition make_hseq {I : Set} {f : I -> Type} (t : I ) (l : list (f t)) : (hseq f (nseq (size l) t)) :=
-  (@list_rect (f t) (fun l0 : list (f t) => @hseq I f (@nseq I (@size (f t) l0) t))
-  (HSeqNil : @hseq I f (@nseq I (@size (f t) (@nil (f t))) t))
-  (fun (a : f t) (l0 : list (f t)) (IHl : @hseq I f (@nseq I (@size (f t) l0) t)) =>
-     @HSeqCons (f t) (@hseq I f (@nseq I (@size (f t) l0) t)) a IHl)) l.
-(*
-  induction l.
-  + simpl ; try exact HSeqNil.
-  + simpl. exact (HSeqCons a IHl).
-Qed.
-*)
-
-Fixpoint option_of_list_option {T:Type} (l: list (option T)) : option (list T) :=
-  match l with
-  | nil => Some nil
-  | None :: _ => None
-  | Some v :: ll => do! res <- (option_of_list_option ll); Some (v :: res)
-  end.
-
-Lemma option_of_list_option_correct {T:Type} (l: list (option T)) :
-  (forall v, List.In v l -> isSome v) -> isSome (option_of_list_option l).
-Proof.
-  induction l; unfold option_of_list_option; simpl in *; auto.
-  intro H. fold (@option_of_list_option T).
-  destruct a; auto.
-  - eapply Coqlib.modusponens; [eapply IHl; auto |].
-    intro leq. simpl in *. unfold isSome in leq.
-    remember (option_of_list_option l) as res. destruct res; inversion leq. simpl. done.
-  - pose proof (H None). eapply H0. left. done.
-Qed.
-
-Lemma option_of_list_option_sound {T:Type} (l: list (option T)) :
-  (exists v, List.In v l /\ v = None) -> (option_of_list_option l) = None.
-Proof.
-  induction l; unfold option_of_list_option; simpl in *; intro H; destruct H as [? [? ?]]; try tauto.
-  subst x. destruct H; try (subst a; tauto).
-  eapply Coqlib.modusponens; [eapply IHl; exists None; auto |].
-  intro leq. fold (@option_of_list_option T). rewrite leq. simpl. destruct a; tauto.
-Qed.
-
-Lemma option_of_list_option_size {T:Type} (l: list (option T)) :
-  forall res, (option_of_list_option l) = Some res -> size res = size l.
-Proof.
-  intros res reseq. remember (size l) as n.
-  revert reseq Heqn. revert l n.
-  induction res; intros l n reseq Heqn; induction n; unfold option_of_list_option; simpl in *; auto.
-  - destruct l; simpl in *; try (inversion n; done).
-    destruct o; try (inversion reseq; done).
-    remember (option_of_list_option l) as res; destruct res; simpl in *; inversion reseq.
-  - destruct l; try (inversion Heqn; done).
-  - destruct l; try (inversion Heqn; done).
-    rewrite (IHres l n); auto. unfold option_of_list_option in *.
-    destruct o; try (inversion reseq; done).
-    fold (@option_of_list_option T) in reseq. fold (@option_of_list_option T).
-    remember (option_of_list_option l) as res'; destruct res'; simpl in *; inversion reseq. trivial.
-Qed.
-
-
 Definition reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil.
 
-(* return an hseq containing the tags of all registers apart from RA and RCOM, plus top_reg *)
-(* ugly definition extracted from the proof in comment. *)
+(* return an hseq containing the tags of all registers in l, plus top_reg_tag at the top *)
 Fixpoint reg_clear_list_aux (l : seq nat) (regs : {fmap reg mt -> atom (tag_type ttypes R)}) (top_reg_tag: (tag_type ttypes R)) :
   option (hseq (tag_type ttypes) (nseq (S (size l)) R)):=
   let f := (fun i => do! v <- regs (word.as_word (ssrint.Posz i)); Some (taga v)) in
@@ -360,83 +301,8 @@ Fixpoint reg_clear_list_aux (l : seq nat) (regs : {fmap reg mt -> atom (tag_type
       Some (HSeqCons top_reg_tag (l')): option (hseq _ (nseq (S (S (size l))) R))
   end.
 
-(*
-Proof.
-  remember (fun i => do! v <- regs (word.as_word i); Some (taga v)) as f.
-  remember (Some top_reg_tag :: (map (fun n => (f (ssrint.Posz n))) l)) as l'.
-  remember (option_of_list_option l') as res. destruct res as [res|]; [|exact None].
-  remember (size l) as n.
-  revert Heql' Heqres Heqn.
-  revert res n l' top_reg_tag.
-  induction l; intros res n l' top_reg_tag Heql' Heqres Heqn.
-  - simpl in *. subst n. exact (Some (@make_hseq tag_kind (tag_type ttypes) R [:: top_reg_tag])).
-  - simpl in *. subst l'.
-    remember ([seq f (ssrint.Posz n) | n <- l]) as l''.
-    unfold option_of_list_option in Heqres. fold (@option_of_list_option (reg_tag_type ttypes)) in Heqres.
-    destruct (option_of_list_option l'') eqn: l'eq; simpl in *; destruct (f (ssrint.Posz a)) eqn: feq;
-    try (inversion Heqres; done).
-    simpl in *. inversion Heqres as [reseq]. clear Heqres. destruct res as [|h res]; try (inversion reseq; done).
-    inversion reseq as [reseq']. clear reseq. destruct res as [|h' res]; try (inversion reseq'; done).
-    inversion H. subst h' res top_reg_tag. clear H.
-    assert (eqop: option_of_list_option (Some s :: l'') = Some (s :: l0)).
-    { unfold option_of_list_option. fold (@option_of_list_option (reg_tag_type ttypes)).
-      rewrite l'eq. simpl. done. }
-    pose proof (IHl _ (size l) _ s (Logic.eq_refl) (esym eqop) (Logic.eq_refl)).
-    subst n. destruct X; [|exact None].
-    eapply Some. eapply HSeqCons. exact s.
-    unfold nseq in *. simpl. done.
-Qed.
-*)
-(*
-Proof.
-  remember (fun i => do! v <- regs (word.as_word i); Some (taga v)) as f.
-  remember (Some top_reg_tag :: (map (fun n => (f (ssrint.Posz n))) reg_list)) as l.
-  remember (option_of_list_option l) as res. destruct res as [res|]; [|exact None].
-  remember (size reg_list) as n.
-  assert (sl: size l = S n).
-  { rewrite Heql. simpl. rewrite size_map. rewrite Heqn. trivial. }
-  rewrite <- sl.
-  rewrite <- (option_of_list_option_size (esym Heqres)).
-  exact (Some (@make_hseq tag_kind (tag_type ttypes) _ res)).
-Qed.
-
-(* old definition *)
-Definition reg_clear_list (regs : {fmap reg mt -> atom (tag_type ttypes R)})
-  top_reg_tag : option (hseq (tag_type ttypes) (nseq 11 R)) :=
-  let reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil in
-  let f := (fun i => do! v <- regs (word.as_word i); Some (taga v)) in
-  let l := (Some top_reg_tag :: (map (fun n => (f (ssrint.Posz n))) reg_list)) in
-  match (option_of_list_option l) with
-  | Some res => (Some (@make_hseq tag_kind (tag_type ttypes) _ res)):(option (hseq _ (nseq (size reg_list) R)))
-  | None => None
-  end.
- *)
-
+(* return an hseq containing the tags of all registers apart from RA and RCOM, plus top_reg *)
 Definition reg_clear_list := reg_clear_list_aux reg_list.
-
-Lemma clear_list_prop: forall reg told l h i,
-    reg_clear_list_aux l reg told = Some h ->
-    List.In i l ->
-    exists v, reg (as_word (ssrint.Posz i)) = Some v.
-Proof.
-  intros reg told l. revert told.
-  induction l; intros told h i leq i_in; [inversion i_in|].
-  destruct i_in.
-  - subst a. unfold reg_clear_list_aux in leq. simpl in *.
-    remember (reg (as_word (ssrint.Posz i))) as cond.
-    destruct cond; simpl in leq ; try (inversion leq; done).
-    eauto.
-  - unfold reg_clear_list_aux in leq. fold reg_clear_list_aux in leq.
-    unfold Option.bind in leq.
-    repeat
-      (let veq := fresh "veq" in
-       match goal with
-       | H: (oapp ?f _ ?v) = _ |- _ => destruct v eqn:veq; simpl in H; try (inversion H; done)
-       end).
-    eapply IHl; auto.
-    exact veq0.
-Qed.
-
 
 Definition reg_clear_read :=
   map (fun n => (RegRead (word.as_word (ssrint.Posz n)))) reg_list.

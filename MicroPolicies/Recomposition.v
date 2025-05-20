@@ -663,24 +663,6 @@ Section Recomposition.
     | |- (match ?cond as _ return _ with _ => _ end) => remember cond as a; destruct a
     end.
 
-  
-  
-  Ltac deduce_color_eq :=
-    unfold color_of; subst; simpl;
-    repeat
-      match goal with
-      | |- Some (_ ?t) = _ => subst t; simpl
-      | |- _ = Some (_ ?t) => subst t; simpl
-      | |- match (setm _ _ _) with _ => _ end = _ => rewrite setmE; goal_match_bind_step
-      | |- _ = match (setm _ _ _) with _ => _ end => rewrite setmE; goal_match_bind_step
-      | |- match (mem ?s ?w) with _ => _ end = _ => subst s
-      | |- _ = match (mem ?s ?w) with _ => _ end => subst s
-      | H: (?m ?v) = _ |- match (?m ?w) with _ => _ end = _ => rewrite H
-      | H: (?m ?v) = _ |- _ = match (?m ?w) with _ => _ end => rewrite H
-      | H: _ = (?m ?v) |- match (?m ?w) with _ => _ end = _ => rewrite <- H
-      | H: _ = (?m ?v) |- _ = match (?m ?w) with _ => _ end => rewrite <- H
-      end; try done.
-
   Ltac deduce_reg reg_match :=
     let impl := fresh "impl" in
     let d_eq := fresh "d_eq" in
@@ -1492,25 +1474,6 @@ Section Recomposition.
     - subst. unfold initial_state. simpl. rewrite Hifacep Hifacec. trivial.
     - assert (color_eq: color_of s1 = 0). subst. unfold initial_state, color_of. simpl. trivial.
   Admitted.
-
-
-  Ltac unfold_register_cases :=
-    repeat(
-        (*automatically rewrite regs3 registers*)
-        (repeat
-           (match goal with
-            | H: getm _ ?w = _  |- context[getm _ ?w] => rewrite H; simpl
-            end));
-        (*automatically transforms setm in if (_ == _) then _ else _*)
-        repeat rewrite setmE; simpl; try trivial;
-        (*destruct the (_ == _) condition *)
-        try
-          (let cond := fresh "cond" in
-           match goal with
-           | |- context[@eq_op ?t ?a ?r] =>
-               remember (@eq_op t a r) as cond; destruct cond;
-               [convert_eq_op; simpl in *|]; simpl
-           end)).
 
       
   Lemma step_silent_strong1:

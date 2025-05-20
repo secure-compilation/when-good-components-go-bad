@@ -161,8 +161,14 @@ Definition is_jump (t:value_tag) : option unit :=
 Definition is_address (t:value_tag) : bool :=
   match t with | Ret _ | InternalJump | Invalidated => true | Other => false end.
 
+Fixpoint make_hseq n tag : (hseq (tag_type lrc_tags) (nseq n R))  :=
+  match n with
+  | O => HSeqNil
+  | S m => HSeqCons tag (make_hseq m tag)
+  end.
+
 Definition reg_invalidate_hseq : (hseq (tag_type lrc_tags) (nseq 10 R)) :=
-  make_hseq (nseq 10 Invalidated).
+  make_hseq 10 Invalidated.
 
 (* TL TODO: comments? cf org file *)
 Definition instr_rules (evi : ev_inputs) (op : opcode)
