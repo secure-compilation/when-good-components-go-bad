@@ -288,12 +288,10 @@ Definition component_memory_prefix (c : int) (nc : nat) :=
 (* alloc is a syscall taking one argument, the size to allocate *)
 (* a syscall don't change the pc level *)
 Definition alloc_fun (st : state) : option state :=
+  let current_c := (match (taga (pc st)) with Level _ c => c end) in
   do! ra_val <- regs st ra;
   do! _ <- is_jump (taga ra_val);
   let next_pc := (vala ra_val)@(taga (pc st)) in
-  (* TL TODO: Is using return address to compute calling component safe? *)
-  do! ra_atom <- mem st (vala ra_val);
-  let current_c := (color (taga ra_atom)) in
   let prefix := (component_memory_prefix (1 + current_c) (comp_num st)) in
   let mask := (component_memory_prefix ((2 ^ (comp_num st))-1) (comp_num st)) in
   let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
