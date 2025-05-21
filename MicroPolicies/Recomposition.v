@@ -1475,7 +1475,173 @@ Section Recomposition.
     - assert (color_eq: color_of s1 = 0). subst. unfold initial_state, color_of. simpl. trivial.
   Admitted.
 
-      
+  Lemma step_event:
+  forall s1 e s1', Step sem s1 (e :: nil) s1' ->
+  forall s2 s2',   Step sem' s2 (e :: nil) s2' ->
+  forall s3 M, match_states M s1 s2 s3    ->
+  exists s3' M', Plus sem'' s3 (e :: nil) s3' /\ (* using Plus here because we know if an event is emitted then we've done at least one step *)
+              match_states M' s1' s2' s3'.
+  Proof.
+    intros s1 e s1' step_s1 s2 s2' step_s2 s3 M match_st.
+    remember (id s3) as s3'; simpl in Heqs3'; destruct s3' as [mem3 regs3 [pc3_val pc3_tag] internal3 cn3].
+    rewrite Heqs3' in match_st; rewrite Heqs3'. pose proof (esym Heqs3') as eq_s3. clear Heqs3'.
+    inversion step_s2;
+      unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
+    all: unfold_all; try unfold_match; unfold_all.
+    all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *. (* eliminates many goals *)
+    (* gets rid of cases with no events *)
+    1-6, 8: (exfalso; clear -NEXT Heqa0 Heqa4 Heqa7; repeat (unfold_all || unfold_match); done).
+    3: (exfalso; clear -CALL; unfold run_syscall in *; repeat (unfold_all || unfold_match); done).
+    all: (assert (tpc1 = tpc0) by (clear -Heqa2; unfold_match' Heqa2); subst tpc1).
+    all: (assert (ts0 = (ts (mvec None)) ) by
+             (unfold mvec in *; simpl; clear -Heqa2; unfold_match' Heqa2; try (inversion Heqa2; subst b); eapply ivec_eq_inv in Heqa2;
+              destruct Heqa2 as [_ _ _ H]; eapply Classical_Prop.EqdepTheory.inj_pair2 in H; auto); subst ts0).
+    all: (unfold mvec in *; assert (ti1 = ti0) by
+                (clear -Heqa2; unfold_match' Heqa2; try (inversion Heqa2; subst b); eapply ivec_eq_inv in Heqa2;
+                 destruct Heqa2 as [_ _ H]; eapply Classical_Prop.EqdepTheory.inj_pair2 in H; auto); subst ti1).
+    all: unfold check_belong, belong, reg_clear_list in *.
+    all: repeat (unfold_all || unfold_match).
+    all: destruct tpc0; repeat (unfold_all || unfold_match); simpl in *.
+    all: convert_eq_op.
+    all: unfold is_jump, check_ret in *; try (repeat unfold_match; subst t1).
+    all: unfold hshead in *; simpl in *.
+    all: (inversion Heqa0); revert ST eq_s3; subst; intros ST eq_s3. (* trick to keep an equality on s1 and s3 *)
+    all: simpl in *.
+    1: rename i1 into comp; rename color0 into comp'.
+    2: rename i2 into comp; rename color0 into comp'.
+    (* tidying up the hypothesis *)
+    (*
+    all: repeat
+           (let va := fresh "va" in
+            let ta := fresh "ta" in
+            match goal with
+              a: atom _ value_tag |- _ => destruct a as [va ta]
+            end).
+     *)
+    all: simpl in *.
+    all: repeat
+           (match goal with
+              H: Some _ = getm (setm _ _ _) _ |- _ =>
+                repeat (rewrite setmE in H; unfold as_word in H; simpl in H)
+            end).
+    all: repeat
+           (match goal with
+              H: Some _ = match (eq_op (_ (_ ((_ (_ ?a _)) _ _))) _) with _ => _ end,
+                H' : Some _ = getm _ (as_word (_ ?a))
+              |- _ => idtac a; unfold as_word in H'; rewrite ST in H; simpl in H', H; rewrite <- H' in H
+            end).
+    all: simpl in *.
+    all: repeat (match goal with H: ?a = ?a |- _ => clear H end).
+    (* we branch on which side is strongly related to s3 *)
+    all: destruct match_st as [M ? ? ? common strong weak |M ? ? ? common weak strong];
+      (* in each case, we keep only one step from s1 (the most useful for the case being treated) *)
+      [match (type of step_s1) with
+         (_ _ _ _ _ _ ?ev _) =>
+           remember ev as t;
+           destruct step_s1 as [s1 ? s1' step_s1 allowed | s1 ? s1' step_s1 _];
+           [exfalso;
+            destruct strong as [? ? ? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match];
+            eapply Machine.Intermediate.fdisjoint_partition_notinboth;
+            [inversion Hmergeable_ifaces as [[_ fdisj] _]; exact fdisj | exact allowed | unfold side_of in *; unfold_match' side_eq]
+           | ]; subst t
+       end
+      |match (type of step_s1) with
+         (_ _ _ _ _ _ ?ev _) =>
+           assert (step_2: step2 tt s1 ev s1');
+           [remember ev as t; destruct step_s1 as [s1 ? s1' step_s1 allowed | s1 ? s1' _ step_s1]; subst t; exact step_s1
+           | clear step_s1; rename step_2 into step_s1]
+       end].
+    repeat
+      match goal with
+        H: Some ?a = match ?cond with true => Some ?b | false => Some ?c end |- _ =>
+          assert (a = if cond then b else c); [destruct cond; inversion H; try congruence| clear H]
+      end.
+    all: inversion step_s1;
+      unfold next_state_updates, next_state_do_updates, next_state_updates_and_pc,
+      next_state, transfer, instr_rules, LRC.transfer, LRC.instr_rules in *.
+    all: unfold_all; try unfold_match; unfold_all.
+    all: try (exfalso; clear -CALL; unfold run_syscall in *; repeat (unfold_all || unfold_match)). (* eliminate alloc cases *)
+    all: match goal with
+         | H: @eq (ivec lrc_tags) _ _ |- _ => rename H into ivec_eq
+         end.
+    all: try (exfalso; unfold mvec0 in ivec_eq; clear- ivec_eq; repeat unfold_match' ivec_eq; done). (* eliminate many uncoherent cases *)
+    all: (assert (tpc1 = tpc0) by (clear -ivec_eq; unfold_match' ivec_eq); subst tpc1).
+    all: destruct tpc0.
+    all: assert (eqo1: OP o1 = op (mvec0 None)) by (try subst o1; unfold mvec0 in *; clear -ivec_eq; unfold_match' ivec_eq).
+    all: unfold mvec0 in eqo1; simpl in eqo1; inversion eqo1; subst o1.
+    all: (assert (ts0eq: ts0 = (ts (mvec0 None)) ) by
+           (unfold mvec0 in *; simpl; clear -ivec_eq; unfold_match' ivec_eq; try (inversion ivec_eq; subst b);
+            eapply ivec_eq_inv in ivec_eq; destruct ivec_eq as [_ _ _ H]; eapply Classical_Prop.EqdepTheory.inj_pair2 in H; auto);
+          unfold mvec0 in ts0eq; simpl in ts0eq; subst ts0).
+    all: (unfold mvec0 in *; assert (ti1 = ti0) by
+                (clear -ivec_eq; unfold_match' ivec_eq; try (inversion ivec_eq; subst b); eapply ivec_eq_inv in ivec_eq;
+                 destruct ivec_eq as [_ _ H]; eapply Classical_Prop.EqdepTheory.inj_pair2 in H; auto); subst ti1).
+    all: unfold check_belong, belong, reg_clear_list in *.
+    all: repeat
+           let pl := fresh "pl" in
+           let pr := fresh "pr" in
+           match goal with
+           | p : _ * option event |- _ =>
+               match goal with
+               | H : Some p = _ |- _ =>
+                   assert (tmp: p.2 = None) by (clear -H; repeat (unfold_all || unfold_match));
+                   destruct p as [pl pr]; inversion tmp; clear tmp; simpl in *; try subst pl; try subst pr
+               end
+           end.
+    all: try simplify_some.
+    all: try (exfalso; clear -NEXT; repeat (unfold_all || unfold_match); done). (* eliminate all remaining cases with no events *)
+    all: unfold reg_clear_list_aux in CLEAR; unfold_all.
+    2, 4, 5, 7: exfalso; 
+    repeat ( match goal with | p : _ * option event |- _ => destruct p end); simpl in *;
+    repeat (unfold_all || unfold_match). (* eliminate cases with the wrong events *)
+    all: repeat
+           match goal with
+             H: Some ?a = match ?cond with true => Some ?b | false => Some ?c end |- _ =>
+               assert (a = if cond then b else c); [destruct cond; inversion H; try congruence| clear H]
+           end.
+    all: repeat (unfold_all || unfold_match).
+    all: subst color color0; try subst i3; destruct e0, e; simpl in *; subst rcom_value0.
+    all: unfold is_jump, check_ret, build_tpc in *; try (repeat unfold_match; subst t1).
+    all: convert_eq_op.
+    all: unfold_match' ivec_eq; inversion ivec_eq as [tag_mem_w0].
+    all: try (match goal with
+                H : @eq (ovec lrc_tags _) _ _ |- _ => inversion H; clear H
+              end).
+    all: revert ST ST0 eq_s3; subst; intros ST ST0 eq_s3; simpl in *. (* trick to keep an equality on s1 and s3 *)
+    1-2: rename i1 into comp.
+    3-4: rename i2 into comp.
+    (* We now need to branch on which state is strongly related to s3 next (i.e. comp', the color of the next compartment) *)
+    all: destruct (in_mem comp' (ssrbool.mem (domm ip))) eqn: side_comp';
+      [ assert (ip_comp': comp' \in domm ip); [rewrite side_comp'; trivial|]
+      | assert (ic_comp': comp' \in domm ic); [admit |]]; clear side_comp'. (* need hypothesis on the colors contained by memory *)
+    all: inversion strong as [? ? ? wf_m comp_num pc_s'_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
+    all: inversion common as [? ? ? ? ? ? tag_pc1 tag_pc2 tag_pc3 wfst
+                                [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
+                                [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
+                                [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+    all: subst s s' s0 s4 s5 m m0.
+    all: rewrite ST in tag_pc2; inversion tag_pc2; subst n0 c0; clear tag_pc2.
+    (* Steps needed in each cases: *)
+    (* 1/ deduce beforehand the equalities on s3 needed to proceed, *)
+    (* 2/ unfold to show that a step can be done from s3, *)
+    (* 3/ show that match_state hold for the new states. *)
+    all: repeat match goal with
+             |- context[vala (match ?cond with true => ?a | false => ?b end)] =>
+               assert (tmp: vala (match cond with true => a | false => b end) = (match cond with true => vala a | false => vala b end));
+               [ clear; destruct cond; simpl; done | rewrite tmp; clear tmp]
+           end; simpl.
+    + admit. (* return from comp in P to comp' in P *)
+    + admit. (* return from comp in P to comp' in C *)
+    + admit. (* return from comp in C to comp' in P *)
+    + admit. (* return from comp in C to comp' in C *)
+    + admit. (* call from comp in P to comp' in P *)
+    + admit. (* call from comp in P to comp' in C *)
+    + admit. (* call from comp in C to comp' in P *)
+    + admit. (* call from comp in C to comp' in C *)
+  Admitted.
+
+
+        
   Lemma step_silent_strong1:
     forall s1 s1', Step sem s1 E0 s1' ->
     forall s2 s3 M, strong_equiv Left M s1 s3 ->
