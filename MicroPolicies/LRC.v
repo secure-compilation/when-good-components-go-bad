@@ -229,7 +229,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                    let ev := Some (ERet current (rcom_value evi) c') in
                                    do! _ <- check_ret level.-1 tp;
                                    Some (OVec JUMP (build_tpc (level.-1) c')
-                                           (HSeqCons Other reg_invalidate_hseq), ev)
+                                           (HSeqCons Invalidated reg_invalidate_hseq), ev)
 
   | JAL,     HSeqCons tra next    => if belong current tni then
                                    Some (OVec JAL tpc (HSeqCons InternalJump next), None)
