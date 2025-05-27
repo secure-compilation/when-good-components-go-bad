@@ -221,7 +221,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
   | JUMP,    HSeqCons tp (HSeqCons trcom next)  => if belong current tni then
                                    do! _ <- is_jump tp;
                                    Some (OVec JUMP tpc (HSeqCons tp (HSeqCons trcom next)), None)
-                                 else
+                                      else
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
                                    (*          (unique Ret n)                              *)
@@ -232,11 +232,12 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                    Some (OVec JUMP (build_tpc (level.-1) c')
                                            (HSeqCons Invalidated (HSeqCons Other reg_invalidate_hseq)), ev)
 
-  | JAL,     (tnext :: tra :: trcom :: next)%hseq => if belong current tni then
-                                   Some (OVec JAL tpc (tnext :: InternalJump :: trcom :: next)%hseq, None)
-                                 else
-                                   do! _ <- is_other trcom;
+  | JAL,     (tnext :: tra :: trcom :: next)%hseq => 
                                    do! _ <- check_belong current (Some tnext);
+                                   if belong current tni then
+                                   Some (OVec JAL tpc (tnext :: InternalJump :: trcom :: next)%hseq, None)
+                                      else
+                                   do! _ <- is_other trcom;
                                    do! c' <- get_tni_color tni;
                                    let ev := do! p  <- get_proc_name tni;
                                              Some (ECall current p (rcom_value evi) c') in
