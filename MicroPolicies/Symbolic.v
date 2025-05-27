@@ -42,9 +42,9 @@ Definition inputs (op : opcode) : seq tag_kind :=
   | BINOP _ => [:: R;R;R]
   | LOAD    => [:: R;M;R]
   | STORE   => [:: R;R;M]
-  | JUMP    => nseq 11 R
+  | JUMP    => nseq 12 R
   | BNZ     => [:: R]
-  | JAL     => nseq 11 R
+  | JAL     => nseq 12 R
   (* the other opcodes are not used by the symbolic machine *)
   | JUMPEPC => [:: P]
   | ADDRULE => [::]
@@ -287,7 +287,7 @@ Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
 Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state_ev :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
-Definition reg_list : seq nat := O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil.
+Definition reg_list : seq nat := 1%N :: O :: 2 :: 3 :: 5 :: 6 :: 7 :: 16 :: 17 :: 18 :: 19 :: nil.
 
 (* return an hseq containing the tags of all registers in l, plus top_reg_tag at the top *)
 Fixpoint reg_clear_list_aux (l : seq nat) (regs : {fmap reg mt -> atom (tag_type ttypes R)}) (top_reg_tag: (tag_type ttypes R)) :
@@ -301,7 +301,7 @@ Fixpoint reg_clear_list_aux (l : seq nat) (regs : {fmap reg mt -> atom (tag_type
       Some (HSeqCons top_reg_tag (l')): option (hseq _ (nseq (S (S (size l))) R))
   end.
 
-(* return an hseq containing the tags of all registers apart from RA and RCOM, plus top_reg *)
+(* return an hseq containing the tags of all registers apart from RA, plus top_reg *)
 Definition reg_clear_list := reg_clear_list_aux reg_list.
 
 Definition reg_clear_read :=

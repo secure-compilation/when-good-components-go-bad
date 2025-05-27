@@ -71,12 +71,23 @@ Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
 Definition get_procedures p :=
   fset (map (fun '(_, tag) => color tag) (code p)).
 
+(* TODO: don't we want a condition on lc as well? (allowed components) *)
 Definition find_procedure p comp proc :=
   Exists (fun '(_, tag) =>
             match (entry tag) with
             | None => False
-            | Some (proc', lc) => (proc = proc') /\ (In comp lc)
+            | Some (proc', lc) => (proc = proc') /\ (comp = color tag)
             end) (code p).
+
+Definition unique_entry_points (cde: @Merged.code mt) :=
+  forall c e n m i i' t t',
+    color t  = c ->
+    color t' = c ->
+    entry t  = Some e ->
+    entry t' = Some e ->
+    nth_error cde n = Some (i, t ) ->
+    nth_error cde m = Some (i',t') ->
+    n = m.
 
 Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
@@ -88,6 +99,9 @@ Record well_formed_program (p: program) := {
     wfprog_exported_procedures_existence: 
     forall C P, exported_procedure (prog_interface p) C P ->
            find_procedure p C P;
+    (* there are no duplicate entry points *)
+    wfprog_unique_entry_points:
+    unique_entry_points (code p);
     (* each declared component has the required static buffers *)
     wfprog_defined_buffers: domm (prog_interface p) = domm (prog_buffers p);
     (* each component's buffer is well formed *)
@@ -123,8 +137,8 @@ Section Recomposition.
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
-  Let prog'  := program_link p  c'.
-  Let prog'' := program_link p' c'.
+  Let prog'  := program_link p'  c'.
+  Let prog'' := program_link p c'.
 
   Let state := @Symbolic.state mt LRC.lrc_tags [eqType of unit].
   Let genvtype := unit.
@@ -148,9 +162,10 @@ Section Recomposition.
     fun s => s = initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'').
   
   Definition color_of: state -> Component.id :=
-    fun s => match (taga (pc s)) with
-          | Level _ c => c
-          end.
+    fun '(Symbolic.State m r (Types.Atom _ tpc) _ _) =>
+      match (tpc) with
+      | Level _ c => c
+      end.
   
   Definition allowed_UB: state -> Prop :=
     fun s => (color_of s) \in (domm ic).
@@ -225,7 +240,7 @@ Section Recomposition.
 
   Lemma det_sem : determinate sem.
   Proof.
-    econstructor; intros; unfold sem'  in *.
+   econstructor; intros; unfold sem'  in *.
     - simpl in *. (*unfold step1, step2, step_mp, step_me in *. *)
       destruct H, H0 ; [|clear H0| clear H| clear H1 H2];
         unfold step1, step2, step_mp, step_me in *;
@@ -298,9 +313,18 @@ Section Recomposition.
     Definition offset2: NMap ssrint.int := 
       mkfmapfp (fun comp =>
                   do! p_s3 <- p0 prog'' comp;
-                  do! p_s2 <- p0 prog comp;
+                  do! p_s2 <- p0 prog' comp;
                   Some (encode_int (Z.of_nat p_s3 - Z.of_nat p_s2)))
         (domm ic).
+
+    Lemma offset1_domm : domm offset1 = domm ip.
+    Proof.
+      unfold offset1. clear. rewrite domm_mkfmapfp. simpl.
+    Admitted.
+    
+    Lemma offset2_domm : domm offset2 = domm ic.
+    Proof.
+    Admitted.
 
     Definition stack: Type := seq (stack_value * stack_value * stack_value * Component.id).
     Definition metadata: Type := stack.
@@ -367,8 +391,8 @@ Section Recomposition.
             | InternalJump => Option.apply (fun off => v2 = addw v1 (as_word off)) False (get_offset i comp)
             | Ret _ =>
                 match i with
-                | Left  => exists sv', In (d, sv', d', comp) m
-                | Right => exists sv', In (sv', d, d', comp) m
+                | Left  => exists sv' comp', In (d, sv', d', comp') m
+                | Right => exists sv' comp', In (sv', d, d', comp') m
                 end
             end
       end.
@@ -405,23 +429,35 @@ Section Recomposition.
           same_pc i s s'
     .
 
-    Definition decode_match v v' off :=
-      (match (decode_instr v, decode_instr v') with
-       | (Some (Jal imm), Some (Jal imm')) =>
-           if (orb (imm == word_of_nat alloc_label) (imm' == word_of_nat alloc_label))
-           then (imm = imm')
-           else imm' = addw imm (as_word off)
-       | _ => v = v'
-       end).
+    Variant decode_match (mem: @memory mt) (mem': @memory mt) v v' off c: Prop :=
+      | decode_match_no_JAL:
+        (forall imm, decode_instr v <> Some (Jal imm)) ->
+        (forall imm', decode_instr v' <> Some (Jal imm')) ->
+        v = v' ->
+        decode_match mem mem' v v' off c
+      | decode_match_alloc_JAL:
+        decode_instr v  = Some (Jal (word_of_nat alloc_label) ) ->
+        decode_instr v' = Some (Jal (word_of_nat alloc_label) ) ->
+        decode_match mem mem' v v' off c
+      | decode_match_JAL: forall imm imm' d d',
+          decode_instr v  = Some (Jal imm ) ->
+          decode_instr v' = Some (Jal imm') ->
+          mem (swcast imm) = Some d ->
+          mem' (swcast imm') = Some d' ->
+          is_code (taga d) ->
+          taga d = taga d' -> (* exact same tag, so same entry point if there is one *)
+          (color (taga d) = c -> imm' = addw imm (as_word off)) ->
+          decode_match mem mem' v v' off c
+    .
 
     Definition combined_codes (i: side) (s: state) (s': state) : Prop :=
       forall w v t off c,
         is_relevant_comp i c ->
-        get_offset Left c = Some off ->
+        get_offset i c = Some off ->
         is_code (t) ->
         color (t) = c ->
-        ((mem s w = Some v@t -> exists v', decode_match v v' off /\ (mem s' (addw w (as_word off)) = Some v'@t))
-         /\ ((mem s' (addw w (as_word off)) = Some (v@t)) -> exists v', decode_match v' v off /\ (mem s w = Some (v'@t))))
+        ((mem s w = Some v@t -> exists v', decode_match (mem s) (mem s') v v' off c /\ (mem s' (addw w (as_word off)) = Some v'@t))
+         /\ ((mem s' (addw w (as_word off)) = Some (v@t)) -> exists v', decode_match (mem s) (mem s') v' v off c /\ (mem s w = Some (v'@t))))
     .
 
     Definition end_condition (mem: memory) : Prop :=
@@ -486,12 +522,36 @@ Section Recomposition.
          | _ => True
          end).
 
+    Definition color_in_memory (mem: @memory mt) :=
+      forall w d, mem w = Some d -> In (color (taga d)) (domm ip) \/ In (color (taga d)) (domm ic).
+    
+    (* necessary invariant to prove that registers are properly cleared on call/return *)
+    Definition register_domm (regs: {fmap reg mt -> atom (mword mt) value_tag} ) : Prop :=
+      ((domm regs): seq (reg mt)) = ra :: (map (word_of_nat) reg_list).
+
+    (* necessary invariant on calls that change which state is weakly/strongly related *)
+    Definition entry_points_offset i (mem: @memory mt) (mem': @memory mt) : Prop :=
+      forall c w w' d d' e,
+        is_relevant_comp i c ->
+        mem  w  = Some d ->
+        mem' w' = Some d' ->
+        is_code (taga d ) ->
+        is_code (taga d') ->
+        color (taga d ) = c ->
+        color (taga d') = c ->
+        entry (taga d ) = Some e ->
+        entry (taga d') = Some e ->
+        (exists off,
+            get_offset i c = Some off
+            /\  w' = addw w (as_word off)).
+    
     Definition general_memory_correctness (mem: memory) nc : Prop :=
       memory_prefix_condition mem nc
       /\ code_prefix_condition mem nc
       /\ alloc_empty mem
       /\ BNZ_correctness mem
-      /\ end_condition mem.
+      /\ end_condition mem
+      /\ color_in_memory mem.
 
     Definition compatible {A} (col_opt: option A) (col: A) :=
       match col_opt with
@@ -505,6 +565,9 @@ Section Recomposition.
           taga (@pc _ lrc_tags _ s2) = Level n c ->
           taga (@pc _ lrc_tags _ s3) = Level n c ->
           wf_stack (mem s1) (mem s2) (mem s3) n m ->
+          register_domm (regs s1) ->
+          register_domm (regs s2) ->
+          register_domm (regs s3) ->
           general_memory_correctness (mem s1) (comp_num s1) ->
           general_memory_correctness (mem s2) (comp_num s2) ->
           general_memory_correctness (mem s3) (comp_num s3) ->
@@ -521,6 +584,7 @@ Section Recomposition.
           side_of (color_of s) = i ->
           memory_address_correctness i s ->
           memory_address_correctness i s' ->
+          entry_points_offset i (mem s) (mem s') ->
           register_address_correctness s ->
           register_address_correctness s' ->
           memory_match i m s s' ->
@@ -536,6 +600,7 @@ Section Recomposition.
           side_of (color_of s) = other_side i ->
           memory_address_correctness (other_side i) s ->
           memory_address_correctness (other_side i) s' ->
+          entry_points_offset i (mem s) (mem s') ->
           memory_match i m s s' ->
           weak_equiv i m s s'
     .
@@ -757,18 +822,18 @@ Section Recomposition.
     intros s1 s2 s3 M s1' s3' pc1' tpc1' pc3' tpc3' equiv eq_s1' eq_s3' pc1'_pc3' pc1_tag pc3_tag.
     destruct equiv as [strong [weak common]].
     split; [|split].
-    - destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
-      econstructor; unfold color_of in *; try (subst; intros; auto; done); try congruence.
-    - destruct weak as [? ? ? wf_m ? color_eq side_s' s_mem_cor s'_mem_cor mem_match].
+    - destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+      econstructor; destruct s, s', pc0, pc1; try (subst; intros; auto; done); try congruence.
+    - destruct weak as [? ? ? wf_m ? color_eq side_s' s_mem_cor s'_mem_cor entry_off mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try (subst; intros; auto; done); try congruence.
-    - destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst
-                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
-      eapply common_equiv_def with (n := n);
+      subst. destruct s, s', pc0, pc1. simpl in *. trivial.
+    - destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
+                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 col_mem1]]]]]
+                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 col_mem2]]]]]
+                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 col_mem3]]]]] code_left code_right].
+      eapply common_equiv_def with (n := n) (c := c0);
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done.
       + rewrite eq_s1'. rewrite pc1_tag. simpl. exact tag_pc1.
-      + trivial.
       + rewrite eq_s3'. rewrite pc3_tag. simpl. exact tag_pc3.
   Qed.
 
@@ -804,8 +869,8 @@ Section Recomposition.
     destruct equiv as [strong [weak common]].
     pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
     split; [|split].
-    - destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
-      econstructor; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence.
+    - destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match];
+      econstructor; destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence.
       + intros ? ? ? ? comp ? in_m veq off_eq. subst v0. unfold mem. rewrite eq_s1' eq_s3'. simpl.
         unfold points_to_comp_code, points_to_comp_code'. rewrite setmE. rewrite setmE. split; [|split].
         * remember (@eq_op (Ord.eqType _) (Types.vala v1) w) as cond. destruct cond.
@@ -828,24 +893,24 @@ Section Recomposition.
             right. rewrite <- eq. done.
           -- eapply wf_m; eauto.
         * intro comp_in_ip. eapply (wf_m _ _ _ _ _ _ in_m); auto.
-      + destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst
-                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+      + destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
+                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 col_mem1]]]]]
+                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 col_mem2]]]]]
+                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 col_mem3]]]]] code_left code_right].
         destruct pc_s1_s3 as [? ? ? eq_none|? ? ? ? eq_comp eq_off pc_s1_s3].
         * eapply same_pc_alloc; try rewrite eq_s1'; try rewrite eq_s3'; simpl; auto.
           rewrite setmE.
-          remember (@eq_op (Ord.eqType _) (vala (pc s)) w) as cond. simpl in *. rewrite <- Heqcond.
+          remember (@eq_op (Ord.eqType _) (Types.vala (pc s)) w) as cond. simpl in *. rewrite <- Heqcond.
           destruct cond; simpl; auto.
-          exfalso. assert (eqw: vala (pc s) = w) by eq_op_to_eq. subst w.
+          exfalso. assert (eqw: Types.vala (pc s) = w) by eq_op_to_eq. subst w.
           destruct no_code_w_s1 as [d [d_eq d_nocode]]. rewrite d_eq in eq_none. done.
         * eapply same_pc_normal; eauto.
-          -- subst s1'. simpl. rewrite setmE. remember (@eq_op (Ord.eqType _) (vala (pc s)) w) as cond. simpl in *.
+          -- subst s1'. simpl. rewrite setmE. remember (@eq_op (Ord.eqType _) (Types.vala (pc s)) w) as cond. simpl in *.
              rewrite i_is_pc. rewrite <- Heqcond. eapply (@eq_trans _ _ (Some (if cond then v else i))).
              destruct cond; trivial. subst cond. reflexivity.
-          -- subst s1'. unfold color_of in *. simpl in *. eauto.
+          -- subst s1'. destruct s, pc0. simpl in *. exact eq_off.
           -- rewrite eq_s1' eq_s3'. simpl. done.
-      + subst. exact side_eq.
+      + subst. trivial.
       + subst. intros d w' rel deq. simpl. destruct d as [vd [vt ? ? ?]]. simpl.
         remember (@eq_op (Ord.eqType _) w' w) as cond. 
         remember (@eq_op (Ord.eqType _) vd w) as cond1.
@@ -872,6 +937,11 @@ Section Recomposition.
         all: try (eapply modusponens; [eapply (s'_mem_cor _ w' _ deq) | ]; simpl; intros [v'' [v''eq v''code]]; 
                   destruct no_code_w_s3 as [d' [d'eq d'code]]; rewrite d'eq in v''eq; simplify_some;
               (contradiction || (destruct v''code; contradiction))).
+      + subst. simpl. intros col w' w'' d d' e rel eqw' eqw'' dcode d'code dcol d'col d_e_eq d'_e_eq.
+        rewrite setmE in eqw'. rewrite setmE in eqw''.
+        unfold_match' eqw'; try convert_eq_op; try simplify_some; try contradiction.
+        unfold_match' eqw''; try convert_eq_op; try simplify_some; try contradiction.
+        eapply (entry_off); eauto.
       + subst. intros d w' deq. simpl. destruct d as [vd vt].
         remember (@eq_op (Ord.eqType _) vd w) as cond.
         destruct vt; simpl; auto; rewrite setmE; simpl in *; rewrite <- Heqcond; destruct cond;
@@ -894,9 +964,9 @@ Section Recomposition.
         remember (@eq_op (Ord.eqType _) w0 w) as cond. destruct cond.
         * split; intro eq; inv eq; eexists; split; eauto.
         * apply mem_match; auto.
-    - destruct weak as [? ? ? wf_m ? color_eq side_s' s_mem_cor s'_mem_cor  mem_match].
-      econstructor; auto.
-      + intros ? ? ? ? comp ? in_m veq off_eq. subst v0. rewrite eq_s3'. simpl.
+    - destruct weak as [? ? ? wf_m ? color_eq side_s' s_mem_cor s'_mem_cor entry_off mem_match];
+      econstructor; destruct s, s', pc0, pc1; subst; auto.
+      + intros ? ? ? ? comp ? in_m veq off_eq. subst v0. simpl.
         unfold points_to_comp_code. rewrite setmE. split; [|split].
         * remember (@eq_op (Ord.eqType _) (Types.vala v1) w) as cond. destruct cond.
           -- assert (eq: Types.vala v1 = w) by eq_op_to_eq.
@@ -914,8 +984,6 @@ Section Recomposition.
             right. rewrite <- eq. done.
           -- eapply wf_m; eauto.
         * intro comp_in_ip. eapply (wf_m _ _ _ _ _ _ in_m); auto.
-      + subst. done.
-      + subst. trivial.
       + subst. intros d w' rel deq. simpl. destruct d as [vd [vt ? ? ?]]. simpl.
         remember (@eq_op (Ord.eqType _) w' w) as cond. 
         remember (@eq_op (Ord.eqType _) vd w) as cond1.
@@ -927,14 +995,18 @@ Section Recomposition.
         all: try (eapply modusponens; [eapply (s'_mem_cor _ w' _ deq) | ]; simpl; intros [v'' [v''eq v''code]];
                destruct no_code_w_s3 as [d' [d'eq d'code]]; rewrite d'eq in v''eq; simplify_some;
               (contradiction || (destruct v''code; contradiction))).
-      + unfold memory_match in *. rewrite eq_s3'. simpl.
+      + subst. simpl. intros col w' w'' d d' e rel eqw' eqw'' dcode d'code dcol d'col d_e_eq d'_e_eq.
+        rewrite setmE in eqw''.
+        unfold_match' eqw''; try convert_eq_op; try simplify_some; try contradiction.
+        eapply (entry_off); eauto.
+      + unfold memory_match in *. simpl.
         intros.
         rewrite setmE.
         remember (@eq_op (Ord.eqType _) w0 w) as cond. destruct cond.
         * assert (eq_w: w0 = w) by eq_op_to_eq.
-          subst. simpl in mem_match. split; intro eq; inv eq; exfalso.
-          -- remember (mem s' w) as v_opt. destruct v_opt as [d'|].
-             ++ assert (color (taga d) = color (taga d')) by (rewrite <- v_color; eapply same_color; auto). simpl in v_relevant.
+          subst. simpl in *. split; intro eq; inv eq; exfalso.
+          -- remember (mem1 w) as v_opt. destruct v_opt as [d'|].
+             ++ assert (color (Types.taga d) = color (Types.taga d')) by (rewrite <- v_color; eapply same_color; auto). simpl in v_relevant.
                 { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
                   inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. rewrite <- v_color. auto. }
              ++ simpl in v_relevant. 
@@ -942,20 +1014,20 @@ Section Recomposition.
                   inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. rewrite <- v_color. auto. }
           -- pose proof (mem_match w d H0 H1) as [_ d_impl].
              destruct (d_impl H3) as [d' [d_d'_match eq_d']].
-             assert (d'_color: color (taga v) = color (taga d')) by (eapply same_color; auto).
-             rewrite d'_color in v_relevant. assert (d'_color_bis: (color (taga d') = color (taga d))).
+             assert (d'_color: color (Types.taga v) = color (Types.taga d')) by (eapply same_color; auto).
+             rewrite d'_color in v_relevant. assert (d'_color_bis: (color (Types.taga d') = color (Types.taga d))).
              { destruct d, d'. simpl. unfold data_match' in d_d'_match. destruct d_d'_match. subst. done. }
              rewrite <- d'_color_bis in H1. simpl in *. 
              { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
                inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
         * apply mem_match; auto.
-    - destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst
-                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+    - destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
+                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 col_mem1]]]]]
+                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 col_mem2]]]]]
+                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 col_mem3]]]]] code_left code_right].
       eapply common_equiv_def with (n := n) (c := c0); 
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done;
-        try (split; [|split; [|split; [|split]]]).
+        try (split; [|split; [|split; [|split; [|split]]]]).
       + rewrite eq_s3'. simpl. clear strong weak code_left code_right v_match tag_pc1 tag_pc2 tag_pc3.
         simpl in *. 
         induction wfst; intros.
@@ -1036,6 +1108,10 @@ Section Recomposition.
           remember (@eq_op (Ord.eqType _) (addw w0 onew) w) as cond. destruct cond; try (split; done).
           exfalso. assert ((addw w0 onew) = w) by eq_op_to_eq. subst w.
           destruct no_code_w_s1 as [? [eq no_code]]. rewrite eq in v1_eq. simplify_some. done.
+      + intros w' d deq. subst. simpl in deq.
+        rewrite setmE in deq. unfold_match' deq; try convert_eq_op; try simplify_some.
+        simpl in v_relevant. left. eapply ((fst (Extra.In_in _ _)) v_relevant).
+        eapply col_mem1; eauto.
       + admit. (* domains remain unchanged *)
       + admit. (* domains remain unchanged *)
       + unfold alloc_empty in *. subst. simpl in *. rewrite setmE.
@@ -1066,6 +1142,10 @@ Section Recomposition.
           remember (@eq_op (Ord.eqType _) (addw w0 onew) w) as cond. destruct cond; try (split; done).
           exfalso. assert ((addw w0 onew) = w) by eq_op_to_eq. subst w.
           destruct no_code_w_s3 as [? [eq no_code]]. rewrite eq in v1_eq. simplify_some. done.
+      + intros w' d deq. subst. simpl in deq.
+        rewrite setmE in deq. unfold_match' deq; try convert_eq_op; try simplify_some.
+        rewrite v_color in v_relevant. simpl in v_relevant. left. eapply ((fst (Extra.In_in _ _)) v_relevant).
+        eapply col_mem3; eauto.
       + unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
@@ -1076,9 +1156,40 @@ Section Recomposition.
         pose proof (code_left w' d t off comp relevant_comp offset v'_code v'_color) as [impll implr].
         destruct cond1; destruct cond2; convert_eq_op; simpl; split; intro eq; try simplify_some; subst.
         all: try contradiction.
-        destruct (impll eq) as [? [? eq1]]. destruct no_code_w_s3 as [? [eq2 ?]]. rewrite eq1 in eq2. simplify_some. contradiction.
-        destruct (implr eq) as [? [? eq1]]. destruct no_code_w_s1 as [? [eq2 ?]]. rewrite eq1 in eq2. simplify_some. contradiction.
-        exact (impll eq). exact (implr eq).
+        * destruct (impll eq) as [? [? eq1]]. destruct no_code_w_s3 as [? [eq2 ?]]. rewrite eq1 in eq2. simplify_some. contradiction.
+        * destruct (implr eq) as [? [? eq1]]. destruct no_code_w_s1 as [? [eq2 ?]]. rewrite eq1 in eq2. simplify_some. contradiction.
+        * destruct (impll eq) as [d' [decode_d' d'_eq]]. exists d'. split; auto.
+          inversion decode_d'; subst.
+          -- econstructor; trivial.
+          -- eapply decode_match_alloc_JAL; trivial.
+          -- eapply decode_match_JAL. exact H. exact H1.
+             rewrite setmE.
+             destruct (@eq_op (Ord.eqType _) (swcast imm) w) eqn:cond1; repeat simplify_some.
+             { exfalso. pose proof (esym cond1). convert_eq_op. destruct no_code_w_s1 as [? [eq1 ?]].
+               rewrite H2 in eq1. simplify_some. tauto. }
+             { exact H2. }
+             rewrite setmE.
+             destruct (@eq_op (Ord.eqType _) (swcast imm') w) eqn:cond1; repeat simplify_some.
+             { exfalso. pose proof (esym cond1). convert_eq_op. destruct no_code_w_s3 as [? [eq1 ?]].
+               rewrite H3 in eq1. simplify_some. rewrite H5 in H4. tauto. }
+             { exact H3. }
+             all: trivial.
+        * destruct (implr eq) as [d' [decode_d' d'_eq]]. exists d'. split; auto.
+          inversion decode_d'; subst.
+          -- econstructor; trivial.
+          -- eapply decode_match_alloc_JAL; trivial.
+          -- eapply decode_match_JAL. exact H. exact H1.
+             rewrite setmE.
+             destruct (@eq_op (Ord.eqType _) (swcast imm) w) eqn:cond1; repeat simplify_some.
+             { exfalso. pose proof (esym cond1). convert_eq_op. destruct no_code_w_s1 as [? [eq1 ?]].
+               rewrite H2 in eq1. simplify_some. tauto. }
+             { exact H2. }
+             rewrite setmE.
+             destruct (@eq_op (Ord.eqType _) (swcast imm') w) eqn:cond1; repeat simplify_some.
+             { exfalso. pose proof (esym cond1). convert_eq_op. destruct no_code_w_s3 as [? [eq1 ?]].
+               rewrite H3 in eq1. simplify_some. rewrite H5 in H4. tauto. }
+             { exact H3. }
+             all: trivial.
       +  unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
@@ -1089,7 +1200,30 @@ Section Recomposition.
         destruct cond; convert_eq_op; simpl; split; intro eq; try simplify_some; subst.
         all: try contradiction.
         destruct (impll eq) as [? [? eq1]]. destruct no_code_w_s3 as [? [eq2 ?]]. rewrite eq1 in eq2. simplify_some. contradiction.
-        exact (impll eq). exact (implr eq).
+        * destruct (impll eq) as [d' [decode_d' d'_eq]]. exists d'. split; auto.
+          inversion decode_d'; subst.
+          -- econstructor; trivial.
+          -- eapply decode_match_alloc_JAL; trivial.
+          -- eapply decode_match_JAL. exact H. exact H1.
+             exact H2.
+             rewrite setmE.
+             destruct (@eq_op (Ord.eqType _) (swcast imm') w) eqn:cond1; repeat simplify_some.
+             { exfalso. pose proof (esym cond1). convert_eq_op. destruct no_code_w_s3 as [? [eq1 ?]].
+               rewrite H3 in eq1. simplify_some. rewrite H5 in H4. tauto. }
+             { exact H3. }
+             all: trivial.
+        * destruct (implr eq) as [d' [decode_d' d'_eq]]. exists d'. split; auto.
+          inversion decode_d'; subst.
+          -- econstructor; trivial.
+          -- eapply decode_match_alloc_JAL; trivial.
+          -- eapply decode_match_JAL. exact H. exact H1.
+             exact H2.
+             rewrite setmE.
+             destruct (@eq_op (Ord.eqType _) (swcast imm') w) eqn:cond1; repeat simplify_some.
+             { exfalso. pose proof (esym cond1). convert_eq_op. destruct no_code_w_s3 as [? [eq1 ?]].
+               rewrite H3 in eq1. simplify_some. rewrite H5 in H4. tauto. }
+             { exact H3. }
+             all: trivial.
   Admitted.
 
   Lemma preserves_equiv_left_reg_write :
@@ -1111,18 +1245,18 @@ Section Recomposition.
     intros s1 s2 s3 M s1' s3' r v v' r1' r3' equiv v_match
       correct_v correct_v' eq_r1 eq_r3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst
-                            [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                            [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                            [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+    destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
+                          [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 col_mem1]]]]]
+                          [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 col_mem2]]]]]
+                          [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 col_mem3]]]]] code_left code_right].
     pose proof (updm_set eq_r1). pose proof (updm_set eq_r3). subst r1' r3'. 
     split; [|split].
-    - destruct strong as [? ? ? wf_m num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
-      econstructor; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try (subst; simpl; trivial; done); try congruence.
+    - destruct strong as [? ? ? wf_m num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+      econstructor; destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try (subst; simpl; trivial; done); try congruence.
       + destruct pc_s1_s3 as [? ? ? eq_none|? ? ? ? eq_comp eq_off pc_s1_s3].
         * eapply same_pc_alloc; try rewrite eq_s1'; try rewrite eq_s3'; auto.
         * eapply same_pc_normal; eauto. subst. simpl. exact eq_comp.
-          subst. simpl. exact eq_off.
+          subst. simpl. destruct s, pc0. exact eq_off.
           rewrite eq_s1' eq_s3'. simpl. done.
       + subst. intros d w' deq. simpl in *. auto. destruct d as [vd vt].
         rewrite setmE in deq. remember (@eq_op (Ord.eqType _) w' r) as cond.
@@ -1140,11 +1274,18 @@ Section Recomposition.
         remember (@eq_op (Ord.eqType _) w r) as cond. destruct cond.
         * split; intro eq; simplify_some; eauto.
         * apply reg_match; auto.
-    - destruct weak as [? ? s3 wf_m num_eq color_eq side_s' s_mem_cor s'_mem_cor  mem_match].
-      econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence. auto.
+    - destruct weak as [? ? s3 wf_m num_eq color_eq side_s' s_mem_cor s'_mem_cor entry_off mem_match].
+      econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence.
+      destruct s, s3, pc0, pc1. subst. simpl. auto. trivial.
     - eapply common_equiv_def with (n := n) (c := c0); 
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done.
-  Qed.
+      + subst. unfold register_domm. simpl. rewrite domm_set. 
+        unfold register_domm, reg_field_size in *. simpl in *. unfold updm in eq_r1. unfold_match' eq_r1.
+        clear -Heqa reg_domm1. admit.
+      + subst. unfold register_domm. simpl. rewrite domm_set. 
+        unfold register_domm, reg_field_size in *. simpl in *. unfold updm in eq_r3. unfold_match' eq_r3.
+        clear -Heqa reg_domm3. admit.
+  Admitted.
 
   
   Lemma preserves_equiv_left_alloc_fun:
@@ -1166,13 +1307,13 @@ Section Recomposition.
     repeat (unfold_all || unfold_match).
     destruct a as [v tmp]. destruct a2 as [v' tmp']. simpl in *. subst tmp tmp'.
     rename n into n'.
-    inversion common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst
-                           [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                           [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                           [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+    inversion common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
+                          [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 col_mem1]]]]]
+                          [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 col_mem2]]]]]
+                          [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 col_mem3]]]]] code_left code_right].
     subst m s0 s4 s5.
     assert (n1 = n').
-    { destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
+    { destruct strong as [? ? ? wf_m ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
       destruct (reg_match (as_word (ssrint.Posz 17)) v'@Other) as [_ impl].
       destruct (impl (esym Heqa5)) as [? [dmatch eq1]]. simpl in *. rewrite eq1 in Heqa1.
       simplify_some. destruct x. 
@@ -1181,20 +1322,21 @@ Section Recomposition.
       pose proof (congr1 ssrint.absz eq) as eq'.
       repeat rewrite ssrint.absz_nat in eq'. done. } subst n1.
     split; [|split].
-    - destruct strong as [? ? ? wf_m num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
-      econstructor; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence; simpl; try done.
+    - destruct strong as [? ? ? wf_m num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+      econstructor; try (destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence; simpl; done).
       + intros v1 v2 v3 v0 comp off inclusion side_c0 off_eq.
         destruct (wf_m v1 v2 v3 v0 comp off inclusion side_c0 off_eq) as [? [? ?]].
         unfold points_to_comp_code, points_to_comp_code' in *. simpl.
         do 2 oapp_False. 
         repeat rewrite unionmE. simpl in *. rewrite <- HeqH0. rewrite <- HeqH2. simpl. done.
       + pose proof ((fst (reg_match _ v@InternalJump)) (esym Heqa)) as [d' [d'match d'eq]].
-        simpl in *. rewrite <- Heqa3 in d'eq. simplify_some. destruct d'.
-        destruct d'match as [? ?]. subst taga. oapp_False.
+        simpl in *. rewrite <- Heqa3 in d'eq. simplify_some. destruct d' as [? taga1].
+        destruct d'match as [? ?]. subst taga1. oapp_False.
         pose proof (s_reg_cor _ _ (esym Heqa3)). destruct H as [? [eq ?]].
         eapply same_pc_normal; simpl; try done; eauto.
         rewrite unionmE. rewrite eq. simpl. trivial.
-      +  intros d w rel d_eq. simpl. destruct d as [vd td]. destruct td.
+        destruct s, s', pc0, pc1. rewrite HeqH. simpl. trivial.
+      + intros d w rel d_eq. simpl. destruct d as [vd td]. destruct td.
         destruct vtag; simpl; auto.
         all: rewrite unionmE; rewrite unionmE in d_eq; simpl in *.
         all: remember (mem s w) as cond; simpl in *.
@@ -1220,6 +1362,13 @@ Section Recomposition.
         all: remember (iota 0 n') as l; clear Heql. 
         all: induction l; simpl in *; try (inversion d_eq; done).
         all: rewrite setmE in d_eq; unfold_match; simpl in *; auto.
+      + subst. simpl. intros col w' w'' d d' e rel eqw' eqw'' dcode d'code dcol d'col d_e_eq d'_e_eq.
+        rewrite unionmE in eqw'. rewrite unionmE in eqw''.
+        unfold_match' eqw'; unfold_match' eqw''.
+        * eapply entry_off; eauto.
+        * assert (~ (is_code (taga d'))) by admit. tauto.
+        * assert (~ (is_code (taga d))) by admit. tauto.
+        * assert (~ (is_code (taga d'))) by admit. tauto.
       + intros d w d_eq. simpl in *. destruct d as [vd td].
         destruct td; simpl; auto.
         all: rewrite unionmE; rewrite setmE in d_eq; simpl in *.
@@ -1289,16 +1438,18 @@ Section Recomposition.
           rewrite tag_pc1 in Heqa13. rewrite tag_pc3 in Heqa10.
           clear -Heqa10 Heqa13. admit. }
         subst p2.
-        simpl in *. rewrite <- Heqcond. destruct cond; simpl; try eapply reg_match.
+        simpl in *. rewrite <- Heqcond. destruct cond; simpl.
         split; intro; simplify_some; eexists; split; eauto.
-        all: split; auto.
-    - destruct weak as [? ? s3 wf_m num_eq color_eq side_s' s_mem_cor s'_mem_cor  mem_match].
+        all: destruct s, pc0; try eapply reg_match.
+        all: simpl in *; split; auto.
+    - destruct weak as [? ? s3 wf_m num_eq color_eq side_s' s_mem_cor s'_mem_cor entry_off mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence; simpl; try done.
       + intros v1 v2 v3 v0 comp off inclusion side_c0 off_eq.
         destruct (wf_m v1 v2 v3 v0 comp off inclusion side_c0 off_eq) as [? [? ?]].
         unfold points_to_comp_code, points_to_comp_code' in *. simpl.
         do 2 oapp_False. 
         repeat rewrite unionmE. simpl in *. rewrite <- HeqH0. rewrite <- HeqH2. simpl. done.
+      + destruct s, s3, pc0, pc1. simpl. trivial.
       + intros d w rel d_eq. simpl. destruct d as [vd td]. destruct td.
         destruct vtag; simpl; auto.
         all: rewrite unionmE; rewrite unionmE in d_eq; simpl in *.
@@ -1312,6 +1463,11 @@ Section Recomposition.
         all: remember (iota 0 n') as l; clear Heql. 
         all: induction l; simpl in *; try (inversion d_eq; done).
         all: rewrite setmE in d_eq; unfold_match; simpl in *; auto.
+      + subst. simpl. intros col w' w'' d d' e rel eqw' eqw'' dcode d'code dcol d'col d_e_eq d'_e_eq.
+        rewrite unionmE in eqw''.
+        unfold_match' eqw''.
+        * eapply entry_off; eauto.
+        * assert (~ (is_code (taga d'))) by admit. tauto.
       + intros w d no_code rel. simpl. repeat rewrite unionmE.
         split.
         * remember (mem s3 w) as cond. simpl in *. rewrite <- Heqcond. destruct cond; simpl.
@@ -1347,7 +1503,11 @@ Section Recomposition.
              oapp_False. simpl. done.
           -- unfold points_to_comp_code in *. rewrite unionmE.
              oapp_False. simpl. done.
-      + split; [|split; [|split; [|split]]];
+      + unfold register_domm. simpl. rewrite domm_set. 
+        unfold register_domm, reg_field_size in *. simpl in *. clear -reg_domm1. admit.
+      + unfold register_domm. simpl. rewrite domm_set. 
+        unfold register_domm, reg_field_size in *. simpl in *. clear -reg_domm3. admit.
+      + split; [|split; [|split; [|split; [|split]]]];
           unfold memory_prefix_condition, code_prefix_condition, alloc_empty, BNZ_correctness, end_condition in *;
           simpl; repeat rewrite unionmE.
         * admit.
@@ -1371,7 +1531,10 @@ Section Recomposition.
             rewrite unionmE. rewrite d'eq. simpl. done. }
           { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
             subst d. simpl in dcode. inversion dcode. }
-      + split; [|split; [|split; [|split]]];
+        * intros w d deq. rewrite unionmE in deq. unfold_match' deq.
+          -- eapply col_mem1; eauto.
+          -- admit.
+      + split; [|split; [|split; [|split; [|split]]]];
           unfold memory_prefix_condition, code_prefix_condition, alloc_empty, BNZ_correctness, end_condition in *;
           simpl; repeat rewrite unionmE.
         * admit.
@@ -1395,14 +1558,33 @@ Section Recomposition.
             rewrite unionmE. rewrite d'eq. simpl. done. }
           { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
             subst d. simpl in dcode. inversion dcode. }
+        * intros w d deq. rewrite unionmE in deq. unfold_match' deq.
+          -- eapply col_mem3; eauto.
+          -- admit.
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
         remember (mem s3 (addw w (as_word off))) as cond1.
         remember (mem s1 w) as cond2.
         simpl in *. rewrite <- Heqcond1. rewrite <- Heqcond2.
         destruct cond1; destruct cond2; split; simpl; intro Heq; try simplify_some; subst; simpl.
-        -- rewrite Heqcond1. exact ((fst (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)).
-        -- rewrite Heqcond2. exact ((snd (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)).
+        -- rewrite Heqcond1. destruct ((fst (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [x [xmatch xeq]].
+           exists x. split; auto.
+           inversion xmatch; subst.
+           ++ econstructor; eauto.
+           ++ eapply decode_match_alloc_JAL; eauto.
+           ++ eapply decode_match_JAL. exact H. exact H0.
+              rewrite unionmE. rewrite H1. simpl. eauto.
+              rewrite unionmE. rewrite H2. simpl. eauto.
+              all: trivial.
+        -- rewrite Heqcond2. destruct ((snd (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)) as [x [xmatch xeq]].
+           exists x. split; auto.
+           inversion xmatch; subst.
+           ++ econstructor; eauto.
+           ++ eapply decode_match_alloc_JAL; eauto.
+           ++ eapply decode_match_JAL. exact H. exact H0.
+              rewrite unionmE. rewrite H1. simpl. eauto.
+              rewrite unionmE. rewrite H2. simpl. eauto.
+              all: trivial.
         -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
            inv eq. exfalso. discriminate.
         -- destruct ((snd (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)) as [? [? eq1]].
@@ -1421,8 +1603,24 @@ Section Recomposition.
         remember (mem s2 w) as cond2.
         simpl in *. rewrite <- Heqcond1. rewrite <- Heqcond2.
         destruct cond1; destruct cond2; split; simpl; intro Heq; try simplify_some; subst; simpl; try (inversion Heq; done).
-        -- rewrite Heqcond1. exact ((fst (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)).
-        -- rewrite Heqcond2. exact ((snd (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)).
+        -- rewrite Heqcond1. destruct ((fst (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [x [xmatch xeq]].
+           exists x. split; auto.
+           inversion xmatch; subst.
+           ++ econstructor; eauto.
+           ++ eapply decode_match_alloc_JAL; eauto.
+           ++ eapply decode_match_JAL. exact H. exact H0.
+              exact H1.
+              rewrite unionmE. rewrite H2. simpl. eauto.
+              all: trivial.
+        -- rewrite Heqcond2. destruct ((snd (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)) as [x [xmatch xeq]].
+           exists x. split; auto.
+           inversion xmatch; subst.
+           ++ econstructor; eauto.
+           ++ eapply decode_match_alloc_JAL; eauto.
+           ++ eapply decode_match_JAL. exact H. exact H0.
+              exact H1.
+              rewrite unionmE. rewrite H2. simpl. eauto.
+              all: trivial.
         -- destruct ((snd (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)) as [? [? eq1]].
            exfalso. congruence.
         -- destruct ((fst (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [? [? eq1]].
@@ -1468,8 +1666,11 @@ Section Recomposition.
     - admit.
     - admit.
     - admit.
+    - admit.
+    - admit.
     - unfold combined_codes. intros. admit.
     - unfold combined_codes. intros. admit.
+    - admit.
     - unfold well_formed_metadata. intros. inv H.
     - subst. unfold initial_state. simpl. rewrite Hifacep Hifacec. trivial.
     - assert (color_eq: color_of s1 = 0). subst. unfold initial_state, color_of. simpl. trivial.
@@ -1606,11 +1807,11 @@ Section Recomposition.
     all: destruct (in_mem comp' (ssrbool.mem (domm ip))) eqn: side_comp';
       [ assert (ip_comp': comp' \in domm ip); [rewrite side_comp'; trivial|]
       | assert (ic_comp': comp' \in domm ic); [admit |]]; clear side_comp'. (* need hypothesis on the colors contained by memory *)
-    all: inversion strong as [? ? ? wf_m comp_num pc_s'_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match].
-    all: inversion common as [? ? ? ? ? ? tag_pc1 tag_pc2 tag_pc3 wfst
-                                [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 end_s1]]]]
-                                [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 end_s2]]]]
-                                [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 end_s3]]]] code_left code_right].
+    all: inversion strong as [? ? ? wf_m comp_num pc_s'_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+    all: inversion common as [? ? ? ? ? ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
+                          [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 col_mem1]]]]]
+                          [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 col_mem2]]]]]
+                          [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 col_mem3]]]]] code_left code_right].
     all: subst s s' s0 s4 s5 m m0.
     all: rewrite ST in tag_pc2; inversion tag_pc2; subst n0 c0; clear tag_pc2.
     (* Steps needed in each cases: *)
@@ -1670,26 +1871,40 @@ Section Recomposition.
       subst s1. unfold side_of in *. unfold_match' side_eq. simpl in *.
       deduce_equality PC0.
       assert (Meq: exists top M', M = top :: M').
-      { destruct vt_match9 as [ret_eq stack_prop]. unfold color_of in stack_prop.
-        subst t9. simpl in stack_prop. destruct stack_prop as [top top_in].
+      { destruct vt_match10 as [ret_eq stack_prop]. unfold color_of in stack_prop.
+        subst t10. simpl in stack_prop. destruct stack_prop as [top [col top_in]].
         destruct M; eauto. inversion top_in. }
-      destruct Meq as [top [M' M_eq]].
-      inversion ivec_eq as [next_pc_tag]. destruct a41 as [xt xv].
-      destruct vt_match9 as [ret_eq stack_prop]. unfold color_of in stack_prop.
-      subst t9. simpl in stack_prop. destruct stack_prop as [s2val triple_in].
-      unfold color_of in eq_off. simpl in eq_off.
-      pose proof (wf_m _ _ _ _ _ _ triple_in (Logic.eq_refl) eq_off) as cap_prop.
-      unfold points_to_comp_code, points_to_comp_code' in cap_prop.
-      destruct cap_prop as [w0_code [v10_code w0_v10_eq]]. do 2 oapp_False.
-      simpl in HeqH0, HeqH10. destruct w0_code as [w0_color w0_code].
-      destruct v10_code as [v10_color v10_code].
+      destruct Meq as [top [M' M_eq]]. destruct a41 as [xt xv].
+      destruct vt_match10 as [ret_eq stack_prop]. unfold color_of in stack_prop.
+      subst t10. simpl in stack_prop. destruct stack_prop as [s2val [comp'' triple_in]].
+      match (type of triple_in) with (_ ?t _) => assert (top = t); [|subst top] end. 
+      { inv tag_pc1. simpl in *. subst.
+        clear- wfst triple_in. destruct triple_in as [?| is_in]; auto. exfalso.
+        remember (Nat.pred n) as n'. assert (n'_ineq: S n' >= n) by (subst; clear; induction n; eauto).
+        clear Heqn'.
+        revert is_in. revert n'_ineq. revert w0 s2val v11 comp'' n'.
+        inversion wfst; subst; clear - WF_ST; simpl; unfold Init.Nat.pred, "+", addn_rec; rewrite Nat.add_1_r.
+        all: induction WF_ST; intros a v b col n' n'_ineq is_in; inversion is_in.
+        all: try (inversion H; subst n; (assert false; [|done]); rewrite <- (ltn_subrR 0 (S n')); unfold subn, subn_rec, Nat.sub;
+                  unfold addn, addn_rec in n'_ineq; rewrite Nat.add_1_r in n'_ineq; done).
+        all: eapply (IHWF_ST _ _ _ _ _ _ H). }
+      assert (comp'' = comp'); [|subst comp''].
+      { clear - wfst M_eq Heqa7 tag_mem_w0. inversion wfst; subst M; inv H0;
+        unfold points_to_comp_code' in PTS_CODE1; oapp_False; simpl in *; rewrite <- Heqa7 in HeqH; simplify_some;
+        destruct PTS_CODE1 as [col ?]; rewrite <- tag_mem_w0 in col; simpl in col; auto. }
+      inversion wfst; subst M; try (inv H0; done); simpl in *.
+      2: { exfalso. inv H14. clear - SIDE ip_comp' Hmergeable_ifaces.
+           eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
+           inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
+      (* pose proof (wf_m _ _ _ _ _ _ triple_in (Logic.eq_refl) eq_off') as cap_prop.*) (* we don't need both wf_m *and* wfst *)
+      inversion H14. subst v13 n n0 s2val v15 C st. clear H20 H14.
+      unfold points_to_comp_code in PTS_CODE3. oapp_False.
       eexists. exists M'.
       split.
       * eapply (plus_left _ [:: ERet comp rcom_value1 comp'] ). try eapply step_jump; eauto.
+        -- rewrite eq_s3 in vt_eq11. exact vt_eq11.
+        -- inversion vt_match11; subst; revert H11; try decode_instr_eq.
         -- rewrite eq_s3 in vt_eq10. exact vt_eq10.
-        -- unfold decode_match in vt_match10. revert vt_match10.
-           decode_instr_eq. intro vt_match10. subst. decode_instr_eq.
-        -- rewrite eq_s3 in vt_eq9. exact vt_eq9.
         -- unfold reg_clear_list, reg_list. simpl. unfold as_word. subst. simpl.
            repeat
              (match goal with
@@ -1697,12 +1912,14 @@ Section Recomposition.
               end). trivial.
         -- unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
            unfold evi in *. simpl. unfold_bind.
-           deduce_reg reg_match.
-           rewrite <- HeqH10. simpl. rewrite eq_s3 in tag_pc3. simpl in tag_pc3.
+           deduce_reg reg_match. subst v11. simpl in *.
+           rewrite <- HeqH11. simpl. rewrite eq_s3 in tag_pc3. simpl in tag_pc3.
            rewrite tag_pc3. rewrite eq_refl. simpl.
-           assert (a9_color: color (taga a9) = comp') by admit. (* fix needed to data_match *)
-           destruct a9; destruct taga; simpl in a9_color; simpl; rewrite a9_color.
-           rewrite <- Heqa8. simpl. inversion tag_pc1. subst n1. rewrite eq_refl. simpl.
+           destruct PTS_CODE3 as [col_a10 code_a10]. destruct a10 as [va10 ta10]. destruct ta10.
+           simpl in col_a10. rewrite col_a10. simpl. rewrite <- Heqa10. simpl.
+           destruct a22. unfold is_other in *. unfold_match' Heqa50. simpl in *.
+           subst taga. inversion vt_match9 as [? _]. subst t9. simpl.
+           unfold "+", addn_rec. rewrite Nat.add_1_r. simpl. rewrite eq_refl. simpl.
            unfold updm. unfold as_word. simpl in *.
            (*automatically rewrite regs3 registers*)
            repeat
@@ -1720,20 +1937,18 @@ Section Recomposition.
                      remember (@eq_op t a r) as cond; destruct cond;
                      [convert_eq_op; simpl in *|]; simpl
                  end)).
-           all: inversion Heqa20; subst rcom_value1;
-             assert (eq_evi: Types.vala a11 = Types.vala x) by admit; (* need more hypothesis on evi in instr_rules *)
-             rewrite eq_evi.
-           11: trivial.
+           all: inversion Heqa0; subst rcom_value1; rewrite H10 in Heqa5; simplify_some; destruct x; destruct H11; subst; simpl.
+           12: reflexivity.
            all: unfold as_word in *; simpl in *.
-           all: (match (type of vt_eq9) with
+           all: (match (type of vt_eq10) with
                  | ?ls = ?rs =>
-                     revert vt_eq9;
+                     revert vt_eq10;
                      (match goal with
                         Heq: ls = Some (?a) |- _ =>
-                          intro vt_eq9; rewrite Heq in vt_eq9; simplify_some; subst; simpl
+                          intro vt_eq10; rewrite Heq in vt_eq10; simplify_some; subst; simpl
                       end)
                  end).
-           all: repeat (rewrite setmxx || (rewrite (setmC _ (v10@_)); [|done]) ).
+           all: repeat (rewrite setmxx || (rewrite (setmC _ ((addw _ _)@_)); [|done]) ).
            all: trivial.
         -- eapply star_refl.
         -- reflexivity.

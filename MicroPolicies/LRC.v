@@ -218,28 +218,30 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                   do! _ <- check_belong current tni;
                                      Some (OVec BNZ       tpc [hseq tx], None)
 
-  | JUMP,    HSeqCons tp next  => if belong current tni then
+  | JUMP,    HSeqCons tp (HSeqCons trcom next)  => if belong current tni then
                                    do! _ <- is_jump tp;
-                                   Some (OVec JUMP tpc (HSeqCons tp next), None)
+                                   Some (OVec JUMP tpc (HSeqCons tp (HSeqCons trcom next)), None)
                                  else
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
                                    (*          (unique Ret n)                              *)
+                                   do! _ <- is_other trcom;
                                    do! c' <- get_tni_color tni;
                                    let ev := Some (ERet current (rcom_value evi) c') in
                                    do! _ <- check_ret level.-1 tp;
                                    Some (OVec JUMP (build_tpc (level.-1) c')
-                                           (HSeqCons Invalidated reg_invalidate_hseq), ev)
+                                           (HSeqCons Invalidated (HSeqCons Other reg_invalidate_hseq)), ev)
 
-  | JAL,     HSeqCons tra next    => if belong current tni then
-                                   Some (OVec JAL tpc (HSeqCons InternalJump next), None)
+  | JAL,     HSeqCons tra (HSeqCons trcom next)    => if belong current tni then
+                                   Some (OVec JAL tpc (HSeqCons InternalJump (HSeqCons trcom next)), None)
                                  else
+                                   do! _ <- is_other trcom;
                                    do! c' <- get_tni_color tni;
                                    let ev := do! p  <- get_proc_name tni;
                                              Some (ECall current p (rcom_value evi) c') in
                                    do! _ <- check_entry current tni;
                                    Some (OVec JAL (build_tpc (level.+1) c')
-                                           (HSeqCons (Ret level) reg_invalidate_hseq), ev)
+                                           (HSeqCons (Ret level) (HSeqCons Other reg_invalidate_hseq)), ev)
 
   | _,     _                   => None
   end.
