@@ -232,16 +232,17 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                    Some (OVec JUMP (build_tpc (level.-1) c')
                                            (HSeqCons Invalidated (HSeqCons Other reg_invalidate_hseq)), ev)
 
-  | JAL,     HSeqCons tra (HSeqCons trcom next)    => if belong current tni then
-                                   Some (OVec JAL tpc (HSeqCons InternalJump (HSeqCons trcom next)), None)
+  | JAL,     (tnext :: tra :: trcom :: next)%hseq => if belong current tni then
+                                   Some (OVec JAL tpc (tnext :: InternalJump :: trcom :: next)%hseq, None)
                                  else
                                    do! _ <- is_other trcom;
+                                   do! _ <- check_belong current (Some tnext);
                                    do! c' <- get_tni_color tni;
                                    let ev := do! p  <- get_proc_name tni;
                                              Some (ECall current p (rcom_value evi) c') in
                                    do! _ <- check_entry current tni;
                                    Some (OVec JAL (build_tpc (level.+1) c')
-                                           (HSeqCons (Ret level) (HSeqCons Other reg_invalidate_hseq)), ev)
+                                           (tnext :: (Ret level) :: Other :: reg_invalidate_hseq)%hseq, ev)
 
   | _,     _                   => None
   end.

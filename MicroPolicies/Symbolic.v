@@ -44,7 +44,7 @@ Definition inputs (op : opcode) : seq tag_kind :=
   | STORE   => [:: R;R;M]
   | JUMP    => nseq 12 R
   | BNZ     => [:: R]
-  | JAL     => nseq 12 R
+  | JAL     => M :: nseq 12 R
   (* the other opcodes are not used by the symbolic machine *)
   | JUMPEPC => [:: P]
   | ADDRULE => [::]
@@ -374,15 +374,16 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
      let pc' := pc + (if w == 0%w
                       then 1%w else swcast n) in forall
     (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] pc' = Some (st', ev)),     step st st' ev
-| step_jal : forall mem reg pc i imm tpc ti old told extra nc l
+| step_jal : forall mem reg pc i imm tpc ti old told extra nc l vret tret
     (ST : st = State mem reg pc@tpc extra nc)
     (PC : mem pc = Some i@ti)
+    (RA : mem (pc.+1) = Some vret@tret )
     (INST : decode_instr i = Some (Jal imm))
     (OLD : reg ra = Some old@told)
     (CLEAR: reg_clear_list reg told = Some l),
-    let mvec := IVec JAL tpc ti l in
+    let mvec := IVec JAL tpc ti (HSeqCons tret l) in
     let pc' := (swcast imm) in forall
-    (NEXT : next_state_updates_and_pc st mvec ((RegWrite ra (pc.+1)) :: reg_clear_read) pc' = Some (st', ev)), step st st' ev
+    (NEXT : next_state_updates_and_pc st mvec (MemRead (pc.+1) :: (RegWrite ra (pc.+1)) :: reg_clear_read) pc' = Some (st', ev)), step st st' ev
 | step_syscall : forall mem reg pc sc tpc extra nc
     (ST : st = State mem reg pc@tpc extra nc)
     (PC : mem pc = None)

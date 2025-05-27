@@ -98,10 +98,11 @@ Definition stepf (st : state ttypes internal_state) :
     | Jal i =>
       do! oldtold <- reg ra;
       let: _@told := oldtold in
+      do! ret <- mem (pc.+1);
       do! l <- reg_clear_list reg told;
-      let mvec := IVec JAL tpc ti l in
+      let mvec := IVec JAL tpc ti (HSeqCons (taga ret) l) in
       let pc' := swcast i in
-      next_state_updates_and_pc st mvec ((RegWrite ra (pc.+1)) :: reg_clear_read) pc'
+      next_state_updates_and_pc st mvec (MemRead (pc.+1) :: (RegWrite ra (pc.+1)) :: reg_clear_read) pc'
     | JumpEpc | AddRule | GetTag _ _ | PutTag _ _ _ | Halt =>
       None
     end
@@ -206,8 +207,9 @@ Definition build_k_ivec st : option (k_ivec ttypes)  :=
               Some (part [hseq taga w])
             | Jal  r => fun part =>
               do! old <- regs st ra;
+              do! ret <- mem st ((vala (pc st)).+1);
               do! l <- reg_clear_list (regs st) (taga old);
-              Some (part l)
+              Some (part (HSeqCons (taga ret) l))
             | JumpEpc => fun _ => None
             | AddRule => fun _ => None
             | GetTag _ _ => fun _ => None
