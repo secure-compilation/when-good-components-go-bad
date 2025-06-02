@@ -37,7 +37,7 @@ Definition reg0 {ttypes} (Other: (Symbolic.tag_type ttypes Symbolic.R)) : {fmap 
       ; (as_word 1, Atom (as_word 0) Other)
       ; (as_word 2, Atom (as_word 0) Other)
       ; (as_word 3, Atom (as_word 0) Other)
-      ; (as_word 4, Atom (as_word (Nat.pow 2 15)) Other)
+      ; (as_word 4, Atom (as_word 0) Other)
       ; (as_word 5, Atom (as_word 0) Other)
       ; (as_word 6, Atom (as_word 0) Other)
       ; (as_word 7, Atom (as_word 0) Other)
