@@ -1925,9 +1925,10 @@ Section Recomposition.
              H: Some ?a = match ?cond with true => Some ?b | false => Some ?c end |- _ =>
                assert (a = if cond then b else c); [destruct cond; inversion H; try congruence| clear H]
            end.
-    all: repeat (unfold_all || unfold_match).
+    all: revert Heqa23; repeat (unfold_all || unfold_match).
+    all: intro a21_eq.
     all: subst color; try subst color0; try subst color1; try subst i3; destruct e0, e; simpl in *; subst rcom_value0.
-    all: unfold is_jump, check_ret, build_tpc in *; try (repeat unfold_match; subst t1).
+    all: unfold is_jump, check_ret, build_tpc in *; try (revert a21_eq; repeat unfold_match; subst t1; intro a21_eq).
     all: convert_eq_op.
     all: unfold_match' ivec_eq; inversion ivec_eq as [tag_mem_w0].
     all: try (match goal with
@@ -1935,13 +1936,13 @@ Section Recomposition.
               end).
     all: revert ST ST0 eq_s3; subst; intros ST ST0 eq_s3; simpl in *. (* trick to keep an equality on s1 and s3 *)
     1-2: rename i1 into comp.
-    3-4: rename color0 into comp.
+    3-4: rename i2 into comp.
     all: inversion strong as [? ? ? comp_num pc_s'_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
     all: inversion common as [? ? ? ? ? ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
                           [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
                           [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]
                           [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]
-                          code_left code_right].
+                          capa_cor1 capa_cor2 capa_cor3 code_left code_right].
     all: subst s s' s0 s4 s5 m m0.
     (* We now need to branch on which state is strongly related to s3 next (i.e. on what is comp', the color of the next compartment) *)
     all: ((match goal with
@@ -1969,6 +1970,7 @@ Section Recomposition.
            H : Some ?a = getm reg0 _ |- _ => deduce_equality (esym H); pose proof (esym H); clear H
          end).
       deduce_equality RW0.
+      deduce_equality RA0.
       subst s1. unfold side_of in *. unfold_match' side_eq. simpl in *.
       deduce_equality PC0.
       assert (Meq: exists top M', M = top :: M').
@@ -1997,14 +1999,15 @@ Section Recomposition.
       2: { exfalso. inv H14. clear - SIDE ip_comp' Hmergeable_ifaces.
            eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
            inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
-      inversion H14. subst v13 n n0 s2val v15 C st. clear H20 H14.
+      inversion H14. subst v14 n n0 s2val v16 C st. clear H20 H14.
       unfold points_to_comp_code in PTS_CODE3. oapp_False.
       eexists. exists M'.
       split.
       * eapply (plus_left _ [:: ERet comp rcom_value1 comp'] ). try eapply step_jump; eauto.
-        -- rewrite eq_s3 in vt_eq11. exact vt_eq11.
-        -- inversion vt_match11; subst; revert H11; try decode_instr_eq.
+        -- rewrite eq_s3 in vt_eq12. exact vt_eq12.
+        -- inversion vt_match12; subst; revert H11; try decode_instr_eq.
         -- rewrite eq_s3 in vt_eq10. exact vt_eq10.
+        -- rewrite eq_s3 in vt_eq11. exact vt_eq11.
         -- unfold reg_clear_list, reg_list. simpl. unfold as_word. subst. simpl.
            repeat
              (match goal with
@@ -2017,8 +2020,8 @@ Section Recomposition.
            rewrite tag_pc3. rewrite eq_refl. simpl.
            destruct PTS_CODE3 as [col_a10 code_a10]. destruct a10 as [va10 ta10]. destruct ta10.
            simpl in col_a10. rewrite col_a10. simpl. rewrite <- Heqa10. simpl.
-           destruct a22 as [? ta22]. unfold is_other in *. unfold_match' Heqa50. simpl in *.
-           subst ta22. inversion vt_match9 as [? _]. subst t9. simpl.
+           destruct a23 as [? ta]. unfold is_other in *. unfold_match' Heqa51. simpl in *.
+           subst ta. inversion vt_match9 as [? _]. subst t9. simpl.
            unfold "+", addn_rec. rewrite Nat.add_1_r. simpl. rewrite eq_refl. simpl.
            unfold updm. unfold as_word. simpl in *.
            (*automatically rewrite regs3 registers*)
@@ -2038,7 +2041,7 @@ Section Recomposition.
                      [convert_eq_op; simpl in *|]; simpl
                  end)).
            all: inversion Heqa0; subst rcom_value1; rewrite H10 in Heqa5; simplify_some; destruct x; destruct H11; subst; simpl.
-           12: reflexivity. (* most general case, to be treated first *)
+           13: reflexivity. (* most general case, to be treated first *)
            all: unfold as_word in *; simpl in *.
            all: (match (type of vt_eq10) with
                  | ?ls = ?rs =>
@@ -2071,18 +2074,71 @@ Section Recomposition.
         -- split; [|split; [|split; [|split; [|split; [|split]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split]]]]]; trivial.
+        -- intros v' n rw rweq. simpl in *. destruct rw as [r' | w'].
+           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
+             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by (rewrite <- reg_domm1; rewrite mem_domm; rewrite rweq; trivial).
+             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in. 
+             repeat (destruct r'_in as [|r'_in];
+                     [subst;
+                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+             inversion r'_in. }
+           pose proof (capa_cor1 v' n (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
+           { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [|is_in]]]]; [|eauto].
+             exfalso. inversion H11. subst n v' sv1 sv2 col. eapply (unicity (inl _)). exact RW0. }
+           intros rw v''. destruct rw as [r' | w'']; simpl.
+           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
+             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by (rewrite <- reg_domm1; rewrite mem_domm; rewrite rweq'; trivial).
+             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in. 
+             repeat (destruct r'_in as [|r'_in];
+                     [subst;
+                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+             inversion r'_in.  }
+           intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
+        -- intros v' n rw rweq. simpl in *. destruct rw as [r' | w'].
+           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
+             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by (rewrite <- reg_domm2; rewrite mem_domm; rewrite rweq; trivial).
+             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in. 
+             repeat (destruct r'_in as [|r'_in];
+                     [subst;
+                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+             inversion r'_in. }
+           pose proof (capa_cor2 v' n (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
+           { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [|is_in]]]]; [|eauto].
+             exfalso. inversion H11. subst n v' sv1 sv2 col. eapply (unicity (inl _)). rewrite H14. exact RW. }
+           intros rw v''. destruct rw as [r' | w'']; simpl.
+           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
+             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by (rewrite <- reg_domm2; rewrite mem_domm; rewrite rweq'; trivial).
+             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in. 
+             repeat (destruct r'_in as [|r'_in];
+                     [subst;
+                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+             inversion r'_in.  }
+           intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
+        -- intros v' n rw rweq. simpl in *. destruct rw as [r' | w'].
+           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
+             repeat simplify_some. inversion Heqa51.
+             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by (rewrite <- reg_domm3; rewrite mem_domm ; rewrite rweq; trivial).
+             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold as_word in r'_in. simpl in r'_in.
+             unfold word_of_nat, as_word in r'_in. simpl in r'_in.
+             repeat (destruct r'_in as [|r'_in];
+                     [subst;
+                      (match goal with H : false = (Word ?a == Word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+             inversion r'_in. }
+           pose proof (capa_cor3 v' n (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
+           { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [|is_in]]]]; [|eauto].
+             exfalso. inversion H11. subst n v' sv1 sv2 col. eapply (unicity (inl _)). exact vt_eq10. }
+           intros rw v''. destruct rw as [r' | w'']; simpl.
+           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
+             repeat simplify_some. inversion Heqa51.
+             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by (rewrite <- reg_domm3; rewrite mem_domm; rewrite rweq'; trivial).
+             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. simpl in r'_in. unfold word_of_nat, as_word in r'_in. simpl in r'_in. 
+             repeat (destruct r'_in as [|r'_in];
+                     [subst;
+                      (match goal with H : false = (Word ?a == Word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+             inversion r'_in.  }
+           intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
         -- eapply same_pc_normal; simpl; eauto.
         -- unfold side_of. rewrite ip_comp'. trivial.
-        -- unfold memory_address_correctness. simpl.
-           intros d w' rel deq. pose proof (s_mem_cor d w' rel deq) as add_corr.
-           destruct d as [dv dt]. destruct dt as [dt ? ? ?]; destruct dt; simpl in *; destruct add_corr; try trivial.
-           destruct H11 as [xeq [xcode n_ineq]]. eexists. split; eauto. split; auto. admit. (* need fix in hypothesis *)
-           eauto.
-        -- unfold memory_address_correctness. simpl.
-           intros d w' rel deq. pose proof (s'_mem_cor d w' rel deq) as add_corr.
-           destruct d as [dv dt]. destruct dt as [dt ? ? ?]; destruct dt; simpl in *; destruct add_corr; try trivial.
-           destruct H11 as [xeq [xcode n_ineq]]. eexists. split; eauto. split; auto. admit. (* need fix in hypothesis *)
-           eauto.
         -- unfold register_address_correctness. simpl.
            intros d r1 r_d_eq.
            unfold register_domm in *.
@@ -2095,10 +2151,6 @@ Section Recomposition.
            rewrite reg_domm1 in r_in.
            repeat (destruct r_in as [? | r_in]; try subst r1; repeat (rewrite setmE in r_d_eq; simpl in r_d_eq)).
            all: unfold_match' r_d_eq; simpl.
-           pose proof (s_reg_cor d _ r_d_eq) as add_corr. simpl in add_corr.
-           destruct d as [dv dt]. destruct dt; simpl; simpl in add_corr; try trivial.
-           destruct add_corr as [? [? [? n_ineq]]].
-           eexists. split; eauto. split; eauto. admit. (* need fix in hypothesis *)
         -- unfold register_address_correctness. simpl.
            intros d r1 r_d_eq.
            unfold register_domm in *.
@@ -2110,11 +2162,8 @@ Section Recomposition.
              rewrite <- reg_domm3. setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). exists d. trivial. }
            rewrite reg_domm3 in r_in.
            repeat (destruct r_in as [? | r_in]; try subst r1; repeat (rewrite setmE in r_d_eq; simpl in r_d_eq));
-             simpl in r_d_eq; repeat simplify_some; simpl; trivial.
-           { unfold_match' r_d_eq; simpl. pose proof (s'_reg_cor _ _ r_d_eq) as add_corr.
-             destruct d as [dv dt]. destruct dt; simpl in *; try trivial.
-             admit. } (* need unicity of return capabilities to force add_corr to be at a lower level *)
-           { destruct d; unfold is_other in *; unfold_match' Heqa50. }
+             simpl in r_d_eq; repeat simplify_some; simpl; trivial. unfold_match' r_d_eq.
+           { destruct d; unfold is_other in *; unfold_match' Heqa51. }
            inversion r_in.
         -- unfold memory_match. simpl.
            intros w' d d_code d_ip. split; intro w_eq.
@@ -2126,9 +2175,10 @@ Section Recomposition.
              destruct inM ; [|exists sv', comp''; trivial].
              exfalso. inversion H15. subst n vala1 vala0.
              match (type of d''eq) with _ = Some (?v) => assert (rel: is_relevant_comp Left (LRC.color (taga v))) by (simpl; auto) end.
-             destruct (s_mem_cor _ _ rel d''eq) as [d' [d'eq [d'code n1_ineq]]].
-             clear -n1_ineq. induction n1; simpl in *; inversion n1_ineq; trivial. admit. admit. (* need fix in hypothesis *)
-           }
+             destruct (s_mem_cor _ _ rel d''eq) as [d' [d'eq d'code]]. simpl in d'eq.
+             pose proof (capa_cor1 w0 (n1.-1) (inr w')) as cor. simpl in cor.
+             destruct cor as [is_in unicity]. eexists. split. exact d''eq. eauto.
+             eapply (unicity (inl _)); eauto. }
            { destruct (snd (mem_match w' d d_code d_ip) w_eq) as [d'' [d''match d''eq]].
              simpl in *. exists d''. split; [|exact d''eq].
              destruct d; destruct d'' as [? d''t]; destruct d''t as [d''t ? ? ?]. destruct d''match; subst;
@@ -2137,9 +2187,10 @@ Section Recomposition.
              destruct inM ; [|exists sv', comp''; trivial].
              exfalso. inversion H15. subst n vala1 vala0.
              match (type of d''eq) with _ = Some (?v) => assert (rel: is_relevant_comp Left (LRC.color (taga v))) by (simpl; auto) end.
-             destruct (s'_mem_cor _ _ rel d''eq) as [d' [d'eq [d'code n1_ineq]]].
-             clear -n1_ineq. induction n1; simpl in *; inversion n1_ineq; trivial. admit. admit. (* need fix in hypothesis *)
-           }
+             subst. destruct (s'_mem_cor _ _ rel d''eq) as [d' [d'eq d'code]]. simpl in d'eq.
+             pose proof (capa_cor3 (w0 + as_word off0)%w (n1.-1) (inr w')) as cor. simpl in cor.
+             destruct cor as [is_in unicity]. eexists. split. exact d''eq. eauto.
+             eapply (unicity (inl _)); eauto. }
         -- unfold registers_match. simpl. intros w' d.
            split; intro w_eq.
            { repeat (rewrite setmE in w_eq; unfold_match' w_eq; [ convert_eq_op |]; simpl in w_eq).
@@ -2147,47 +2198,53 @@ Section Recomposition.
              all: repeat (rewrite setmE; simpl).
              1-11: eexists; split; [| reflexivity].
              1-11: try (split; trivial).
-             { destruct d as [v_d t_d]. unfold is_other in *. destruct t_d; inversion Heqa50.
-               split; trivial. rewrite setmE in Heqa40. simpl in Heqa40. rewrite H10 in Heqa40.
-               unfold_match' Heqa40; simplify_some; trivial. simpl. convert_eq_op.
-               rewrite <- Heqa39 in H10. simplify_some. trivial. }
+             { destruct d as [v_d t_d]. unfold is_other in *. destruct t_d; inversion Heqa51.
+               split; trivial. rewrite setmE in Heqa41.
+               unfold_match' Heqa41; simplify_some; trivial. simpl. convert_eq_op.
+               rewrite setmE in Heqa40. unfold_match' Heqa40. rewrite <- Heqa40 in H10. simplify_some. trivial.
+               rewrite setmE in Heqa41. unfold_match' Heqa41. rewrite <- Heqa41 in H10. simplify_some. trivial. }
              { simpl. unfold as_word. unfold ssrint.absz. simpl.
                repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
-               simpl. subst pc3_val. simpl. eexists ((Types.vala a44)@Invalidated). eexists. split; auto.
+               simpl. subst pc3_val. simpl. eexists ((Types.vala a45)@Invalidated). eexists. split; auto.
                rewrite eq_refl. trivial. }
-             assert (r_in : In w' (domm regs3)).
-             { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). exists d. trivial. }
-             exfalso. admit. (* need slight adjustment of the micro-policy *) }
+             { rewrite <- Heqa31. eexists (_ @ Invalidated). split; eauto. split; auto. }  
+             { assert (r_in : In w' (domm regs3)).
+               { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). exists d. trivial. }
+               exfalso. rewrite reg_domm3 in r_in. simpl in r_in. unfold word_of_nat, as_word in r_in. simpl in r_in.
+               repeat (destruct r_in as [|r_in];
+                       [subst;
+                        (match goal with H : false = (Word ?a == Word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+               inversion r_in. } }
            { repeat (rewrite setmE in w_eq; unfold_match' w_eq; [ convert_eq_op |]; simpl in w_eq).
              all: try simplify_some.
              all: repeat (rewrite setmE; simpl).
              1-10: eexists; split; [| reflexivity].
              1-10: try (split; trivial).
-             { destruct a22 as [v_d t_d]. unfold is_other in *. destruct t_d; inversion Heqa50.
-               eexists. split; eauto. split; auto. rewrite setmE in Heqa40. simpl in Heqa40. rewrite H10 in Heqa40.
-               unfold_match' Heqa40; simplify_some; trivial. simpl. convert_eq_op.
-               rewrite <- Heqa39 in H10. simplify_some. trivial. }
+             { destruct a23 as [v_d t_d]. unfold is_other in *. destruct t_d; inversion Heqa51.
+               eexists. split; trivial. rewrite setmE in Heqa41.
+               unfold_match' Heqa41; simplify_some; trivial. simpl. convert_eq_op.
+               rewrite setmE in Heqa40. unfold_match' Heqa40. rewrite <- Heqa40 in H10. simplify_some. split; trivial.
+               rewrite setmE in Heqa41. unfold_match' Heqa41. rewrite <- Heqa41 in H10. simplify_some. split; trivial. }
              { simpl. unfold as_word, ssrint.absz in *. simpl in *.
                repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
-               simpl. subst pc3_val. simpl. eexists ((Types.vala a44 + as_word off0)%w @Invalidated). eexists. split; auto.
-               rewrite eq_refl. trivial. rewrite <- Heqa39 in RW0. simplify_some. simpl. trivial. }
+               simpl. subst pc3_val. simpl. eexists ((Types.vala a45 + as_word off0)%w @Invalidated). eexists. split; auto.
+               rewrite eq_refl. repeat rewrite setmE in Heqa40. repeat unfold_match' Heqa40; convert_eq_op.
+               simplify_some. rewrite <- Heqa39 in RW0. simplify_some. reflexivity.
+               rewrite <- Heqa40 in RW0. simplify_some. reflexivity. }
+             { simpl. unfold as_word, ssrint.absz in *. simpl in *.
+               repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
+               simpl. subst pc3_val. simpl. eexists. split; auto. split; auto. }
              assert (r_in : In w' (domm reg0)).
              { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). exists d. trivial. }
-             exfalso. admit. (* need slight adjustment of the micro-policy *) }
+             exfalso. rewrite reg_domm1 in r_in. simpl in r_in. unfold word_of_nat in r_in. simpl in r_in.
+              repeat (destruct r_in as [|r_in];
+                     [subst;
+                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+              inversion r_in. }
         -- inversion weak; trivial.
         -- unfold side_of. rewrite ip_comp'. trivial.
-        -- inversion weak as [? ? ? _ _ _ m_cor_s m_cor_s' _ _]; trivial.
-           intros v' w' rel v'eq. pose proof (m_cor_s v' w' rel v'eq) as addr_corr. simpl in *.
-           destruct v' as [v'v v't]. destruct v't as [v't ? ? ?]; destruct v't; simpl; trivial.
-           simpl in addr_corr. destruct addr_corr as [v' [v'veq [v'code n_ineq]]].
-           exists v'. split; auto. split; auto.
-           admit. (* need unicity of return capabilities to force add_corr to be at a lower level *)
-        -- inversion weak as [? ? ? _ _ _ m_cor_s m_cor_s' _ _]; trivial.
-           intros v' w' rel v'eq. pose proof (m_cor_s' v' w' rel v'eq) as addr_corr. simpl in *.
-           destruct v' as [v'v v't]. destruct v't as [v't ? ? ?]; destruct v't; simpl; trivial.
-           simpl in addr_corr. destruct addr_corr as [v' [v'veq [v'code n_ineq]]].
-           exists v'. split; auto. split; auto.
-           admit. (* need unicity of return capabilities to force add_corr to be at a lower level *)
+        -- inversion weak; trivial.
+        -- inversion weak; trivial.
         -- inversion weak; trivial.
         -- unfold memory_match. simpl. inversion weak as [? ? ? _ _ _ _ _ _ mem_match']. subst.
            intros w' d d_code d_ip. split; intro w_eq.
@@ -2200,9 +2257,10 @@ Section Recomposition.
              exfalso. inversion H15. subst n vala1 vala0.
              match (type of d''eq) with _ = Some (?v) => assert (rel: is_relevant_comp Right (LRC.color (taga v))) by (simpl; auto) end.
              inversion weak as [? ? ? _ _ _ m_cor_s m_cor_s' _ _].
-             destruct (m_cor_s _ _ rel d''eq) as [d' [d'eq [d'code n1_ineq]]].
-             clear -n1_ineq. induction n1; simpl in *; inversion n1_ineq; trivial. admit. admit. (* need fix in hypothesis *)
-           }
+             destruct (m_cor_s _ _ rel d''eq) as [d' [d'eq d'code]]. simpl in d'eq.
+             pose proof (capa_cor2 v15 (n1.-1) (inr w')) as cor. simpl in cor.
+             destruct cor as [is_in unicity]. eexists. split. exact d''eq. eauto.
+             eapply (unicity (inl _)); eauto. rewrite H14. eauto. }
            { destruct (snd (mem_match' w' d d_code d_ip) w_eq) as [d'' [d''match d''eq]].
              simpl in *. exists d''. split; [|exact d''eq].
              destruct d; destruct d'' as [? d''t]; destruct d''t as [d''t ? ? ?]. destruct d''match; subst;
@@ -2210,11 +2268,9 @@ Section Recomposition.
              destruct H15; subst. destruct d''t; try exact H15. destruct H15 as [sv' [comp'' inM]].
              destruct inM ; [|exists sv', comp''; trivial].
              exfalso. inversion H15. subst n vala1 vala0.
-             match (type of d''eq) with _ = Some (?v) => assert (rel: is_relevant_comp Right (LRC.color (taga v))) by (simpl; auto) end.
-             inversion weak as [? ? ? _ _ _ m_cor_s m_cor_s' _ _].
-             destruct (m_cor_s' _ _ rel d''eq) as [d' [d'eq [d'code n1_ineq]]].
-             clear -n1_ineq. induction n1; simpl in *; inversion n1_ineq; trivial. admit. admit. (* need fix in hypothesis *)
-           }
+             pose proof (capa_cor3 (w0 + as_word off0)%w (n1.-1) (inr w')) as cor. simpl in cor.
+             destruct cor as [is_in unicity]. eexists. split. exact d''eq. eauto.
+             eapply (unicity (inl _)); eauto. }
     + (* return from comp in P to comp' in C *)
       repeat
         (match goal with
