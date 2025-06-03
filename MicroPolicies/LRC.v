@@ -218,9 +218,9 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                   do! _ <- check_belong current tni;
                                      Some (OVec BNZ       tpc [hseq tx], None)
 
-  | JUMP,    HSeqCons tp (HSeqCons trcom next)  => if belong current tni then
+  | JUMP,    (tra :: tp :: trcom :: next)%hseq => if belong current tni then
                                    do! _ <- is_jump tp;
-                                   Some (OVec JUMP tpc (HSeqCons tp (HSeqCons trcom next)), None)
+                                   Some (OVec JUMP tpc (tra :: tp :: trcom :: next)%hseq, None)
                                       else
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
@@ -230,7 +230,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                    let ev := Some (ERet current (rcom_value evi) c') in
                                    do! _ <- check_ret level.-1 tp;
                                    Some (OVec JUMP (build_tpc (level.-1) c')
-                                           (HSeqCons Invalidated (HSeqCons Other reg_invalidate_hseq)), ev)
+                                           (Invalidated :: Invalidated :: Other :: reg_invalidate_hseq)%hseq, ev)
 
   | JAL,     (tnext :: tra :: trcom :: next)%hseq => 
                                    do! _ <- check_belong current (Some tnext);

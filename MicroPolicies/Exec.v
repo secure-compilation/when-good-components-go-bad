@@ -85,9 +85,11 @@ Definition stepf (st : state ttypes internal_state) :
     | Jump r =>
       do! a <- reg r;
       let: w@t1 := a in
+      do! a <- reg ra;
+      let: _@rat := a in
       do! l <- reg_clear_list reg t1;
-      let mvec := IVec JUMP tpc ti l in
-      next_state_updates_and_pc st mvec ((RegRead r) :: reg_clear_read) w
+      let mvec := IVec JUMP tpc ti (HSeqCons rat l) in
+      next_state_updates_and_pc st mvec ((RegRead ra) :: (RegRead r) :: reg_clear_read) w
     | Bnz r n =>
       do! a <- reg r;
       let: w@t1 := a in
@@ -200,8 +202,9 @@ Definition build_k_ivec st : option (k_ivec ttypes)  :=
               Some (part [hseq (taga w1); (taga w2); (taga w3)])
             | Jump  r => fun part =>
               do! w <- regs st r;
+              do! wra <- regs st ra;
               do! l <- reg_clear_list (regs st) (taga w);
-              Some (part l)
+              Some (part (HSeqCons (taga wra) l))
             | Bnz  r n => fun part =>
               do! w <- regs st r;
               Some (part [hseq taga w])

@@ -42,7 +42,7 @@ Definition inputs (op : opcode) : seq tag_kind :=
   | BINOP _ => [:: R;R;R]
   | LOAD    => [:: R;M;R]
   | STORE   => [:: R;R;M]
-  | JUMP    => nseq 12 R
+  | JUMP    => nseq 13 R
   | BNZ     => [:: R]
   | JAL     => M :: nseq 12 R
   (* the other opcodes are not used by the symbolic machine *)
@@ -357,14 +357,15 @@ Inductive step (st st' : state) (ev : option event) : Prop :=
     (OLD  : mem w1 = Some old@told),
     let mvec := IVec STORE tpc ti [hseq t1; t2; told] in forall
     (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; MemWrite w1 w2 ] = Some (st', ev)),    step st st' ev
-| step_jump : forall mem reg pc i r w tpc ti t1 extra nc l
+| step_jump : forall mem reg pc i r w tpc ti t1 extra nc l rav rat
     (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jump r))
     (RW   : reg r = Some w@t1)
+    (RA   : reg ra = Some rav@rat)
     (CLEAR: reg_clear_list reg t1 = Some l),
-    let mvec := IVec JUMP tpc ti l  in forall
-    (NEXT : next_state_updates_and_pc st mvec ( (RegRead r):: reg_clear_read) w = Some (st', ev)),    step st st' ev
+    let mvec := IVec JUMP tpc ti (HSeqCons rat l)  in forall
+    (NEXT : next_state_updates_and_pc st mvec ( (RegRead ra) :: (RegRead r) :: reg_clear_read) w = Some (st', ev)),    step st st' ev
 | step_bnz : forall mem reg pc i r n w tpc ti t1 extra nc
     (ST   : st = State mem reg pc@tpc extra nc)
     (PC   : mem pc = Some i@ti)
