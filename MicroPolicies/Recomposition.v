@@ -342,8 +342,6 @@ Section Recomposition.
       Option.apply (fun memval => color (Types.taga (memval)) = comp /\ ((i = Right /\ j = Right) \/ is_code (taga memval))) False (m v).
     (* unless we are in the 'Right' state, running the 'Right' side (c), we should point to code only *)
 
-
-    (* JT: It would be easier to use inductive predicates for the stack invariant. Here's my attempt: *)
     Inductive wf_stack (m1 m2 m3: memory): nat -> stack -> Prop :=
     | wf_stack_empty:
         wf_stack m1 m2 m3 0 []
@@ -367,6 +365,34 @@ Section Recomposition.
         (WF_ST: wf_stack m1 m2 m3 n st),
         wf_stack m1 m2 m3 (n+1)
           ((Types.Atom v1 (Ret n), Types.Atom v2 (Ret n), Types.Atom v3 (Ret n), C) :: st)
+    .
+
+    (* This property states that all capabilities are stored in our metadata *)
+    (* And that they are unique in our *)
+    Variant which_state := WS_S1 | WS_S2 | WS_S3.
+    Definition in_stack (m:stack) ws v n :=
+      (exists sv1 sv2 col,
+          match ws with
+          | WS_S1 => In (v @ (Ret n), sv1, sv2, col) m
+          | WS_S2 => In (sv1, v @ (Ret n), sv2, col) m
+          | WS_S3 => In (sv1, sv2, v @ (Ret n), col) m
+          end)
+    .
+    Definition capability_correctness (m: metadata) (ws: which_state) (s: state) :=
+      forall v n p,
+        match p with
+        | inr w => exists t, (mem s) w = Some (v @ t) /\ vtag t = Ret n
+        | inl r => (regs s) r = Some (v @ (Ret n))
+        end ->
+        in_stack m ws v n
+        /\ forall p' v',
+            (match p, p' with
+             | inr w, inr w' => (exists t', (mem s) w' = Some (v' @ t') /\ vtag t' = Ret n) -> w = w'
+             | inl r, inl r' => (regs s) r' = Some (v' @ (Ret n)) -> r = r'
+             (* The capability can't be both in our registers and in memoryD *)
+             | inl _, inr w' => (exists t', (mem s) w' = Some (v' @ t') /\ vtag t' = Ret n) -> False
+             | inr _, inl r' => (regs s) r' = Some (v' @ (Ret n)) -> False
+             end)
     .
 
     Notation data := (Types.atom (Types.mword mt) mem_tag).
@@ -569,6 +595,9 @@ Section Recomposition.
           general_memory_correctness (mem s1) (comp_num s1) ->
           general_memory_correctness (mem s2) (comp_num s2) ->
           general_memory_correctness (mem s3) (comp_num s3) ->
+          capability_correctness m WS_S1 s1 ->
+          capability_correctness m WS_S2 s2 ->
+          capability_correctness m WS_S3 s3 ->
           combined_codes Left  s1 s3 ->
           combined_codes Right s2 s3 ->
           common_equiv m s1 s2 s3
@@ -833,6 +862,15 @@ Section Recomposition.
       + rewrite eq_s3'. rewrite pc3_tag. simpl. exact tag_pc3.
   Qed.
 
+  Definition capability_correctness' ws (s: state) m v t :=
+    match t with
+    | Ret n =>
+        (forall v w t, vtag t = Ret n -> (mem s) w <> Some (v @ t))
+        /\ (forall v r, (regs s) r <> Some (v @ (Ret n)))
+        /\ in_stack m ws v n
+    | _ => True
+    end.
+
     
   Lemma preserves_equiv_left_mem_write:
     forall s1 s2 s3 M s1' s3' w v v' m1' m3' i,
@@ -851,6 +889,8 @@ Section Recomposition.
       is_code (taga i) ->
       not (is_code (taga v)) ->
       not (is_code (taga v')) ->
+      capability_correctness' WS_S1 s1 M (vala v) (vtag (taga v )) ->
+      capability_correctness' WS_S3 s3 M (vala v') (vtag (taga v')) ->
       address_correctness (vala v) (vtag (taga v)) (mem s1) ->
       address_correctness (vala v') (vtag (taga v')) (mem s3) ->
       updm (mem s1) w v = Some m1' ->
@@ -862,7 +902,7 @@ Section Recomposition.
       /\ common_equiv M s1' s2 s3'.
   Proof.
     intros s1 s2 s3 M s1' s3' w v v' m1' m3' i equiv v_match v_color M_color no_entry v_relevant same_color no_code_w_s3 no_code_w_s1
-      i_is_pc code_i no_code_v no_code_v' correct_v correct_v' eq_m1 eq_m3 eq_s1' eq_s3'.
+      i_is_pc code_i no_code_v no_code_v' capa_prop1 capa_prop3 correct_v correct_v' eq_m1 eq_m3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
     pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
     split; [|split].
@@ -872,7 +912,7 @@ Section Recomposition.
                             [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
                             [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]
                             [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]
-                            code_left code_right].
+                            capa_cor1 capa_cor2 capa_cor3 code_left code_right].
         destruct pc_s1_s3 as [? ? ? eq_none|? ? ? ? eq_comp eq_off pc_s1_s3].
         * eapply same_pc_alloc; try rewrite eq_s1'; try rewrite eq_s3'; simpl; auto.
           rewrite setmE.
@@ -983,11 +1023,12 @@ Section Recomposition.
                             [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
                             [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]
                             [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]
-                            code_left code_right].
+                            capa_cor1 capa_cor2 capa_cor3 code_left code_right].
       eapply common_equiv_def with (n := n) (c := c0); 
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done;
         try (split; [|split; [|split; [|split; [|split; [|split]]]]]).
-      + rewrite eq_s3'. simpl. clear strong weak code_left code_right v_match tag_pc1 tag_pc2 tag_pc3.
+      + rewrite eq_s3'. simpl. clear strong weak code_left code_right v_match tag_pc1 tag_pc2 tag_pc3 capa_cor1 capa_cor2 capa_cor3.
+        clear capa_prop1 capa_prop3.
         simpl in *. 
         induction wfst; intros.
         * eapply wf_stack_empty; eauto.
@@ -1114,6 +1155,44 @@ Section Recomposition.
         * exfalso. convert_eq_op. simplify_some. destruct v, d. destruct v_match as [tag_eq ?]. rewrite <- tag_eq in dent.
           rewrite no_entry in dent. inversion dent.
         * eapply entry_code3; eauto.
+      + rewrite eq_s1'. unfold capability_correctness. simpl. intros d q r r_cap.
+        destruct r as [r|w'].
+        { pose proof (capa_cor1 d q (inl r) r_cap) as cor. destruct cor as [[sv1 [sv2 [col in_m]]] unicity].
+          split; [unfold in_stack; eauto|]. intros r' v''. destruct r' as [r'| w']. eapply (unicity (inl _)); eauto.
+          rewrite setmE. intros [t' [v''eq t'cap]]. unfold_match' v''eq; [| eapply (unicity (inr _)); eauto].
+          convert_eq_op. simplify_some. rewrite t'cap in capa_prop1. destruct capa_prop1 as [limp [rimp ?]].
+          eapply rimp; eauto. }
+        { rewrite setmE in r_cap. destruct r_cap as [t [dt_eq t_cap]].
+          unfold_match' dt_eq.
+          - convert_eq_op. simplify_some. rewrite t_cap in capa_prop1. destruct capa_prop1 as [limp [rimp v_in_m]].
+            split; auto. intros r' v''. destruct r' as [r'| w']. eapply rimp; eauto.
+            rewrite setmE. intros [t' [v''t'_eq t'_capa]]. unfold_match' v''t'_eq; [convert_eq_op; trivial | exfalso].
+            eapply limp; eauto.
+          - pose proof (capa_cor1 d q (inr w')) as cor. simpl in cor.
+            destruct (cor (ex_intro _ t (conj dt_eq t_cap))) as [[sv1 [sv2 [col in_m]]] unicity].
+            split; [unfold in_stack; eauto|]. intros r' v''. destruct r' as [r'| w'']. eapply (unicity (inl _)); eauto.
+            rewrite setmE. intros [t' [v''eq t'cap]]. unfold_match' v''eq; [| eapply (unicity (inr _)); eauto].
+            convert_eq_op. simplify_some. exfalso. rewrite t'cap in capa_prop1. destruct capa_prop1 as [limp rimp].
+            eapply (limp _ w' t); eauto. }
+      + rewrite eq_s3'. unfold capability_correctness. simpl. intros d q r r_cap.
+        destruct r as [r|w'].
+        { pose proof (capa_cor3 d q (inl r) r_cap) as cor. destruct cor as [[sv1 [sv2 [col in_m]]] unicity].
+          split; [unfold in_stack; eauto|]. intros r' v''. destruct r' as [r'| w']. eapply (unicity (inl _)); eauto.
+          rewrite setmE. intros [t' [v''eq t'cap]]. unfold_match' v''eq; [| eapply (unicity (inr _)); eauto].
+          convert_eq_op. simplify_some. rewrite t'cap in capa_prop3. destruct capa_prop3 as [limp [rimp ?]].
+          eapply rimp; eauto. }
+        { rewrite setmE in r_cap. destruct r_cap as [t [dt_eq t_cap]].
+          unfold_match' dt_eq.
+          - convert_eq_op. simplify_some. rewrite t_cap in capa_prop3. destruct capa_prop3 as [limp [rimp v_in_m]].
+            split; auto. intros r' v''. destruct r' as [r'| w']. eapply rimp; eauto.
+            rewrite setmE. intros [t' [v''t'_eq t'_capa]]. unfold_match' v''t'_eq; [convert_eq_op; trivial | exfalso].
+            eapply limp; eauto.
+          - pose proof (capa_cor3 d q (inr w')) as cor. simpl in cor.
+            destruct (cor (ex_intro _ t (conj dt_eq t_cap))) as [[sv1 [sv2 [col in_m]]] unicity].
+            split; [unfold in_stack; eauto|]. intros r' v''. destruct r' as [r'| w'']. eapply (unicity (inl _)); eauto.
+            rewrite setmE. intros [t' [v''eq t'cap]]. unfold_match' v''eq; [| eapply (unicity (inr _)); eauto].
+            convert_eq_op. simplify_some. exfalso. rewrite t'cap in capa_prop3. destruct capa_prop3 as [limp rimp].
+            eapply (limp _ w' t); eauto. }
       + unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
@@ -1200,6 +1279,8 @@ Section Recomposition.
       /\ weak_equiv Right M s2 s3
       /\ common_equiv M s1 s2 s3 ->
       data_match Left (color_of s1) M v v' ->
+      capability_correctness' WS_S1 s1 M (vala v ) (taga v ) ->
+      capability_correctness' WS_S3 s3 M (vala v') (taga v') ->
       address_correctness (vala v) (taga v) (mem s1) ->
       address_correctness (vala v') (taga v') (mem s3) ->
       updm (regs s1) r v = Some r1' ->
@@ -1211,13 +1292,13 @@ Section Recomposition.
       /\ common_equiv M s1' s2 s3'.
   Proof.
     intros s1 s2 s3 M s1' s3' r v v' r1' r3' equiv v_match
-      correct_v correct_v' eq_r1 eq_r3 eq_s1' eq_s3'.
+      capa_prop1 capa_prop3 correct_v correct_v' eq_r1 eq_r3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
     destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
                           [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
                           [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]
                           [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]
-                          code_left code_right].
+                          capa_cor1 capa_cor2 capa_cor3 code_left code_right].
     pose proof (updm_set eq_r1). pose proof (updm_set eq_r3). subst r1' r3'. 
     split; [|split].
     - destruct strong as [? ? ? num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
@@ -1254,6 +1335,46 @@ Section Recomposition.
       + subst. unfold register_domm. simpl. rewrite domm_set. 
         unfold register_domm, reg_field_size in *. simpl in *. unfold updm in eq_r3. unfold_match' eq_r3.
         clear -Heqa reg_domm3. admit.
+      + rewrite eq_s1'. unfold capability_correctness. simpl. intros d q w w_cap.
+        destruct w as [r'|w'].
+        { rewrite setmE in w_cap. unfold_match' w_cap.
+          - convert_eq_op. simplify_some. destruct capa_prop1 as [limp [rimp v_in_m]].
+            split; auto. intros r' v''. destruct r' as [r'| w'].
+            rewrite setmE. intro r_r'_eq. unfold_match' r_r'_eq; convert_eq_op; trivial.
+            exfalso. eapply rimp; eauto.
+            intros [t' [v''eq t'capa]]. eapply limp; eauto.
+          - pose proof (capa_cor1 d q (inl r') w_cap) as [is_in cor]. simpl in cor.
+            split; auto. intros w' v''. destruct w' as [r''|w'].
+            { intro eq. rewrite setmE in eq. unfold_match' eq; convert_eq_op; try simplify_some.
+              exfalso. unfold capability_correctness' in capa_prop1. simpl in capa_prop1.
+              pose proof ((fst (snd capa_prop1)) d r') as eq. eapply eq; eauto.
+              eapply (cor (inl _)); eauto. } eapply (cor (inr _)). }
+        { pose proof (capa_cor1 d q (inr w') w_cap) as cor. destruct cor as [[sv1 [sv2 [col in_m]]] unicity].
+          split; [unfold in_stack; eauto|]. intros r' v''. destruct r' as [r'| w''].
+          rewrite setmE. intros v''eq. unfold_match' v''eq; [| eapply (unicity (inl _)); eauto].
+          convert_eq_op. simplify_some. destruct capa_prop1 as [limp [rimp ?]].
+          destruct w_cap as [t [teq tcapa]]. eapply limp; eauto.
+          eapply (unicity (inr _)); eauto.  }
+      + rewrite eq_s3'. unfold capability_correctness. simpl. intros d q w w_cap.
+        destruct w as [r'|w'].
+        { rewrite setmE in w_cap. unfold_match' w_cap.
+          - convert_eq_op. simplify_some. destruct capa_prop3 as [limp [rimp v_in_m]].
+            split; auto. intros r' v''. destruct r' as [r'| w'].
+            rewrite setmE. intro r_r'_eq. unfold_match' r_r'_eq; convert_eq_op; trivial.
+            exfalso. eapply rimp; eauto.
+            intros [t' [v''eq t'capa]]. eapply limp; eauto.
+          - pose proof (capa_cor3 d q (inl r') w_cap) as [is_in cor]. simpl in cor.
+            split; auto. intros w' v''. destruct w' as [r''|w'].
+            { intro eq. rewrite setmE in eq. unfold_match' eq; convert_eq_op; try simplify_some.
+              exfalso. unfold capability_correctness' in capa_prop3. simpl in capa_prop3.
+              pose proof ((fst (snd capa_prop3)) d r') as eq. eapply eq; eauto.
+              eapply (cor (inl _)); eauto. } eapply (cor (inr _)). }
+        { pose proof (capa_cor3 d q (inr w') w_cap) as cor. destruct cor as [[sv1 [sv2 [col in_m]]] unicity].
+          split; [unfold in_stack; eauto|]. intros r' v''. destruct r' as [r'| w''].
+          rewrite setmE. intros v''eq. unfold_match' v''eq; [| eapply (unicity (inl _)); eauto].
+          convert_eq_op. simplify_some. destruct capa_prop3 as [limp [rimp ?]].
+          destruct w_cap as [t [teq tcapa]]. eapply limp; eauto.
+          eapply (unicity (inr _)); eauto.  }
   Admitted.
 
   
@@ -1280,7 +1401,7 @@ Section Recomposition.
                           [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
                           [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]
                           [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]
-                          code_left code_right].
+                          capa_cor1 capa_cor2 capa_cor3 code_left code_right].
     subst m s0 s4 s5.
     assert (n1 = n').
     { destruct strong as [? ? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
@@ -1449,7 +1570,7 @@ Section Recomposition.
           simpl. eauto.
     - eapply common_equiv_def with (n := n) (c := c0); 
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; simpl; try done.
-      + simpl. clear strong common weak code_left code_right tag_pc1 tag_pc2 tag_pc3.
+      + simpl. clear strong common weak code_left code_right tag_pc1 tag_pc2 tag_pc3 capa_cor1 capa_cor2 capa_cor3.
         simpl in *. 
         induction wfst; intros.
         * eapply wf_stack_empty; eauto.
@@ -1531,6 +1652,44 @@ Section Recomposition.
           -- exfalso.
              assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
              rewrite eq in dent. simpl in dent. inversion dent.
+      + intros d q r req. destruct r as [r | w]; repeat (rewrite unionmE || rewrite setmE);
+          repeat (rewrite unionmE in req || rewrite setmE in req); simpl; simpl in req.
+        { unfold_match' req. pose proof (capa_cor1 d q (inl r) req) as [is_in unicity].
+          split; auto. intros r' d'.
+          destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
+          { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
+          { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
+            assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+            destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
+        { destruct req as [t [teq tcapa]]. unfold_match' teq.
+          { pose proof (capa_cor1 d q (inr w) (ex_intro _ t (conj teq tcapa))) as [is_in unicity].
+            split; auto. intros r' d'.
+            destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
+            { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
+            { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
+              assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+              destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
+          { assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+            destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
+        + intros d q r req. destruct r as [r | w]; repeat (rewrite unionmE || rewrite setmE);
+          repeat (rewrite unionmE in req || rewrite setmE in req); simpl; simpl in req.
+        { unfold_match' req. pose proof (capa_cor3 d q (inl r) req) as [is_in unicity].
+          split; auto. intros r' d'.
+          destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
+          { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
+          { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
+            assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+            destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
+        { destruct req as [t [teq tcapa]]. unfold_match' teq.
+          { pose proof (capa_cor3 d q (inr w) (ex_intro _ t (conj teq tcapa))) as [is_in unicity].
+            split; auto. intros r' d'.
+            destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
+            { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
+            { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
+              assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+              destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
+          { assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+            destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
         remember (mem s3 (addw w (as_word off))) as cond1.
@@ -1638,9 +1797,12 @@ Section Recomposition.
     - admit.
     - admit.
     - admit.
-    - unfold combined_codes. intros. admit.
-    - unfold combined_codes. intros. admit.
     - admit.
+    - admit.
+    - admit.
+    - admit.
+    - unfold combined_codes. intros. admit.
+    - unfold combined_codes. intros. admit.
     - subst. unfold initial_state. simpl. rewrite Hifacep Hifacec. trivial.
     - assert (color_eq: color_of s1 = 0). subst. unfold initial_state, color_of. simpl. trivial.
   Admitted.
