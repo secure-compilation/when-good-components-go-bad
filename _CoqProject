@@ -94,4 +94,7 @@ MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
 #MicroPolicies/Helper.v
 
-MicroPolicies/Recomposition.v
+MicroPolicies/Recomposition/Definitions.v
+MicroPolicies/Recomposition/PreservationLemmas.v
+MicroPolicies/Recomposition/StepEvent.v
+MicroPolicies/Recomposition/StepSilentStrong.v
