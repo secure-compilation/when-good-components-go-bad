@@ -92,9 +92,9 @@ Module StepStrong (S: RecompositionContext).
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
       all: unfold check_belong, belong, reg_clear_list in *.
       all: simpl in *; unfold_all.
-      7-8: try (match (type of Heqa2) with
+      7-8: (match (type of Heqa2) with
                   (_ = match ?m ?w with _ => _ end)
-                  => eapply (@modusponens (exists res, m w = Some res /\ (is_code (taga res))));
+                  => eapply (@modusponens (exists res, m w = Some res /\ (LRC.color (taga res) \in domm ip -> is_code (taga res))));
                     [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2]
                 end).
       11: remember (mem0 pc') as next_pc_content; destruct next_pc_content.
@@ -213,6 +213,7 @@ Module StepStrong (S: RecompositionContext).
           -- subst. destruct t1; simpl; auto.
           -- subst new_t1. destruct t1; simpl; trivial.
           -- subst new_t1. destruct t1; simpl; trivial.
+          -- subst new_t1. destruct t1; simpl; trivial.
           -- rewrite ST R1W. simpl. done.
           -- rewrite vt_eq0. done.
           -- destruct vt_match0. subst. unfold color_of in *. simpl in *. split; trivial.
@@ -230,6 +231,8 @@ Module StepStrong (S: RecompositionContext).
                 rewrite (unicity (inl r') _ req) in Heqa3. rewrite eq_refl in Heqa3. inv Heqa3.
           -- subst. simpl. eapply (s_reg_cor _ _ R1W).
           -- subst. simpl. eapply (s'_reg_cor _ _ vt_eq0).
+          -- inversion weak as [? ? ? _ _ _ _ _ _ s'_reg_cor' _].
+             subst. simpl. eapply (s'_reg_cor' _ _ vt_eq0).
           -- repeat rewrite setmE. rewrite <- Heqcond. destruct cond; subst; simpl; try done.
              rewrite OLD. simpl. done.
           -- repeat rewrite setmE. rewrite <- Heqcond. destruct cond; subst; simpl; try done.
@@ -414,6 +417,13 @@ Module StepStrong (S: RecompositionContext).
              all:try (destruct vt_match0; subst t0; eapply modusponens;
                       [eapply (s'_mem_cor _ _ _ vt_eq0)| simpl; intros [? [eq1 no_code]]]; rewrite vt_eq0 in eq1;
                     simplify_some; simpl in *; eexists; split; [eauto|]; intro in_ip; eapply no_code; eauto).
+          -- inversion weak as [? ? ? _ _ _ s_mem_cor' s'_mem_cor' _ _ _].
+             subst. unfold memory_address_correctness in *. simpl in *. remember (@eq_op (Ord.eqType _) v1 w1) as cond.
+             destruct vtag1; simpl; auto; rewrite setmE; simpl in *; rewrite <- Heqcond; destruct cond; simpl; convert_eq_op.
+             all:try (destruct vt_match0; subst t0; eapply (s'_mem_cor' _ _ _ vt_eq0)).
+             all:try (destruct vt_match0; subst t0; eapply modusponens;
+                      [eapply (s'_mem_cor' _ _ _ vt_eq0)| simpl; intros [? [eq1 no_code]]]; rewrite vt_eq0 in eq1;
+                    simplify_some; simpl in *; eexists; split; [eauto|]; intro in_ip; eapply no_code; eauto).
           -- unfold updm. rewrite setmE. remember (@eq_op (Ord.eqType _) r2 r1) as cond. simpl in *.
              rewrite <- Heqcond. destruct cond; try done. rewrite OLD. simpl. done.
           -- unfold updm. rewrite setmE. remember (@eq_op (Ord.eqType _) r2 r1) as cond. simpl in *.
@@ -480,6 +490,7 @@ Module StepStrong (S: RecompositionContext).
           -- subst. destruct t2; simpl; trivial.
           -- subst. destruct t2; simpl; trivial.
           -- subst. destruct t2; simpl; trivial.
+          -- subst. destruct t2; simpl; trivial.
           -- unfold updm. rewrite setmE. remember (@eq_op (Ord.eqType _) r2 r1) as cond. simpl in *.
              rewrite <- Heqcond. destruct cond; try done. rewrite R2W. done.
           -- unfold updm. rewrite setmE. remember (@eq_op (Ord.eqType _) r2 r1) as cond. simpl in *.
@@ -512,34 +523,18 @@ Module StepStrong (S: RecompositionContext).
                 rewrite (unicity (inl r) v' req) in Heqa3. rewrite eq_refl in Heqa3. inversion Heqa3.
           -- subst. simpl. eapply (s_reg_cor _ _ R2W).
           -- subst. simpl. destruct vt_match. subst. eapply (s'_reg_cor _ _ vt_eq).
-          -- subst. simpl. destruct vt_match. subst. eapply (s'_reg_cor _ _ vt_eq).
-          -- inversion weak as [? ? ? _ _ _ s_mem_cor' s'_mem_cor' _ _ _].
-             subst. unfold memory_address_correctness in *. simpl in *. remember (@eq_op (Ord.eqType _) w2 w1) as cond.
-             destruct vtag1; simpl; auto; rewrite setmE; simpl in *; rewrite <- Heqcond; destruct cond; simpl; convert_eq_op.
-               all:try (eapply (s_mem_cor _ _ _ MEM1)).
-               all:try (eapply modusponens; [eapply (s_mem_cor _ _ _ MEM1)| simpl; intros [? [eq1 no_code]]]; rewrite MEM1 in eq1;
-                    simplify_some; simpl in *; eexists; split; [eauto|]; intro in_ip; eapply no_code; eauto).
-          -- inversion weak as [? ? ? _ _ _ s_mem_cor' s'_mem_cor' _ _ _].
-             subst. unfold memory_address_correctness in *. simpl in *. remember (@eq_op (Ord.eqType _) v1 w1) as cond.
-             destruct vtag1; simpl; auto; rewrite setmE; simpl in *; rewrite <- Heqcond; destruct cond; simpl; convert_eq_op.
-             all:try (destruct vt_match0; subst t0; eapply (s'_mem_cor _ _ _ vt_eq0)).
-             all:try (destruct vt_match0; subst t0; eapply modusponens;
-                      [eapply (s'_mem_cor _ _ _ vt_eq0)| simpl; intros [? [eq1 no_code]]]; rewrite vt_eq0 in eq1;
-                    simplify_some; simpl in *; eexists; split; [eauto|]; intro in_ip; eapply no_code; eauto).
-          -- subst s1. simpl in *. rewrite R1W in Heqa12. simplify_some. simpl.
-             simpl. remember (@eq_op (Ord.eqType _) r2 r1) as cond. destruct cond.
-             ++ assert (r_eq: r2 = r1) by (clear - Heqcond; eq_op_to_eq). rewrite r_eq. do 2 rewrite setmxx.
-                simpl in *. rewrite setmE in Heqa13. simpl in *. rewrite <- Heqcond in Heqa13. simplify_some. simpl.
-                rewrite <- r_eq in R1W. rewrite R1W in R2W. simplify_some. subst. done.
-             ++ simpl in *. rewrite setmE in Heqa13. simpl in *. rewrite <- Heqcond in Heqa13. rewrite R2W in Heqa13. simplify_some.
-                simpl. done.
-          -- subst. simpl. destruct vt_match; subst. done.
+          -- inversion weak as [? ? ? _ _ _ _ _ _ s'_reg_cor' _].
+             subst. simpl. destruct vt_match. subst. eapply (s'_reg_cor' _ _ vt_eq).
+          -- subst. simpl. trivial. rewrite R1W in Heqa12. simplify_some. simpl.
+             rewrite setmE in Heqa13. unfold_match' Heqa13; convert_eq_op; try rewrite R2W in Heqa13; simplify_some; simpl; trivial.
+             rewrite R1W in R2W. simplify_some. trivial.
+          -- destruct vt_match. subst. trivial.
       + subst. pose proof (s_reg_cor _ _ RW) as cor_RW. simpl in cor_RW.
         assert (Hyp: t1 = InternalJump \/ exists n, t1 = Ret n).
         { clear - Heqa7; repeat (unfold check_ret in *; (unfold_all || unfold_match)); eauto. }
         remember t1 as t1'.
         destruct t1; subst t1'; try (destruct Hyp as [?|Hyp]; try destruct Hyp; done);
-          simpl in cor_RW; destruct cor_RW as [? [? [? ?]]]; eauto.
+          simpl in cor_RW; destruct cor_RW as [? [? ?]]; eauto.
       + repeat
           (let va := fresh "va" in
            let ta := fresh "ta" in
@@ -558,8 +553,9 @@ Module StepStrong (S: RecompositionContext).
                H' : Some _ = getm _ (as_word (_ ?a))
              |- _ => idtac a; unfold as_word in H'; rewrite ST in H; simpl in H', H; rewrite <- H' in H
            end).
-        rewrite ST RW in Heqa22. simplify_some. subst va21 ta21.
+        rewrite ST RA in Heqa22. simplify_some. subst va22 ta22.
         deduce_equality RW.
+        deduce_equality RA.
         deduce_equality (esym Heqa9).
         deduce_equality (esym Heqa6).
         deduce_equality (esym Heqa11).
@@ -577,29 +573,33 @@ Module StepStrong (S: RecompositionContext).
           -- eapply (etrans _ (PC)).
           -- decode_instr_eq.
           -- rewrite eq_s3 in vt_eq. eauto.
+          -- rewrite eq_s3 in vt_eq0. eauto.
           -- unfold reg_clear_list, reg_list. simpl. unfold as_word. subst. simpl.
              repeat
                (match goal with
                 | H: _ ?w = _  |- context[_ ?w] => rewrite H; simpl
                 end). trivial.
           -- unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
-             unfold evi in *. unfold_all. rewrite vt_eq0.
+             unfold evi in *. unfold_all. rewrite vt_eq1.
              subst s1 s3. simpl in *.
              inversion vt_match. subst t. oapp_False. destruct res as [resv rest]. subst v0.
+             inversion Heqa2. subst rest. unfold side_of in side_eq. unfold_match' side_eq.
              match type of (res_eq) with (_ = Some (_@?t)) => assert (res_col: color t = i0) by (inversion Heqa2; done) end.
-             match type of (res_eq) with (_ = Some (_@?t)) => assert (res_code': LRC.is_code t) by (simpl; done) end.
-             assert (rel: is_relevant_comp Left i0). { clear - side_eq. unfold side_of in *. unfold_match' side_eq. }
+             match type of (res_eq) with (_ = Some (_@?t)) => assert (res_code': LRC.is_code t);
+                                                             [eapply res_code; simpl in *; unfold Component.id; rewrite <- Heqa4; done|]
+             end.
+             assert (rel: is_relevant_comp Left i0). { clear - Heqa4. simpl in *. unfold Component.id. rewrite <- Heqa4. trivial. }
              pose proof ((fst (code_left w resv _ off _ rel eq_off res_code' res_col))) as impl.
              simpl in impl. pose proof (impl (res_eq)) as [? [? pc3'eq]]. simpl.
              simpl in HeqH. rewrite eq_off in HeqH. simplify_some. rewrite pc3'eq. simpl.
-             destruct rest. simpl in res_col. rewrite res_col. rewrite eq_refl. simpl.
+             subst pc3_tag. simpl. rewrite eq_refl. simpl.
              unfold updm. simpl in pc3'eq. unfold as_word.
-             try rewrite eq_s3 in tag_pc3. simpl in *. rewrite tag_pc3. try rewrite ST. rewrite eq_refl. simpl.
+             try rewrite eq_s3 in tag_pc3. simpl in *. try rewrite ST. simpl.
              (*automatically rewrite regs3 registers*)
              repeat
              (repeat
                 (match goal with
-                 | H: getm _ ?w = _  |- context[getm _ ?w] => rewrite H; simpl
+                 | H: getm ?r ?w = _  |- context[getm ?r ?w] => rewrite H; simpl
                  end);
               (*automatically transforms setm in if (_ == _) then _ else _*)
               repeat rewrite setmE; simpl;
@@ -611,16 +611,18 @@ Module StepStrong (S: RecompositionContext).
                      remember (@eq_op t a r) as cond; destruct cond;
                      [convert_eq_op; simpl in *|]; simpl
                  end)).
-             12: reflexivity. (* most general case, to be treated first *)
+             13: reflexivity. (* most general case, to be treated first *)
+             all: unfold as_word in *; simpl in *.
              all: repeat (rewrite setmxx || (rewrite (setmC _ (_@InternalJump)); [|done]) ).
              all: (match (type of vt_eq) with
                    | ?ls = ?rs =>
                        revert vt_eq;
                        (match goal with
                           Heq: ls = Some (?a) |- _ =>
-                            intro vt_eq; rewrite Heq in vt_eq; simplify_some; subst; done
+                            intro vt_eq; rewrite Heq in vt_eq; simplify_some; subst; simpl
                         end)
                    end).
+             all: trivial.
           -- eapply star_refl.
           -- done.
         * destruct vt_match. oapp_False. subst. simpl in *.
@@ -631,8 +633,15 @@ Module StepStrong (S: RecompositionContext).
           (match goal with
              |- (_ _ _ ?s _) /\ _ => assert(eq_tmp: regs s = reg); [|simpl in eq_tmp; rewrite eq_tmp; clear eq_tmp]
            end).
-          { simpl.
-            rewrite (setmI RW). unfold as_word. simpl.
+          { simpl. rewrite (setmI RA). unfold as_word. simpl. rewrite eq_sym in Heqa23.
+            unfold_match' Heqa23; convert_eq_op; repeat simplify_some; subst; simpl.
+            simpl in *. repeat simplify_some. subst. unfold as_word in *. simpl in *.
+            rewrite RW in RA. simplify_some. subst. rewrite (setmI RW).
+            repeat
+              (match goal with
+               | H : Some (?v@_) = _  |- context[setm reg _ ?v@_] => rewrite (setmI (esym H))
+               end). trivial.
+            rewrite RW in Heqa23. simplify_some; subst. rewrite (setmI RW).
             repeat
             ((* this instruction branches on the value of r *)
               (match goal with
@@ -698,6 +707,7 @@ Module StepStrong (S: RecompositionContext).
         {subst. simpl in *. subst. unfold pc'. subst.
          rewrite <- addwA. rewrite (addwC (as_word _) (if _ then _ else _)).
          rewrite addwA. reflexivity. }
+        assert (is_code0). { eapply res_code. subst s1. clear -Heqa3. simpl in *. unfold Component.id. rewrite <- Heqa3. trivial. }
         deduce_equality res_eq. rewrite next_pc_eq in vt_eq1. simplify_some.
         eexists. exists M. simpl.
         split.
@@ -709,7 +719,7 @@ Module StepStrong (S: RecompositionContext).
              unfold evi in *. unfold_all.
              deduce_reg reg_match. rewrite <- Heqcond. rewrite <- Heqpc3'. rewrite eq_s3 next_pc_eq. simpl.
              rewrite eq_s3 in tag_pc3. simpl in tag_pc3. rewrite tag_pc3. rewrite t_color0. rewrite eq_refl. simpl.
-             unfold check_belong, belong. rewrite H2. simpl. rewrite t_color0 eq_refl. simpl.
+             unfold check_belong, belong. rewrite H3. simpl. rewrite t_color0 eq_refl. simpl.
              unfold updm. subst. rewrite vt_eq. simpl.
              try rewrite eq_s3 in tag_pc3. simpl in *. reflexivity.
           -- destruct cond; eapply star_refl.
@@ -835,7 +845,11 @@ Module StepStrong (S: RecompositionContext).
              rewrite <- addwA. rewrite (addwC (as_word _) onew). rewrite addwA. trivial.
           -- rewrite Heqi'. eexists. split; eauto.
           -- pose proof (end_s3 _ _ vt_eq11). simpl in H. revert H. rewrite H2.
-             intro H. destruct H; auto; try contradiction.
+             intro H. destruct H; auto; try contradiction. destruct H as [? [? ?]].
+             eexists; split; [eauto|]. intro. trivial.
+          -- pose proof (end_s3 _ _ vt_eq11). simpl in H. revert H. rewrite H2.
+             intro H. destruct H; auto; try contradiction. destruct H as [? [? ?]].
+             eexists; split; [eauto|]. intro. trivial.
           -- rewrite OLD. simpl. trivial.
           -- rewrite vt_eq10. simpl. trivial.
           -- rewrite setmI. auto. auto. rewrite <- Heqa22 in Heqi'. simplify_some. rewrite Heqa22. trivial.
@@ -900,7 +914,7 @@ Module StepStrong (S: RecompositionContext).
           -- unfold reg_clear_list, reg_list. simpl. unfold as_word. subst. simpl.
              repeat
                (match goal with
-                | H: _ ?w = _  |- context[_ ?w] => rewrite H; simpl
+                | H: ?r ?w = _  |- context[?r ?w] => rewrite H; simpl
                 end). trivial.
           -- unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
              unfold evi in *. unfold_all. rewrite vt_eq.
@@ -911,7 +925,7 @@ Module StepStrong (S: RecompositionContext).
                 (*automatically rewrite regs3 registers*)
                 ((repeat
                    (match goal with
-                    | H: _ ?w = _  |- context[isSome(_ ?w)] =>rewrite H; simpl
+                    | H: ?r ?w = _  |- context[isSome(?r ?w)] =>rewrite H; simpl
                     end);
                  (*automatically transforms setm in if (_ == _) then _ else _*)
                  repeat rewrite setmE; simpl
@@ -938,7 +952,11 @@ Module StepStrong (S: RecompositionContext).
              rewrite addwA. trivial.
           -- rewrite Heqi'. eexists. split; eauto.
           -- pose proof (end_s3 _ _ vt_eq11). simpl in H. revert H. rewrite H1.
-             intro H. destruct H; auto; try contradiction.
+             intro H. destruct H; auto; try contradiction. destruct H as [? [? ?]].
+             eexists; split; [eauto|]. intro. trivial.
+          -- pose proof (end_s3 _ _ vt_eq11). simpl in H. revert H. rewrite H1.
+             intro H. destruct H; auto; try contradiction. destruct H as [? [? ?]].
+             eexists; split; [eauto|]. intro. trivial.
           -- rewrite OLD. simpl. trivial.
           -- rewrite vt_eq10. simpl. trivial.
           -- rewrite setmI. auto. rewrite <- Heqa22 in Heqi'. simplify_some. rewrite Heqa22. trivial.
