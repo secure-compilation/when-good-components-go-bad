@@ -97,4 +97,6 @@ MicroPolicies/Merged.v
 MicroPolicies/Recomposition/Definitions.v
 MicroPolicies/Recomposition/PreservationLemmas.v
 MicroPolicies/Recomposition/StepSilentStrong.v
-MicroPolicies/Recomposition/StepEvent.v
+MicroPolicies/Recomposition/StepEventCall.v
+MicroPolicies/Recomposition/StepEventReturn.v
+MicroPolicies/Recomposition/RecompositionEnd.v

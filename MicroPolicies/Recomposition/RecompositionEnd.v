@@ -34,7 +34,8 @@ Import Types.
 Require Import MicroPolicies.Recomposition.Definitions.
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentStrong.
-Require Import MicroPolicies.Recomposition.StepEvent.
+Require Import MicroPolicies.Recomposition.StepEventReturn.
+Require Import MicroPolicies.Recomposition.StepEventCall.
 
 Module RecEnd (S: RecompositionContext).
 
