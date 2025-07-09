@@ -335,8 +335,54 @@ Qed.
              oapp_False.
              destruct PTS_CODE3 as [color_a code_a].
              destruct no_code_w_s3 as [d [d_eq d_nocode]]. rewrite d_eq in HeqH. simplify_some. done.
-      + admit. (* domains remain unchanged *)
-      + admit. (* domains remain unchanged *)
+      + clear -same_color no_code_v no_code_w_s1 eq_m1 eq_s1' mem_pref_cond_s1.
+        subst s1'.
+        move: mem_pref_cond_s1.
+        simpl.
+        rewrite /memory_prefix_condition => H c.
+        move: {H} (H c) => //=.
+        assert (H: domm (mem s1) = domm (setm (mem s1) w v)).
+        { apply eq_fset => x. rewrite !mem_domm.
+          rewrite setmE; case: ifP => //=.
+          move=> /eqP ->.
+          move: eq_m1; rewrite /updm.
+          case: ifP => //=. }
+        rewrite H. move=> ->.
+        move: H => /eq_fset H.
+        assert (G: domm
+                  (filterm (fun=> (fun v0 : atom (mword mt) mem_tag => (color (taga v0) == c) && ~~ is_code (taga v0))) (mem s1)) =
+                  domm
+                    (filterm (fun=> (fun v0 : atom (mword mt) mem_tag => (color (taga v0) == c) && ~~ is_code (taga v0))) (setm (mem s1) w v))).
+        { apply eq_fset => x; rewrite !mem_domm.
+          rewrite !filtermE.
+          destruct (mem s1 x) eqn:mem_s1_x; specialize (H x); rewrite !mem_domm in H.
+          - rewrite mem_s1_x; rewrite mem_s1_x in H; destruct (setm (mem s1) w v x) eqn:mem_s1'_x; inv H.
+            specialize (same_color a).
+            rewrite mem_s1'_x. simpl.
+            move: mem_s1'_x mem_s1_x.
+            rewrite setmE. case: ifP => /eqP.
+            + intros eq0; subst.
+              move=> [] eq1; subst.
+              intros mem_s1_w.
+              destruct no_code_w_s1 as [d [? no_code_w]].
+              assert (a = d) by congruence; subst d.
+              move: no_code_w => /negP ->.
+              move: no_code_v => /negP ->.
+              rewrite same_color; eauto.
+              case: ifP => //=.
+            + move=> _ ? ?; assert (a0 = a) by congruence; now subst a0.
+          - rewrite mem_s1_x; rewrite mem_s1_x in H; destruct (setm (mem s1) w v x) eqn:mem_s1'_x; inv H.
+            rewrite mem_s1'_x. simpl. reflexivity. }
+        now rewrite G.
+      + clear -same_color no_code_v no_code_w_s1 eq_m1 eq_s1' code_pref_cond_s1.
+        subst s1'.
+        move: code_pref_cond_s1.
+        simpl.
+        rewrite /code_prefix_condition => H w' v'.
+        rewrite setmE. case: ifP => /eqP.
+        * move=> ? [] ?; subst. now auto.
+        * move=> _.
+          apply H.
       + unfold alloc_empty in *. subst. simpl in *. rewrite setmE.
         remember (@eq_op (Ord.eqType _) (word_of_nat alloc_label) w) as cond.
         destruct cond; try (eapply (alloc_mem_s1)). exfalso.
@@ -373,8 +419,55 @@ Qed.
         rewrite eq_s1' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. rewrite no_entry in dent. inversion dent.
         * eapply entry_code1; eauto.
-      + admit. (* domains remain unchanged *)
-      + admit. (* domains remain unchanged *)
+      + clear -same_color no_code_v' v_color no_code_w_s3 eq_m3 eq_s3' mem_pref_cond_s3.
+        subst s3'.
+        move: mem_pref_cond_s3.
+        simpl.
+        rewrite /memory_prefix_condition => H c.
+        move: {H} (H c) => //=.
+        assert (H: domm (mem s3) = domm (setm (mem s3) w v')).
+        { apply eq_fset => x. rewrite !mem_domm.
+          rewrite setmE; case: ifP => //=.
+          move=> /eqP ->.
+          move: eq_m3; rewrite /updm.
+          case: ifP => //=. }
+        rewrite H. move=> ->.
+        move: H => /eq_fset H.
+        assert (G: domm
+                  (filterm (fun=> (fun v0 : atom (mword mt) mem_tag => (color (taga v0) == c) && ~~ is_code (taga v0))) (mem s3)) =
+                  domm
+                    (filterm (fun=> (fun v0 : atom (mword mt) mem_tag => (color (taga v0) == c) && ~~ is_code (taga v0))) (setm (mem s3) w v'))).
+        { apply eq_fset => x; rewrite !mem_domm.
+          rewrite !filtermE.
+          destruct (mem s3 x) eqn:mem_s3_x; specialize (H x); rewrite !mem_domm in H.
+          - rewrite mem_s3_x; rewrite mem_s3_x in H; destruct (setm (mem s3) w v' x) eqn:mem_s3'_x; inv H.
+            specialize (same_color a).
+            rewrite mem_s3'_x. simpl.
+            move: mem_s3'_x mem_s3_x.
+            rewrite setmE. case: ifP => /eqP.
+            + intros eq0; subst.
+              move=> [] eq3; subst.
+              intros mem_s3_w.
+              destruct no_code_w_s3 as [d [? no_code_w]].
+              assert (a = d) by congruence; subst d.
+              move: no_code_w => /negP ->.
+              move: no_code_v' => /negP ->.
+              rewrite v_color in same_color.
+              rewrite same_color; eauto.
+              case: ifP => //=.
+            + move=> _ ? ?; assert (a0 = a) by congruence; now subst a0.
+          - rewrite mem_s3_x; rewrite mem_s3_x in H; destruct (setm (mem s3) w v' x) eqn:mem_s3'_x; inv H.
+            rewrite mem_s3'_x. simpl. reflexivity. }
+        now rewrite G.
+      + clear -same_color no_code_v' no_code_w_s3 eq_m3 eq_s3' code_pref_cond_s3.
+        subst s3'.
+        move: code_pref_cond_s3.
+        simpl.
+        rewrite /code_prefix_condition => H w' v''.
+        rewrite setmE. case: ifP => /eqP.
+        * move=> ? [] ?; subst. now auto.
+        * move=> _.
+          apply H.
       + unfold alloc_empty in *. subst. simpl in *. rewrite setmE.
         remember (@eq_op (Ord.eqType _) (word_of_nat alloc_label) w) as cond.
         destruct cond; try (eapply (alloc_mem_s3)). exfalso.
