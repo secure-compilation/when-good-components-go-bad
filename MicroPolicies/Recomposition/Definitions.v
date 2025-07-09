@@ -489,13 +489,17 @@ Module RecompositionDefinitions (S: RecompositionContext).
     .
 
     Definition combined_codes (i: side) (s: state) (s': state) : Prop :=
-      forall w v t off c,
+      forall (w: word (imm_size mt)) v t off c,
         is_relevant_comp i c ->
         get_offset i c = Some off ->
         is_code (t) ->
         color (t) = c ->
-        ((mem s w = Some v@t -> exists v', decode_match (mem s) (mem s') v v' /\ (mem s' (addw w (as_word off)) = Some v'@t))
-         /\ ((mem s' (addw w (as_word off)) = Some (v@t)) -> exists v', decode_match (mem s) (mem s') v' v /\ (mem s w = Some (v'@t))))
+        ((mem s (swcast w) = Some v@t ->
+          exists v', decode_match (mem s) (mem s') v v' /\
+                  (mem s' (swcast (addw w (as_word off))) = Some v'@t))
+         /\ ((mem s' (swcast (addw w (as_word off))) = Some (v@t)) -> exists v',
+               decode_match (mem s) (mem s') v' v /\
+                 (mem s (swcast w) = Some (v'@t))))
     .
 
     Definition end_condition (mem: memory) : Prop :=

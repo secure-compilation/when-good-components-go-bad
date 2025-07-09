@@ -546,8 +546,10 @@ Qed.
       + unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
-        remember (@eq_op (Ord.eqType _) w'' w) as cond1.
-        remember (@eq_op (Ord.eqType _) w' w) as cond2. unfold mt, concrete_int_32_mt, word_size in Heqcond1, Heqcond2.
+        remember (@eq_op (Ord.eqType _) (@swcast (imm_size mt) (word_size mt) w'') w) as cond1.
+        remember (@eq_op (Ord.eqType _) (@swcast (imm_size mt) (word_size mt) w') w) as cond2.
+        unfold mt, concrete_int_32_mt, word_size in Heqcond1, Heqcond2.
+        simpl in Heqcond1, Heqcond2.
         rewrite <- Heqcond1, <- Heqcond2.
         destruct v as [? vt], v' as [? vt']. inversion v_match. subst vt'.
         pose proof (code_left w' d t off comp relevant_comp offset v'_code v'_color) as [impll implr].
@@ -590,7 +592,8 @@ Qed.
       +  unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
-        remember (@eq_op (Ord.eqType _) w'' w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
+        remember (@eq_op (Ord.eqType _) (swcast w'') w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
+        simpl in Heqcond.
         rewrite <- Heqcond.
         destruct v as [? vt], v' as [? vt']. inversion v_match. subst vt'.
         pose proof (code_right w' d t off comp relevant_comp offset v'_code v'_color) as [impll implr].
@@ -621,7 +624,12 @@ Qed.
                rewrite H3 in eq1. simplify_some. rewrite H5 in H4. tauto. }
              { exact H3. }
              all: trivial.
-  Admitted.
+             Unshelve.
+             all: simpl; eauto.
+             all: unfold ip, ic.
+             all: eapply proj1 in Hmergeable_ifaces.
+             all: eapply proj2 in Hmergeable_ifaces; eauto.
+  Qed.
 
   Lemma preserves_equiv_left_reg_write :
     forall s1 s2 s3 M s1' s3' r v v'  r1' r3',
@@ -1054,9 +1062,10 @@ Qed.
             destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
-        remember (mem s3 (addw w (as_word off))) as cond1.
-        remember (mem s1 w) as cond2.
-        simpl in *. rewrite <- Heqcond1. rewrite <- Heqcond2.
+        remember (mem s3 (swcast (addw w (as_word off)))) as cond1.
+        remember (mem s1 (swcast w)) as cond2.
+        simpl in *.
+        rewrite <- Heqcond1. rewrite <- Heqcond2.
         destruct cond1; destruct cond2; split; simpl; intro Heq; try simplify_some; subst; simpl.
         -- rewrite Heqcond1. destruct ((fst (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [x [xmatch xeq]].
            exists x. split; auto.
@@ -1090,8 +1099,8 @@ Qed.
            inv eq. exfalso. discriminate.
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
-        remember (mem s3 (addw w (as_word off))) as cond1.
-        remember (mem s2 w) as cond2.
+        remember (mem s3 (swcast (addw w (as_word off)))) as cond1.
+        remember (mem s2 (swcast w)) as cond2.
         simpl in *. rewrite <- Heqcond1. rewrite <- Heqcond2.
         destruct cond1; destruct cond2; split; simpl; intro Heq; try simplify_some; subst; simpl; try (inversion Heq; done).
         -- rewrite Heqcond1. destruct ((fst (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [x [xmatch xeq]].

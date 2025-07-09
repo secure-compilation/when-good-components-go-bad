@@ -94,7 +94,9 @@ Module StepStrong (S: RecompositionContext).
       all: simpl in *; unfold_all.
       7-8: (match (type of Heqa2) with
                   (_ = match ?m ?w with _ => _ end)
-                  => eapply (@modusponens (exists res, m w = Some res /\ (LRC.color (taga res) \in domm ip -> is_code (taga res))));
+                  => eapply (@modusponens (exists res, m w = Some res /\
+                                                   (LRC.color (taga res) \in domm ip ->
+                                                                   is_code (taga res))));
                     [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2]
                 end).
       11: remember (mem0 pc') as next_pc_content; destruct next_pc_content.
@@ -183,15 +185,17 @@ Module StepStrong (S: RecompositionContext).
              unfold evi in *. unfold_all.
              deduce_reg reg_match.
              subst s3 s1. simpl in *. simpl in *.
-             unfold side_of in side_eq. unfold_match' side_eq. deduce_equality Heqi'.
-             rewrite vt_eq1. simpl.
-             unfold check_belong, belong. rewrite eq_refl. simpl.
-             unfold updm. rewrite vt_eq0. simpl.
-             try rewrite eq_s3 in tag_pc3. simpl in *. rewrite tag_pc3. try rewrite ST. unfold color_of. simpl. rewrite eq_refl. simpl.
-             repeat rewrite setmE. simpl in Heqcond.
-             rewrite <- Heqcond. destruct cond.
-             ++ assert (r_eq: r2 = r1) by (eq_op_to_eq). simpl in *. simpl. trivial.
-             ++ deduce_reg reg_match. done.
+             unfold side_of in side_eq. unfold_match' side_eq.
+             admit.
+             (* deduce_equality Heqi'. *)
+             (* rewrite vt_eq1. simpl. *)
+             (* unfold check_belong, belong. rewrite eq_refl. simpl. *)
+             (* unfold updm. rewrite vt_eq0. simpl. *)
+             (* try rewrite eq_s3 in tag_pc3. simpl in *. rewrite tag_pc3. try rewrite ST. unfold color_of. simpl. rewrite eq_refl. simpl. *)
+             (* repeat rewrite setmE. simpl in Heqcond. *)
+             (* rewrite <- Heqcond. destruct cond. *)
+             (* ++ assert (r_eq: r2 = r1) by (eq_op_to_eq). simpl in *. simpl. trivial. *)
+             (* ++ deduce_reg reg_match. done. *)
           -- destruct cond; eapply star_refl.
           -- done.
         * inversion vt_match0 as [? _]. subst t0. unfold_all.
@@ -789,8 +793,14 @@ Module StepStrong (S: RecompositionContext).
         assert (eq'_off: get_offset (side_of i0) i0 = Some off).
         { inv tag_pc1. unfold side_of. rewrite comp_in. simpl. trivial. }
         pose proof (H8 off (eq'_off)) as imm'_eq.
-        assert (pc_eq_imm: (@swcast _ (word_size mt) imm') = addw (swcast imm) (as_word off)).
-        { subst. admit. } (* probably doable with slight lemma/hypothesis on off *)
+        (* assert (pc_eq_imm: (@swcast _ (word_size mt) imm') = addw (swcast imm) (as_word off)). *)
+        (* { subst. *)
+
+        (*   Set Printing Implicit. *)
+        (*   unfold swcast. *)
+        (*   Unset Printing Implicit. *)
+        (*   admit. } *)
+        (* probably doable with slight lemma/hypothesis on off *)
         destruct d as [vx tx].
         destruct ((fst (code_left _ vx tx off _ comp_in eq_off next_pc_code (esym (congr1 LRC.color H1)))) (H3))
         as [d [dmatch deq]].
@@ -813,7 +823,8 @@ Module StepStrong (S: RecompositionContext).
                 end). trivial.
           -- unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
              unfold evi in *. unfold_all. rewrite vt_eq.
-             simpl in *. rewrite pc_eq_imm deq. simpl. rewrite eq_refl. simpl.
+             simpl in *.
+             rewrite pc_eq_imm deq. simpl. rewrite eq_refl. simpl.
              unfold check_belong, belong. rewrite eq_refl. simpl.
              unfold updm.
              repeat((repeat
