@@ -119,6 +119,8 @@ Record well_formed_program (p: program) := {
 Module Type RecompositionContext.
   Parameters p c p' c' : program.
 
+  Parameter NC: nat.
+
   Axiom Hwfp  : well_formed_program p.
   Axiom Hwfc  : well_formed_program c.
   Axiom Hwfp' : well_formed_program p'.
@@ -165,13 +167,13 @@ Module RecompositionDefinitions (S: RecompositionContext).
   Let state := @Symbolic.state mt LRC.lrc_tags [eqType of unit].
   Let genvtype := unit.
   Let step1 := (fun (ge: genvtype) s t s' => match t with
-                                       | [::] => step_me s s' None
-                                       | e :: [::] => step_me s s' (Some e)
+                                       | [::] => step_me s s' None (NC := NC)
+                                       | e :: [::] => step_me s s' (Some e) (NC := NC)
                                        | _ => False
                                        end).
   Let step2 := (fun (ge: genvtype) s t s' => match t with
-                                       | [::] => step_mp s s' None
-                                       | e :: [::] => step_mp s s' (Some e)
+                                       | [::] => step_mp s s' None (NC := NC)
+                                       | e :: [::] => step_mp s s' (Some e) (NC := NC)
                                        | _ => False
                                        end).
   Definition initial_state1: state -> Prop :=
@@ -184,7 +186,7 @@ Module RecompositionDefinitions (S: RecompositionContext).
     fun s => s = initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'').
 
   Definition color_of: state -> Component.id :=
-    fun '(Symbolic.State m r (Types.Atom _ tpc) _ _) =>
+    fun '(Symbolic.State m r (Types.Atom _ tpc) _) =>
       match (tpc) with
       | Level _ c => c
       end.
@@ -193,7 +195,7 @@ Module RecompositionDefinitions (S: RecompositionContext).
     fun s => (color_of s) \in (domm ic).
 
   Definition final_state_me: state -> Prop :=
-    fun '(Symbolic.State m r (Types.Atom pc _) _ _) =>
+    fun '(Symbolic.State m r (Types.Atom pc _) _) =>
       match (m pc) with
       | None => False
       | Some (Types.Atom i tag) =>
@@ -201,7 +203,7 @@ Module RecompositionDefinitions (S: RecompositionContext).
       end.
 
   Definition final_state_rUB: state -> Prop :=
-    fun '(Symbolic.State m r (Types.Atom pc tpc) _ _) =>
+    fun '(Symbolic.State m r (Types.Atom pc tpc) _) =>
       match (m pc) with
       | None => False
       | Some (Types.Atom i tag) =>
@@ -419,9 +421,26 @@ Module RecompositionDefinitions (S: RecompositionContext).
 
     #[export] Notation data := (Types.atom (Types.mword mt) mem_tag).
 
+    Variant data_match_variant (i: side) (comp: Component.id) (m: metadata): stack_value -> stack_value -> Prop :=
+      | data_match_variant_invalidated: forall v1 v2,
+          data_match_variant i comp m (Types.Atom v1 Invalidated) (Types.Atom v2 Invalidated)
+      | data_match_variant_other: forall v,
+          data_match_variant i comp m (Types.Atom v Other) (Types.Atom v Other)
+      | data_match_variant_internal_jump: forall v1 v2 off,
+          get_offset i comp = Some off ->
+          v2 = addw v1 (as_word off) ->
+          data_match_variant i comp m (Types.Atom v1 InternalJump) (Types.Atom v2 InternalJump)
+      | data_match_variant_ret: forall v1 t1 v2 t2 n sv' comp',
+        t1 = Ret n ->
+        t2 = Ret n ->
+        (i = Left -> In (Types.Atom v1 t1, sv', Types.Atom v2 t2, comp') m) ->
+        (i = Right -> In (sv', Types.Atom v1 t1, Types.Atom v2 t2, comp') m) ->
+        data_match_variant i comp m (Types.Atom v1 t1) (Types.Atom v2 t2)
+    .
+
     Definition data_match (i: side) (comp: Component.id) (m: metadata) (d: stack_value) (d': stack_value) : Prop :=
-      match (d, d') with
-      | (Types.Atom v1 t1, Types.Atom v2 t2) =>
+      match d, d' with
+      | Types.Atom v1 t1, Types.Atom v2 t2 =>
           t1 = t2 /\
             match t1 with
             | Invalidated => True
@@ -435,9 +454,25 @@ Module RecompositionDefinitions (S: RecompositionContext).
             end
       end.
 
+    Lemma data_match_eq: forall i comp m d d',
+        data_match_variant i comp m d d' <-> data_match i comp m d d'.
+    Proof.
+      intros; split.
+      - intros H; inv H.
+        + simpl; auto.
+        + simpl; auto.
+        + simpl. rewrite H0. simpl; auto.
+        + simpl; auto. destruct i; eauto.
+      - destruct d as [v1 []], d' as [v2 []]; simpl; try now auto.
+        + move=> [] [] <-; case: i => [] [] sv' [] comp' H; econstructor; eauto; congruence.
+        + move=> [] _ <-; constructor.
+        + move=> [] _; case eq_offset: (get_offset i comp) => //=; econstructor; eauto.
+        + move=> _; constructor.
+    Qed.
+
     Definition data_match' (i: side) (m: metadata) (d: data) (d': data) : Prop :=
-      match (d, d') with
-      | (Types.Atom v1 t1, Types.Atom v2 t2) =>
+      match d, d' with
+      | Types.Atom v1 t1, Types.Atom v2 t2 =>
           t1 = t2 /\
             let comp := (color t1) in
             (data_match i comp m (Types.Atom v1 (vtag t1)) (Types.Atom v2 (vtag t2)))
@@ -489,17 +524,17 @@ Module RecompositionDefinitions (S: RecompositionContext).
     .
 
     Definition combined_codes (i: side) (s: state) (s': state) : Prop :=
-      forall (w: word (imm_size mt)) v t off c,
+      forall w v t off c,
         is_relevant_comp i c ->
         get_offset i c = Some off ->
         is_code (t) ->
         color (t) = c ->
-        ((mem s (swcast w) = Some v@t ->
-          exists v', decode_match (mem s) (mem s') v v' /\
-                  (mem s' (swcast (addw w (as_word off))) = Some v'@t))
-         /\ ((mem s' (swcast (addw w (as_word off))) = Some (v@t)) -> exists v',
+        ((mem s w = Some v@t -> exists v',
+             decode_match (mem s) (mem s') v v' /\
+               (mem s' (addw w (as_word off)) = Some v'@t))
+         /\ ((mem s' (addw w (as_word off)) = Some (v@t)) -> exists v',
                decode_match (mem s) (mem s') v' v /\
-                 (mem s (swcast w) = Some (v'@t))))
+                 (mem s w = Some (v'@t))))
     .
 
     Definition end_condition (mem: memory) : Prop :=
@@ -511,22 +546,22 @@ Module RecompositionDefinitions (S: RecompositionContext).
     .
 
     (* necessary invariants for the allocation case *)
-    Definition memory_prefix_condition (mem:memory) nc :=
+    Definition memory_prefix_condition (mem:memory) :=
       forall current_c,
-        let prefix := (@component_memory_prefix mt (ssrint.Posz(1 + current_c)) nc) in
-        let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in
-        let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in
+        let prefix := (@component_memory_prefix mt NC (ssrint.Posz(1 + current_c))) in
+        (* let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in *)
+        let prefix_filter := (fun mw => ((word.andw mw (mask (NC := NC))) == prefix) ) in
         let comp_filter := (fun w v => andb (color (taga v) == current_c) (negb (is_code (taga v)))) in
         filter prefix_filter (domm (mem)) =
           fsetD (domm (filterm comp_filter (mem))) (domm (initial_memory (prog_buffers prog))).
 
-    Definition code_prefix_condition (mem:memory) nc :=
+    Definition code_prefix_condition (mem:memory) :=
       forall w v,
         mem w = Some v ->
         is_code (taga v) ->
-        let prefix := (@component_memory_prefix mt (ssrint.Posz(0)) nc) in
-        let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in
-        ((word.andw w mask) == prefix).
+        let prefix := (@component_memory_prefix mt NC (ssrint.Posz(0))) in
+        (* let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in *)
+        ((word.andw w (mask (NC := NC))) == prefix).
 
     Definition alloc_empty (mem: @memory mt) :=
       mem (word_of_nat alloc_label) = None.
@@ -595,9 +630,9 @@ Module RecompositionDefinitions (S: RecompositionContext).
             get_offset i c = Some off
             /\  w' = addw w (as_word off)).
 
-    Definition general_memory_correctness (mem: memory) nc : Prop :=
-      memory_prefix_condition mem nc
-      /\ code_prefix_condition mem nc
+    Definition general_memory_correctness (mem: memory) : Prop :=
+      memory_prefix_condition mem
+      /\ code_prefix_condition mem
       /\ alloc_empty mem
       /\ BNZ_correctness mem
       /\ end_condition mem
@@ -619,9 +654,9 @@ Module RecompositionDefinitions (S: RecompositionContext).
           register_domm (regs s1) ->
           register_domm (regs s2) ->
           register_domm (regs s3) ->
-          general_memory_correctness (mem s1) (comp_num s1) ->
-          general_memory_correctness (mem s2) (comp_num s2) ->
-          general_memory_correctness (mem s3) (comp_num s3) ->
+          general_memory_correctness (mem s1) ->
+          general_memory_correctness (mem s2) ->
+          general_memory_correctness (mem s3) ->
           capability_correctness m WS_S1 s1 ->
           capability_correctness m WS_S2 s2 ->
           capability_correctness m WS_S3 s3 ->
@@ -631,7 +666,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
     .
     Variant strong_equiv (i: side): metadata -> state -> state -> Prop :=
       strong_equiv_def : forall m s s',
-          comp_num s = comp_num s' ->
           same_pc i s s' ->
           color_of s = color_of s' ->
           side_of (color_of s) = i ->
@@ -647,7 +681,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
 
     Variant weak_equiv (i: side): metadata -> state -> state -> Prop :=
       weak_equiv_def : forall m s s',
-          comp_num s = comp_num s' ->
           color_of s = color_of s' ->
           side_of (color_of s) = other_side i ->
           memory_address_correctness i s ->

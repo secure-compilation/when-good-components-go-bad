@@ -70,7 +70,7 @@ Definition def_mem_tag (c : Component.id) code : mem_tag :=
 
 
 
-Module Import MemTagEq.
+Module Export MemTagEq.
 Definition tuple_of_mem_tag t := (vtag t, color t, entry t, is_code t).
 Definition mem_tag_of_tuple tp :=
   match tp with
@@ -281,7 +281,9 @@ Section WithClasses.
 
 Context {mt : machine_types}
         {ops : machine_ops mt}
-        {sregs : syscall_regs mt}.
+        {sregs : syscall_regs mt}
+        {NC: nat}. (* smallest natural number n such that number of components < 2^n *)
+
 (* TL TODO: these notations inside a module? *)
 
 Notation state := (@Symbolic.state mt lrc_tags [eqType of unit]).
@@ -292,8 +294,12 @@ Definition matom := (atom (mword mt) mem_tag).
 
 
 (* allows to split memory between components *)
-Definition component_memory_prefix (c : int) (nc : nat) :=
- @word.shlw (word_size mt) (word.as_word  (c)) (word.as_word (ssrint.Posz ((word_size mt) - nc))). (* left shift *)
+Definition component_memory_prefix (c: int): word (word_size mt) :=
+  shlw (as_word c) (as_word (word_size mt - NC)).
+
+Definition mask: word (word_size mt) :=
+  shlw (as_word (2 ^ (word_size mt) - 1))
+    (as_word ((word_size mt) - NC)).
 
 (* alloc is a syscall taking one argument, the size to allocate *)
 (* a syscall don't change the pc level *)
@@ -302,8 +308,8 @@ Definition alloc_fun (st : state) : option state :=
   do! ra_val <- regs st ra;
   do! _ <- is_jump (taga ra_val);
   let next_pc := (vala ra_val)@(taga (pc st)) in
-  let prefix := (component_memory_prefix (1 + current_c) (comp_num st)) in
-  let mask := (component_memory_prefix ((2 ^ (comp_num st))-1) (comp_num st)) in
+  let prefix := (component_memory_prefix (1 + current_c)) in
+  (* let mask := (component_memory_prefix ((2 ^ 32)-1)) in *)
   let prefix_filter := (fun mw => ((word.andw mw mask) == prefix) ) in (* keep only words starting with exactly prefix *)
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
   let max_addr := last (filter prefix_filter (domm (mem st))) (prefix) in
@@ -324,6 +330,6 @@ Definition alloc_fun (st : state) : option state :=
   do! addr <- (do! x <- head bloc;
                  Some (fst x));
   do! regs' <- updm (regs st) syscall_ret addr@Other;
-  Some (State mem' regs' next_pc tt (comp_num st)).
+  Some (State mem' regs' next_pc tt).
 
 End WithClasses.

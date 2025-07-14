@@ -76,8 +76,8 @@ Lemma preserves_equiv_left_pc_incr :
     strong_equiv Left M s1 s3
     /\ weak_equiv Right M s2 s3
     /\ common_equiv M s1 s2 s3 ->
-    s1' = State _ _ (mem s1) (regs s1) (pc1'@tpc1') tt (comp_num s1) ->
-    s3' = State _ _ (mem s3) (regs s3) (pc3'@tpc3') tt (comp_num s3) ->
+    s1' = State _ _ (mem s1) (regs s1) (pc1'@tpc1') tt ->
+    s3' = State _ _ (mem s3) (regs s3) (pc3'@tpc3') tt ->
     same_pc Left s1' s3' ->
     tpc1' = taga (pc s1) ->
     tpc3' = taga (pc s3) ->
@@ -137,8 +137,8 @@ Qed.
       address_correctness Right (vala v') (vtag (taga v')) (mem s3) ->
       updm (mem s1) w v = Some m1' ->
       updm (mem s3) w v' = Some m3' ->
-      s1' = State _ _ m1' (regs s1) (pc s1) tt (comp_num s1) ->
-      s3' = State _ _ m3' (regs s3) (pc s3) tt (comp_num s3) ->
+      s1' = State _ _ m1' (regs s1) (pc s1) tt ->
+      s3' = State _ _ m3' (regs s3) (pc s3) tt ->
       strong_equiv Left M s1' s3'
       /\ weak_equiv Right M s2 s3'
       /\ common_equiv M s1' s2 s3'.
@@ -150,7 +150,7 @@ Qed.
     destruct equiv as [strong [weak common]].
     pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
     split; [|split].
-    - destruct strong as [? ? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match];
+    - destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match];
       econstructor; destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence.
       + destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
                             [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
@@ -224,7 +224,7 @@ Qed.
         remember (@eq_op (Ord.eqType _) w0 w) as cond. destruct cond.
         * split; intro eq; inv eq; eexists; split; eauto.
         * apply mem_match; auto.
-    - destruct weak as [? ? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match];
+    - destruct weak as [? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match];
       econstructor; destruct s, s', pc0, pc1; subst; auto.
       + subst. intros d w' rel deq. simpl. destruct d as [vd [vt ? ? ?]]. simpl.
         remember (@eq_op (Ord.eqType _) w' w) as cond.
@@ -267,12 +267,12 @@ Qed.
              ++ simpl in v_relevant.
                 { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
                   inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. rewrite <- v_color. auto. }
-          -- pose proof (mem_match w d H0 H1) as [_ d_impl].
-             destruct (d_impl H3) as [d' [d_d'_match eq_d']].
+          -- pose proof (mem_match w d H H0) as [_ d_impl].
+             destruct (d_impl H2) as [d' [d_d'_match eq_d']].
              assert (d'_color: color (Types.taga v) = color (Types.taga d')) by (eapply same_color; auto).
              rewrite d'_color in v_relevant. assert (d'_color_bis: (color (Types.taga d') = color (Types.taga d))).
              { destruct d, d'. simpl. unfold data_match' in d_d'_match. destruct d_d'_match. subst. done. }
-             rewrite <- d'_color_bis in H1. simpl in *.
+             rewrite <- d'_color_bis in H0. simpl in *.
              { eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
                inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto. }
         * apply mem_match; auto.
@@ -546,8 +546,8 @@ Qed.
       + unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
-        remember (@eq_op (Ord.eqType _) (@swcast (imm_size mt) (word_size mt) w'') w) as cond1.
-        remember (@eq_op (Ord.eqType _) (@swcast (imm_size mt) (word_size mt) w') w) as cond2.
+        remember (@eq_op (Ord.eqType _) w'' w) as cond1.
+        remember (@eq_op (Ord.eqType _) w' w) as cond2.
         unfold mt, concrete_int_32_mt, word_size in Heqcond1, Heqcond2.
         simpl in Heqcond1, Heqcond2.
         rewrite <- Heqcond1, <- Heqcond2.
@@ -592,7 +592,7 @@ Qed.
       +  unfold combined_codes. intros w' d t off comp relevant_comp offset v'_code v'_color.
         remember (addw w' (as_word off)) as w''. subst s1' s3'. simpl.
         repeat rewrite setmE.
-        remember (@eq_op (Ord.eqType _) (swcast w'') w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
+        remember (@eq_op (Ord.eqType _) w'' w) as cond. unfold mt, concrete_int_32_mt, word_size in Heqcond.
         simpl in Heqcond.
         rewrite <- Heqcond.
         destruct v as [? vt], v' as [? vt']. inversion v_match. subst vt'.
@@ -644,8 +644,8 @@ Qed.
       address_correctness Right (vala v') (taga v') (mem s3) ->
       updm (regs s1) r v = Some r1' ->
       updm (regs s3) r v' = Some r3' ->
-      s1' = State _ _ (mem s1) r1' (pc s1) tt (comp_num s1) ->
-      s3' = State _ _ (mem s3) r3' (pc s3) tt (comp_num s3) ->
+      s1' = State _ _ (mem s1) r1' (pc s1) tt ->
+      s3' = State _ _ (mem s3) r3' (pc s3) tt ->
       strong_equiv Left M s1' s3'
       /\ weak_equiv Right M s2 s3'
       /\ common_equiv M s1' s2 s3'.
@@ -660,7 +660,7 @@ Qed.
                           capa_cor1 capa_cor2 capa_cor3 code_left code_right].
     pose proof (updm_set eq_r1). pose proof (updm_set eq_r3). subst r1' r3'.
     split; [|split].
-    - destruct strong as [? ? ? num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+    - destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
       econstructor; destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try (subst; simpl; trivial; done); try congruence.
       + destruct pc_s1_s3 as [? ? ? eq_none|? ? ? ? eq_comp eq_off pc_s1_s3].
         * eapply same_pc_alloc; try rewrite eq_s1'; try rewrite eq_s3'; auto.
@@ -683,7 +683,7 @@ Qed.
         remember (@eq_op (Ord.eqType _) w r) as cond. destruct cond.
         * split; intro eq; simplify_some; eauto.
         * apply reg_match; auto.
-    - destruct weak as [? ? s3 num_eq color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match].
+    - destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence.
       destruct s, s3, pc0, pc1. subst. simpl. auto. trivial.
       + intros d r' deq. subst. rewrite setmE in deq. unfold_match' deq.
@@ -693,10 +693,12 @@ Qed.
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done.
       + subst. unfold register_domm. simpl. rewrite domm_set.
         unfold register_domm, reg_field_size in *. simpl in *. unfold updm in eq_r1. unfold_match' eq_r1.
-        clear -Heqa reg_domm1. admit.
+        clear -Heqa reg_domm1.
+        rewrite fsetU1in //= mem_domm //=.
       + subst. unfold register_domm. simpl. rewrite domm_set.
         unfold register_domm, reg_field_size in *. simpl in *. unfold updm in eq_r3. unfold_match' eq_r3.
-        clear -Heqa reg_domm3. admit.
+        clear -Heqa reg_domm3.
+        rewrite fsetU1in //= mem_domm //=.
       + rewrite eq_s1'. unfold capability_correctness. simpl. intros d q w w_cap.
         destruct w as [r'|w'].
         { rewrite setmE in w_cap. unfold_match' w_cap.
@@ -737,7 +739,7 @@ Qed.
           convert_eq_op. simplify_some. destruct capa_prop3 as [limp [rimp ?]].
           destruct w_cap as [t [teq tcapa]]. eapply limp; eauto.
           eapply (unicity (inr _)); eauto.  }
-  Admitted.
+  Qed.
 
 
   Lemma preserves_equiv_left_alloc_fun:
@@ -745,8 +747,8 @@ Qed.
       strong_equiv Left M s1 s3
       /\ weak_equiv Right M s2 s3
       /\ common_equiv M s1 s2 s3 ->
-      alloc_fun s1 = Some s1' ->
-      alloc_fun s3 = Some s3' ->
+      alloc_fun s1 (NC := NC) = Some s1' ->
+      alloc_fun s3 (NC := NC) = Some s3' ->
       strong_equiv Left M s1' s3'
       /\ weak_equiv Right M s2 s3'
       /\ common_equiv M s1' s2 s3'.
@@ -769,7 +771,7 @@ Qed.
                           capa_cor1 capa_cor2 capa_cor3 code_left code_right].
     subst m s0 s4 s5.
     assert (n1 = n').
-    { destruct strong as [? ? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+    { destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
       destruct (reg_match (as_word (ssrint.Posz 17)) v'@Other) as [_ impl].
       destruct (impl (esym Heqa5)) as [? [dmatch eq1]]. simpl in *. rewrite eq1 in Heqa1.
       simplify_some. destruct x.
@@ -778,7 +780,7 @@ Qed.
       pose proof (congr1 ssrint.absz eq) as eq'.
       repeat rewrite ssrint.absz_nat in eq'. done. } subst n1.
     split; [|split].
-    - destruct strong as [? ? ? num_eq pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+    - destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
       econstructor; try (destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence; simpl; done).
       + pose proof ((fst (reg_match _ v@InternalJump)) (esym Heqa)) as [d' [d'match d'eq]].
         simpl in *. rewrite <- Heqa3 in d'eq. simplify_some. destruct d' as [? taga1].
@@ -817,9 +819,23 @@ Qed.
         rewrite unionmE in eqw'. rewrite unionmE in eqw''.
         unfold_match' eqw'; unfold_match' eqw''.
         * eapply entry_off; eauto.
-        * assert (~ (is_code (taga d'))) by admit. tauto.
-        * assert (~ (is_code (taga d))) by admit. tauto.
-        * assert (~ (is_code (taga d'))) by admit. tauto.
+        * assert (~ (is_code (taga d'))).
+          { apply (@mkfmap_Some _ _ _ w'' d') in eqw''.
+            move: eqw'' => //=. rewrite /mkseq.
+            move=> /mapP [] x x_in_iota [] w''_eq -> //=. }
+          tauto.
+        * assert (~ (is_code (taga d))).
+          {
+            apply (@mkfmap_Some _ _ _ w' d) in eqw'.
+            move: eqw' => //=. rewrite /mkseq.
+            move=> /mapP [] x x_in_iota [] w'_eq -> //=. }
+          tauto.
+        * assert (~ (is_code (taga d'))).
+          { clear -eqw''.
+            apply (@mkfmap_Some _ _ _ w'' d') in eqw''.
+            move: eqw'' => //=. rewrite /mkseq.
+            move=> /mapP [] x x_in_iota [] w''_eq -> //=. }
+          tauto.
       + intros d w d_eq. simpl in *. destruct d as [vd td].
         destruct td; simpl; auto.
         all: rewrite unionmE; rewrite setmE in d_eq; simpl in *.
@@ -844,34 +860,88 @@ Qed.
              destruct (impl (esym Heqcond)) as [d' [d'match d'eq]].
              rewrite d'eq. simpl. exists d'. done.
           -- intro. exists d.
-             assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s') false)) by admit.
+             assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s') false)).
+             { clear -H tag_pc3.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc3.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s' tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
              subst d. split; simpl; try done. simpl in *.
              remember (mem s w) as cond. destruct cond.
-             { assert (w_prefix: (andw w (@component_memory_prefix mt (ssrint.Posz (2 ^ comp_num s' - 1)) (comp_num s')) ==
-                                    @component_memory_prefix mt (ssrint.Posz (1 + color_of s')) (comp_num s'))).
-               { clear -H. admit. }
+             { setoid_rewrite <- Heqcond0 => //=.
+
+               (* pose proof (mem_match w a) as [_ impl]; auto; simpl; try (rewrite code; done). *)
+               (* { clear -code_pref_cond_s1 Heqcond0. *)
+               (*   (* setoid_rewrite <- Heqcond0 => //=. rewrite -Heqcond0. *) *)
+               (*   intros is_code. *)
+               (*   specialize (code_pref_cond_s1 w a (Logic.eq_sym Heqcond0) is_code). *)
+
+               (*   comp_num *)
+
+               (*   exfalso. admit. } *)
+               (*   clear -w_prefix rel code Heqcond0 mem_pref_cond_s1. *)
+               (*   assert (color (taga a) = color_of s') as eq. *)
+               (*   { unfold color_of. *)
+               (*     destruct s'. destruct pc0. simpl. *)
+               (*     destruct taga. simpl in *. *)
+               (*     admit. } *)
+               (*   now rewrite eq. } *)
+
+               assert (w_prefix: (andw w (@mask mt NC) ==
+                                    @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s')))).
+               { clear -H tag_pc3.
+                 apply (@mkfmap_Some _ _ _ w (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s') false)) in H.
+                 move: H => //=. rewrite /mkseq tag_pc3.
+                 move=> /mapP [] x x_in_iota [] H -> //=.
+                 admit. }
+
                destruct (is_code (taga a)) eqn:code.
-               { clear -code_pref_cond_s1 Heqcond0 code w_prefix. exfalso. admit. }
+               { clear -w_prefix code_pref_cond_s1 Heqcond0 code.
+                 setoid_rewrite <- Heqcond0 => //=.
+                 specialize (code_pref_cond_s1 w a (Logic.eq_sym Heqcond0) code).
+                 simpl in code_pref_cond_s1.
+                 exfalso.
+                 move: code_pref_cond_s1 w_prefix => /eqP H1 /eqP H2.
+                 rewrite H2 in H1; clear -H1.
+                 admit. }
+
                pose proof (mem_match w a) as [_ impl]; auto; simpl; try (rewrite code; done).
-               { clear -w_prefix rel code Heqcond0 mem_pref_cond_s1.
-                 assert (color (taga a) = color_of s') as eq by admit. rewrite eq. done. }
+               {
+                 clear -w_prefix rel code Heqcond0 mem_pref_cond_s1.
+                 assert (color (taga a) = color_of s') as eq.
+                 { unfold color_of.
+                   destruct s'. destruct pc0. simpl.
+                   destruct taga. simpl in *.
+                   admit. }
+                 now rewrite eq. }
                destruct (impl (esym Heqcond0)) as [d' [d'match d'eq]]. simpl in *.
                rewrite <- Heqcond in d'eq. inversion d'eq. }
              simpl in *. rewrite <- Heqcond0. simpl.
-             assert (eq: comp_num s = comp_num s') by done. rewrite eq.
-             rewrite tag_pc1. rewrite tag_pc3 in H. clear -H mem_pref_cond_s1. admit.
+             (* assert (eq: comp_num s = comp_num s') by done. rewrite eq. *)
+             rewrite tag_pc1. rewrite tag_pc3 in H.
+             rewrite -H.
+             clear -mem_pref_cond_s1. admit.
         * remember (mem s w) as cond. simpl in *. rewrite <- Heqcond. destruct cond; simpl.
           -- intro. simplify_some.
              pose proof (mem_match w d) as [_ impl]; auto; simpl.
              destruct (impl (esym Heqcond)) as [d' [d'match d'eq]].
              rewrite d'eq. simpl. exists d'. done.
           -- intro. exists d.
-             assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s) false)) by admit.
+             assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s) false)).
+             { clear -H tag_pc1.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc1.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s tag_pc1 {H} => //= _ _ [] //= _ taga _ -> //=. }
              subst d. split; simpl; try done. simpl in *.
              remember (mem s' w) as cond. destruct cond.
              { assert (w_prefix: (andw w (@component_memory_prefix mt (ssrint.Posz (2 ^ comp_num s - 1)) (comp_num s)) ==
                                     @component_memory_prefix mt (ssrint.Posz (1 + color_of s)) (comp_num s))).
-               { clear -H. admit. }
+               { clear -H tag_pc1.
+                 apply (@mkfmap_Some _ _ _ w  (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s) false)) in H.
+                 move: H => //=. rewrite /mkseq tag_pc1.
+                 move=> /mapP [] x x_in_iota [] H -> //=.
+                 admit. }
                destruct (is_code (taga a)) eqn:code.
                { clear -code_pref_cond_s3 Heqcond0 code w_prefix. exfalso. admit. }
                pose proof (mem_match w a) as [impl _]; auto; simpl; try (rewrite code; done).
@@ -1062,8 +1132,8 @@ Qed.
             destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
-        remember (mem s3 (swcast (addw w (as_word off)))) as cond1.
-        remember (mem s1 (swcast w)) as cond2.
+        remember (mem s3 (addw w (as_word off))) as cond1.
+        remember (mem s1 w) as cond2.
         simpl in *.
         rewrite <- Heqcond1. rewrite <- Heqcond2.
         destruct cond1; destruct cond2; split; simpl; intro Heq; try simplify_some; subst; simpl.
@@ -1099,8 +1169,8 @@ Qed.
            inv eq. exfalso. discriminate.
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
-        remember (mem s3 (swcast (addw w (as_word off)))) as cond1.
-        remember (mem s2 (swcast w)) as cond2.
+        remember (mem s3 (addw w (as_word off))) as cond1.
+        remember (mem s2 w) as cond2.
         simpl in *. rewrite <- Heqcond1. rewrite <- Heqcond2.
         destruct cond1; destruct cond2; split; simpl; intro Heq; try simplify_some; subst; simpl; try (inversion Heq; done).
         -- rewrite Heqcond1. destruct ((fst (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [x [xmatch xeq]].

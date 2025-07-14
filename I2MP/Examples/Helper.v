@@ -452,30 +452,30 @@ Instance showStateMP : Show (state [eqType of unit]) :=
   }. *)
 
 
-Fixpoint execN (n: nat) (st: state [eqType of unit]) : option Z + nat :=
+Fixpoint execN {NC: nat} (n: nat) (st: state [eqType of unit]) : option Z + nat :=
   match n with
   | O => inr 3
   | S n' =>
-    match step_eval_mp st with
+    match step_eval_mp st (NC := NC) with
     | None => (inl (
              do! w <- (Symbolic.regs st (word_of_reg R_COM));
              Some (Symbolic.convert (word.int_of_word (Types.vala w)))))
     | Some (st', _) =>
-        execN n' st'
+        execN n' st' (NC := NC)
     end
   end.
 
 
-Fixpoint execN_me (n: nat) (st: Symbolic.state LRC.lrc_tags [eqType of unit]) : option Z + nat :=
+Fixpoint execN_me {NC: nat} (n: nat) (st: Symbolic.state LRC.lrc_tags [eqType of unit]) : option Z + nat :=
   match n with
   | O => inr 3
   | S n' =>
-    match step_eval_me st with
+    match step_eval_me st (NC := NC) with
     | None => (inl (
              do! w <- (Symbolic.regs st (word_of_reg R_COM));
              Some (Symbolic.convert (word.int_of_word (Types.vala w)))))
     | Some (st', _) =>
-        execN_me n' st'
+        execN_me n' st' (NC := NC)
     end
   end.
 
@@ -487,9 +487,9 @@ Definition compile_and_run_me (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let bufs := (Intermediate.prog_buffers inter_p) in
       let merged_p := (transitional_to_merged bufs (intermediate_to_transitional inter_p)) in
-      let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) nc in
-      match execN_me fuel st with
+      let NC := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) in
+      match execN_me fuel st (NC := NC) with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)
@@ -504,9 +504,9 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let bufs := (Intermediate.prog_buffers inter_p) in
       let merged_p := (transitional_to_merged bufs (intermediate_to_transitional inter_p)) in
-      let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) nc in
-      match execN fuel st with
+      let NC := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) in
+      match execN fuel st (NC := NC) with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)
@@ -514,18 +514,18 @@ Definition compile_and_run_mp (p: Source.program) (fuel:nat) :=
   end
 .
 
-Fixpoint execN_and_show_mp (n: nat) (st: state [eqType of unit]) : option Z + nat :=
+Fixpoint execN_and_show_mp {NC: nat} (n: nat) (st: state [eqType of unit]) : option Z + nat :=
 (*  printer ( show st ) *)
    
   match n with
   | O => inr 3
   | S n' =>
-    match stepf st with
+    match stepf st (NC := NC) with
     | None => (inl (
              do! w <- (Symbolic.regs st (word_of_reg R_COM));
              Some (Symbolic.convert (word.int_of_word (Types.vala w)))))
     | Some (st', _) =>
-        execN_and_show_mp n' st'
+        execN_and_show_mp n' st' (NC := NC)
     end
   end.
 
@@ -536,10 +536,10 @@ Definition compile_and_run_and_show_mp (p: Source.program) (fuel:nat) :=
   | Some inter_p =>
       let bufs := (Intermediate.prog_buffers inter_p) in
       let merged_p := (transitional_to_merged bufs (intermediate_to_transitional inter_p)) in
-      let nc := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
-      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) nc in
+      let NC := (1+ Nat.log2 (1 + (size (domm (Intermediate.prog_interface inter_p))))) in
+      let st := @load LRC.lrc_tags [eqType of unit] LRC.Other (LRC.Level 0 Component.main) tt (merged_to_mp_backend bufs merged_p) in
      printer ("-------------" ++ newline ++ (show (merged_p)) ++ "-------------" ++ newline)
-      match execN_and_show_mp fuel st with
+      match execN_and_show_mp fuel st (NC := NC) with
     | inl (Some n) => print_ocaml_int (z2int n)
     | inl None => print_error ocaml_int_1
     | inr n => print_error (nat2int n)

@@ -22,11 +22,11 @@ Global Instance scr : syscall_regs mt := concrete_int_32_scr.
 
 Definition alloc_addr : imm mt := shlw 1%w (as_word 14). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)
 
-Definition table := Merged.table.
+Definition table {NC: nat} := Merged.table (NC := NC).
   (*[fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})]. *)
 
 Definition state := (@Symbolic.state mt lrc_tags).
-Definition stepf := (@Exec.stepf mt ops lrc_tags transfer [eqType of unit] table).
+Definition stepf {NC: nat} := (@Exec.stepf mt ops lrc_tags transfer [eqType of unit] (table (NC := NC))).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
@@ -47,15 +47,17 @@ Definition reg0 {ttypes} (Other: (Symbolic.tag_type ttypes Symbolic.R)) : {fmap 
       ; (as_word 19, Atom (as_word 0) Other)].
 
 
-Definition load {ttypes} {internal:eqType} {Other} {start_tag} {start_internal: internal} (start : {fmap mword mt -> _ } * nat) nc : @Symbolic.state mt ttypes internal :=
-  {| Symbolic.mem := fst start ;
+Definition load {ttypes} {internal:eqType} {Other} {start_tag} {start_internal: internal}
+  (start : {fmap mword mt -> _ } * nat): @Symbolic.state mt ttypes internal :=
+  {| Symbolic.mem := fst start;
      Symbolic.regs := reg0 Other;
-     Symbolic.pc := {| vala := word.as_word (snd start) ; taga := start_tag |} ;
-     Symbolic.internal := start_internal ;
-     Symbolic.comp_num := nc|}.
+     Symbolic.pc := {| vala := word.as_word (snd start) ; taga := start_tag|} ;
+     Symbolic.internal := start_internal; |}.
 
 
-Definition step_eval_mp := (@Exec.stepf mt ops lrc_tags LRC.transfer [eqType of unit] table).
-Definition step_eval_me := (@Exec.stepf mt ops lrc_tags Merged.transfer [eqType of unit] table).
-Definition step_mp := (@Symbolic.step mt ops lrc_tags LRC.transfer [eqType of unit] table).
-Definition step_me := (@Symbolic.step mt ops lrc_tags Merged.transfer [eqType of unit] table).
+Definition step_eval_mp {NC: nat} :=
+  (@Exec.stepf mt ops lrc_tags LRC.transfer [eqType of unit] (table (NC := NC))).
+Definition step_eval_me {NC: nat} :=
+  (@Exec.stepf mt ops lrc_tags Merged.transfer [eqType of unit] (table (NC := NC))).
+Definition step_mp {NC: nat} := (@Symbolic.step mt ops lrc_tags LRC.transfer [eqType of unit] (table (NC := NC))).
+Definition step_me {NC: nat} := (@Symbolic.step mt ops lrc_tags Merged.transfer [eqType of unit] (table (NC := NC))).

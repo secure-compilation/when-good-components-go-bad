@@ -320,14 +320,17 @@ Definition initial_state cde (pb : prog_buffers) (pi : Program.interface) : (Sym
   let mem0 := (initial_memory pb) in
   let pc0 := (size mem0) in
   let pctag := build_tpc 0 Component.main in
-  {|mem := unionm (encode_code cde pc0) mem0 ; regs := reg0 ; pc := (word_of_nat pc0)@pctag ; internal := tt; comp_num := nc|}.
+  {| mem := unionm (encode_code cde pc0) mem0;
+    regs := reg0;
+    pc := (word_of_nat pc0)@pctag;
+    internal := tt |}.
 
 End WithClasses.
 
 
 Section WithClasses'.
 
-Context {mt : machine_types}.
+Context {mt : machine_types} {NC: nat}.
 
 Definition instr_rules (rcom_val : Z)
   (op : opcode)
@@ -407,7 +410,8 @@ Definition alloc_fun (st : @Symbolic.state mt sym_lrc_merged) : option (Symbolic
 
 
 Definition table : (Symbolic.syscall_table lrc_tags [eqType of unit]) :=
-  [fmap ((word_of_nat alloc_label), (@Symbolic.Syscall mt lrc_tags [eqType of unit] tt LRC.alloc_fun ) )].
+  [fmap ((word_of_nat alloc_label),
+       (@Symbolic.Syscall mt lrc_tags [eqType of unit] tt (LRC.alloc_fun (NC := NC))))].
 
 (*
 Definition alloc_addr : imm mt := shlw 1%w (as_word (ssrint.Posz 14)). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)

@@ -186,6 +186,10 @@ Module StepStrong (S: RecompositionContext).
              deduce_reg reg_match.
              subst s3 s1. simpl in *. simpl in *.
              unfold side_of in side_eq. unfold_match' side_eq.
+
+
+             destruct (code_left (swcast (pc0 + 1))%w i' _ off).
+
              admit.
              (* deduce_equality Heqi'. *)
              (* rewrite vt_eq1. simpl. *)

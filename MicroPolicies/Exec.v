@@ -34,7 +34,7 @@ Notation next_state_updates := (@next_state_updates mt ops ttypes transfer inter
 
 Definition stepf (st : state ttypes internal_state) :
   option (state ttypes internal_state * option event) :=
-  let 'State mem reg pc@tpc extra nc := st in
+  let 'State mem reg pc@tpc extra := st in
   match mem pc with
   | Some iti =>
     let: i@ti := iti in
