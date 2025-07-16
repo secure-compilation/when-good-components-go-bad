@@ -129,3 +129,20 @@ Global Instance concrete_int_32_scr : syscall_regs mt := {|
   syscall_arg2 := as_word 18;
   syscall_arg3 := as_word 19
 |}.
+
+
+Lemma shlw_all_one: forall k (w: word k) n,
+    andw (shlw w n)
+      (shlw (as_word (ssrint.Posz (2 ^ k - 1))) n) =
+      shlw w n.
+Proof.
+  induction k.
+  - intros w n.
+    destruct w as [[m1 i1]], n as [[m2 i2]].
+    unfold shlw, expn, muln in *. simpl in *.
+    assert (m1 = 0) by now destruct m1. subst m1.
+    assert (m2 = 0) by now destruct m2. subst m2.
+    simpl.
+    now rewrite andww.
+  - admit.
+Admitted.

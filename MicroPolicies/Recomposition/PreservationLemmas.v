@@ -905,7 +905,15 @@ Qed.
                               (@component_memory_prefix mt NC (ssrint.Posz (1 + c0))))
                            (@mask mt NC) = @component_memory_prefix mt NC (ssrint.Posz (1 + c0))).
                  { clear.
-                   admit. }
+                   generalize (domm (mem s')) as fs.
+                   destruct fs as [l sorted]. simpl. clear sorted.
+                   induction l.
+                   - simpl. unfold mask, component_memory_prefix.
+                     pose proof shlw_all_one (k := 32)
+                                             (as_word (ssrint.Posz (1 + c0)))
+                                             (as_word (ssrint.Posz (word_size mt - NC))).
+                     admit.
+                   - admit. }
                  apply /eqP.
                  subst w.
                  eapply mask_range with
