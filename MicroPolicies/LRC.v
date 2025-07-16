@@ -297,9 +297,25 @@ Definition matom := (atom (mword mt) mem_tag).
 Definition component_memory_prefix (c: int): word (word_size mt) :=
   shlw (as_word c) (as_word (word_size mt - NC)).
 
+Lemma component_memory_prefix_not_zero:
+  forall n,
+    component_memory_prefix (ssrint.Posz (1 + n)) <> component_memory_prefix (ssrint.Posz 0).
+Proof.
+Admitted.
+
 Definition mask: word (word_size mt) :=
   shlw (as_word (2 ^ (word_size mt) - 1))
     (as_word ((word_size mt) - NC)).
+
+Lemma mask_range: forall x n C,
+    andw x mask = component_memory_prefix C ->
+    andw (x + (as_word (ssrint.Posz (n + 1))))%w mask =
+      component_memory_prefix C ->
+    forall k, k \in iota 0 n ->
+         andw (x + (as_word (ssrint.Posz (k + 1))))%w mask =
+           component_memory_prefix C.
+Proof.
+Admitted.
 
 (* alloc is a syscall taking one argument, the size to allocate *)
 (* a syscall don't change the pc level *)
@@ -317,13 +333,16 @@ Definition alloc_fun (st : state) : option state :=
   let atom : matom := (word.as_word 0)@(def_mem_tag current_c false) in
   do! size <- regs st syscall_arg1;
   do! _ <- is_other (taga size);
-  if (negb (prefix_filter (addw (vala size) max_addr))) then None else (* fail if overlaping with the next compartment's prefix *)
   do! length <- match word.int_of_word (vala size) with
                 | Posz x => Some x
                 | Negz _ => None
                 end;
+  if negb (prefix_filter (word.addw max_addr (word.as_word (length + 1)))) then
+    (* check we're not going past the compartment's memory space *)
+    None
+  else
   let bloc :=
-      mkseq (fun n => ((word.addw max_addr (word.as_word (n + 2))), atom)) (* this + 2 is giving you one unallocated word between each block *)
+      mkseq (fun n => ((word.addw max_addr (word.as_word (n + 1))), atom))
             length in
   let mem' := unionm (mem st) (mkfmap bloc) in
   (* return *)

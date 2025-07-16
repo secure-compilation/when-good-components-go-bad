@@ -88,9 +88,9 @@ Proof.
   intros s1 s2 s3 M s1' s3' pc1' tpc1' pc3' tpc3' equiv eq_s1' eq_s3' pc1'_pc3' pc1_tag pc3_tag.
   destruct equiv as [strong [weak common]].
   split; [|split].
-  - destruct strong as [? ? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+  - destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
     econstructor; destruct s, s', pc0, pc1; try (subst; intros; auto; done); try congruence.
-  - destruct weak as [? ? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match].
+  - destruct weak as [? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match].
     econstructor; try (rewrite eq_s3'; simpl; auto; done); try (subst; intros; auto; done); try congruence.
     subst. destruct s, s', pc0, pc1. simpl in *. trivial.
   - destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
@@ -773,19 +773,20 @@ Qed.
     assert (n1 = n').
     { destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
       destruct (reg_match (as_word (ssrint.Posz 17)) v'@Other) as [_ impl].
-      destruct (impl (esym Heqa5)) as [? [dmatch eq1]]. simpl in *. rewrite eq1 in Heqa1.
-      simplify_some. destruct x.
-      destruct dmatch. simpl in *. subst. rewrite <- Heqa8 in Heqa12.
-      rename Heqa12 into eq. clear -eq.
-      pose proof (congr1 ssrint.absz eq) as eq'.
-      repeat rewrite ssrint.absz_nat in eq'. done. } subst n1.
+      destruct (impl (esym Heqa6)) as [? [dmatch eq1]]. simpl in *.
+      rewrite eq1 in Heqa1. inv Heqa1.
+      destruct x.
+      inv dmatch. simpl in *.
+      clear -Heqa3 Heqa12.
+      congruence. }
+    subst n1.
     split; [|split].
     - destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
       econstructor; try (destruct s, s', pc0, pc1; try (rewrite eq_s1' eq_s3'; simpl; auto; done); try congruence; simpl; done).
       + pose proof ((fst (reg_match _ v@InternalJump)) (esym Heqa)) as [d' [d'match d'eq]].
-        simpl in *. rewrite <- Heqa3 in d'eq. simplify_some. destruct d' as [? taga1].
+        simpl in *. rewrite <- Heqa4 in d'eq. simplify_some. destruct d' as [? taga1].
         destruct d'match as [? ?]. subst taga1. oapp_False.
-        pose proof (s_reg_cor _ _ (esym Heqa3)). destruct H as [? [eq ?]].
+        pose proof (s_reg_cor _ _ (esym Heqa4)). destruct H as [? [eq ?]].
         eapply same_pc_normal; simpl; try done; eauto.
         rewrite unionmE. rewrite eq. simpl. trivial.
         destruct s, s', pc0, pc1. rewrite HeqH. simpl. trivial.
@@ -887,13 +888,34 @@ Qed.
                (*     admit. } *)
                (*   now rewrite eq. } *)
 
-               assert (w_prefix: (andw w (@mask mt NC) ==
-                                    @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s')))).
-               { clear -H tag_pc3.
+               assert (w_prefix: andw w (@mask mt NC) ==
+                                    @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s'))).
+               { clear -H Heqa9 tag_pc3.
+                 symmetry in Heqa9.
+
+                 move: Heqa9 => /negb_false_iff /eqP. rewrite tag_pc3 => //= Hend.
                  apply (@mkfmap_Some _ _ _ w (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s') false)) in H.
                  move: H => //=. rewrite /mkseq tag_pc3.
                  move=> /mapP [] x x_in_iota [] H -> //=.
-                 admit. }
+
+                 assert (Hstart:
+                          andw
+                           (List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                                         (domm (mem s')))
+                              (@component_memory_prefix mt NC (ssrint.Posz (1 + c0))))
+                           (@mask mt NC) = @component_memory_prefix mt NC (ssrint.Posz (1 + c0))).
+                 { clear.
+                   admit. }
+                 apply /eqP.
+                 subst w.
+                 eapply mask_range with
+                   (x0 := (List.last
+                             (List.filter
+                                (fun mw : word 32 =>
+                                   andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                                (domm (mem s'))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
+                   [eapply Hstart | eapply Hend | eauto].
+               }
 
                destruct (is_code (taga a)) eqn:code.
                { clear -w_prefix code_pref_cond_s1 Heqcond0 code.
@@ -903,7 +925,8 @@ Qed.
                  exfalso.
                  move: code_pref_cond_s1 w_prefix => /eqP H1 /eqP H2.
                  rewrite H2 in H1; clear -H1.
-                 admit. }
+                 eapply component_memory_prefix_not_zero.
+                 exact H1. }
 
                pose proof (mem_match w a) as [_ impl]; auto; simpl; try (rewrite code; done).
                {
@@ -935,8 +958,8 @@ Qed.
                case: s tag_pc1 {H} => //= _ _ [] //= _ taga _ -> //=. }
              subst d. split; simpl; try done. simpl in *.
              remember (mem s' w) as cond. destruct cond.
-             { assert (w_prefix: (andw w (@component_memory_prefix mt (ssrint.Posz (2 ^ comp_num s - 1)) (comp_num s)) ==
-                                    @component_memory_prefix mt (ssrint.Posz (1 + color_of s)) (comp_num s))).
+             { assert (w_prefix: (andw w (@mask mt NC) ==
+                                    @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s)))).
                { clear -H tag_pc1.
                  apply (@mkfmap_Some _ _ _ w  (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s) false)) in H.
                  move: H => //=. rewrite /mkseq tag_pc1.
@@ -950,20 +973,18 @@ Qed.
                destruct (impl (esym Heqcond0)) as [d' [d'match d'eq]]. simpl in *.
                rewrite <- Heqcond in d'eq. inversion d'eq. }
              simpl in *. rewrite <- Heqcond0. simpl.
-             assert (eq: comp_num s = comp_num s') by done. rewrite <- eq.
              rewrite tag_pc3. rewrite tag_pc1 in H. clear -H mem_pref_cond_s3. admit.
       + intros w d. simpl. repeat rewrite setmE.
         remember (@eq_op (Ord.eqType _) w (as_word (ssrint.Posz 16))) as cond.
         assert (p1 = p2).
-        { assert (eq: comp_num s = comp_num s') by done. rewrite eq in Heqa13.
-          rewrite tag_pc1 in Heqa13. rewrite tag_pc3 in Heqa10.
+        { rewrite tag_pc1 in Heqa13. rewrite tag_pc3 in Heqa10.
           clear -Heqa10 Heqa13. admit. }
         subst p2.
         simpl in *. rewrite <- Heqcond. destruct cond; simpl.
         split; intro; simplify_some; eexists; split; eauto.
         all: destruct s, pc0; try eapply reg_match.
         all: simpl in *; split; auto.
-    - destruct weak as [? ? s3 num_eq color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match].
+    - destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off s'_reg_cor mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence; simpl; try done.
       + destruct s, s3, pc0, pc1. simpl. trivial.
       + intros d w rel d_eq. simpl. destruct d as [vd td]. destruct td.
@@ -995,8 +1016,8 @@ Qed.
           -- intro. simplify_some.
              pose proof (mem_match w d) as [impl _]; auto; simpl.
           -- intro. exfalso.
-             assert (w_prefix: (andw w (@component_memory_prefix mt (ssrint.Posz (2 ^ comp_num s3 - 1)) (comp_num s3)) ==
-                                  @component_memory_prefix mt (ssrint.Posz (1 + color_of s3)) (comp_num s3))).
+             assert (w_prefix: (andw w (@mask mt NC) ==
+                                  @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s3)))).
              { clear -H. admit. }
              assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
              subst d. simpl in rel.
