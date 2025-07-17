@@ -742,6 +742,34 @@ Qed.
   Qed.
 
 
+  Lemma andw_last_component_prefix: forall C (m: {fmap mword mt -> atom (mword mt) (tag_type ttypes M)}),
+      andw
+        (List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC C)
+                      (domm m))
+           (@component_memory_prefix mt NC C))
+        (@mask mt NC) = @component_memory_prefix mt NC C.
+  Proof.
+    intros C m.
+    generalize (domm m) as fs.
+    destruct fs as [l sorted]. simpl. clear sorted.
+    induction l.
+    - simpl. unfold mask, component_memory_prefix.
+      (* Set Printing Implicit. *)
+      replace (@andw 32) with (@andw (word_size mt)) by reflexivity.
+      pose proof shlw_all_one (k := (word_size mt))
+        (as_word C)
+        (as_word (ssrint.Posz (word_size mt - NC))).
+      rewrite <- H at 2.
+      (* This should hold by reflexivity, but Rocq hangs. I wan't to kill myself *)
+      admit.
+    - simpl.
+      case: ifP => /eqP H.
+      + simpl.
+        destruct List.filter eqn:? => //=.
+      + eauto.
+  Admitted.
+
+
   Lemma preserves_equiv_left_alloc_fun:
     forall s1 s2 s3 M s1' s3',
       strong_equiv Left M s1 s3
@@ -898,22 +926,7 @@ Qed.
                  move: H => //=. rewrite /mkseq tag_pc3.
                  move=> /mapP [] x x_in_iota [] H -> //=.
 
-                 assert (Hstart:
-                          andw
-                           (List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
-                                         (domm (mem s')))
-                              (@component_memory_prefix mt NC (ssrint.Posz (1 + c0))))
-                           (@mask mt NC) = @component_memory_prefix mt NC (ssrint.Posz (1 + c0))).
-                 { clear.
-                   generalize (domm (mem s')) as fs.
-                   destruct fs as [l sorted]. simpl. clear sorted.
-                   induction l.
-                   - simpl. unfold mask, component_memory_prefix.
-                     pose proof shlw_all_one (k := 32)
-                                             (as_word (ssrint.Posz (1 + c0)))
-                                             (as_word (ssrint.Posz (word_size mt - NC))).
-                     admit.
-                   - admit. }
+                 pose proof (andw_last_component_prefix (ssrint.Posz (1 + c0)) (mem s')) as Hstart.
                  apply /eqP.
                  subst w.
                  eapply mask_range with
