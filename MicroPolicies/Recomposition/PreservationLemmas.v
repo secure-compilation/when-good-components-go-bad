@@ -760,14 +760,18 @@ Qed.
         (as_word C)
         (as_word (ssrint.Posz (word_size mt - NC))).
       rewrite <- H at 2.
-      (* This should hold by reflexivity, but Rocq hangs. I wan't to kill myself *)
-      admit.
+      repeat (try (eapply congr2 || eapply congr1)).
+      1-4,6-9: reflexivity.
+      clear. remember (word_size mt) as n. clear.
+      induction n; auto. simpl.
+      unfold expn in *. simpl. rewrite <- IHn.
+      destruct n; auto; simpl.
     - simpl.
       case: ifP => /eqP H.
       + simpl.
         destruct List.filter eqn:? => //=.
       + eauto.
-  Admitted.
+  Qed.
 
 
   Lemma preserves_equiv_left_alloc_fun:
