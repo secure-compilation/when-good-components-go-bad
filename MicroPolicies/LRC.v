@@ -297,9 +297,14 @@ Definition matom := (atom (mword mt) mem_tag).
 Definition component_memory_prefix (c: int): word (word_size mt) :=
   shlw (as_word c) (as_word (word_size mt - NC)).
 
-Lemma component_memory_prefix_not_zero:
+Lemma component_memory_prefix_succ_not_zero:
   forall n,
     component_memory_prefix (ssrint.Posz (1 + n)) <> component_memory_prefix (ssrint.Posz 0).
+Proof.
+Admitted.
+
+Lemma component_memory_prefix_zero:
+  component_memory_prefix (ssrint.Posz 0) = 0%w.
 Proof.
 Admitted.
 

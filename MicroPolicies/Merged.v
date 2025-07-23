@@ -108,6 +108,14 @@ Definition binop_of_binop (b : binop) : Types.binop :=
 
 Definition alloc_label := 2 ^ 14.
 
+Lemma mask_alloc_label: forall NC,
+  NC < 19 ->
+  andw (word_of_nat alloc_label) (@mask mt NC) = 0%w.
+Proof.
+Admitted.
+
+
+
 (*** Tagged -> Merged ***)
 
 Fixpoint fold_left_map {FROM ACC TO: Type} (f : ACC -> FROM -> TO * ACC) (init : ACC) (l : list FROM) : list TO :=

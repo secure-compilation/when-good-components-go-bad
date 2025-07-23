@@ -612,7 +612,8 @@ Module RecompositionDefinitions (S: RecompositionContext).
 
     (* necessary invariant to prove that registers are properly cleared on call/return *)
     Definition register_domm (regs: {fmap reg mt -> atom (mword mt) value_tag} ) : Prop :=
-      ((domm regs): seq (reg mt)) = ra :: (map (word_of_nat) reg_list).
+      domm regs =
+        fset (ra :: (map (word_of_nat) reg_list)).
 
     (* necessary invariant on calls that change which state is weakly/strongly related *)
     Definition entry_points_offset i (mem: @memory mt) (mem': @memory mt) : Prop :=
