@@ -546,16 +546,31 @@ Module RecompositionDefinitions (S: RecompositionContext).
     .
 
     (* necessary invariants for the allocation case *)
-    Definition memory_prefix_condition (mem:memory) :=
-      forall current_c,
-        let prefix := (@component_memory_prefix mt NC (ssrint.Posz(1 + current_c))) in
-        (* let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in *)
-        let prefix_filter := (fun mw => ((word.andw mw (mask (NC := NC))) == prefix) ) in
-        let comp_filter := (fun w v => andb (color (taga v) == current_c) (negb (is_code (taga v)))) in
-        filter prefix_filter (domm (mem)) =
-          fsetD (domm (filterm comp_filter (mem))) (domm (initial_memory (prog_buffers prog))).
+    (* Definition memory_prefix_condition (mem: memory) := *)
+    (*   forall current_c, *)
+    (*     let prefix := (@component_memory_prefix mt NC (ssrint.Posz(1 + current_c))) in *)
+    (*     (* let mask := (@component_memory_prefix mt (ssrint.Posz((2 ^ nc)-1)) nc) in *) *)
+    (*     let prefix_filter := (fun mw => ((word.andw mw (mask (NC := NC))) == prefix) ) in *)
+    (*     let comp_filter := (fun w v => andb (color (taga v) == current_c) (negb (is_code (taga v)))) in *)
+    (*     filter prefix_filter (domm (mem)) = *)
+    (*       fsetD (domm (filterm comp_filter (mem))) (domm (initial_memory (prog_buffers prog))). *)
 
-    Definition code_prefix_condition (mem:memory) :=
+    Definition memory_prefix_condition (mem: memory) :=
+      forall c w v,
+        mem w = Some v ->
+        color (taga v) = c ->
+        not (is_code (taga v)) ->
+        andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz (1 + c)) \/
+          w \in domm (initial_memory (prog_buffers prog)).
+
+    Definition memory_prefix_condition' (mem: memory) :=
+      forall c w v,
+        mem w = Some v ->
+        andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz (1 + c)) ->
+        color (taga v) = c /\ not (is_code (taga v)).
+
+
+    Definition code_prefix_condition (mem: memory) :=
       forall w v,
         mem w = Some v ->
         is_code (taga v) ->
@@ -633,6 +648,7 @@ Module RecompositionDefinitions (S: RecompositionContext).
 
     Definition general_memory_correctness (mem: memory) : Prop :=
       memory_prefix_condition mem
+      /\ memory_prefix_condition' mem
       /\ code_prefix_condition mem
       /\ alloc_empty mem
       /\ BNZ_correctness mem
