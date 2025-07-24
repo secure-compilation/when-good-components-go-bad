@@ -308,6 +308,12 @@ Lemma component_memory_prefix_zero:
 Proof.
 Admitted.
 
+Lemma component_memory_prefix_inj: forall c c',
+    component_memory_prefix (ssrint.Posz c) = component_memory_prefix (ssrint.Posz c') ->
+    c = c'.
+Proof.
+Admitted.
+
 Definition mask: word (word_size mt) :=
   shlw (as_word (2 ^ (word_size mt) - 1))
     (as_word ((word_size mt) - NC)).

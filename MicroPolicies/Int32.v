@@ -146,3 +146,8 @@ Proof.
     now rewrite andww.
   - admit.
 Admitted.
+
+Lemma shlw_zero: forall k n,
+    shlw (0%w: word k) n = 0%w.
+Proof.
+Admitted.

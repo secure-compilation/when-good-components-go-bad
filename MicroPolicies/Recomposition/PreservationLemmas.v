@@ -737,6 +737,30 @@ Qed.
       + eauto.
   Qed.
 
+  Lemma match_mem_pref_condition_filter_eq i m s s' c:
+    side_of c = i ->
+    memory_match i m s s' ->
+    memory_prefix_condition' (mem s) ->
+    memory_prefix_condition' (mem s') ->
+    List.filter
+      (fun mw : word 32 =>
+         andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c)))
+      (domm (mem s)) =
+      List.filter
+        (fun mw : word 32 =>
+           andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c)))
+        (domm (mem s')).
+  Proof.
+  (* This holds because the representation of sets
+     uses a sorted list with no duplicates. How to formalize
+     this intuition tho? *)
+  Admitted.
+
+  Lemma mask_alloc_label:
+          andw (word_of_nat alloc_label) (@mask mt NC) = 0%w.
+  Proof.
+  Admitted.
+
 
   Lemma preserves_equiv_left_alloc_fun:
     forall s1 s2 s3 M s1' s3',
@@ -901,12 +925,20 @@ Qed.
                 { rewrite color_a. auto. }
                 destruct (impl (Heqcond0)) as [d' [d'match d'eq]]. simpl in *.
                 rewrite Heqcond in d'eq. inversion d'eq.
-             ++ apply (@mkfmap_Some _ _ _ w (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s') false)) in H.
-                move: H mem_match => //=.
-                move=> /mapP [] x x_in_iota [] H -> //= mem_match.
-                (* apply /mapP. *)
-                (* apply /getmP. unfold mkfmap. subst w. *)
-                admit.
+             ++ rewrite <- H.
+                apply congr2; eauto.
+                apply congr1; eauto.
+                apply congr2; eauto.
+                apply FunctionalExtensionality.functional_extensionality.
+                intros x.
+                rewrite tag_pc1 tag_pc3.
+                apply congr2; eauto.
+                apply congr2; eauto.
+                apply congr2; eauto.
+                eapply match_mem_pref_condition_filter_eq with (i := Left); eauto.
+                clear -rel tag_pc3.
+                destruct s' as [?? [] ?]; simpl in *; subst.
+                rewrite /side_of rel //=.
         * destruct (mem s w) eqn:Heqcond; rewrite Heqcond; simpl.
           -- intro. simplify_some.
              pose proof (mem_match w d) as [_ impl]; auto; simpl.
@@ -959,11 +991,21 @@ Qed.
                 destruct (impl Heqcond0) as [d' [d'match d'eq]]. simpl in *.
                 rewrite Heqcond in d'eq. inversion d'eq.
 
-             ++ apply (@mkfmap_Some _ _ _ w (as_word (ssrint.Posz 0))@
-                         (def_mem_tag (color_of s) false)) in H.
-                move: H => //=. rewrite /mkseq.
-                move=> /mapP [] x x_in_iota [] H -> //=.
-                admit.
+             ++ rewrite <- H.
+                apply congr2; eauto.
+                apply congr1; eauto.
+                apply congr2; eauto.
+                apply FunctionalExtensionality.functional_extensionality.
+                intros x.
+                rewrite tag_pc1 tag_pc3.
+                apply congr2; eauto.
+                apply congr2; eauto.
+                apply congr2; eauto.
+                symmetry.
+                eapply match_mem_pref_condition_filter_eq with (i := Left); eauto.
+                clear -rel tag_pc1.
+                destruct s as [?? [] ?]; simpl in *; subst.
+                rewrite /side_of rel //=.
       + intros w d. simpl. repeat rewrite setmE.
         remember (@eq_op (Ord.eqType _) w (as_word (ssrint.Posz 16))) as cond.
         assert (G: p1.1 = p2.1).
@@ -979,14 +1021,9 @@ Qed.
           case: n' => //= _ [] -> [] -> //=.
           eapply congr2 => //=.
           eapply congr2 => //=.
-          unfold memory_match in mem_match.
-          move: mem_match mem_pref_cond_s1' mem_pref_cond_s3'.
-          remember (mem s) as l. setoid_rewrite <- Heql. clear Heql.
-          remember (mem s') as l'. setoid_rewrite <- Heql'. clear Heql'.
-          clear.
-          unfold memory_prefix_condition' in *.
-          admit. }
-
+          symmetry.
+          eapply match_mem_pref_condition_filter_eq with (i := Left); eauto.
+          simpl in *. rewrite /side_of c0_Left //=. }
         simpl in *. rewrite <- Heqcond. destruct cond; simpl.
         split; intro; simplify_some; eexists; split; eauto.
         all: destruct s, pc0; try eapply reg_match.
@@ -1053,7 +1090,12 @@ Qed.
                  [eapply Hstart | eapply Hend | eauto].
                destruct s3; destruct pc0; destruct taga; simpl in *; congruence.
              }
-             assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+             assert (d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+             { clear -H tag_pc3.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc3.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
              subst d. simpl in rel.
              unfold side_of in side_s'. unfold_match' side_s'.
              eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic)); eauto.
@@ -1106,10 +1148,55 @@ Qed.
       + split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]];
           unfold memory_prefix_condition, code_prefix_condition, alloc_empty, BNZ_correctness, end_condition in *;
           simpl; repeat rewrite unionmE.
-        * clear -mem_pref_cond_s1.
-          admit.
-        * clear -mem_pref_cond_s1'.
-          admit.
+        * clear -mem_pref_cond_s1 tag_pc1 Heqa10.
+          rename Heqa10 into Hend.
+          move: mem_pref_cond_s1.
+          simpl.
+          rewrite /memory_prefix_condition => H c w' v'.
+          rewrite unionmE.
+          case: ifP => _; [apply H|].
+          move=> /mkfmap_Some //=.
+          rewrite /mkseq tag_pc1; move=> /mapP [] x x_in_iota //= [] H1 H2.
+          intros. left.
+          subst v'. simpl in H0. rewrite <- H0.
+          { pose proof (andw_last_component_prefix (ssrint.Posz (1 + c0)) (mem s1)) as Hstart.
+            symmetry in Hend.
+            move: Hend => /negb_false_iff /eqP.
+            rewrite tag_pc1 => //= Hend.
+            subst w'.
+            eapply mask_range with
+              (x0 := (List.last
+                        (List.filter
+                           (fun mw : word 32 =>
+                              andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                           (domm (mem s1))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
+              [eapply Hstart | eapply Hend | eauto]. }
+        * clear -mem_pref_cond_s1 mem_pref_cond_s1' tag_pc1 Heqa10.
+          rename Heqa10 into Hend.
+          move: mem_pref_cond_s1'.
+          simpl.
+          rewrite /memory_prefix_condition' => H c w' v'.
+          rewrite unionmE.
+          case: ifP => _; [apply H|].
+          move=> /mkfmap_Some //=.
+          rewrite /mkseq tag_pc1; move=> /mapP [] x x_in_iota //= [] H1 H2 H3 //=.
+          rewrite H2 //=; split; auto.
+          assert (andw w' (@mask mt NC) = @component_memory_prefix mt NC (ssrint.Posz (1 + c0))).
+          { pose proof (andw_last_component_prefix (ssrint.Posz (1 + c0)) (mem s1)) as Hstart.
+            symmetry in Hend.
+            move: Hend => /negb_false_iff /eqP.
+            rewrite tag_pc1 => //= Hend.
+            subst w'.
+            eapply mask_range with
+              (x0 := (List.last
+                        (List.filter
+                           (fun mw : word 32 =>
+                              andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                           (domm (mem s1))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
+              [eapply Hstart | eapply Hend | eauto]. }
+          rewrite H3 in H0.
+          eapply component_memory_prefix_inj in H0.
+          eapply addnI; eauto.
         * clear -code_pref_cond_s1.
           move=> w v; rewrite unionmE.
           case: ifP => //= _; [eapply code_pref_cond_s1; eauto|].
@@ -1141,8 +1228,9 @@ Qed.
                            (domm (mem s1))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
               [eapply Hstart | eapply Hend | eauto]. }
           clear H1. subst w.
-          assert (andw (word_of_nat alloc_label) (@mask mt NC) = 0%w).
-          { admit. }
+          pose proof mask_alloc_label as H.
+          (* assert (andw (word_of_nat alloc_label) (@mask mt NC) = 0%w). *)
+          (* { admit. } *)
           rewrite H in w_prefix.
           exfalso.
           eapply component_memory_prefix_succ_not_zero.
@@ -1152,7 +1240,9 @@ Qed.
           apply /eqP. eapply w_prefix.
           unfold component_memory_prefix.
           simpl.
-          admit.
+          replace (@as_word 32 (ssrint.Posz 0)) with (0%w: word 32) by reflexivity.
+          symmetry.
+          apply shlw_zero.
         * intros w d deq dcode. goal_match_bind_step.
           rewrite unionmE in deq. unfold_match' deq.
           all: auto.
@@ -1161,7 +1251,12 @@ Qed.
             + destruct cor as [? [eq ?]]. rewrite eq. simpl. eauto.
             + destruct cor as [[? [eq ?] ]| ]. rewrite eq. simpl. eauto.
               rewrite H. right. done. }
-          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+             { clear -deq tag_pc1. rename deq into H.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc1.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> //=. }
             rewrite eq in Heqa0. exfalso. clear -Heqa0. simpl in *. unfold_all. rewrite wunpackS in Heqa.
             unfold hnth in *. simpl in *. lazy in Heqa. inv Heqa. }
         * intros w d deq dcode. rewrite unionmE in deq.
@@ -1169,28 +1264,132 @@ Qed.
           { simpl in deq. simplify_some. destruct (end_s1 _ _ (esym Heqcond)); auto.
             right. destruct H as [d' [d'eq ?]]. exists d'.
             rewrite unionmE. rewrite d'eq. simpl. done. }
-          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
-            subst d. simpl in dcode. inversion dcode. }
+          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+             { clear -deq tag_pc1. rename deq into H.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc1.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> //=. }
+             subst d. simpl in dcode. inversion dcode. }
         * intros w d deq. rewrite unionmE in deq. unfold_match' deq.
           -- eapply col_mem1; eauto.
-          -- admit.
+          -- move: deq => /mkfmap_Some //=.
+             rewrite /mkseq; move=> /mapP [] x x_in_iota //= [] H1 H2.
+             subst d. rewrite tag_pc1. simpl.
+             left; eapply Extra.In_in.
+             clear -tag_pc1 strong.
+             inv strong.
+             destruct s1 as [?? [] ?]; simpl in *; subst.
+             move: H1; rewrite /side_of; case: ifP => //=.
         * intros w d e deq dent. rewrite unionmE in deq. unfold_match' deq.
           -- eapply entry_code1; eauto.
           -- exfalso.
-             assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+             assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+             { clear -deq tag_pc1. rename deq into H.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc1.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> //=. }
              rewrite eq in dent. simpl in dent. inversion dent.
       + split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]];
           unfold memory_prefix_condition, code_prefix_condition, alloc_empty, BNZ_correctness, end_condition in *;
           simpl; repeat rewrite unionmE.
-        * admit.
-        * admit.
+        * clear -mem_pref_cond_s3 tag_pc3 Heqa9.
+          rename Heqa9 into Hend.
+          move: mem_pref_cond_s3.
+          simpl.
+          rewrite /memory_prefix_condition => H c w' v'.
+          rewrite unionmE.
+          case: ifP => _; [apply H|].
+          move=> /mkfmap_Some //=.
+          rewrite /mkseq tag_pc3; move=> /mapP [] x x_in_iota //= [] H1 H2.
+          intros. left.
+          subst v'. simpl in H0. rewrite <- H0.
+          { pose proof (andw_last_component_prefix (ssrint.Posz (1 + c0)) (mem s3)) as Hstart.
+            symmetry in Hend.
+            move: Hend => /negb_false_iff /eqP.
+            rewrite tag_pc3 => //= Hend.
+            subst w'.
+            eapply mask_range with
+              (x0 := (List.last
+                        (List.filter
+                           (fun mw : word 32 =>
+                              andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                           (domm (mem s3))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
+              [eapply Hstart | eapply Hend | eauto]. }
+        * clear -mem_pref_cond_s3 mem_pref_cond_s3' tag_pc3 Heqa9.
+          rename Heqa9 into Hend.
+          move: mem_pref_cond_s3'.
+          simpl.
+          rewrite /memory_prefix_condition' => H c w' v'.
+          rewrite unionmE.
+          case: ifP => _; [apply H|].
+          move=> /mkfmap_Some //=.
+          rewrite /mkseq tag_pc3; move=> /mapP [] x x_in_iota //= [] H1 H2 H3 //=.
+          rewrite H2 //=; split; auto.
+          assert (andw w' (@mask mt NC) = @component_memory_prefix mt NC (ssrint.Posz (1 + c0))).
+          { pose proof (andw_last_component_prefix (ssrint.Posz (1 + c0)) (mem s3)) as Hstart.
+            symmetry in Hend.
+            move: Hend => /negb_false_iff /eqP.
+            rewrite tag_pc3 => //= Hend.
+            subst w'.
+            eapply mask_range with
+              (x0 := (List.last
+                        (List.filter
+                           (fun mw : word 32 =>
+                              andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                           (domm (mem s3))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
+              [eapply Hstart | eapply Hend | eauto]. }
+          rewrite H3 in H0.
+          eapply component_memory_prefix_inj in H0.
+          eapply addnI; eauto.
         * clear -code_pref_cond_s3.
           move=> w v; rewrite unionmE.
           case: ifP => //= _; [eapply code_pref_cond_s3; eauto|].
           move=> /mkfmap_Some //=.
           rewrite /mkseq; move=> /mapP [] x x_in_iota //= [] H1 H2.
           subst; by [].
-        * rewrite alloc_mem_s3. simpl. admit.
+        (* * rewrite alloc_mem_s3. simpl. admit. *)
+        * rewrite alloc_mem_s3. simpl. rewrite tag_pc3.
+          clear -Heqa9 tag_pc3.
+          destruct (mkfmap _ _) eqn:H; auto.
+          apply mkfmap_Some in H.
+          move: H => //=. rewrite /mkseq.
+          move=> /mapP [] x x_in_iota.
+          remember (word_of_nat alloc_label) as w.
+          move=> [] H1 _.
+
+          assert (w_prefix: andw w (@mask mt NC) ==
+                              @component_memory_prefix mt NC (ssrint.Posz (1 + c0))).
+          { pose proof (andw_last_component_prefix (ssrint.Posz (1 + c0)) (mem s3)) as Hstart.
+            apply /eqP. clear Heqw.
+            symmetry in Heqa9.
+            move: Heqa9 => /negb_false_iff /eqP.
+            rewrite tag_pc3 => //= Hend.
+            subst w.
+            eapply mask_range with
+              (x0 := (List.last
+                        (List.filter
+                           (fun mw : word 32 =>
+                              andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + c0)))
+                           (domm (mem s3))) (@component_memory_prefix mt NC (ssrint.Posz (1 + c0)))));
+              [eapply Hstart | eapply Hend | eauto]. }
+          clear H1. subst w.
+          pose proof mask_alloc_label as H.
+          (* assert (andw (word_of_nat alloc_label) (@mask mt NC) = 0%w). *)
+          (* { admit. } *)
+          rewrite H in w_prefix.
+          exfalso.
+          eapply component_memory_prefix_succ_not_zero.
+          symmetry.
+          replace (@component_memory_prefix mt NC (ssrint.Posz 0))
+            with (0%w: word (word_size mt)).
+          apply /eqP. eapply w_prefix.
+          unfold component_memory_prefix.
+          simpl.
+          replace (@as_word 32 (ssrint.Posz 0)) with (0%w: word 32) by reflexivity.
+          symmetry.
+          apply shlw_zero.
         * intros w d deq dcode. goal_match_bind_step.
           rewrite unionmE in deq. unfold_match' deq.
           all: auto.
@@ -1199,23 +1398,45 @@ Qed.
             + destruct cor as [? [eq ?]]. rewrite eq. simpl. eauto.
             + destruct cor as [[? [eq ?] ]| ]. rewrite eq. simpl. eauto.
               rewrite H. right. done. }
-          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
-            rewrite eq in Heqa0. exfalso. clear -Heqa0. simpl in *. unfold_all. rewrite wunpackS in Heqa.
-            lazy in Heqa. inv Heqa. }
+          assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+          { clear -deq tag_pc3. rename deq into H.
+            apply (@mkfmap_Some _ _ _ w d) in H.
+            move: H => //=. rewrite /mkseq tag_pc3.
+            move=> /mapP [] x x_in_iota [] H -> //=.
+            case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
+          rewrite eq in Heqa0. exfalso. clear -Heqa0. simpl in *. unfold_all. rewrite wunpackS in Heqa.
+          lazy in Heqa. inv Heqa.
         * intros w d deq dcode. rewrite unionmE in deq.
           remember (mem s3 (w)) as cond. simpl in *. rewrite <- Heqcond in deq. destruct cond.
           { simpl in deq. simplify_some. destruct (end_s3 _ _ (esym Heqcond)); auto.
             right. destruct H as [d' [d'eq ?]]. exists d'.
             rewrite unionmE. rewrite d'eq. simpl. done. }
-          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+          { assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+            { clear -deq tag_pc3. rename deq into H.
+              apply (@mkfmap_Some _ _ _ w d) in H.
+              move: H => //=. rewrite /mkseq tag_pc3.
+              move=> /mapP [] x x_in_iota [] H -> //=.
+              case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
             subst d. simpl in dcode. inversion dcode. }
         * intros w d deq. rewrite unionmE in deq. unfold_match' deq.
           -- eapply col_mem3; eauto.
-          -- admit.
+          -- move: deq => /mkfmap_Some //=.
+             rewrite /mkseq; move=> /mapP [] x x_in_iota //= [] H1 H2.
+             subst d. rewrite tag_pc3. simpl.
+             left; eapply Extra.In_in.
+             clear -tag_pc3 strong.
+             inv strong.
+             destruct s3 as [?? [] ?]; simpl in *; subst.
+             move: H1; rewrite /side_of; case: ifP => //=.
         * intros w d e deq dent. rewrite unionmE in deq. unfold_match' deq.
           -- eapply entry_code3; eauto.
           -- exfalso.
-             assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+             assert (eq: d = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+             { clear -deq tag_pc3. rename deq into H.
+               apply (@mkfmap_Some _ _ _ w d) in H.
+               move: H => //=. rewrite /mkseq tag_pc3.
+               move=> /mapP [] x x_in_iota [] H -> //=.
+               case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
              rewrite eq in dent. simpl in dent. inversion dent.
       + intros d q r req. destruct r as [r | w]; repeat (rewrite unionmE || rewrite setmE);
           repeat (rewrite unionmE in req || rewrite setmE in req); simpl; simpl in req.
@@ -1224,7 +1445,12 @@ Qed.
           destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
           { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
           { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
-            assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+            assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+            { clear -t'eq tag_pc1. rename t'eq into H.
+              apply (@mkfmap_Some _ _ _ w' d'@t') in H.
+              move: H => //=. rewrite /mkseq tag_pc1.
+              move=> /mapP [] x x_in_iota [] H -> //=.
+              case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
             destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
         { destruct req as [t [teq tcapa]]. unfold_match' teq.
           { pose proof (capa_cor1 d q (inr w) (ex_intro _ t (conj teq tcapa))) as [is_in unicity].
@@ -1232,9 +1458,19 @@ Qed.
             destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
             { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
             { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
-              assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+              assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+              { clear -t'eq tag_pc1. rename t'eq into H.
+                apply (@mkfmap_Some _ _ _ w' d'@t') in H.
+                move: H => //=. rewrite /mkseq tag_pc1.
+                move=> /mapP [] x x_in_iota [] H -> //=.
+                case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
               destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
-          { assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+          { assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+            { clear -teq tag_pc1. rename teq into H.
+              apply (@mkfmap_Some _ _ _ w d@t) in H.
+              move: H => //=. rewrite /mkseq tag_pc1.
+              move=> /mapP [] x x_in_iota [] H -> //=.
+              case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
             destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
         + intros d q r req. destruct r as [r | w]; repeat (rewrite unionmE || rewrite setmE);
           repeat (rewrite unionmE in req || rewrite setmE in req); simpl; simpl in req.
@@ -1243,7 +1479,12 @@ Qed.
           destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
           { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
           { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
-            assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+            assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+            { clear -t'eq tag_pc3. rename t'eq into H.
+              apply (@mkfmap_Some _ _ _ w' d'@t') in H.
+              move: H => //=. rewrite /mkseq tag_pc3.
+              move=> /mapP [] x x_in_iota [] H -> //=.
+              case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
             destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
         { destruct req as [t [teq tcapa]]. unfold_match' teq.
           { pose proof (capa_cor3 d q (inr w) (ex_intro _ t (conj teq tcapa))) as [is_in unicity].
@@ -1251,9 +1492,19 @@ Qed.
             destruct r' as [r' | w']; simpl; repeat (rewrite unionmE || rewrite setmE).
             { intro req'. unfold_match' req'. eapply (unicity (inl _)); eauto. }
             { intros [t' [t'eq t'capa]]. unfold_match' t'eq. eapply (unicity (inr _)); eauto.
-              assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+              assert (eq: d'@t' = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+              { clear -t'eq tag_pc3. rename t'eq into H.
+                apply (@mkfmap_Some _ _ _ w' d'@t') in H.
+                move: H => //=. rewrite /mkseq tag_pc3.
+                move=> /mapP [] x x_in_iota [] H -> //=.
+                case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
               destruct t'. simpl in t'capa. rewrite t'capa in eq. inv eq. } }
-          { assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+          { assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+            { clear -teq tag_pc3. rename teq into H.
+              apply (@mkfmap_Some _ _ _ w d@t) in H.
+              move: H => //=. rewrite /mkseq tag_pc3.
+              move=> /mapP [] x x_in_iota [] H -> //=.
+              case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
             destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
@@ -1280,17 +1531,39 @@ Qed.
               rewrite unionmE. rewrite H1. simpl. eauto.
               rewrite unionmE. rewrite H2. simpl. eauto.
               all: trivial.
-        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+           { clear -Heq tag_pc1. rename Heq into H.
+             apply (@mkfmap_Some _ _ _ w d@t) in H.
+             move: H => //=. rewrite /mkseq tag_pc1.
+             move=> /mapP [] x x_in_iota [] H -> //=.
+             case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
            inv eq. exfalso. discriminate.
         -- destruct ((snd (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond1)) as [? [? eq1]].
            exfalso. congruence.
         -- destruct ((fst (code_left w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2)) as [? [? eq1]].
            exfalso. congruence.
-        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+           { clear -Heq tag_pc3. rename Heq into H.
+             apply (@mkfmap_Some _ _ _ (w + as_word off)%w d@t) in H.
+             move: H => //=. rewrite /mkseq tag_pc3.
+             move=> /mapP [] x x_in_iota. generalize (w + as_word off)%w.
+             move=> w0 [] H -> -> //=.
+             case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
            inv eq. exfalso. discriminate.
-        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)) by admit.
+        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s1) false)).
+           { clear -Heq tag_pc1. rename Heq into H.
+             apply (@mkfmap_Some _ _ _ w d@t) in H.
+             move: H => //=. rewrite /mkseq tag_pc1.
+             move=> /mapP [] x x_in_iota [] H -> //=.
+             case: s1 tag_pc1 {H} => //= _ _ [] //= _ taga _ -> -> //=. }
            inv eq. exfalso. discriminate.
-        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+           { clear -Heq tag_pc3. rename Heq into H.
+             apply (@mkfmap_Some _ _ _ (w + as_word off)%w d@t) in H.
+             move: H => //=. rewrite /mkseq tag_pc3.
+             move=> /mapP [] x x_in_iota. generalize (w + as_word off)%w.
+             move=> w0 [] H -> -> //=.
+             case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
            inv eq. exfalso. discriminate.
       + unfold combined_codes in *. simpl in *.
         intros w d t off col rel eq_off dcode dcol. repeat rewrite unionmE.
@@ -1321,10 +1594,24 @@ Qed.
         -- destruct ((fst (code_right w d t off _ rel eq_off dcode (Logic.eq_refl))) (esym Heqcond2))
              as [? [? eq1]].
            exfalso. congruence.
-        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+           { clear -Heq tag_pc3. rename Heq into H.
+             apply (@mkfmap_Some _ _ _ (w + as_word off)%w d@t) in H.
+             move: H => //=. rewrite /mkseq tag_pc3.
+             move=> /mapP [] x x_in_iota. generalize (w + as_word off)%w.
+             move=> w0 [] H -> -> //=.
+             case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
            inv eq. exfalso. discriminate.
-        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)) by admit.
+        -- assert (eq: d@t = (as_word (ssrint.Posz 0))@(def_mem_tag (color_of s3) false)).
+           { clear -Heq tag_pc3. rename Heq into H.
+             apply (@mkfmap_Some _ _ _ (w + as_word off)%w d@t) in H.
+             move: H => //=. rewrite /mkseq tag_pc3.
+             move=> /mapP [] x x_in_iota. generalize (w + as_word off)%w.
+             move=> w0 [] H -> -> //=.
+             case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
            inv eq. exfalso. discriminate.
-  Admitted.
+  Qed.
+
+
 
 End Preservation.
