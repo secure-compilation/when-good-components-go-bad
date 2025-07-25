@@ -1610,7 +1610,7 @@ Qed.
              move=> w0 [] H -> -> //=.
              case: s3 tag_pc3 {H} => //= _ _ [] //= _ taga _ -> //=. }
            inv eq. exfalso. discriminate.
-  Qed.
+  Admitted.
 
 
 

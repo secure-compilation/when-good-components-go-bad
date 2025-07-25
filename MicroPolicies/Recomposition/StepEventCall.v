@@ -97,7 +97,7 @@ Module StepEventCall (S: RecompositionContext).
            remember ev as t;
            destruct step_s1 as [s1 ? s1' step_s1 allowed | s1 ? s1' step_s1 _];
            [exfalso;
-            destruct strong as [? ? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match];
+            destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor s_reg_cor s'_reg_cor mem_match reg_match];
             eapply Machine.Intermediate.fdisjoint_partition_notinboth;
             [inversion Hmergeable_ifaces as [[_ fdisj] _]; exact fdisj | exact allowed | unfold side_of in *; unfold_match' side_eq]
            | ]; subst t
@@ -167,11 +167,11 @@ Module StepEventCall (S: RecompositionContext).
               end).
     all: revert ST ST0 eq_s3; subst; intros ST ST0 eq_s3; simpl in *. (* trick to keep an equality on s1 and s3 *)
     1-2: rename i2 into comp.
-    all: inversion strong as [? ? ? comp_num pc_s'_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
+    all: inversion strong as [? ? ? pc_s'_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
     all: inversion common as [? ? ? ? ? ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
-                          [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]
-                          [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]
-                          [mem_pref_cond_s3 [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]
+                          [mem_pref_cond_s1 [mem_pref_cond_s1' [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 entry_code1]]]]]]]
+                          [mem_pref_cond_s2 [mem_pref_cond_s2' [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 entry_code2]]]]]]]
+                          [mem_pref_cond_s3 [mem_pref_cond_s3' [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 entry_code3]]]]]]]
                           capa_cor1 capa_cor2 capa_cor3 code_left code_right].
     all: subst s s' s0 s4 s5 m m0.
     (* We now need to branch on which state is strongly related to s3 next (i.e. on what is comp', the color of the next compartment) *)
@@ -287,18 +287,18 @@ Module StepEventCall (S: RecompositionContext).
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm1. simpl in reg_domm1.
            unfold mword, word_size. simpl.
-           clear - reg_domm1. unfold_match' reg_domm1. admit. (* exstructure *)
+           clear - reg_domm1. admit. (* exstructure *)
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm2. simpl in reg_domm2.
            unfold mword, word_size. simpl.
-           clear - reg_domm2. unfold_match' reg_domm2. admit. (* exstructure *)
+           clear - reg_domm2. admit. (* exstructure *)
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm3. simpl in reg_domm3.
            unfold mword, word_size. simpl.
-           clear - reg_domm3. unfold_match' reg_domm3. admit. (* exstructure *)
-        -- split; [|split; [|split; [|split; [|split; [|split]]]]]; trivial.
-        -- split; [|split; [|split; [|split; [|split; [|split]]]]]; trivial.
-        -- split; [|split; [|split; [|split; [|split; [|split]]]]]; trivial.
+           clear - reg_domm3. admit. (* exstructure *)
+        -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
+        -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
+        -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- intros d q rw rweq.
            destruct rw as [r | w]; simpl; simpl in rweq.
            ++ repeat rewrite setmE in rweq. repeat (unfold_match' rweq).
@@ -310,6 +310,11 @@ Module StepEventCall (S: RecompositionContext).
                    assert (r_in : In r (domm reg0)).
                    { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). eexists; eauto. }
                    exfalso. rewrite reg_domm1 in r_in. simpl in r_in. unfold word_of_nat in r_in. simpl in r_in.
+                   repeat (destruct r_in as [|r_in];
+                           [subst;
+                            (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                   unfold fset, FSet.fsval, locked_with in r_in.
+                   destruct fset_key. simpl in r_in.
                    repeat (destruct r_in as [|r_in];
                            [subst;
                             (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
@@ -325,6 +330,11 @@ Module StepEventCall (S: RecompositionContext).
                  assert (r_in : In r (domm reg0)).
                  { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). eexists; eauto. }
                  exfalso. rewrite reg_domm1 in r_in. simpl in r_in. unfold word_of_nat in r_in. simpl in r_in.
+                 repeat (destruct r_in as [|r_in];
+                         [subst;
+                          (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                 unfold fset, FSet.fsval, locked_with in r_in.
+                 destruct fset_key. simpl in r_in.
                  repeat (destruct r_in as [|r_in];
                          [subst;
                           (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
@@ -346,6 +356,11 @@ Module StepEventCall (S: RecompositionContext).
                    repeat (destruct r_in as [|r_in];
                            [subst;
                             (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                   unfold fset, FSet.fsval, locked_with in r_in.
+                   destruct fset_key. simpl in r_in.
+                   repeat (destruct r_in as [|r_in];
+                           [subst;
+                            (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
                    inversion r_in. }
               ** eapply (unicity (inr w')).
         -- intros d q rw rweq.
@@ -359,6 +374,11 @@ Module StepEventCall (S: RecompositionContext).
                    assert (r_in : In r (domm reg)).
                    { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). eexists; eauto. }
                    exfalso. rewrite reg_domm2 in r_in. simpl in r_in. unfold word_of_nat in r_in. simpl in r_in.
+                   repeat (destruct r_in as [|r_in];
+                           [subst;
+                            (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                   unfold fset, FSet.fsval, locked_with in r_in.
+                   destruct fset_key. simpl in r_in.
                    repeat (destruct r_in as [|r_in];
                            [subst;
                             (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
@@ -377,6 +397,11 @@ Module StepEventCall (S: RecompositionContext).
                  repeat (destruct r_in as [|r_in];
                          [subst;
                           (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                 unfold fset, FSet.fsval, locked_with in r_in.
+                 destruct fset_key. simpl in r_in.
+                 repeat (destruct r_in as [|r_in];
+                         [subst;
+                          (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
                  inversion r_in.
            ++ pose proof (capa_cor2 d q (inr w) rweq) as [is_in unicity].
               split. { clear -is_in. unfold in_stack in *. destruct is_in as [sv1 [sv2 [col is_in]]]. do 3 eexists. right. eauto. }
@@ -392,6 +417,11 @@ Module StepEventCall (S: RecompositionContext).
                  { assert (r_in : In r' (domm reg)).
                    { setoid_rewrite <- Extra.In_in. setoid_rewrite <- (rwP dommP). eexists; eauto. }
                    exfalso. rewrite reg_domm2 in r_in. simpl in r_in. unfold word_of_nat in r_in. simpl in r_in.
+                   repeat (destruct r_in as [|r_in];
+                           [subst;
+                            (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                   unfold fset, FSet.fsval, locked_with in r_in.
+                   destruct fset_key. simpl in r_in.
                    repeat (destruct r_in as [|r_in];
                            [subst;
                             (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
@@ -414,6 +444,11 @@ Module StepEventCall (S: RecompositionContext).
                    repeat (destruct r_in as [|r_in];
                            [subst;
                             (match goal with H : false = (Word ?a == Word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
+                   unfold fset, FSet.fsval, locked_with in r_in.
+                   destruct fset_key. simpl in r_in.
+                   repeat (destruct r_in as [|r_in];
+                           [subst;
+                            (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
                    inversion r_in. }
                  { intro tex. pose proof (capa_cor3 d n (inr w) tex) as [is_in unicity].
                    unfold in_stack in is_in. clear -is_in wfst.
