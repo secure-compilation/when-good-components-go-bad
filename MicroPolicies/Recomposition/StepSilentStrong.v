@@ -651,6 +651,7 @@ Module StepStrong (S: RecompositionContext).
                | H : Some (?v@_) = _  |- context[setm reg _ ?v@_] =>
                    rewrite (setmI (esym H))
                end). now trivial.
+
             rewrite RW in Heqa23. simplify_some; subst. rewrite (setmI RW).
             repeat
             ((* this instruction branches on the value of r *)
@@ -673,6 +674,7 @@ Module StepStrong (S: RecompositionContext).
                    H: Some ?v = getm reg ?r |- context[setm reg ?r ?v] => rewrite (setmI (esym H))
                  end);
               try trivial).
+
             admit. admit. admit. admit. admit. admit. admit. admit. admit.
             admit. admit.
           }
