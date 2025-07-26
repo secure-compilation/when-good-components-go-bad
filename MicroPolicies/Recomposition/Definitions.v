@@ -519,7 +519,9 @@ Module RecompositionDefinitions (S: RecompositionContext).
           mem' (swcast imm') = Some d' ->
           is_code (taga d) ->
           taga d = taga d' -> (* exact same tag, so same entry point if there is one *)
-          (forall off, (get_offset (side_of (color (taga d))) (color (taga d)) = Some off) -> imm' = addw imm (as_word off)) ->
+          (forall off, (get_offset (side_of (color (taga d))) (color (taga d)) =
+                     Some off) -> @swcast _ (word_size mt) imm' = addw (@swcast _ (word_size mt) imm)
+                                                                   (as_word off)) ->
           decode_match mem mem' v v'
     .
 

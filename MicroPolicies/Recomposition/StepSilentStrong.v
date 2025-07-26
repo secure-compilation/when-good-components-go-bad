@@ -801,13 +801,9 @@ Module StepStrong (S: RecompositionContext).
         assert (eq'_off: get_offset (side_of i0) i0 = Some off).
         { inv tag_pc1. unfold side_of. rewrite comp_in. simpl. trivial. }
         pose proof (H8 off (eq'_off)) as imm'_eq.
-        assert (pc_eq_imm: (@swcast _ (word_size mt) imm') = addw (swcast imm) (as_word off)).
-        { subst.
-
-          Set Printing Implicit.
-          unfold swcast.
-          Unset Printing Implicit.
-          admit. }
+        assert (pc_eq_imm: (@swcast _ (word_size mt) imm') =
+                             addw (swcast imm) (as_word off)).
+        { eauto. }
         (* probably doable with slight lemma/hypothesis on off *)
         destruct d as [vx tx].
         destruct ((fst (code_left _ vx tx off _ comp_in eq_off next_pc_code (esym (congr1 LRC.color H1)))) (H3))
