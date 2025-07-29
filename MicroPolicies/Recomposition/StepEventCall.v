@@ -40,6 +40,12 @@ Module StepEventCall (S: RecompositionContext).
   Module Pres := Preservation S.
   Include Pres.
 
+  Lemma convert_int_of_word_inj: forall k (v v': word k),
+      convert (int_of_word v) = convert (int_of_word v') ->
+      v = v'.
+  Proof.
+    Admitted.
+
   Lemma step_event_call:
   forall s1 comp proc z comp' s1', Step sem s1 ((ECall comp proc z comp') :: nil) s1' ->
   forall s2 s2',   Step sem' s2 ((ECall comp proc z comp') :: nil) s2' ->
@@ -353,33 +359,33 @@ Module StepEventCall (S: RecompositionContext).
            unfold mword, word_size. simpl.
            clear - reg_domm3.
            rewrite //= reg_domm3 //=.
-           admit.
-           (* repeat match goal with *)
-           (*   | |- context [as_word (ssrint.Posz ?n)] => *)
-           (*       replace (@as_word 5 (ssrint.Posz n)) with *)
-           (*       (@word_of_nat 5 n) by reflexivity *)
-           (* end. *)
-           (* rewrite <- eq_fset. *)
-           (* intros r. rewrite in_fset. *)
-           (* match goal with *)
-           (* | |- (r \in (word_of_nat _ |: _)%fset) = (r \in _) => *)
-           (*     rewrite in_fset in_cons *)
-           (* end; *)
-           (* match goal with *)
-           (* | |- (r == ?n) || ?b = (r \in ?l) => *)
-           (*     let eqr := fresh "eqr" in *)
-           (*     case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr] *)
-           (* end. *)
-           (* repeat (match goal with *)
-           (*         | |- (r \in FSet.fsval (word_of_nat _ |: _)%fset) = (r \in _) => *)
-           (*             rewrite in_fset in_cons *)
-           (*         end; *)
-           (*         match goal with *)
-           (*         | |- (r == ?n) || ?b = (r \in ?l) => *)
-           (*             let eqr := fresh "eqr" in *)
-           (*             case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr] *)
-           (*         end). *)
-           (* rewrite in_fset. auto. *)
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           unfold word_of_nat. unfold as_word. simpl.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (Word _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (Word _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
@@ -869,7 +875,35 @@ Module StepEventCall (S: RecompositionContext).
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm3. simpl in reg_domm3.
            unfold mword, word_size. simpl.
-           clear - reg_domm3. admit. (* exstructure *)
+           clear - reg_domm3.
+           rewrite //= reg_domm3 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           unfold word_of_nat. unfold as_word. simpl.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (Word _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (Word _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
@@ -1136,7 +1170,7 @@ Module StepEventCall (S: RecompositionContext).
                unfold as_word in Heqa44. simpl in Heqa44. rewrite <- Heqa24 in Heqa44. repeat simplify_some.
                rewrite H16 in H13. clear -H13. simpl in H13. remember (vala a20) as v.
                unfold mword, mt, concrete_int_32_mt in Heqv. simpl in Heqv. rewrite <- Heqv in H13. clear Heqv a20.
-               admit. } (* TODO : convert & int_of_word injectivity *)
+               eapply convert_int_of_word_inj; eauto. }
              { subst pc3_val. eexists. eexists. left. rewrite <- addwA, (addwC onew), addwA. reflexivity. }
              simpl. unfold as_word. unfold ssrint.absz. simpl.
              repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
@@ -1163,7 +1197,7 @@ Module StepEventCall (S: RecompositionContext).
                unfold as_word in Heqa44. simpl in Heqa44. rewrite <- Heqa24 in Heqa44. repeat simplify_some.
                rewrite H16 in H13. clear -H13. simpl in H13. remember (vala a20) as v.
                unfold mword, mt, concrete_int_32_mt in Heqv. simpl in Heqv. rewrite <- Heqv in H13. clear Heqv a20.
-               admit. } (* TODO : convert & int_of_word injectivity *)
+               eapply convert_int_of_word_inj; eauto. }
              { subst pc3_val. eexists. eexists. left. rewrite <- addwA, (addwC onew), addwA. reflexivity. }
              simpl. unfold as_word. unfold ssrint.absz. simpl.
              repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
@@ -1201,7 +1235,9 @@ Module StepEventCall (S: RecompositionContext).
       { destruct (H12 imm); auto. }
       { inversion H12. subst imm pc'. unfold alloc_empty in *. subst. simpl in alloc_mem_s2.
         assert (sw_eq: @swcast _ (word_size mt) (@word_of_nat (imm_size mt) alloc_label) = word_of_nat alloc_label).
-        { admit. } simpl in sw_eq.
+        { unfold swcast, word_of_nat. simpl.
+          unfold alloc_label. rewrite div.modn_small. trivial. trivial. }
+        simpl in sw_eq.
         rewrite <- sw_eq in alloc_mem_s2. rewrite <- Heqa6 in alloc_mem_s2. inversion alloc_mem_s2. }
       inversion H12. subst imm1. clear H12. subst pc'. rewrite H14 in Heqa6. simplify_some. simpl in *.
       rename taga into td. rename vala into vd. rename H15 into eq_next_pc.
@@ -1275,15 +1311,97 @@ Module StepEventCall (S: RecompositionContext).
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm1. simpl in reg_domm1.
            unfold mword, word_size. simpl.
-           clear - reg_domm1.  admit. (* exstructure *)
+           clear -reg_domm1.
+           rewrite //= reg_domm1 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (word_of_nat _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (word_of_nat _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm2. simpl in reg_domm2.
            unfold mword, word_size. simpl.
-           clear - reg_domm2.  admit. (* exstructure *)
+           clear -reg_domm2.
+           rewrite //= reg_domm2 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (word_of_nat _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (word_of_nat _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm3. simpl in reg_domm3.
            unfold mword, word_size. simpl.
-           clear - reg_domm3.  admit. (* exstructure *)
+           clear - reg_domm3.
+           rewrite //= reg_domm3 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           unfold word_of_nat. unfold as_word. simpl.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (Word _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (Word _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
@@ -1520,7 +1638,7 @@ Module StepEventCall (S: RecompositionContext).
                rewrite setmE in Heqa49. simpl in Heqa49. rewrite <- Heqa17 in Heqa49. repeat simplify_some.
                remember (vala a) as v_a. unfold mword, mt, concrete_int_32_mt in Heqv_a.
                simpl in Heqv_a. rewrite <- Heqv_a in H12. rewrite H12 in H19. clear - H19.
-               admit. } (* TODO : convert & int_of_word injectivity *)
+               eapply convert_int_of_word_inj; eauto. }
              { subst pc3_val. eexists. eexists. left. rewrite <- addwA, (addwC onew), addwA. reflexivity. }
              simpl. unfold as_word. unfold ssrint.absz. simpl.
              repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
@@ -1547,7 +1665,7 @@ Module StepEventCall (S: RecompositionContext).
                rewrite setmE in Heqa49. simpl in Heqa49. rewrite <- Heqa17 in Heqa49. repeat simplify_some.
                remember (vala a) as v_a. unfold mword, mt, concrete_int_32_mt in Heqv_a.
                simpl in Heqv_a. rewrite <- Heqv_a in H12. rewrite H12 in H19. clear - H19.
-               admit. } (* TODO : convert & int_of_word injectivity *)
+               eapply convert_int_of_word_inj; eauto. }
              { subst pc3_val. eexists. eexists. left. rewrite <- addwA, (addwC onew), addwA. reflexivity. }
              simpl. unfold as_word. unfold ssrint.absz. simpl.
              repeat (match goal with | H: false = ?c |- context[?c] => rewrite <- H end).
@@ -1619,7 +1737,9 @@ Module StepEventCall (S: RecompositionContext).
       { destruct (H12 imm); auto. }
       { inversion H12. subst imm pc'. unfold alloc_empty in *. subst. simpl in alloc_mem_s2.
         assert (sw_eq: @swcast _ (word_size mt) (@word_of_nat (imm_size mt) alloc_label) = word_of_nat alloc_label).
-        { admit. } simpl in sw_eq.
+        { unfold swcast, word_of_nat. simpl.
+          unfold alloc_label. rewrite div.modn_small. trivial. trivial. }
+        simpl in sw_eq.
         rewrite <- sw_eq in alloc_mem_s2. rewrite <- Heqa6 in alloc_mem_s2. inversion alloc_mem_s2. }
       inversion H12. subst imm1. clear H12. subst pc'. rewrite H14 in Heqa6. simplify_some. simpl in *.
       destruct d as [vd td]. rename H15 into eq_next_pc.
@@ -1696,15 +1816,97 @@ Module StepEventCall (S: RecompositionContext).
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm1. simpl in reg_domm1.
            unfold mword, word_size. simpl.
-           clear - reg_domm1.  admit. (* exstructure *)
+           clear -reg_domm1.
+           rewrite //= reg_domm1 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (word_of_nat _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (word_of_nat _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm2. simpl in reg_domm2.
            unfold mword, word_size. simpl.
-           clear - reg_domm2.  admit. (* exstructure *)
+           clear -reg_domm2.
+           rewrite //= reg_domm2 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (word_of_nat _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (word_of_nat _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- unfold register_domm. repeat rewrite domm_set. simpl.
            unfold register_domm, reg_field_size, mword, FSet.fsval in reg_domm3. simpl in reg_domm3.
            unfold mword, word_size. simpl.
-           clear - reg_domm3.  admit. (* exstructure *)
+           clear - reg_domm3.
+           rewrite //= reg_domm3 //=.
+           repeat match goal with
+             | |- context [as_word (ssrint.Posz ?n)] =>
+                 replace (@as_word 5 (ssrint.Posz n)) with
+                 (@word_of_nat 5 n) by reflexivity
+           end.
+           unfold word_of_nat. unfold as_word. simpl.
+           rewrite <- eq_fset.
+           intros r. rewrite in_fset.
+           match goal with
+           | |- (r \in (Word _ |: _)%fset) = (r \in _) =>
+               rewrite in_fset in_cons
+           end;
+           match goal with
+           | |- (r == ?n) || ?b = (r \in ?l) =>
+               let eqr := fresh "eqr" in
+               case eqr: eq_op => //=; [move: eqr => /eqP -> //=| clear eqr]
+           end.
+           repeat (match goal with
+                   | |- (r \in FSet.fsval (Word _ |: _)%fset) = (r \in _) =>
+                       rewrite in_fset in_cons
+                   end;
+                   match goal with
+                   | |- (r == ?n) || ?b = (r \in ?l) =>
+                       let eqr := fresh "eqr" in
+                       case eqr: eq_op => //=; [move: eqr => /eqP -> //=|clear eqr]
+                   end).
+           rewrite in_fset. auto.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
         -- split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]; trivial.
