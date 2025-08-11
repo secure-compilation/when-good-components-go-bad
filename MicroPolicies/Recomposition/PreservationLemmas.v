@@ -113,6 +113,12 @@ Qed.
     end.
 
 
+  Lemma convert_int_of_word_inj: forall k (v v': word k),
+      convert (int_of_word v) = convert (int_of_word v') ->
+      v = v'.
+  Proof.
+    Admitted.
+
   Lemma preserves_equiv_left_mem_write:
     forall s1 s2 s3 M s1' s3' w v v' m1' m3' i,
       strong_equiv Left M s1 s3
@@ -761,6 +767,34 @@ Qed.
   Proof.
   Admitted.
 
+  Lemma alloc_preserves_memory_address_correctness:
+    forall i s s',
+      memory_address_correctness i s ->
+      alloc_fun (NC := NC) s = Some s' ->
+      memory_address_correctness i s'.
+  Proof.
+    intros i s s' s_mem_cor alloc d w rel d_eq.
+    unfold alloc_fun in *.
+    repeat (unfold_all || unfold_match).
+    unfold is_jump, is_other in *.
+    repeat (unfold_all || unfold_match).
+    destruct a as [v tmp]. destruct a0 as [v' tmp']. simpl in *. subst tmp tmp'.
+    rename n0 into n'.
+    simpl. destruct d as [vd td]. destruct td.
+    destruct vtag; simpl; auto.
+    all: rewrite unionmE; rewrite unionmE in d_eq; simpl in *.
+    all: remember (mem s w) as cond; simpl in *.
+    all: rewrite <- Heqcond in d_eq; destruct cond; simpl in *.
+    all: try (pose proof (s_mem_cor a w ); simplify_some; simpl in *;
+              pose proof (H rel (esym Heqcond)) as [d' [d'eq d'cond]];
+              rewrite d'eq; simpl; eauto).
+    all: exfalso; clear - d_eq.
+    all: unfold mkfmap, mkseq, foldr, map in *.
+    all: remember (iota 0 n') as l; clear Heql.
+    all: induction l; simpl in *; try (inversion d_eq; done).
+    all: rewrite setmE in d_eq; unfold_match; simpl in *; auto.
+  Admitted.
+
 
   Lemma preserves_equiv_left_alloc_fun:
     forall s1 s2 s3 M s1' s3',
@@ -810,7 +844,8 @@ Qed.
         eapply same_pc_normal; simpl; try done; eauto.
         rewrite unionmE. rewrite eq. simpl. trivial.
         destruct s, s', pc0, pc1. rewrite HeqH. simpl. trivial.
-      + intros d w rel d_eq. simpl. destruct d as [vd td]. destruct td.
+      + intros d w rel d_eq.
+        simpl. destruct d as [vd td]. destruct td.
         destruct vtag; simpl; auto.
         all: rewrite unionmE; rewrite unionmE in d_eq; simpl in *.
         all: remember (mem s w) as cond; simpl in *.

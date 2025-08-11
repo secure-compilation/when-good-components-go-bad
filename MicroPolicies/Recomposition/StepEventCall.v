@@ -40,12 +40,6 @@ Module StepEventCall (S: RecompositionContext).
   Module Pres := Preservation S.
   Include Pres.
 
-  Lemma convert_int_of_word_inj: forall k (v v': word k),
-      convert (int_of_word v) = convert (int_of_word v') ->
-      v = v'.
-  Proof.
-    Admitted.
-
   Lemma step_event_call:
   forall s1 comp proc z comp' s1', Step sem s1 ((ECall comp proc z comp') :: nil) s1' ->
   forall s2 s2',   Step sem' s2 ((ECall comp proc z comp') :: nil) s2' ->
