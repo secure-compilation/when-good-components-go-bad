@@ -83,7 +83,7 @@ Definition code := NMap (seq (instr * mem_tag)).
 
 Definition instr_to_transitional (c : Component.id) (i : Machine.instr) : (instr * mem_tag) :=
   match i with
-  | ICall c' P => if beq_nat c c' then ((TrJalProc (c',P)), def_mem_tag c true)
+  | ICall c' P => if Nat.eqb c c' then ((TrJalProc (c',P)), def_mem_tag c true)
     else ((TrJalProc (c',P)), def_mem_tag c true)
   | IReturn => ((TrJump R_RA), def_mem_tag c true)
   | INop => (TrNop, def_mem_tag c true)
@@ -321,15 +321,19 @@ Module Memory. (* : AbstractComponentMemory.*)
     obind (fun mem =>
            obind (fun mem => Some (setm m c mem)) (store_b mem (Pointer.block ptr) (Pointer.offset ptr) v)) (m c).
 
-  Definition domm_mem (m : t) c := obind (fun mem => Some (@domm nat_ordType block (content mem))) (m c).
+  Definition domm_mem (m : t) c := obind (fun mem => Some (@domm nat block (content mem))) (m c).
 
   
 
   (* all functions below are used to initialize the memory *)
   
+  (* NB: the accumulator must be THREADED. Passing the outer [m] to
+     [reserve_block] on every iteration hands back the same fresh id [n]
+     times, and [reserve_component_blocks]'s [mkfmap (zip bs code)] then keeps
+     only the last procedure of each component. *)
   Definition reserve_blocks (m : mem) (n : nat) : (mem * list Block.id) :=
-    let acc '(_, bs) :=
-      let (mem', b) := (reserve_block m) in
+    let acc '(mcur, bs) :=
+      let (mem', b) := reserve_block mcur in
       (mem', bs ++ [b])  in
     ssrnat.iter n (acc)  ((m, [])).
   
@@ -560,9 +564,15 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     Pointer.component pc' <> Pointer.component pc ->
     (Some pct = value_to_pc_tag (tvtag (Register.get r regs))) ->
     (val (Register.get R_COM regs) = Int rcomval) ->
-    check_pc_jump cde tg pc' c ->
+    (* The return target must be a valid instruction in ITS OWN component
+       (mirrors [eval_step]'s [nth_error (cde (comp pc')) ...] check). The old
+       [check_pc_jump cde tg pc' c] was vacuous for a cross-return: it demands
+       [comp pc' = c = comp pc], contradicting [comp pc' <> comp pc]. And
+       [eval_step] INVALIDATES the callee's registers on return, so the
+       relational rule must too (only [R_COM]/[R_RA] survive). *)
+    check_pc_jump cde tg pc' (Pointer.component pc') ->
     step cde (st, mem, regs, pc, pct) [ERet (Pointer.component pc) rcomval (Pointer.component pc')]
-    (st, mem, regs, pc', dec_pc_tag pct)
+    (st, mem, Register.invalidate regs, pc', dec_pc_tag pct)
 
 | BnzNZ: forall st mem regs pc tg c pct pc' r l v,
     executing cde pc (TrBnz r l) tg c ->
@@ -570,7 +580,12 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     (tvtag (Register.get r regs) = Other) ->
     val (Register.get r regs) = Int v ->
     (v <> 0) % Z ->
-    find_label_in_code cde l = Some pc' ->
+    (* COMPONENT-LOCAL resolution (2026-07-23): S2I's label counters are
+       per-component, so the same numeric label can occur in several
+       components; global-first-match ([find_label_in_code]) could jump into a
+       FOREIGN component.  Bnz targets are always emitted in the same
+       component as the branch. *)
+    find_label_in_comp cde c l = Some pc' ->
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs, pc', pct)
@@ -715,7 +730,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       | MVal Other (Int 0) =>
         ret (E0, (mem, regs, Pointer.inc pc, pct))
       | MVal Other (Int val) =>
-        do pc' <- find_label_in_code cde l;
+        do pc' <- find_label_in_comp cde (Pointer.component pc) l;
         ret (E0, (mem, regs, pc', pct))
       | _ => None
       end
@@ -773,36 +788,64 @@ Fixpoint execN (n: nat) (cde: code) (st: stackless) : option Z + nat :=
 (*** Compilation & execution ***)
 
 
-Definition head_tag (pr : Intermediate.program) (c : Component.id) (p : Procedure.id) : mem_tag :=
-  let I := Intermediate.prog_interface pr in
+(* GENERALIZED over the interface the entry tags are computed against
+   (T2M audit, plan-t2me.md §3.8, 2026-08-08).  [head_tag]'s allowed-caller
+   list used to filter over the COMPILING program's own interface; for a
+   separately-compiled SIDE of a link that interface misses the other
+   side's components, so the me/mp machines' [check_entry] refused every
+   cross-side call.  Like the canonical label scheme and the joint buffer
+   map, separately-compiled sides must agree on the JOINT interface [PI].
+   The whole-program instantiations below ([head_tag], [linearize_proc],
+   …, [intermediate_to_transitional]) fix [PI := prog_interface pr] and
+   unfold to exactly the old bodies. *)
+
+Definition head_tag_gen (PI : Program.interface)
+    (c : Component.id) (p : Procedure.id) : mem_tag :=
   let allowed_call_by (c' : Component.id) :=
-      Option.default false (do i <- getm I c ;
-                            do i' <- getm I c' ;
+      Option.default false (do i <- getm PI c ;
+                            do i' <- getm PI c' ;
                             Some ((p \in Component.export i) && ((c, p) \in Component.import i')))
-  in MTag LRC.Other c (Some (p, filter allowed_call_by (domm I))) true.
+  in MTag LRC.Other c (Some (p, filter allowed_call_by (domm PI))) true.
 
+Definition head_tag (pr : Intermediate.program) : Component.id -> Procedure.id -> mem_tag :=
+  head_tag_gen (Intermediate.prog_interface pr).
 
-Definition linearize_proc (pr : Intermediate.program )
+Definition linearize_proc_gen (PI : Program.interface) (pr : Intermediate.program)
            (c : Component.id) (p : Procedure.id) : seq (instr * mem_tag) :=
   let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (pr)) c;
                                     getm map p)
-  in ((TrLabel (inr (c,p))), head_tag pr c p) :: (map (instr_to_transitional c) code).
+  in ((TrLabel (inr (c,p))), head_tag_gen PI c p) :: (map (instr_to_transitional c) code).
 
-Definition linearize_component (pr : Intermediate.program ) (c : Component.id) : seq (instr * mem_tag) :=
+Definition linearize_proc (pr : Intermediate.program) :=
+  linearize_proc_gen (Intermediate.prog_interface pr) pr.
+
+Definition linearize_component_gen (PI : Program.interface)
+    (pr : Intermediate.program ) (c : Component.id) : seq (instr * mem_tag) :=
   let procs : seq Procedure.id :=
       Option.default fset0 (do map <- getm (Intermediate.prog_procedures (pr)) c;
                             Some (domm map)) in
-  flatten (map (linearize_proc pr c) procs).
+  flatten (map (linearize_proc_gen PI pr c) procs).
 
+Definition linearize_component (pr : Intermediate.program) :=
+  linearize_component_gen (Intermediate.prog_interface pr) pr.
 
-Fixpoint compile_component_list {T} cenv (l : list (Component.id * T)) :=
- match l with 
+Fixpoint compile_component_list_gen {T} PI cenv (l : list (Component.id * T)) :=
+ match l with
   | [] => []
-  | (c,_) :: cs => (c,linearize_component cenv c) :: compile_component_list cenv cs
+  | (c,_) :: cs => (c,linearize_component_gen PI cenv c)
+                     :: compile_component_list_gen PI cenv cs
 end.
 
-Definition intermediate_to_transitional (pr : Intermediate.program) : code := 
-mkfmap (compile_component_list pr (elementsm (Intermediate.prog_procedures (pr)))).
+Definition compile_component_list {T} cenv (l : list (Component.id * T)) :=
+  compile_component_list_gen (Intermediate.prog_interface cenv) cenv l.
+
+Definition intermediate_to_transitional_gen (PI : Program.interface)
+    (pr : Intermediate.program) : code :=
+  mkfmap (compile_component_list_gen PI pr
+            (elementsm (Intermediate.prog_procedures (pr)))).
+
+Definition intermediate_to_transitional (pr : Intermediate.program) : code :=
+  intermediate_to_transitional_gen (Intermediate.prog_interface pr) pr.
 
 
 

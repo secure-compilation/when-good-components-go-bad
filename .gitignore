@@ -17,3 +17,6 @@ I2SFI/*.cmx
 sfi_safety_properties.exe
 CoqMakefile.conf
 test_out
+
+.recomp-backups/
+*.bak

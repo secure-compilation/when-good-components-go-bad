@@ -2,11 +2,12 @@ Require Import Common.Definitions.
 
 From CoqUtils Require Import hseq word.
 From extructures Require Import fmap.
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat div seq.
 
 Require Import Types.
 Require Import Transitional.
 Require Import MicroPolicies.Utils MicroPolicies.LRC MicroPolicies.Symbolic Intermediate.Machine.
+Require Import MicroPolicies.WordExtra MicroPolicies.Int32.
 Require Import CompCert.Events.
 
 
@@ -108,11 +109,17 @@ Definition binop_of_binop (b : binop) : Types.binop :=
 
 Definition alloc_label := 2 ^ 14.
 
+(* [mt] is abstract here, so the bound is stated on [word_size mt] directly (the concrete
+   instance has [word_size = 32], [alloc_label = 2^14], so any [NC < 18] satisfies it). *)
 Lemma mask_alloc_label: forall NC,
-  NC < 19 ->
+  alloc_label < expn 2 (word_size mt - NC) ->
   andw (word_of_nat alloc_label) (@mask mt NC) = 0%w.
 Proof.
-Admitted.
+move=> NC H.
+apply: andw_mask_low.
+rewrite valw_as_word modn_small; first exact: H.
+apply: (leq_trans H); rewrite leq_exp2l //; exact: leq_subr.
+Qed.
 
 
 
@@ -131,6 +138,14 @@ Fixpoint fold_left_map_bis {FROM ACC TO: Type} (f : ACC -> FROM -> TO * ACC) (in
 end.
 
 (* gives you the beginning point of each buffers in memory *)
+(* FIXED 2026-08-07 (T2M Stage-0 audit): the outer fold used to thread
+   [count + acc], but [count] (the inner [fold_left_map_bis] result) already
+   includes [acc], so from the THIRD component on every base drifted upward
+   and [IConst (IPtr …)] immediates pointed at the wrong flat address —
+   while [initial_memory]'s [base_adress] counts correctly, so code and data
+   disagreed.  Confirmed empirically by [T2M/M_Audit.v] (sample [p_three]:
+   baked base 18 vs actual 12, the me run wedges in component 3).  The
+   correct accumulator is [count]. *)
 Definition memory_lengths (buf : NMap {fmap Block.id -> nat + seq value}):  NMap (NMap nat) :=
   let l := Maps.elementsm (mapm Maps.elementsm buf) in (* turns fmaps into lists *)
   let f := (fun acc => fold_left_map_bis (fun acc' (a : nat * (nat + seq value)) =>
@@ -138,14 +153,22 @@ Definition memory_lengths (buf : NMap {fmap Block.id -> nat + seq value}):  NMap
                                       | inl n => ((fst a, acc'), n + acc')
                                       | inr s => ((fst a, acc'), (size s) + acc') end ) acc) in
   mkfmap (fold_left_map (fun acc s => let (flat,count) := f acc (snd s) in
-                           ((fst s, mkfmap (flat)), count + acc) ) 0 l).
+                           ((fst s, mkfmap (flat)), count) ) 0 l).
 
 
+(* FIXED 2026-08-08 (T2M §3.6): the [Z.neg] branch used to be
+   [Negz (nat_of_pos n)] = -(n+1) — off by one on EVERY negative integer
+   (ssrint's [Negz m] denotes -(m+1)).  On the immediate path this was
+   masked by the 15-bit truncation the fit condition fences anyway, but
+   [initial_memory]/[me_encode_val] also route BUFFER contents through
+   here, where words are full-width and the off-by-one was the only
+   error: a buffer holding [Int (-5)] was silently initialized as -6.
+   The faithful embedding of [Z.neg n] (= -n, n ≥ 1) is [Negz (n-1)]. *)
 Definition encode_int (z : Z) : ssrint.int :=
   match z with
   | Z0 => ssrint.Posz 0
   | Z.pos n => ssrint.Posz (ssrnat.nat_of_pos n)
-  | Z.neg n => ssrint.Negz (ssrnat.nat_of_pos n)
+  | Z.neg n => ssrint.Negz (ssrnat.nat_of_pos n).-1
   end.
 
 Definition convert_value (memory_size : NMap (NMap nat)) (iv : imvalue) : imm mt :=
@@ -184,20 +207,36 @@ Definition instr_translation (make_label : proc_label -> nat) (update_label : na
 
 Notation prog_buffers := (NMap {fmap Block.id -> nat + seq value}).
 
-Definition transitional_to_merged (pb : prog_buffers) (cde : Transitional.code) : code :=
+(* GENERALIZED flattening: the label scheme ([make_label] for procedure entries,
+   [update_label] for per-component body labels) is a PARAMETER, so separately-compiled
+   programs can share one canonical, collision-free scheme (see
+   Recomposition/LabelScheme.v).  [transitional_to_merged] below recovers the legacy
+   behaviour (bounds computed from the code map) definitionally. *)
+Definition transitional_to_merged_gen (make_label : proc_label -> nat)
+    (update_label : Component.id -> nat -> nat)
+    (pb : prog_buffers) (cde : Transitional.code) : code :=
   let memory_size := memory_lengths (pb) in
-  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inl la) => la | _ => 0 end) l )) in
-  let lmax := foldl Init.Nat.max 0 (codomm(mapm max_seq cde)) in
-  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inr (_,p)) => p | _ => 0 end) l )) in
-  let pmax := foldl Init.Nat.max 0 (codomm(mapm max_seq cde)) in
-  let cmax := foldl Init.Nat.max 0 (domm cde) in
-  let make_label := (fun pl => lmax * (cmax + 1) + 1 + (fst pl)*pmax + (snd pl)) in
-  let update_label := (fun c old => old + lmax * (c)) in
   let f := (fun  (itrt: Transitional.instr * mem_tag) (c: code) =>
     let (itr, t) := itrt in
     let il := map (fun i => (i,t)) (instr_translation make_label (update_label (color t)) memory_size itr) in app il c) in
   let c :=  flatten(map snd  (Maps.elementsm cde)) in
   foldr f nil c.
+
+Definition legacy_lmax (cde : Transitional.code) : nat :=
+  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inl la) => la | _ => 0 end) l )) in
+  foldl Init.Nat.max 0 (codomm(mapm max_seq cde)).
+Definition legacy_pmax (cde : Transitional.code) : nat :=
+  let max_seq := (fun l => foldl Init.Nat.max 0 (map (fun p => match (fst p) with | TrLabel (inr (_,p)) => p | _ => 0 end) l )) in
+  foldl Init.Nat.max 0 (codomm(mapm max_seq cde)).
+Definition legacy_cmax (cde : Transitional.code) : nat :=
+  foldl Init.Nat.max 0 (domm cde).
+Definition legacy_make_label (cde : Transitional.code) : proc_label -> nat :=
+  fun pl => (legacy_lmax cde) * (legacy_cmax cde + 1) + 1 + (fst pl) * (legacy_pmax cde) + (snd pl).
+Definition legacy_update_label (cde : Transitional.code) : Component.id -> nat -> nat :=
+  fun c old => old + (legacy_lmax cde) * c.
+
+Definition transitional_to_merged (pb : prog_buffers) (cde : Transitional.code) : code :=
+  transitional_to_merged_gen (legacy_make_label cde) (legacy_update_label cde) pb cde.
 
 (*** Merged -> MP ***)
 
@@ -239,7 +278,7 @@ Definition findopt {A : Type} (pred : A -> bool) l : option nat :=
                     end) None l.
 
 Definition encode_code (cde : code) (pc0 : nat) : memory :=
-  let cde := cde ++ [(MrHalt, MTag Other Component.main None true )] in
+  (* let cde := cde ++ [(MrHalt, MTag Other Component.main None true )] in *)
   let code_length := size cde in
   let offset := pc0 + code_length in
   let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in
@@ -318,19 +357,20 @@ Definition merged_to_mp_backend (pb : prog_buffers) (cde : code) : memory * nat 
 
 (*
 (* tag the part of memory that will serve for the code in mp*)
-Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word_ordType (word_size mt) -> atom mem_tag} :=
+Definition encode_code_placeholder (cde : code) (pc0 : nat) : {fmap word (word_size mt) -> atom mem_tag} :=
   Tmp.mapk (fun x => word_of_nat (x + pc0)) (fmap_of_seq (map (fun '(_,t) => Atom (word_of_nat 0) t) cde)).
  *)
 
 
-Definition initial_state cde (pb : prog_buffers) (pi : Program.interface) : (Symbolic.state lrc_tags [eqType of unit]) :=
+Definition initial_state cde (pb : prog_buffers) (pi : Program.interface) : (Symbolic.state lrc_tags unit) :=
   let nc := (1+ Nat.log2 (1 + (size (domm pi)))) in
   let mem0 := (initial_memory pb) in
   let pc0 := (size mem0) in
+  let main_pos := find (fun '(_, tag) => color tag == Component.main) cde in
   let pctag := build_tpc 0 Component.main in
   {| mem := unionm (encode_code cde pc0) mem0;
     regs := reg0;
-    pc := (word_of_nat pc0)@pctag;
+    pc := (word_of_nat (pc0 + main_pos))@pctag;
     internal := tt |}.
 
 End WithClasses.
@@ -382,7 +422,7 @@ Definition transfer (iv : Symbolic.ivec lrc_tags) (evi : Symbolic.ev_inputs) : o
 Definition sym_lrc_merged : Symbolic.params := {|
   Symbolic.ttypes := lrc_tags;
   Symbolic.transfer := transfer;
-  Symbolic.internal_state := [eqType of unit]
+  Symbolic.internal_state := unit
  |}.
 
 
@@ -417,13 +457,13 @@ Definition alloc_fun (st : @Symbolic.state mt sym_lrc_merged) : option (Symbolic
   Some (Symbolic.State sym_lrc_merged mem' regs' next_pc tt (Symbolic.comp_num st)). *)
 
 
-Definition table : (Symbolic.syscall_table lrc_tags [eqType of unit]) :=
+Definition table : (Symbolic.syscall_table lrc_tags unit) :=
   [fmap ((word_of_nat alloc_label),
-       (@Symbolic.Syscall mt lrc_tags [eqType of unit] tt (LRC.alloc_fun (NC := NC))))].
+       (@Symbolic.Syscall mt lrc_tags unit tt (LRC.alloc_fun (NC := NC))))].
 
 (*
 Definition alloc_addr : imm mt := shlw 1%w (as_word (ssrint.Posz 14)). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)
-Definition table_lrc : @Symbolic.syscall_table mt lrc_tags [eqType of unit] :=
+Definition table_lrc : @Symbolic.syscall_table mt lrc_tags unit :=
   [fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := LRC.alloc_fun |})].
 *)
 End WithClasses'.

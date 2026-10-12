@@ -18,7 +18,8 @@ Require Import Lib.Extra.
 Require Import Coq.Program.Equality.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
-From mathcomp Require ssrnat.
+From mathcomp Require Import ssrnat.
+Import Common.CompCertExtensions.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

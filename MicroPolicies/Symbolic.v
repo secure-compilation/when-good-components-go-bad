@@ -1,9 +1,11 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word.
-From extructures Require Import fmap.
+From extructures Require Import ord fset fmap.
+From HB Require Import structures.
 
 Require Import MicroPolicies.Utils MicroPolicies.Types.
 Require Import CompCert.Events.
+Require Import Coq.micromega.Lia.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -30,8 +32,7 @@ Definition tag_kind_eq (tk1 tk2 : tag_kind) : bool :=
 Lemma tag_kind_eqP : Equality.axiom tag_kind_eq.
 Proof. by do !case; constructor. Qed.
 
-Definition tag_kind_eqMixin := EqMixin tag_kind_eqP.
-Canonical tag_kind_eqType := Eval hnf in EqType tag_kind tag_kind_eqMixin.
+HB.instance Definition _ := hasDecEq.Build tag_kind tag_kind_eqP.
 End TagKindEq.
 
 Definition inputs (op : opcode) : seq tag_kind :=
@@ -183,8 +184,19 @@ Definition pct (s : state) := taga (pc s).
 Definition convert (i : ssrint.int) : BinNums.Z :=
   match i with
   | ssrint.Posz n => BinInt.Z.of_nat n
-  | ssrint.Negz n => BinInt.Z.opp (BinInt.Z.of_nat n)
+  | ssrint.Negz n => BinInt.Z.opp (BinInt.Z.of_nat (S n))
   end.
+
+(* [convert] is the standard [int -> Z] embedding ([Negz n] is [-(n+1)]), hence injective.
+   (The previous version dropped the [+1] for [Negz], conflating [0] and [-1].) *)
+Lemma convert_inj : injective convert.
+Proof.
+move=> [m|m] [n|n]; rewrite /convert => H.
+- congr ssrint.Posz; lia.
+- exfalso; lia.
+- exfalso; lia.
+- congr ssrint.Negz; lia.
+Qed.
 
 (* TL TODO: following CH's instruction, adding arguments ad-hoc to allow
             transfer function to produces events *)
@@ -266,6 +278,45 @@ Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
         next_state_do_updates st' (hsbehead tags) (behead updts)
   end.
 
+
+(* [updm] is an in-place update: it succeeds only on a key already in the domain, so it leaves
+   the domain unchanged. *)
+Lemma updm_domm_eq {T : ordType} {St : Type} (m m' : {fmap T -> St}) k v :
+  updm m k v = Some m' -> domm m' = domm m.
+Proof.
+rewrite /updm; case E: (getm m k) => [a|] // [<-].
+apply/eq_fset => x; rewrite domm_set in_fsetU1.
+case: (altP (x =P k)) => [->|_] //=.
+by rewrite mem_domm E.
+Qed.
+
+(* A single update only [updm]s a register/memory key, so it preserves the register domain. *)
+Lemma next_state_do_update_regs_domm (st : state) (tk : tag_kind)
+      (tag : tag_type ttypes tk) (updt : update) (st' : state) :
+  next_state_do_update st tag updt = Some st' -> domm (regs st') = domm (regs st).
+Proof.
+case: tk tag => tag; rewrite /next_state_do_update.
+- case: updt => [r x | r | w1 w2 | w] //=.
+  + case E: (updm (regs st) r _) => [rs'|] //= [<-] /=. exact: (updm_domm_eq E).
+  + case Ea: (regs st r) => [a|] //=.
+    case E: (updm (regs st) r _) => [rs'|] //= [<-] /=. exact: (updm_domm_eq E).
+- case: updt => [r x | r | w1 w2 | w] //=.
+  + case E: (updm (mem st) w1 _) => [m'|] //= [<-] //.
+  + case Ea: (mem st w) => [a|] //=. case E: (updm (mem st) w _) => [m'|] //= [<-] //.
+- by [].
+Qed.
+
+Lemma next_state_do_updates_regs_domm :
+  forall (tks : seq tag_kind) (tags : hseq (tag_type ttypes) tks)
+         (updts : seq update) (st st' : state),
+    next_state_do_updates st tags updts = Some st' -> domm (regs st') = domm (regs st).
+Proof.
+elim => [|tk tks' IH] tags updts st st' /=.
+- by move=> [<-].
+- case: (ohead updts) => [updt|] //=.
+  case E: (next_state_do_update st (hshead tags) updt) => [st1|] //= H.
+  by rewrite (IH _ _ _ _ H) (next_state_do_update_regs_domm E).
+Qed.
 
 Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
            (updts : seq update) (pc' : word) : option state_ev :=
@@ -403,7 +454,7 @@ Module Exports.
 
 Import Symbolic.
 
-Definition state_eqb mt p : rel (@state mt p [eqType of unit]) :=
+Definition state_eqb mt p : rel (@state mt p unit) :=
   [rel s1 s2 | [&& mem s1 == mem s2,
                    regs s1 == regs s2,
                    pc s1 == pc s2 &
@@ -418,8 +469,7 @@ Proof.
   - by move => [-> -> -> ->].
 Qed.
 
-Definition state_eqMixin mt p := EqMixin (@state_eqbP mt p).
-Canonical state_eqType mt p := Eval hnf in EqType _ (@state_eqMixin mt p).
+HB.instance Definition _ mt p := hasDecEq.Build (@state mt p unit) (@state_eqbP mt p).
 
 Export TagKindEq.
 

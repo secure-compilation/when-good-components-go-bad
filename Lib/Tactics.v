@@ -24,9 +24,9 @@ Ltac simplify_bools :=
   end.
 
 Ltac simplify_nat_equalities :=
-  try rewrite <- beq_nat_refl;
-  try rewrite beq_nat_refl;
+  try rewrite Nat.eqb_refl;
+  try rewrite <- Nat.eqb_refl;
   try match goal with
       | H: (_ =? _) = true |- _ =>
-        apply beq_nat_true_iff in H; rewrite H
+        apply Nat.eqb_eq in H; rewrite H
       end.

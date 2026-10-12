@@ -8,7 +8,6 @@ Require Import Coq.extraction.ExtrOcamlBasic.
 Require Import Coq.extraction.ExtrOcamlString.
 Require Import Coq.extraction.ExtrOcamlNatBigInt.
 Require Import Coq.extraction.ExtrOcamlZBigInt.
-Require Import Coq.extraction.ExtrOcamlBigIntConv.
 Require Export Extraction.
 Require Import Coq.Strings.String.
 

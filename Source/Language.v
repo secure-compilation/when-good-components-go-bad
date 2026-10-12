@@ -103,6 +103,27 @@ Module Source.
                  | inr values => length values > 0
                  end%nat.
 
+  (* Static buffer contents may not forge pointers into DYNAMIC memory: a
+     buffer value is an integer, Undef, or a pointer to a STATIC buffer
+     (block [Block.local]). This mirrors [values_are_integers] for
+     expressions ("no pointer forging"): a pointer literal aimed at a
+     dynamically allocated block would let a program observe the compiler's
+     block-allocation strategy (source and compiled code allocate different
+     block ids for the same source allocation). *)
+  Definition well_formed_buffer_value (C: Component.id) (v: value) : bool :=
+    match v with
+    | Ptr p => Nat.eqb (Pointer.block p) Block.local
+               && Nat.eqb (Pointer.component p) C
+    | _ => true
+    end.
+
+  Definition well_formed_buffer (C: Component.id) (buf: nat + list value)
+    : bool :=
+    match buf with
+    | inl _ => true
+    | inr values => List.forallb (well_formed_buffer_value C) values
+    end.
+
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
     wfprog_interface_soundness:
@@ -124,6 +145,11 @@ Module Source.
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
                 has_required_local_buffers p C;
+    (* buffer contents do not forge pointers into dynamic memory or into
+       other components *)
+    wfprog_buffer_values:
+      forall C buf, prog_buffers p C = Some buf ->
+                    well_formed_buffer C buf;
     (* iff the main component is defined, so is the main procedure
        RB: Changed from a simple conditional. *)
     wfprog_main_existence:
@@ -299,6 +325,10 @@ Module Source.
       move/wfprog_well_formed_buffers/(_ C): wf=> /=.
       rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?].
       by exists bufs => //=; rewrite filtermE pb_C /= C_Cs.
+    - move=> C buf /=; rewrite filtermE.
+      case pb_C: (pb C)=> [buf'|] //=.
+      case: ifP=> //= _ [<-].
+      exact: (wfprog_buffer_values wf pb_C).
     - have /= /implyP := proj1 (wfprog_main_existence wf).
       have /= /implyP := proj2 (wfprog_main_existence wf).
       rewrite /prog_main /find_procedure !mem_domm !filtermE.
@@ -425,6 +455,10 @@ Module Source.
       rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
         by rewrite mem_domm; case/wf1=> [? ->] /=; eauto.
       by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
+    - move=> C buf /=; rewrite unionmE.
+      case pb1_C: (prog_buffers p1 C)=> [buf1|] //=.
+      + move=> [<-]. exact: (wfprog_buffer_values wf1 pb1_C).
+      + exact: (wfprog_buffer_values wf2).
     - split.
       + have /implyP := proj1 (wfprog_main_existence wf1).
         have /implyP := proj1 (wfprog_main_existence wf2).

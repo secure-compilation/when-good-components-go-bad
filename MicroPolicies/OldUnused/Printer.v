@@ -5,6 +5,7 @@ From extructures Require Import fmap fset.
 Require Import MicroPolicies.Types.
 Require Import MicroPolicies.Symbolic.
 Require Import MicroPolicies.LRC.
+Require Import Int32.
 Require Import MicroPolicies.Instance.
 
 Require Import Coq.Strings.String.
@@ -107,7 +108,7 @@ Definition coqstring_of_pc (pc : atom (mword mt) pc_tag) : string :=
 Definition coqstring_of_internal (_ : unit) : string := "".
 
 
-Definition coqstring_of_state (st : state [eqType of unit]) : string :=
+Definition coqstring_of_state (st : state unit) : string :=
 "============================
 " ++ coqstring_of_pc (Symbolic.pc st)
   ++ coqstring_of_internal (Symbolic.internal st)

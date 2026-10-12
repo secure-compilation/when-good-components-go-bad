@@ -188,6 +188,7 @@ Proof.
       as [Cmem bs] eqn:Hblocks.
     destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs') (length procs'))
       as [Cmem' bs'] eqn:Hblocks'.
+    rewrite Hblocks' /=.
     rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
     rewrite <- Hiface.
     assert (Hmain : matching_mains p p') by now apply interface_implies_matching_mains.
@@ -241,23 +242,25 @@ Proof.
                 rewrite domm_set; apply /fsetU1P; now left.
                 rewrite domm_set; apply /fsetU1P; right.
                 now apply IHl.
-              * destruct C eqn:HeqC; destruct P' eqn:HeqP'; simpl in *;
-                  try (apply IHl;
-                       move: H2; rewrite domm_set in_fsetU => /orP [H2 | H2]; last assumption;
-                                                             move: H2; rewrite in_fset1; rewrite eqtype.eqE; simpl;
-                                                             intros H; assert (Heq: P = S s) by (now apply /ssrnat.eqnP); subst P;
-                                                             rewrite HP' in H1; destruct H1 as [? | [? ?]]; congruence).
-                -- rewrite domm_set in_fsetU; apply /orP.
-                   destruct P; first now left.
-                   right. apply IHl.
-                   move: H2; rewrite domm_set in_fsetU => /orP [H2 | H2]; last assumption.
-                   inversion H2.
-                -- apply IHl.
-                   destruct P. destruct H1. rewrite HP' in H. congruence.
-                   destruct H. congruence.
-                   move: H2; rewrite domm_set in_fsetU => /orP [H2 | H2]; last assumption.
-                   inversion H2.
+              * destruct C eqn:HeqC; destruct P' eqn:HeqP'; simpl in *.
+                -- rewrite domm_set in_fsetU; move: H2; rewrite domm_set in_fsetU.
+                   case/orP => H2; first by rewrite H2.
+                   by rewrite (IHl H2) orbT.
+                -- apply IHl; move: H2; rewrite domm_set in_fsetU; case/orP; last by [].
+                   rewrite in_fset1 => /eqtype.eqP eP; subst P.
+                   case: H1 => [H | [H _]]; first by rewrite HP' in H.
+                   discriminate H.
+                -- apply IHl; move: H2; rewrite domm_set in_fsetU; case/orP; last by [].
+                   rewrite in_fset1 => /eqtype.eqP eP; subst P.
+                   case: H1 => [H | [_ H]]; first by rewrite HP' in H.
+                   discriminate H.
+                -- apply IHl; move: H2; rewrite domm_set in_fsetU; case/orP; last by [].
+                   rewrite in_fset1 => /eqtype.eqP eP; subst P.
+                   case: H1 => [H | [H _]]; first by rewrite HP' in H.
+                   discriminate H.
         }
+        cbn [Component.main Procedure.main Nat.eqb] in Hdomm.
+        rewrite -Hfmap in Hdomm.
         apply Hin in Hdomm as [Hdomm1 Hdomm2].
         apply Hin; split; try assumption. simpl in *.
         (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
@@ -293,7 +296,7 @@ Proof.
           induction l. by [].
           rewrite //= /oapp; now destruct a.
         }
-        rewrite H in Hdomm; clear -Hdomm; exfalso.
+        rewrite -Hfmap in Hdomm; rewrite H in Hdomm; clear -Hdomm; exfalso.
         move: Hdomm => //=. apply /negP.
         now rewrite domm0.
     + now rewrite -> (proj1 Hmain Hcase3) in Hcase4. (* Contra. *)
@@ -357,6 +360,8 @@ Proof.
                 intros H. assert (Heq: P = P') by now apply /ssrnat.eqnP.
                 rewrite Heq in H1. rewrite HP' in H1. inversion H1.
         }
+        cbn [Component.main Procedure.main Nat.eqb] in Hdomm.
+        rewrite -Hfmap in Hdomm.
         apply Hin in Hdomm as [Hdomm1 Hdomm2].
         apply Hin; split; try assumption. simpl in *.
         (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
@@ -382,7 +387,7 @@ Proof.
           induction l. by [].
           rewrite //= /oapp; now destruct a.
         }
-        rewrite H in Hdomm; clear -Hdomm; exfalso.
+        rewrite -Hfmap in Hdomm; rewrite H in Hdomm; clear -Hdomm; exfalso.
         move: Hdomm => //=. apply /negP.
         now rewrite domm0.
   - now rewrite HC.

@@ -4,7 +4,8 @@ Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype choice seq.
+From HB Require Import structures.
 
 Set Bullet Behavior "Strict Subproofs".
 Require Import Coq.micromega.Lia.
@@ -22,8 +23,7 @@ Proof.
 by case=> [????|???] [????|???] //= => [[-> -> -> ->]|[-> -> ->]].
 Qed.
 
-Definition event_eqMixin := InjEqMixin sum_of_event_inj.
-Canonical event_eqType := Eval hnf in EqType event event_eqMixin.
+HB.instance Definition _ := hasDecEq.Build event (inj_eqAxiom sum_of_event_inj).
 
 Definition empty_behavior (beh : program_behavior) :=
   match beh with

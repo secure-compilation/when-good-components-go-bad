@@ -236,7 +236,8 @@ Qed.
       + split; eauto.
 
     - assert (P'_Cs_tbc_m':
-               does_prefix (CS.sem1 (program_link P' Cs)) (FTbc (finpref_trace m'))).
+               does_prefix (CS.sem1 (program_link P' Cs))
+                 (FTbc (finpref_trace m'))).
       { clear -HP'_Cs_m m'_m.
         revert HP'_Cs_m m'_m.
         generalize (CS.sem1 (program_link P' Cs)). clear.

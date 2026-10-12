@@ -3,6 +3,10 @@ Require Import Common.Values.
 Require Import Common.Linking.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
+From mathcomp Require Import zify.
+Require Import Coq.micromega.Lia.
+
+Local Open Scope fset_scope.
 
 Module Type AbstractComponentMemory.
   Parameter t : Type.
@@ -55,6 +59,82 @@ Module Type AbstractComponentMemory.
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
+
+  (* ------------------------------------------------------------------ *)
+  (* Extensions for the S2I forward-simulation proof (block injection).  *)
+
+  (* Every memory reachable from the exported constructors keeps its
+     allocated block ids below the internal allocation cursor; [wf] is that
+     residual invariant, exported abstractly so that freshness of [alloc]
+     becomes usable from outside the module. *)
+  Parameter wf : t -> Prop.
+
+  Axiom wf_prealloc: forall bufs, wf (prealloc bufs).
+  Axiom wf_empty: wf empty.
+  Axiom wf_alloc:
+    forall m m' n b, wf m -> alloc m n = (m', b) -> wf m'.
+  Axiom wf_store:
+    forall m m' b i v, wf m -> store m b i v = Some m' -> wf m'.
+  Axiom wf_reserve_block:
+    forall m m' b, wf m -> reserve_block m = (m', b) -> wf m'.
+
+  Axiom alloc_fresh:
+    forall m m' n b, wf m -> alloc m n = (m', b) -> b \notin domm m.
+
+  (* The allocation cursor is monotone: every EXISTING block id strictly
+     precedes a freshly allocated one (the stack-chain descent's measure). *)
+  Axiom alloc_gt:
+    forall m m' n b b', wf m -> alloc m n = (m', b) -> b' \in domm m -> b' < b.
+
+  Axiom domm_alloc_eq:
+    forall m m' n b, alloc m n = (m', b) -> domm m' = b |: domm m.
+
+  Axiom load_after_alloc_eq:
+    forall m m' n b,
+      alloc m n = (m', b) ->
+    forall i,
+      load m' b i =
+      if (0 <=? i)%Z && (i <? Z.of_nat n)%Z then Some Undef else None.
+
+  Axiom domm_store:
+    forall m m' b i v, store m b i v = Some m' -> domm m' = domm m.
+
+  Axiom load_domm:
+    forall m b i v, load m b i = Some v -> b \in domm m.
+
+  Axiom load_notin_domm:
+    forall m b i, b \notin domm m -> load m b i = None.
+
+  Axiom store_load:
+    forall m m' b i v,
+      store m b i v = Some m' -> exists v', load m b i = Some v'.
+
+  Axiom load_after_reserve_block:
+    forall m m' b,
+      reserve_block m = (m', b) ->
+    forall b' i, load m' b' i = load m b' i.
+
+  Axiom domm_reserve_block:
+    forall m m' b, reserve_block m = (m', b) -> domm m' = domm m.
+
+  (* The allocation cursor, exposed: consecutive reservations/allocations
+     return the successive cursor values (hence DISTINCT block ids — the fact
+     the compiled-code anchors need). *)
+  Parameter next_block : t -> Block.id.
+
+  Axiom reserve_block_next:
+    forall m m' b,
+      reserve_block m = (m', b) ->
+      b = next_block m /\ next_block m' = S (next_block m).
+
+  Axiom alloc_next_block:
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      b = next_block m /\ next_block m' = S (next_block m).
+
+  Axiom next_block_store:
+    forall m m' b i v,
+      store m b i v = Some m' -> next_block m' = next_block m.
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -112,7 +192,7 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
 
-  Definition domm (m : t) := @domm nat_ordType block (content m).
+  Definition domm (m : t) := @domm nat block (content m).
 
   Lemma load_prealloc:
     forall bufs b i,
@@ -200,13 +280,187 @@ Module ComponentMemory : AbstractComponentMemory.
     forall bufs m,
       prealloc bufs = m ->
       domm m = fmap.domm bufs.
-  Admitted.
+  Proof.
+    move=> bufs m <-. by rewrite /domm /prealloc /= domm_map.
+  Qed.
 
+  (* Provable only for cursor-consistent memories (see [wf] below); kept as in
+     the original development. Unused by the codebase. *)
   Lemma domm_alloc :
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
   Admitted.
+
+  (* ------------------------------------------------------------------ *)
+  (* Extensions for the S2I forward-simulation proof (block injection).  *)
+
+  Definition wf (m : t) : Prop :=
+    forall b, b \in domm m -> b < nextblock m.
+
+  Lemma fold_left_max_ge (l : seq nat) (acc b : nat) :
+    (b <= acc) || (b \in l) -> b <= fold_left Nat.max l acc.
+  Proof.
+    elim: l acc => [|x l IH] acc /=; first by rewrite orbF.
+    rewrite in_cons => Hb. apply: IH.
+    case/orP: Hb => [Hacc|/orP[/eqP ->|Hin]].
+    - apply/orP; left. lia.
+    - apply/orP; left. lia.
+    - by rewrite Hin orbT.
+  Qed.
+
+  Lemma wf_prealloc: forall bufs, wf (prealloc bufs).
+  Proof.
+    move=> bufs b. rewrite /domm /prealloc /= domm_map => Hin.
+    rewrite ltnS. apply: fold_left_max_ge. by rewrite Hin orbT.
+  Qed.
+
+  Lemma wf_empty: wf empty.
+  Proof. by move=> b; rewrite /domm /empty /= domm0 in_fset0. Qed.
+
+  Lemma wf_alloc:
+    forall m m' n b, wf m -> alloc m n = (m', b) -> wf m'.
+  Proof.
+    move=> m m' n b Hwf [<- _] b' /=.
+    rewrite /domm /= domm_set in_fsetU1 => /orP[/eqP ->|Hin].
+    - by rewrite addnC addn1 ltnSn.
+    - have := Hwf _ Hin. lia.
+  Qed.
+
+  Lemma wf_store:
+    forall m m' b i v, wf m -> store m b i v = Some m' -> wf m'.
+  Proof.
+    move=> m m' b i v Hwf. rewrite /store.
+    case Hb: (content m b) => [chunk|] //.
+    case: (0 <=? i)%Z => //.
+    case: (list_upd chunk (Z.to_nat i) v) => [chunk'|] // [<-] b' /=.
+    rewrite /domm /= domm_set in_fsetU1 => /orP[/eqP ->|Hin].
+    - apply: Hwf. by rewrite /domm mem_domm Hb.
+    - exact: Hwf.
+  Qed.
+
+  Lemma wf_reserve_block:
+    forall m m' b, wf m -> reserve_block m = (m', b) -> wf m'.
+  Proof.
+    move=> m m' b Hwf [<- _] b' /= Hin.
+    have := Hwf _ Hin. rewrite /domm /=. lia.
+  Qed.
+
+  Lemma alloc_fresh:
+    forall m m' n b, wf m -> alloc m n = (m', b) -> b \notin domm m.
+  Proof.
+    move=> m m' n b Hwf [_ <-].
+    apply/negP => /Hwf. by rewrite ltnn.
+  Qed.
+
+  Lemma alloc_gt:
+    forall m m' n b b', wf m -> alloc m n = (m', b) -> b' \in domm m -> b' < b.
+  Proof.
+    move=> m m' n b b' Hwf [_ <-]. exact: Hwf.
+  Qed.
+
+  Lemma domm_alloc_eq:
+    forall m m' n b, alloc m n = (m', b) -> domm m' = b |: domm m.
+  Proof.
+    move=> m m' n b [<- <-]. by rewrite /domm /= domm_set.
+  Qed.
+
+  Lemma load_after_alloc_eq:
+    forall m m' n b,
+      alloc m n = (m', b) ->
+    forall i,
+      load m' b i =
+      if (0 <=? i)%Z && (i <? Z.of_nat n)%Z then Some Undef else None.
+  Proof.
+    move=> m m' n b [<- <-] i. rewrite /load /= setmE eqxx.
+    case: (Z.leb_spec0 0 i) => [i_pos|] //=.
+    case: (Z.ltb_spec0 i (Z.of_nat n)) => [i_lt|i_ge].
+    - rewrite <- (Z2Nat.id _ i_pos) in i_lt.
+      rewrite <- Nat2Z.inj_lt in i_lt.
+      rewrite <- (repeat_length Undef n) in i_lt.
+      rewrite <- nth_error_Some in i_lt.
+      destruct (nth_error (repeat Undef n) (Z.to_nat i)) as [v|] eqn:get_i;
+        try congruence.
+      apply nth_error_In in get_i. apply repeat_spec in get_i.
+      now rewrite get_i.
+    - apply (proj2 (nth_error_None _ _)). rewrite repeat_length. lia.
+  Qed.
+
+  Lemma domm_store:
+    forall m m' b i v, store m b i v = Some m' -> domm m' = domm m.
+  Proof.
+    move=> m m' b i v. rewrite /store.
+    case Hb: (content m b) => [chunk|] //.
+    case: (0 <=? i)%Z => //.
+    case: (list_upd chunk (Z.to_nat i) v) => [chunk'|] // [<-].
+    rewrite /domm /= domm_set.
+    apply/eq_fset => b'. rewrite in_fsetU1.
+    case: (b' =P b) => [->|] //=. by rewrite mem_domm Hb.
+  Qed.
+
+  Lemma load_domm:
+    forall m b i v, load m b i = Some v -> b \in domm m.
+  Proof.
+    move=> m b i v. rewrite /load /domm mem_domm.
+    by case: (content m b).
+  Qed.
+
+  Lemma load_notin_domm:
+    forall m b i, b \notin domm m -> load m b i = None.
+  Proof.
+    move=> m b i. rewrite /load /domm mem_domm.
+    by case: (content m b).
+  Qed.
+
+  Lemma store_load:
+    forall m m' b i v,
+      store m b i v = Some m' -> exists v', load m b i = Some v'.
+  Proof.
+    move=> m m' b i v. rewrite /store /load.
+    case Hb: (content m b) => [chunk|] //.
+    case: (0 <=? i)%Z => //.
+    case Hupd: (list_upd chunk (Z.to_nat i) v) => [chunk'|] // _.
+    move: Hupd. move: (Z.to_nat i) chunk' => k chunk'.
+    elim: chunk k chunk' {Hb} => [|v'' chunk IH] [|k] chunk' //=.
+    - by move=> _; eauto.
+    - case Hupd: (list_upd chunk k v) => [chunk''|] //= _.
+      exact: IH Hupd.
+  Qed.
+
+  Lemma load_after_reserve_block:
+    forall m m' b,
+      reserve_block m = (m', b) ->
+    forall b' i, load m' b' i = load m b' i.
+  Proof. by move=> m m' b [<- _] b' i. Qed.
+
+  Lemma domm_reserve_block:
+    forall m m' b, reserve_block m = (m', b) -> domm m' = domm m.
+  Proof. by move=> m m' b [<- _]. Qed.
+
+  Definition next_block (m : t) : Block.id := nextblock m.
+
+  Lemma reserve_block_next:
+    forall m m' b,
+      reserve_block m = (m', b) ->
+      b = next_block m /\ next_block m' = S (next_block m).
+  Proof. by move=> m m' b [<- <-]. Qed.
+
+  Lemma alloc_next_block:
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      b = next_block m /\ next_block m' = S (next_block m).
+  Proof. by move=> m m' n b [<- <-]. Qed.
+
+  Lemma next_block_store:
+    forall m m' b i v,
+      store m b i v = Some m' -> next_block m' = next_block m.
+  Proof.
+    move=> m m' b i v. rewrite /store.
+    case: (content m b) => [chunk|] //.
+    case: (0 <=? i)%Z => //.
+    case: (list_upd chunk (Z.to_nat i) v) => [chunk'|] //.
+    by move=> [<-].
+  Qed.
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
@@ -235,7 +489,7 @@ Module ComponentMemoryExtra.
     - intros n mem' H.
       destruct n; auto.
       + simpl in *. inversion H. now apply app_cons_not_nil in H2.
-      + rewrite app_length plus_comm. simpl.
+      + rewrite app_length Nat.add_comm. simpl.
         unfold reserve_blocks in H.
         simpl in H.
         destruct (iter n (fun '(mem, bs) => let '(mem', b) := reserve_block mem in (mem', bs ++ [b])) (mem, []))

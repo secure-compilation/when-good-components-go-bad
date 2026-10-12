@@ -7,6 +7,7 @@ Require Import Source.Blame.
 Require Import Intermediate.Machine.
 Require Import Intermediate.Recombination.
 Require Import S2I.Compiler.
+Require Import S2I.Simulation.
 Require Import S2I.Definitions.
 Require Import Definability.
 
@@ -166,7 +167,7 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
            Hlinkable Hclosed Hwfp Hwfc Hprefix Hnot_wrong Hcompp Hcompc.
     pose proof Source.linking_well_formedness Hwfp Hwfc Hlinkable as Hwfpc.
     destruct (Compiler.well_formed_compilable _ Hwfpc) as [pc_compiled Hcomppc].
-    pose proof Compiler.forward_simulation_same_safe_prefix _ _ _
+    pose proof Simulation.forward_simulation_same_safe_prefix _ _ _
          Hclosed Hwfpc Hprefix Hnot_wrong Hcomppc
       as [beh [Hbeh Hprefix_beh]].
     pose proof Compiler.separate_compilation_weaker _ _ _ _ _
@@ -198,7 +199,7 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
     pose proof Compiler.separate_compilation_weaker _ _ _ _ _
          Hwfp Hwfc Hlinkable Hcompp Hcompc Hcomppc
       as Hsc.
-    eapply Compiler.backward_simulation_behavior_improves_prefix;
+    eapply Simulation.backward_simulation_behavior_improves_prefix;
       try eassumption.
     - destruct Hprefix as [beh [Hbeh Hprefix_beh]].
       exists beh. split.

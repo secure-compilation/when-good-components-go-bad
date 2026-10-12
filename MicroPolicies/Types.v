@@ -1,7 +1,8 @@
 From mathcomp Require Import
-  ssreflect ssrfun ssrbool eqtype ssrnat seq choice fintype div ssrint ssralg intdiv.
+  ssreflect ssrfun ssrbool eqtype ssrnat seq choice fintype div order ssrint ssralg intdiv.
 From extructures Require Import ord.
 From CoqUtils Require Import word.
+From HB Require Import structures.
 
 Require Import MicroPolicies.Utils.
 
@@ -28,8 +29,7 @@ Scheme Equality for binop.
 Lemma binop_eqP : Equality.axiom binop_beq.
 Proof. by do !case; constructor. Qed.
 
-Definition binop_eqMixin := EqMixin binop_eqP.
-Canonical binop_eqType := Eval hnf in EqType binop binop_eqMixin.
+HB.instance Definition _ := hasDecEq.Build binop binop_eqP.
 
 Definition pickle_binop b :=
   match b with
@@ -65,10 +65,8 @@ Definition unpickle_binop n :=
 Lemma pickle_binopK : pcancel pickle_binop unpickle_binop.
 Proof. by case. Qed.
 
-Definition binop_choiceMixin := PcanChoiceMixin pickle_binopK.
-Canonical binop_choiceType := Eval hnf in ChoiceType binop binop_choiceMixin.
-Definition binop_countMixin := CountMixin pickle_binopK.
-Canonical binop_countType := Eval hnf in CountType binop binop_countMixin.
+HB.instance Definition _ := PCanHasChoice pickle_binopK.
+HB.instance Definition _ := PCanIsCountable pickle_binopK.
 
 Definition binop_enum := [::
   ADD;
@@ -87,8 +85,7 @@ Definition binop_enum := [::
 Lemma binop_enumP : Finite.axiom binop_enum.
 Proof. by case. Qed.
 
-Definition binop_finMixin := FinMixin binop_enumP.
-Canonical binop_finType := Eval hnf in FinType binop binop_finMixin.
+HB.instance Definition _ := isFinite.Build binop binop_enumP.
 
 Inductive opcode : predArgType :=
 | NOP
@@ -111,8 +108,7 @@ Scheme Equality for opcode.
 Lemma opcode_eqP : Equality.axiom opcode_beq.
 Proof. by do !case; constructor. Qed.
 
-Definition opcode_eqMixin := EqMixin opcode_eqP.
-Canonical opcode_eqType := Eval hnf in EqType opcode opcode_eqMixin.
+HB.instance Definition _ := hasDecEq.Build opcode opcode_eqP.
 
 Definition pickle_opcode (o : opcode) : nat :=
   match o with
@@ -174,13 +170,9 @@ Definition unpickle_opcode (n : nat) : option opcode :=
 Lemma pickle_opcodeK : pcancel pickle_opcode unpickle_opcode.
 Proof. by do !case. Qed.
 
-Definition opcode_choiceMixin := PcanChoiceMixin pickle_opcodeK.
-Canonical opcode_choiceType :=
-  Eval hnf in ChoiceType opcode opcode_choiceMixin.
-Definition opcode_countMixin := CountMixin pickle_opcodeK.
-Canonical opcode_countType := Eval hnf in CountType opcode opcode_countMixin.
-Definition opcode_ordMixin := PcanOrdMixin pickle_opcodeK.
-Canonical opcode_ordType := Eval hnf in OrdType opcode opcode_ordMixin.
+HB.instance Definition _ := PCanHasChoice pickle_opcodeK.
+HB.instance Definition _ := PCanIsCountable pickle_opcodeK.
+HB.instance Definition _ := PcanHasOrd pickle_opcodeK.
 
 Definition max_opcode := 24.
 
@@ -217,8 +209,7 @@ Definition opcode_enum :=
 Lemma opcode_enumP : Finite.axiom opcode_enum.
 Proof. by do !case. Qed.
 
-Definition opcode_finMixin := FinMixin opcode_enumP.
-Canonical opcode_finType := Eval hnf in FinType opcode opcode_finMixin.
+HB.instance Definition _ := isFinite.Build opcode opcode_enumP.
 
 Inductive vopcode : predArgType :=
 | OP : opcode -> vopcode
@@ -240,8 +231,7 @@ Proof.
   by apply/(iffP idP); [move /eqP ->| move=> [->]].
 Qed.
 
-Definition vopcode_eqMixin := EqMixin vopcode_eqP.
-Canonical vopcode_eqType := Eval hnf in EqType vopcode vopcode_eqMixin.
+HB.instance Definition _ := hasDecEq.Build vopcode vopcode_eqP.
 
 Definition pickle_vopcode (vo : vopcode) : nat :=
   match vo with
@@ -256,12 +246,8 @@ Definition unpickle_vopcode n :=
 Lemma pickle_vopcodeK : pcancel pickle_vopcode unpickle_vopcode.
 Proof. by do !case. Qed.
 
-Definition vopcode_choiceMixin := PcanChoiceMixin pickle_vopcodeK.
-Canonical vopcode_choiceType :=
-  Eval hnf in ChoiceType vopcode vopcode_choiceMixin.
-Definition vopcode_countMixin := CountMixin pickle_vopcodeK.
-Canonical vopcode_countType :=
-  Eval hnf in CountType vopcode vopcode_countMixin.
+HB.instance Definition _ := PCanHasChoice pickle_vopcodeK.
+HB.instance Definition _ := PCanIsCountable pickle_vopcodeK.
 
 Definition vopcode_enum := SERVICE :: [seq OP x | x <- enum opcode].
 
@@ -282,8 +268,7 @@ Record machine_types := {
 Definition mword (mt : machine_types) : Type :=
   word (word_size mt).
 Arguments mword mt : simpl never.
-Canonical mword_eqType mt :=
-  Eval hnf in EqType (mword mt) [eqMixin of word (word_size mt)].
+HB.instance Definition _ mt := Equality.copy (mword mt) (word (word_size mt)).
 
 Definition reg (mt : machine_types) : Type :=
   word (reg_field_size mt).
@@ -345,8 +330,7 @@ Proof.
   end.
 Qed.
 
-Definition instr_eqMixin := EqMixin instr_eqP.
-Canonical instr_eqType := Eval hnf in EqType instr instr_eqMixin.
+HB.instance Definition _ := hasDecEq.Build instr instr_eqP.
 
 Definition opcode_of (i : instr) : opcode :=
   match i with
@@ -407,7 +391,9 @@ Definition binop_denote (f : binop) : mword mt -> mword mt -> mword mt :=
   | SUB => subw
   | MUL => mulw
   | EQ  => fun w1 w2 => as_word (w1 == w2)
-  | LEQ => fun w1 w2 => as_word (w1 <= w2)%ord (* FIXME: we don't have signed comparison right now *)
+  | LEQ => fun w1 w2 => as_word ((int_of_word w1 <= int_of_word w2)%O)
+      (* signed comparison via two's-complement [int_of_word]
+         (was an unsigned stub; LEQU is the unsigned opcode) *)
   | LEQU => fun w1 w2 => as_word (w1 <= w2)%ord
   | AND => andw
   | OR => orw
@@ -473,8 +459,7 @@ Proof.
   - move => [-> ->]. by rewrite !eqxx.
 Qed.
 
-Definition atom_eqMixin V T := EqMixin (@atom_eqbP V T).
-Canonical atom_eqType V T := Eval hnf in EqType _ (atom_eqMixin V T).
+HB.instance Definition _ (V T : eqType) := hasDecEq.Build (atom V T) (@atom_eqbP V T).
 
 Notation "x @ t" := (Atom x t) (at level 5, format "x '@' t").
 

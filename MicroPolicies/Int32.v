@@ -7,6 +7,7 @@ From extructures Require Import ord fmap.
 
 Require Import MicroPolicies.Utils.
 Require Import MicroPolicies.Types.
+Require Import MicroPolicies.WordExtra.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -20,7 +21,18 @@ Program Definition concrete_int_32_mt : machine_types := {|
   imm_size := 15
 |}.
 
-Local Notation mt := concrete_int_32_mt.
+Definition mt := concrete_int_32_mt.
+
+(* Field sizes of the concrete machine, exposed as equations so downstream files can use them
+   without making [mt] transparent (which would let [simpl] explode the word operations). *)
+Lemma reg_field_size_mt : reg_field_size mt = 5.
+Proof. by []. Qed.
+Lemma word_size_mt : word_size mt = 32.
+Proof. by []. Qed.
+Lemma imm_size_mt : imm_size mt = 15.
+Proof. by []. Qed.
+
+Global Opaque mt.
 
 Definition fields_of_op op : seq nat :=
   match op with
@@ -135,19 +147,8 @@ Lemma shlw_all_one: forall k (w: word k) n,
     andw (shlw w n)
       (shlw (as_word (ssrint.Posz (2 ^ k - 1))) n) =
       shlw w n.
-Proof.
-  induction k.
-  - intros w n.
-    destruct w as [[m1 i1]], n as [[m2 i2]].
-    unfold shlw, expn, muln in *. simpl in *.
-    assert (m1 = 0) by now destruct m1. subst m1.
-    assert (m2 = 0) by now destruct m2. subst m2.
-    simpl.
-    now rewrite andww.
-  - admit.
-Admitted.
+Proof. by move=> *; exact: shlw_all_one'. Qed.
 
 Lemma shlw_zero: forall k n,
     shlw (0%w: word k) n = 0%w.
-Proof.
-Admitted.
+Proof. by move=> *; exact: shlw_zero'. Qed.

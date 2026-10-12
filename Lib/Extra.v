@@ -1,15 +1,15 @@
 (* Complements to the standard Coq library, ssreflect, and Coq utils *)
 
 Require Import Coq.ZArith.ZArith.
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype choice seq.
 From extructures Require Import ord fset fmap.
+From HB Require Import structures.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Definition Z_eqMixin := EqMixin Z.eqb_spec.
-Canonical Z_eqType := Eval hnf in EqType Z Z_eqMixin.
+HB.instance Definition _ := hasDecEq.Build Z Z.eqb_spec.
 
 Section FMap.
 

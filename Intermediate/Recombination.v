@@ -12,6 +12,7 @@ Require Import Intermediate.CS.
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
+Require Import Lia.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -32,12 +33,110 @@ Section Merge.
   Definition merge_frames (f f''   : Pointer.t) : Pointer.t :=
     if Pointer.component f \in domm ip then f else f''.
 
-  Fixpoint merge_stacks (s s'' : CS.stack) : CS.stack :=
-    match s, s'' with
-    | [], [] => []
-    | f :: s, f'' :: s'' => merge_frames f f'' :: merge_stacks s s''
-    | _, _ => [] (* Should not happen *)
+  Fixpoint take_block (C : Component.id) (s : CS.stack) : CS.stack :=
+    match s with
+    | [] => []
+    | f :: s' => if Nat.eqb (Pointer.component f) C then f :: take_block C s' else []
     end.
+
+  Fixpoint drop_block (C : Component.id) (s : CS.stack) : CS.stack :=
+    match s with
+    | [] => []
+    | f :: s' => if Nat.eqb (Pointer.component f) C then drop_block C s' else f :: s'
+    end.
+
+  Definition merge_block (C : Component.id) (s s'' : CS.stack) : CS.stack :=
+    if C \in domm ip then take_block C s else take_block C s''.
+
+  Fixpoint merge_blocks (n : nat) (s s'' : CS.stack) : CS.stack :=
+    match n with
+    | 0 => []
+    | S n' =>
+      match s, s'' with
+      | [], [] => []
+      | f :: _, _ =>
+          merge_block (Pointer.component f) s s''
+          ++ merge_blocks n' (drop_block (Pointer.component f) s)
+                             (drop_block (Pointer.component f) s'')
+      | [], f'' :: _ =>
+          merge_block (Pointer.component f'') s s''
+          ++ merge_blocks n' (drop_block (Pointer.component f'') s)
+                             (drop_block (Pointer.component f'') s'')
+      end
+    end.
+
+  Definition merge_stacks (C : Component.id) (s s'' : CS.stack) : CS.stack :=
+    merge_block C s s'' ++ merge_blocks (length s + length s'')
+                                        (drop_block C s) (drop_block C s'').
+
+  Lemma drop_block_hd f s :
+    drop_block (Pointer.component f) (f :: s) = drop_block (Pointer.component f) s.
+  Proof. simpl. now rewrite Nat.eqb_refl. Qed.
+
+  Lemma take_block_hd f s :
+    take_block (Pointer.component f) (f :: s) = f :: take_block (Pointer.component f) s.
+  Proof. simpl. now rewrite Nat.eqb_refl. Qed.
+
+  Lemma drop_block_cons_eq C f s :
+    Pointer.component f = C -> drop_block C (f :: s) = drop_block C s.
+  Proof. intro H. cbn [drop_block]. rewrite H Nat.eqb_refl. reflexivity. Qed.
+
+  Lemma take_block_cons_eq C f s :
+    Pointer.component f = C -> take_block C (f :: s) = f :: take_block C s.
+  Proof. intro H. cbn [take_block]. rewrite H Nat.eqb_refl. reflexivity. Qed.
+
+  Lemma merge_blocks_cons_l n f s s'' :
+    merge_blocks (S n) (f :: s) s'' =
+    merge_block (Pointer.component f) (f :: s) s'' ++
+    merge_blocks n (drop_block (Pointer.component f) (f :: s))
+                   (drop_block (Pointer.component f) s'').
+  Proof. reflexivity. Qed.
+
+  Lemma length_drop_block C s : length (drop_block C s) <= length s.
+  Proof.
+    induction s as [|f s' IH]; simpl; [lia|].
+    destruct (Nat.eqb (Pointer.component f) C); simpl; lia.
+  Qed.
+
+  Lemma merge_blocks_stab n s s'' :
+    length s + length s'' <= n -> merge_blocks n s s'' = merge_blocks (S n) s s''.
+  Proof.
+    revert s s''; induction n as [|n IH]; intros s s'' Hsz.
+    - destruct s; destruct s''; simpl in *; (reflexivity || lia).
+    - destruct s as [|f s0].
+      + destruct s'' as [|f'' s0''].
+        * reflexivity.
+        * cbn [merge_blocks]. f_equal. apply IH.
+          rewrite drop_block_hd.
+          pose proof (length_drop_block (Pointer.component f'') []).
+          pose proof (length_drop_block (Pointer.component f'') s0'').
+          simpl in *. lia.
+      + cbn [merge_blocks]. f_equal. apply IH.
+        rewrite drop_block_hd.
+        pose proof (length_drop_block (Pointer.component f) s0).
+        pose proof (length_drop_block (Pointer.component f) s'').
+        simpl in Hsz. lia.
+  Qed.
+
+  Lemma merge_blocks_irrel n m s s'' :
+    length s + length s'' <= n -> length s + length s'' <= m ->
+    merge_blocks n s s'' = merge_blocks m s s''.
+  Proof.
+    intros Hn Hm.
+    transitivity (merge_blocks (length s + length s'') s s'').
+    - clear Hm. induction n as [|n IH].
+      + assert (length s + length s'' = 0) as E by lia. rewrite E. reflexivity.
+      + destruct (Nat.eq_dec (length s + length s'') (S n)) as [E|E].
+        * rewrite E. reflexivity.
+        * assert (length s + length s'' <= n) as Hn' by lia.
+          rewrite <- (merge_blocks_stab Hn'). now apply IH.
+    - symmetry. clear Hn. induction m as [|m IH].
+      + assert (length s + length s'' = 0) as E by lia. rewrite E. reflexivity.
+      + destruct (Nat.eq_dec (length s + length s'') (S m)) as [E|E].
+        * rewrite E. reflexivity.
+        * assert (length s + length s'' <= m) as Hm' by lia.
+          rewrite <- (merge_blocks_stab Hm'). now apply IH.
+  Qed.
 
   (* RB: TODO: Here and above, Program.interface vs. fset. *)
   Definition merge_memories (m m'' : Memory.t) : Memory.t :=
@@ -53,20 +152,13 @@ Section Merge.
   Definition merge_states (state state'' : CS.state) : CS.state :=
     let '(s, m, r, pc) := state in
     let '(s'', m'', r'', pc'') := state'' in
-    (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'').
+    (merge_stacks (Pointer.component pc) s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'').
 
   Lemma merge_frames_program frame frame'' :
     Pointer.component frame \in domm ip ->
     merge_frames frame frame'' = frame.
   Proof.
     intros Hpc. unfold merge_frames. now rewrite Hpc.
-  Qed.
-
-  Lemma merge_stacks_cons_program frame gps frame'' gps'' :
-    Pointer.component frame \in domm ip ->
-    merge_stacks (frame :: gps) (frame'' :: gps'') = frame :: merge_stacks gps gps''.
-  Proof.
-    intros Hpc. simpl. now rewrite merge_frames_program.
   Qed.
 
   Lemma merge_frames_context frame frame'' :
@@ -80,16 +172,117 @@ Section Merge.
     now destruct (Pointer.component frame \in domm ip) eqn:Heq.
   Qed.
 
-  Lemma merge_stacks_cons_context frame gps frame'' gps'' :
-    Pointer.component frame \in domm ic ->
-    merge_stacks (frame :: gps) (frame'' :: gps'') =
-    frame'' :: merge_stacks gps gps''.
+  Lemma merge_block_hd C frame gps frame'' gps'' :
+    Pointer.component frame = C -> Pointer.component frame'' = C ->
+    merge_block C (frame :: gps) (frame'' :: gps'') =
+    merge_frames frame frame'' :: merge_block C gps gps''.
   Proof.
-    intros Hpc. simpl. now rewrite merge_frames_context.
+    intros H1 H2. unfold merge_block.
+    rewrite (@take_block_cons_eq C frame gps H1) (@take_block_cons_eq C frame'' gps'' H2).
+    unfold merge_frames. rewrite -H1.
+    by case: (Pointer.component frame \in domm ip).
+  Qed.
+
+  Lemma merge_stacks_cons C frame gps frame'' gps'' :
+    Pointer.component frame'' = Pointer.component frame ->
+    Pointer.component frame <> C ->
+    merge_stacks C (frame :: gps) (frame'' :: gps'') =
+    merge_frames frame frame'' :: merge_stacks (Pointer.component frame) gps gps''.
+  Proof.
+    intros Heq Hne.
+    assert (HC : Nat.eqb (Pointer.component frame) C = false) by (now apply Nat.eqb_neq).
+    assert (HC'' : Nat.eqb (Pointer.component frame'') C = false)
+      by (apply Nat.eqb_neq; rewrite Heq; exact Hne).
+    unfold merge_stacks.
+    assert (Hblk : merge_block C (frame :: gps) (frame'' :: gps'') = []).
+    { unfold merge_block; cbn [take_block]; rewrite HC HC''; by case: (C \in domm ip). }
+    rewrite Hblk app_nil_l.
+    assert (Hd1 : drop_block C (frame :: gps) = frame :: gps) by (cbn [drop_block]; now rewrite HC).
+    assert (Hd2 : drop_block C (frame'' :: gps'') = frame'' :: gps'') by (cbn [drop_block]; now rewrite HC'').
+    rewrite Hd1 Hd2.
+    replace (length (frame :: gps) + length (frame'' :: gps''))
+      with (S (length gps + length (frame'' :: gps''))) by reflexivity.
+    rewrite merge_blocks_cons_l.
+    rewrite (@merge_block_hd (Pointer.component frame) frame gps frame'' gps'' (eq_refl) Heq).
+    rewrite (@drop_block_cons_eq (Pointer.component frame) frame gps (eq_refl _)).
+    rewrite (@drop_block_cons_eq (Pointer.component frame) frame'' gps'' Heq).
+    rewrite -app_comm_cons.
+    f_equal. unfold merge_stacks.
+    f_equal.
+    apply merge_blocks_irrel.
+    - pose proof (length_drop_block (Pointer.component frame) gps).
+      pose proof (length_drop_block (Pointer.component frame) gps''). cbn [length]. lia.
+    - pose proof (length_drop_block (Pointer.component frame) gps).
+      pose proof (length_drop_block (Pointer.component frame) gps''). lia.
+  Qed.
+
+  Lemma merge_stacks_cons_program C frame gps frame'' gps'' :
+    Pointer.component frame \in domm ip ->
+    Pointer.component frame'' = Pointer.component frame ->
+    Pointer.component frame <> C ->
+    merge_stacks C (frame :: gps) (frame'' :: gps'') =
+    frame :: merge_stacks (Pointer.component frame) gps gps''.
+  Proof.
+    intros Hip Heq Hne.
+    rewrite (@merge_stacks_cons C frame gps frame'' gps'' Heq Hne).
+    now rewrite (@merge_frames_program frame frame'' Hip).
+  Qed.
+
+  Lemma merge_stacks_cons_context C frame gps frame'' gps'' :
+    Pointer.component frame \in domm ic ->
+    Pointer.component frame'' = Pointer.component frame ->
+    Pointer.component frame <> C ->
+    merge_stacks C (frame :: gps) (frame'' :: gps'') =
+    frame'' :: merge_stacks (Pointer.component frame) gps gps''.
+  Proof.
+    intros Hic Heq Hne.
+    rewrite (@merge_stacks_cons C frame gps frame'' gps'' Heq Hne).
+    now rewrite (@merge_frames_context frame frame'' Hic).
+  Qed.
+
+  Lemma merge_stacks_add_l C frame gps gps'' :
+    Pointer.component frame = C ->
+    merge_stacks C (frame :: gps) gps'' =
+    (if C \in domm ip then frame :: merge_stacks C gps gps'' else merge_stacks C gps gps'').
+  Proof.
+    intros Hf. unfold merge_stacks, merge_block.
+    rewrite (@drop_block_cons_eq C frame gps Hf).
+    rewrite (@take_block_cons_eq C frame gps Hf).
+    assert (Hirr : merge_blocks (length (frame :: gps) + length gps'')
+                                 (drop_block C gps) (drop_block C gps'')
+                 = merge_blocks (length gps + length gps'')
+                                 (drop_block C gps) (drop_block C gps'')).
+    { apply merge_blocks_irrel;
+      pose proof (length_drop_block C gps);
+      pose proof (length_drop_block C gps''); simpl; lia. }
+    rewrite Hirr. now case: (C \in domm ip).
+  Qed.
+
+  Lemma merge_stacks_add_r C frame'' gps gps'' :
+    Pointer.component frame'' = C ->
+    merge_stacks C gps (frame'' :: gps'') =
+    (if C \in domm ip then merge_stacks C gps gps'' else frame'' :: merge_stacks C gps gps'').
+  Proof.
+    intros Hf. unfold merge_stacks, merge_block.
+    rewrite (@drop_block_cons_eq C frame'' gps'' Hf).
+    rewrite (@take_block_cons_eq C frame'' gps'' Hf).
+    assert (Hirr : merge_blocks (length gps + length (frame'' :: gps''))
+                                 (drop_block C gps) (drop_block C gps'')
+                 = merge_blocks (length gps + length gps'')
+                                 (drop_block C gps) (drop_block C gps'')).
+    { apply merge_blocks_irrel;
+      pose proof (length_drop_block C gps);
+      pose proof (length_drop_block C gps''); simpl; lia. }
+    rewrite Hirr. now case: (C \in domm ip).
+  Qed.
+
+  Lemma merge_stacks_nil C : merge_stacks C [] [] = [].
+  Proof.
+    unfold merge_stacks, merge_block; simpl; by case: (C \in domm ip).
   Qed.
 
   Definition merge_states_stack s s'' :=
-    merge_stacks (CS.state_stack s) (CS.state_stack s'').
+    merge_stacks (Pointer.component (CS.state_pc s)) (CS.state_stack s) (CS.state_stack s'').
 
   Definition merge_states_mem s s'' :=
     merge_memories (CS.state_mem s) (CS.state_mem s'').
@@ -207,7 +400,7 @@ Section Mergeable.
         - right. destruct t2. simpl in *. congruence.
           simpl in *. destruct t2; eauto. simpl in *. congruence.
         - left. subst. destruct t2; simpl in *. reflexivity.
-          omega. }
+          lia. }
       + subst.
         unfold Eapp in Hstar''; rewrite app_nil_r in Hstar''.
         assert (Hmergs2s'' : mergeable_states s2 s'').
@@ -478,20 +671,95 @@ Section Mergeable.
      to prove the symmetry of merge_states from mergeable_states, and the
      following lemma gives the impression of crossing the bridge only to cross
      it back. *)
-  Inductive mergeable_stack : CS.stack -> CS.stack -> Prop :=
-  | mergeable_stack_nil : mergeable_stack [] []
-  | mergeable_stack_cons : forall frame frame'' gps gps'',
+  Inductive mergeable_stack : Component.id -> CS.stack -> CS.stack -> Prop :=
+  | mergeable_stack_nil : forall C, mergeable_stack C [] []
+  | mergeable_stack_add_l : forall C frame gps gps'',
+      Pointer.component frame = C ->
+      C \in domm ip \/ C \in domm ic ->
+      mergeable_stack C gps gps'' ->
+      mergeable_stack C (frame :: gps) gps''
+  | mergeable_stack_add_r : forall C frame'' gps gps'',
+      Pointer.component frame'' = C ->
+      C \in domm ip \/ C \in domm ic ->
+      mergeable_stack C gps gps'' ->
+      mergeable_stack C gps (frame'' :: gps'')
+  | mergeable_stack_cross : forall C frame frame'' gps gps'',
       Pointer.component frame = Pointer.component frame'' ->
-      Pointer.component frame \in domm ic \/ Pointer.component frame \in domm ip ->
-      mergeable_stack gps gps'' ->
-      mergeable_stack (frame :: gps) (frame'' :: gps'').
+      Pointer.component frame <> C ->
+      Pointer.component frame \in domm ip \/ Pointer.component frame \in domm ic ->
+      mergeable_stack (Pointer.component frame) gps gps'' ->
+      mergeable_stack C (frame :: gps) (frame'' :: gps'').
+
+  Lemma mergeable_stack_drop_l C frame gps gps'' :
+    Pointer.component frame = C ->
+    mergeable_stack C (frame :: gps) gps'' -> mergeable_stack C gps gps''.
+  Proof.
+    intros Hf H. remember (frame :: gps) as s eqn:Hs.
+    revert frame gps Hf Hs.
+    induction H as [ C
+                   | C f g g'' Hc Hdom Hm _
+                   | C f'' g g'' Hc Hdom Hm IH
+                   | C f f'' g g'' Hc Hne Hd Hm _ ];
+      intros frame gps Hf Hs; try discriminate.
+    - inversion Hs; subst; exact Hm.
+    - apply mergeable_stack_add_r; [exact Hc | exact Hdom | exact (IH _ _ Hf Hs)].
+    - inversion Hs; subst; congruence.
+  Qed.
+
+  Lemma mergeable_stack_drop_r C frame'' gps gps'' :
+    Pointer.component frame'' = C ->
+    mergeable_stack C gps (frame'' :: gps'') -> mergeable_stack C gps gps''.
+  Proof.
+    intros Hf H. remember (frame'' :: gps'') as s eqn:Hs.
+    revert frame'' gps'' Hf Hs.
+    induction H as [ C
+                   | C f g g'' Hc Hdom Hm IH
+                   | C f'' g g'' Hc Hdom Hm _
+                   | C f f'' g g'' Hc Hne Hd Hm _ ];
+      intros frame'' gps'' Hf Hs; try discriminate.
+    - apply mergeable_stack_add_l; [exact Hc | exact Hdom | exact (IH _ _ Hf Hs)].
+    - inversion Hs; subst; exact Hm.
+    - inversion Hs; subst; congruence.
+  Qed.
+
+  Lemma mergeable_stack_return C f g f'' g'' :
+    Pointer.component f = Pointer.component f'' ->
+    Pointer.component f <> C ->
+    mergeable_stack C (f :: g) (f'' :: g'') ->
+    mergeable_stack (Pointer.component f) g g''.
+  Proof.
+    intros Hc Hne H.
+    remember (f :: g) as sl eqn:Hsl. remember (f'' :: g'') as sr eqn:Hsr.
+    revert f g f'' g'' Hc Hne Hsl Hsr.
+    induction H as [ C0
+                   | C0 fa ga ga'' Hca Hdoma Hma _
+                   | C0 fa'' ga ga'' Hca Hdoma Hma _
+                   | C0 fa fa'' ga ga'' Hca Hnea Hda Hma _ ];
+      intros f g f'' g'' Hc Hne Hsl Hsr; try discriminate.
+    - inversion Hsl; subst. congruence.
+    - inversion Hsr; subst. congruence.
+    - inversion Hsl; inversion Hsr; subst. exact Hma.
+  Qed.
+
+  Lemma mergeable_states_pc_domm s s'' :
+    mergeable_states s s'' ->
+    Pointer.component (CS.state_pc s) \in domm ip \/
+    Pointer.component (CS.state_pc s) \in domm ic.
+  Proof.
+    intros Hmerg.
+    inversion Hmerg as [[[[? ?] ?] pc] ? ?
+                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
+                        Hini _ Hstar _].
+    CS.unfold_states.
+    exact (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
+  Qed.
 
   Lemma mergeable_states_mergeable_stack
         gps1   mem1   regs1   pc1
         gps1'' mem1'' regs1'' pc1'' :
     mergeable_states (gps1  , mem1  , regs1  , pc1  )
                      (gps1'', mem1'', regs1'', pc1'') ->
-    mergeable_stack gps1 gps1''.
+    mergeable_stack (Pointer.component pc1) gps1 gps1''.
   Proof.
     intros Hmerg.
     inversion Hmerg
@@ -513,45 +781,114 @@ Section Mergeable.
       inversion Hini1; inversion Hini1''. now constructor.
       now rewrite -Hifacec -Hifacep.
     - intros; inversion Hstep; subst;
-        try match goal with
-        | Heq: _ = (_, _, _, _) |- _ => inversion Heq; subst; now eapply IH
-        end; admit.
-    - intros; inversion Hstep''; subst;
-        try match goal with
-        | Heq: _ = (_, _, _, _) |- _ => inversion Heq; subst; now eapply IH
-        end;admit.
+        match goal with
+        | Hexec : executing _ _ (IJal _) |- _ =>
+          match goal with
+          | Heq : (Pointer.inc _ :: _, _, _, _) = _ |- _ => inversion Heq; subst
+          end;
+          specialize (IH _ _ _ _ _ _ _ _ eq_refl eq_refl);
+          match goal with
+          | Hlbl : find_label_in_component _ _ _ = Some _ |- _ =>
+            rewrite <- (find_label_in_component_1 _ _ _ _ Hlbl);
+            apply mergeable_stack_add_l;
+            [ apply Pointer.inc_preserves_component
+            | exact (mergeable_states_pc_domm Hmerg)
+            | exact IH ]
+          end
+        | Hexec : executing _ _ IJump |- _ =>
+          match goal with
+          | Heq : (_, _, _, _) = (_, _, _, _) |- _ => inversion Heq; subst
+          end;
+          specialize (IH _ _ _ _ _ _ _ _ eq_refl eq_refl);
+          match goal with
+          | Hj : Pointer.component ?a = Pointer.component ?b |- _ =>
+            rewrite Hj; exact (mergeable_stack_drop_l Hj IH)
+          end
+        | Heq : _ = (_, _, _, _) |- _ => inversion Heq; subst;
+          first [ now eapply IH
+                | rewrite Pointer.inc_preserves_component; now eapply IH
+                | match goal with
+                  | Hlbl : find_label_in_procedure _ _ _ = Some _ |- _ =>
+                    rewrite <- (find_label_in_procedure_1 _ _ _ _ Hlbl); now eapply IH
+                  end ]
+        end.
+    - pose proof (mergeable_states_pc_same_component Hmerg) as Hsame; simpl in Hsame;
+      intros; inversion Hstep''; subst;
+        match goal with
+        | Hexec : executing _ _ (IJal _) |- _ =>
+          match goal with
+          | Heq : (Pointer.inc _ :: _, _, _, _) = _ |- _ => inversion Heq; subst
+          end;
+          specialize (IH _ _ _ _ _ _ _ _ eq_refl eq_refl);
+          apply mergeable_stack_add_r;
+          [ rewrite Pointer.inc_preserves_component; exact (esym Hsame)
+          | exact (mergeable_states_pc_domm Hmerg)
+          | exact IH ]
+        | Hexec : executing _ _ IJump |- _ =>
+          match goal with
+          | Heq : (_, _, _, _) = (_, _, _, _) |- _ => inversion Heq; subst
+          end;
+          specialize (IH _ _ _ _ _ _ _ _ eq_refl eq_refl);
+          match goal with
+          | Hj : Pointer.component ?a = Pointer.component ?b |- _ =>
+            apply (mergeable_stack_drop_r (frame'' := a));
+            [ rewrite Hj; exact (esym Hsame) | exact IH ]
+          end
+        | Heq : _ = (_, _, _, _) |- _ => inversion Heq; subst; now eapply IH
+        end.
     - intros gps2 mem2 regs2 pc2 gps2'' mem2'' regs2'' pc2'' Heqs2 Heqs2''; subst.
-      (* Note: do not try to do:
-         inversion Hstep; inversion Hstep''; try congruence.
-         as it generates 13*13 = subgoals before discarding the
-         absurd ones. *)
       inversion Hstep; try congruence;
         inversion Hstep''; try congruence; subst.
       + repeat match goal with
                | Heq: _ = (_, _) |- _ => inversion Heq; subst; clear Heq
                | Heq: [ECall _ _ _ _] = [ECall _ _ _ _] |- _ => inversion Heq; subst; clear Heq
                end.
-        constructor.
-        now rewrite 2!Pointer.inc_preserves_component.
-        rewrite or_comm.
-        inversion Hmerg.
-        rewrite Pointer.inc_preserves_component.
-        unfold sem, prog in *; simpl in *; eapply CS.star_pc_domm; try eassumption.
-        now eapply IH.
-      + specialize (IH _ _ _ _ _ _ _ _ eq_refl eq_refl);
-          now inversion IH.
-  Admitted.
+        apply mergeable_stack_cross.
+        * now rewrite 2!Pointer.inc_preserves_component.
+        * rewrite Pointer.inc_preserves_component. assumption.
+        * rewrite Pointer.inc_preserves_component.
+          inversion Hmerg.
+          unfold sem, prog in *; simpl in *.
+          eapply CS.star_pc_domm; try eassumption.
+        * rewrite Pointer.inc_preserves_component.
+          now eapply IH.
+      + repeat match goal with
+               | Heq: _ = (_, _) |- _ => inversion Heq; subst; clear Heq
+               | Heq: [ERet _ _ _] = [ERet _ _ _] |- _ => inversion Heq; subst; clear Heq
+               end.
+        specialize (IH _ _ _ _ _ _ _ _ eq_refl eq_refl).
+        match goal with
+        | IH : mergeable_stack (Pointer.component ?pc)
+                 (?f :: ?g) (?f'' :: ?g'') |- _ =>
+          match goal with
+          | Heqf : Pointer.component f'' = Pointer.component f |- _ =>
+            rewrite Heqf;
+            apply (@mergeable_stack_return (Pointer.component pc) f g f'' g'');
+            [ exact (esym Heqf)
+            | match goal with
+              | Hne : Pointer.component pc <> Pointer.component f |- _ =>
+                exact (fun e => Hne (esym e))
+              end
+            | exact IH ]
+          end
+        end.
+  Qed.
 
   Lemma mergeable_states_cons_domm
         frame1   gps1   mem1   regs1   pc1
         frame1'' gps1'' mem1'' regs1'' pc1'' :
     mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  )
                      (frame1'' :: gps1'', mem1'', regs1'', pc1'') ->
-    Pointer.component frame1 = Pointer.component frame1''.
+    Pointer.component frame1 = Pointer.component frame1''
+    \/ Pointer.component frame1   \in domm ip \/ Pointer.component frame1   \in domm ic
+    \/ Pointer.component frame1'' \in domm ip \/ Pointer.component frame1'' \in domm ic.
   Proof.
     intros Hmerge.
     pose proof mergeable_states_mergeable_stack Hmerge as H.
-    now inversion H.
+    inversion H; subst.
+    - match goal with He : Pointer.component frame1 = _ |- _ => rewrite He end; tauto.
+    - match goal with He : Pointer.component frame1'' = _ |- _ => rewrite He end; tauto.
+    - tauto.
   Qed.
 
   (* Memory lemmas on mergeable states. *)
@@ -836,6 +1173,32 @@ Section Mergeable.
     - assumption.
     - now rewrite Hic in Hcomp.
   Qed.
+
+  Lemma merge_stacks_pop_l C g1 g2 f r :
+    C \in domm ip ->
+    mergeable_stack C g1 g2 ->
+    merge_stacks ip C g1 g2 = f :: r ->
+    exists f1 g1', g1 = f1 :: g1' /\ Pointer.component f1 = Pointer.component f.
+  Proof.
+    intros HC Hms Hpop. revert HC Hpop.
+    induction Hms as
+      [ C0
+      | C0 fr gps gps'' Hfr Hin Hms IH
+      | C0 fr'' gps gps'' Hfr'' Hin Hms IH
+      | C0 fr fr'' gps gps'' Heq Hne Hin Hms IH ];
+      intros HC Hpop.
+    - rewrite merge_stacks_nil in Hpop. discriminate.
+    - rewrite (@merge_stacks_add_l ip C0 fr gps gps'' Hfr) in Hpop.
+      destruct (C0 \in domm ip) eqn:Hin2; [| by rewrite Hin2 in HC].
+      inversion Hpop; subst. exists f, gps. split; reflexivity.
+    - rewrite (@merge_stacks_add_r ip C0 fr'' gps gps'' Hfr'') in Hpop.
+      destruct (C0 \in domm ip) eqn:Hin2; [| by rewrite Hin2 in HC].
+      exact (IH HC Hpop).
+    - rewrite (@merge_stacks_cons ip C0 fr gps fr'' gps'' (esym Heq) Hne) in Hpop.
+      inversion Hpop; subst. exists fr, gps. split; [reflexivity |].
+      unfold merge_frames; case: (Pointer.component fr \in domm ip);
+        [reflexivity | now rewrite Heq].
+  Qed.
 End Mergeable.
 
 Section MergeSym.
@@ -848,24 +1211,56 @@ Section MergeSym.
   Let sem   := CS.sem prog.
   Let sem'' := CS.sem prog''.
 
-  Lemma merge_stacks_sym gps gps'' :
+  Lemma merge_stacks_sym C gps gps'' :
     mergeable_interfaces ip ic ->
-    mergeable_stack p c gps gps'' ->
-    merge_stacks ip gps gps'' = merge_stacks ic gps'' gps.
+    mergeable_stack p c C gps gps'' ->
+    merge_stacks ip C gps gps'' = merge_stacks ic C gps'' gps.
   Proof.
     intros Hmergeable_ifaces Hmerge.
-    induction Hmerge as [|frame frame'' gps gps'' Hframe Hdomm Hmerge IH].
-    - now simpl.
-    - simpl.
-      unfold merge_frames.
-      rewrite Hframe IH; rewrite Hframe in Hdomm.
-      destruct Hdomm as [Hdomm | Hdomm].
-      rewrite Hdomm; apply domm_partition_notin with (ctx1 := ip) in Hdomm.
-      now rewrite notin_to_in_false.
-      assumption.
-      rewrite Hdomm; apply domm_partition_notin_r with (ctx2 := ic) in Hdomm.
-      now rewrite notin_to_in_false.
-      assumption.
+    induction Hmerge as
+      [ C
+      | C f g g'' Hf Hdom Hm IH
+      | C f'' g g'' Hf Hdom Hm IH
+      | C f f'' g g'' Hceq Hne Hd Hm IH ].
+    - unfold merge_stacks, merge_block; simpl;
+        by case: (C \in domm ip); case: (C \in domm ic).
+    - rewrite (@merge_stacks_add_l ip C f g g'' Hf).
+      rewrite (@merge_stacks_add_r ic C f g'' g Hf).
+      destruct Hdom as [Hdom | Hdom].
+      + rewrite Hdom.
+        assert (Hni : C \notin domm ic)
+          by (apply domm_partition_notin_r with (ctx2 := ic) in Hdom; assumption).
+        rewrite (negbTE Hni). f_equal. exact IH.
+      + rewrite Hdom.
+        assert (Hni : C \notin domm ip)
+          by (apply domm_partition_notin with (ctx1 := ip) in Hdom; assumption).
+        rewrite (negbTE Hni). exact IH.
+    - rewrite (@merge_stacks_add_r ip C f'' g g'' Hf).
+      rewrite (@merge_stacks_add_l ic C f'' g'' g Hf).
+      destruct Hdom as [Hdom | Hdom].
+      + rewrite Hdom.
+        assert (Hni : C \notin domm ic)
+          by (apply domm_partition_notin_r with (ctx2 := ic) in Hdom; assumption).
+        rewrite (negbTE Hni). exact IH.
+      + rewrite Hdom.
+        assert (Hni : C \notin domm ip)
+          by (apply domm_partition_notin with (ctx1 := ip) in Hdom; assumption).
+        rewrite (negbTE Hni). f_equal. exact IH.
+    - rewrite (@merge_stacks_cons ip C f g f'' g'' (esym Hceq) Hne).
+      assert (Hne' : Pointer.component f'' <> C) by (rewrite <- Hceq; exact Hne).
+      rewrite (@merge_stacks_cons ic C f'' g'' f g Hceq Hne').
+      f_equal.
+      + unfold merge_frames. rewrite Hceq.
+        destruct Hd as [Hd | Hd]; rewrite Hceq in Hd.
+        * rewrite Hd.
+          assert (Hni : Pointer.component f'' \notin domm ic)
+            by (apply domm_partition_notin_r with (ctx2 := ic) in Hd; assumption).
+          now rewrite (negbTE Hni).
+        * rewrite Hd.
+          assert (Hni : Pointer.component f'' \notin domm ip)
+            by (apply domm_partition_notin with (ctx1 := ip) in Hd; assumption).
+          now rewrite (negbTE Hni).
+      + rewrite <- Hceq. exact IH.
   Qed.
 
   (* The necessary disjointness of the partializations is obtained from the fact
@@ -965,12 +1360,13 @@ Section MergeSym.
       now exists prog'', s0'', t.
     }
     destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    pose proof (mergeable_states_pc_same_component Hmerg) as Hpc0; simpl in Hpc0.
     unfold merge_states.
-    rewrite (merge_stacks_sym Hmergeable_ifaces).
+    rewrite (merge_stacks_sym Hmergeable_ifaces (mergeable_states_mergeable_stack Hmerg)).
     rewrite (merge_memories_sym Hmergeable_ifaces Hmem Hmem'').
     erewrite (merge_registers_sym _ _ Hmergeable_ifaces).
     rewrite (merge_pc_sym Hmergeable_ifaces).
-    reflexivity.
+    rewrite Hpc0. reflexivity.
     simpl.
     pose proof CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar as Hdomm.
     rewrite domm_union. now apply /fsetUP.
@@ -983,7 +1379,6 @@ Section MergeSym.
     replace pc with (CS.state_pc (stack, mem, reg, pc)); try reflexivity.
     replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'')); try reflexivity.
     eapply mergeable_states_pc_same_component; eassumption.
-    eapply mergeable_states_mergeable_stack with (p' := p') (c' := c'); eassumption.
   Qed.
 
   (* RB: NOTE: Now the two sub-goals look even more similar than before. *)
@@ -1107,8 +1502,37 @@ Section ThreewayMultisem1.
         erewrite mergeable_states_program_component_domm; try eassumption;
         try (pose proof to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' Hstep23'' as Hmem23'';
              simpl in Hmem23''; rewrite Hmem23'');
-        try reflexivity. admit. admit.
-  Admitted.
+        try reflexivity.
+        (* IJal on the right: pushes a right program-frame, dropped by the merge *)
+        { assert (Hmss : mergeable_states p c p' c' (gps, mem, regs, pc)
+                                            (gps2'', mem3'', regs2'', pc2'')).
+          { inversion Hmerge1 as
+              [s0 s0'' tt ? ? ? ? ? ? ? ? ? ? ? Hstarl Hstarr].
+            apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := tt);
+              try assumption.
+            eapply star_trans; [exact Hstarr | exact Hstar12'' | now rewrite E0_right]. }
+          pose proof (mergeable_states_pc_same_component Hmss) as Hsc; simpl in Hsc.
+          pose proof (is_program_component_in_domm Hcomp Hmerge1) as Hpcin; simpl in Hpcin.
+          assert (Hf : Pointer.component (Pointer.inc pc2'') = Pointer.component pc)
+            by (rewrite Pointer.inc_preserves_component; congruence).
+          rewrite (@merge_stacks_add_r (prog_interface p) (Pointer.component pc)
+                     (Pointer.inc pc2'') gps gps2'' Hf).
+          rewrite Hpcin. reflexivity. }
+        (* IJump on the right: pops a right program-frame, dropped by the merge *)
+        { assert (Hmss : mergeable_states p c p' c' (gps, mem, regs, pc)
+                                            (pc3'' :: gps3'', mem3'', regs3'', pc2'')).
+          { inversion Hmerge1 as
+              [s0 s0'' tt ? ? ? ? ? ? ? ? ? ? ? Hstarl Hstarr].
+            apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := tt);
+              try assumption.
+            eapply star_trans; [exact Hstarr | exact Hstar12'' | now rewrite E0_right]. }
+          pose proof (mergeable_states_pc_same_component Hmss) as Hsc; simpl in Hsc.
+          pose proof (is_program_component_in_domm Hcomp Hmerge1) as Hpcin; simpl in Hpcin.
+          assert (Hf : Pointer.component pc3'' = Pointer.component pc) by congruence.
+          rewrite (@merge_stacks_add_r (prog_interface p) (Pointer.component pc)
+                     pc3'' gps gps3'' Hf).
+          rewrite Hpcin. reflexivity. }
+  Qed.
 
   Lemma context_epsilon_star_merge_states s s1 s2 :
     mergeable_states p c p' c' s s1 ->
@@ -1152,28 +1576,25 @@ Section ThreewayMultisem1.
   Ltac t_threeway_multisem_step_E0 :=
     CS.step_of_executing;
     try eassumption; try reflexivity;
-    (* Solve side goals for CS step. *)
-    match goal with
-    | |- Memory.load _ _ = _ =>
-      eapply program_load_to_partialized_memory;
-      try eassumption; [now rewrite Pointer.inc_preserves_component]
-    | |- Memory.store _ _ _ = _ =>
-      eapply program_store_to_partialized_memory; eassumption
-    | |- find_label_in_component _ _ _ = _ =>
-      eapply find_label_in_component_recombination; eassumption
-    | |- find_label_in_procedure _ _ _ = _ =>
-      eapply find_label_in_procedure_recombination; eassumption
-    | |- Memory.alloc _ _ _ = _ =>
-      eapply program_alloc_to_partialized_memory; eassumption
-    | _ => idtac
-    end;
-    (* Apply linking invariance and solve side goals. *)
-    eapply execution_invariant_to_linking; try eassumption;
-    [ congruence
-    | apply linkable_implies_linkable_mains; congruence
-    | apply linkable_implies_linkable_mains; congruence
-    | eapply is_program_component_in_domm; eassumption
-    ].
+    (* Solve side goals for CS step; pass the source / partner states
+       explicitly so the merge_memories conclusions unify. *)
+    lazymatch goal with
+    | Hstep : Step _ ?sa E0 _, Hm : mergeable_states _ _ _ _ ?sa ?sb |- Memory.load _ _ = _ =>
+      eapply program_load_to_partialized_memory with (s := sa) (s'' := sb); eassumption
+    | Hstep : Step _ ?sa E0 _, Hm : mergeable_states _ _ _ _ ?sa ?sb |- Memory.store _ _ _ = _ =>
+      eapply program_store_to_partialized_memory with (s := sa) (s'' := sb); eassumption
+    | Hstep : Step _ ?sa E0 _, Hm : mergeable_states _ _ _ _ ?sa ?sb |- Memory.alloc _ _ _ = _ =>
+      eapply program_alloc_to_partialized_memory with (s := sa) (s'' := sb); eassumption
+    | Hstep : Step _ ?sa E0 _, Hm : mergeable_states _ _ _ _ ?sa ?sb |- find_label_in_component _ _ _ = _ =>
+      eapply find_label_in_component_recombination with (s := sa) (s'' := sb); eassumption
+    | Hstep : Step _ ?sa E0 _, Hm : mergeable_states _ _ _ _ ?sa ?sb |- find_label_in_procedure _ _ _ = _ =>
+      eapply find_label_in_procedure_recombination with (s := sa) (s'' := sb); eassumption
+    | |- _ =>
+      eapply execution_invariant_to_linking; try eassumption;
+      try congruence;
+      try (apply linkable_implies_linkable_mains; congruence);
+      try (eapply is_program_component_in_domm; eassumption)
+    end.
 
   Theorem threeway_multisem_step_E0 s1 s2 s1'' :
     CS.is_program_component s1 ic ->
@@ -1190,13 +1611,32 @@ Section ThreewayMultisem1.
     pose proof threeway_multisem_mergeable_step_E0 Hcomp1 Hmerge1 Hstep12
       as Hmerge2.
     rewrite (mergeable_states_merge_program Hcomp2 Hmerge2).
+    pose proof (CS.silent_step_preserves_component _ _ _ Hstep12) as Hcc.
+    pose proof (is_program_component_in_domm Hcomp1 Hmerge1) as Hpcin.
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    unfold CS.state_component in Hpcin; simpl in Hcc, Hpcin.
+    unfold merge_states_stack, merge_states_mem;
+      cbn [CS.state_pc CS.state_stack CS.state_mem CS.state_regs].
+    rewrite <- Hcc.
     (* Case analysis on step. *)
-    (*inversion Hstep12; subst;
-      t_threeway_multisem_step_E0. *) admit.
-  Admitted.
+    inversion Hstep12; subst;
+      match goal with
+      | Hexec : executing _ _ (IJal _) |- _ =>
+        rewrite (@merge_stacks_add_l (prog_interface p) (Pointer.component pc1)
+                   (Pointer.inc pc1) gps1 gps1'' (Pointer.inc_preserves_component pc1));
+        rewrite Hpcin; t_threeway_multisem_step_E0
+      | Hexec : executing _ _ IJump |- _ =>
+        match goal with
+        | Hj : Pointer.component ?fr = Pointer.component pc1 |- _ =>
+          rewrite (@merge_stacks_add_l (prog_interface p) (Pointer.component pc1)
+                     fr _ gps1'' Hj)
+        end;
+        rewrite Hpcin; t_threeway_multisem_step_E0
+      | _ => t_threeway_multisem_step_E0
+      end.
+  Qed.
 
   (* Compose two stars into a merged star. The "program" side drives both stars
      and performs all steps without interruption, the "context" side remains
@@ -1305,6 +1745,10 @@ Section ThreewayMultisem1.
       pose proof is_program_component_in_domm Hcomp1 Hmerge1 as Hdomm.
       unfold CS.state_component in Hdomm; simpl in Hdomm. unfold ip, ic.
       rewrite <- Pointer.inc_preserves_component in Hdomm.
+      assert (Hcceq : Pointer.component (Pointer.inc pc1'') = Pointer.component (Pointer.inc pc1))
+        by (rewrite 2!Pointer.inc_preserves_component; assumption).
+      assert (Hccne : Pointer.component (Pointer.inc pc1) <> C')
+        by (rewrite Pointer.inc_preserves_component; assumption).
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [ pose proof mergeable_states_program_to_context Hmerge2 Hcomp2 as Hcomp2''
         | apply negb_false_iff in Hcomp2 ];
@@ -1312,6 +1756,7 @@ Section ThreewayMultisem1.
         | erewrite mergeable_states_merge_context ]; try eassumption;
         unfold merge_states_mem, merge_states_stack;
         rewrite merge_stacks_cons_program; try eassumption;
+        rewrite Pointer.inc_preserves_component;
         match goal with
         | Heq : Pointer.component pc1'' = Pointer.component pc1 |- _ =>
           rewrite Heq
@@ -1324,16 +1769,28 @@ Section ThreewayMultisem1.
         H2 : Pointer.component pc2'' = Pointer.component pc2 |- _ =>
         rename H1 into Heq1; rename H2 into Heq2
       end.
-      destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
-        [| apply negb_false_iff in Hcomp2];
-        [ rewrite (mergeable_states_merge_program _ Hmerge2); try assumption
-        | rewrite (mergeable_states_merge_context _ Hmerge2); try assumption ];
-        unfold merge_states_mem, merge_states_stack; simpl;
-        [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
-          erewrite merge_frames_program; try eassumption
-        | erewrite merge_frames_context; try eassumption ];
-        [ rewrite Heq1 Heq2 | rewrite Heq1 ];
-        [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
+      assert (Hretne : Pointer.component pc2 <> Pointer.component pc1) by congruence.
+      change s1copy with (pc2 :: gps2, mem2, regs1, pc1) in *.
+      change s2copy with (gps2, mem2, Register.invalidate regs1, pc2) in *.
+      destruct (CS.is_program_component (gps2, mem2, Register.invalidate regs1, pc2) ic)
+        eqn:Hcomp2; [| apply negb_false_iff in Hcomp2].
+      + rewrite (mergeable_states_merge_program _ Hmerge2); try assumption.
+        unfold merge_states_mem, merge_states_stack.
+        simpl CS.state_pc; simpl CS.state_stack; simpl CS.state_regs; simpl CS.state_mem.
+        rewrite (@merge_stacks_cons (prog_interface p) (Pointer.component pc1)
+                   pc2 gps2 pc2'' gps2'' Heq2 Hretne).
+        pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2''.
+        erewrite merge_frames_program; try eassumption.
+        rewrite Heq1 Heq2.
+        t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
+      + rewrite (mergeable_states_merge_context _ Hmerge2); try assumption.
+        unfold merge_states_mem, merge_states_stack.
+        simpl CS.state_pc; simpl CS.state_stack; simpl CS.state_regs; simpl CS.state_mem.
+        rewrite (@merge_stacks_cons (prog_interface p) (Pointer.component pc1)
+                   pc2 gps2 pc2'' gps2'' Heq2 Hretne).
+        erewrite merge_frames_context; try eassumption.
+        rewrite Heq1.
+        erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence].
         t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
   Qed.
 
@@ -1521,7 +1978,7 @@ Section ThreewayMultisem2.
                  Hstar3' (eq_refl _)).
       + (* Contradiction: a step generates at most one event. *)
         pose proof @CS.singleton_traces _ _ _ _ Hstep23 as Hcontra.
-        simpl in Hcontra. omega.
+        simpl in Hcontra. lia.
   Qed.
 End ThreewayMultisem2.
 
@@ -1585,7 +2042,7 @@ Section ThreewayMultisem3.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
-  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec:=
+  Ltac t_threeway_multisem_step_inv_program Hms Hdomm0 Hmerge Hnotin Hifacec:=
     match goal with
     (* Memory operations. *)
     | Hstore : Memory.store _ _ _ = _ |- _ =>
@@ -1599,20 +2056,14 @@ Section ThreewayMultisem3.
       apply (genv_entrypoints_interface_some) with (p' := prog) in Hget as [b' Hget];
       last (simpl; congruence);
       try assumption
-    (* Returns. *)
-    | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
-      destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
-      destruct gps1 as [| frame1 gps1]; [now destruct gps1'' |];
-      destruct gps1'' as [| frame1'' gps1'']; [easy |];
-      inversion Hcons; subst PC' GPS';
-      assert (Heq : Pointer.component frame1 = Pointer.component frame1')
-        by (unfold merge_states_stack in Hgps;
-            inversion Hgps as [[Hframe Hdummy]];
-            unfold merge_frames;
-            destruct (Pointer.component frame1 \in domm ip) eqn:Hcase; rewrite Hcase;
-            [ reflexivity
-            | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
-      rewrite <- Heq
+    (* Returns and jumps: the recombined run pops the merged stack, so the
+       source stack is non-empty with a head of the same component. *)
+    | Hcons : _ :: _ = merge_states_stack _ _ _ |- _ =>
+      unfold merge_states_stack in Hcons;
+      cbn [CS.state_pc CS.state_stack] in Hcons;
+      destruct (merge_stacks_pop_l Hdomm0 Hms (esym Hcons))
+        as [frame1 [gps1rest [Hg1 Hcf1]]];
+      rewrite Hg1; try (rewrite <- Hcf1)
     | _ => idtac
     end;
     [eexists;
@@ -1671,10 +2122,11 @@ Section ThreewayMultisem3.
     pose proof linking_well_formedness Hwfp' Hwfc' Hlinkable' as Hwfprog'.
     assert (Hlinkable'' := Hlinkable); rewrite Hifacec in Hlinkable''.
     pose proof linking_well_formedness Hwfp Hwfc' Hlinkable'' as Hwfprog''.
-    (*
+    pose proof (mergeable_states_mergeable_stack Hmerge) as Hms.
+    assert (Hdomm0 : Pointer.component pc1 \in domm (prog_interface p)) by exact Hdomm.
     inversion Hstep; subst;
-      t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec. *) admit.
-  Admitted.
+      t_threeway_multisem_step_inv_program Hms Hdomm0 Hmerge Hnotin Hifacec.
+  Qed.
 End ThreewayMultisem3.
 
 (* Theorems on initial states for main simulation. *)
@@ -1733,6 +2185,7 @@ Section ThreewayMultisem4.
       last (apply interface_preserves_closedness_r with (p2 := c); try assumption;
             now apply interface_implies_matching_mains).
     unfold merge_states, merge_memories, merge_registers, merge_pcs; simpl.
+    rewrite merge_stacks_nil.
     (* Memory simplifictions. *)
     rewrite (prepare_procedures_memory_left Hlinkable).
     unfold ip. erewrite Hifacep at 1. rewrite Hifacep Hifacec in Hlinkable.

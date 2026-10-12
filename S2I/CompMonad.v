@@ -51,6 +51,52 @@ Instance compilation_monad {env} : Monad (Comp.t env) := {
   bind := Comp.bind env
 }.
 
+(* Success inversions: the peeling toolkit for reasoning about compiled output. *)
+Section CompInv.
+  Variable env: Type.
+
+  Lemma bind_Some_inv :
+    forall A B (m: Comp.t env A) (f: A -> Comp.t env B) s r s'',
+      Comp.bind env A B m f s = Some (r, s'') ->
+      exists a s', m s = Some (a, s') /\ f a s' = Some (r, s'').
+  Proof.
+    intros A B m f s r s'' H.
+    unfold Comp.bind in H.
+    destruct (m s) as [[a s']|] eqn:E; try discriminate.
+    eauto.
+  Qed.
+
+  Lemma lift_Some_inv :
+    forall A (x: option A) s r s',
+      Comp.lift env x s = Some (r, s') ->
+      x = Some r /\ s' = s.
+  Proof.
+    intros A x s r s' H.
+    unfold Comp.lift in H.
+    destruct x; inversion H; auto.
+  Qed.
+
+  Lemma ret_Some_inv :
+    forall A (a: A) s r s',
+      Comp.ret env A a s = Some (r, s') ->
+      r = a /\ s' = s.
+  Proof.
+    intros A a s r s' H.
+    unfold Comp.ret in H.
+    inversion H; auto.
+  Qed.
+
+  Lemma run_Some_inv :
+    forall A (s : env) (m: Comp.t env A) r,
+      Comp.run env s m = Some r ->
+      exists s', m s = Some (r, s').
+  Proof.
+    intros A s m r H.
+    unfold Comp.run in H.
+    destruct (m s) as [[v s']|]; inversion H; subst; eauto.
+  Qed.
+End CompInv.
+
 Section CompMonadLaws.
   Variable env: Type.
   

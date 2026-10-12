@@ -1,4 +1,5 @@
 Require Import Lib.Extra.
+Require Import Lia.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -15,7 +16,9 @@ Require Import Source.CS.
 
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.
-From mathcomp Require ssrnat.
+From mathcomp Require Import ssrnat.
+From mathcomp Require Import zify.
+Import Common.CompCertExtensions.
 
 Import Source.
 
@@ -31,6 +34,21 @@ Section Definability.
   Variable intf: Program.interface.
   Variable closed_intf: closed_interface intf.
   Variable has_main: intf Component.main.
+
+  (* Prescribed per-component buffer sizes (floored at 1): the counter needs
+     one cell at offset 0; any extra cells are inert [Int 0] filler.  This
+     lets the back-translated program adopt a TARGET buffer silhouette
+     (cf. MicroPolicies/Recomposition/BufferShape.v) — passing [emptym]
+     recovers the original one-cell buffers. *)
+  Variable bufsz : NMap nat.
+
+  Definition buf_size (C : Component.id) : nat := maxn (odflt 1 (bufsz C)) 1.
+
+  Definition buffers_of_sizes : NMap (nat + list value) :=
+    mkfmapf (fun C => inr (nseq (buf_size C) (Int 0))) (domm intf).
+
+  Lemma length_nseq (T : Type) (x : T) n : length (nseq n x) = n.
+  Proof. by elim: n => //= n ->. Qed.
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -151,8 +169,8 @@ Section Definability.
   Lemma fst_switch n (e_else: expr) (es : list expr) :
     fst (fold_right switch_add_expr (n, e_else) es) = (n - length es)%nat.
   Proof.
-    induction es as [|e' es IH]; try now rewrite Nat.sub_0_r.
-    simpl. now rewrite IH Nat.sub_succ_r.
+    induction es as [|e' es IH]; try now rewrite subn0.
+    simpl. now rewrite IH subnS.
   Qed.
 
   Lemma switch_spec_else p' C stk mem n es e_else arg :
@@ -172,15 +190,17 @@ Section Definability.
     { apply (H (length es)); trivial. }
     clear es_n. intros m m_le_n es_le_n.
     induction es as [|e es IH]; try apply star_refl.
-    unfold switch. simpl. simpl in es_le_n. rewrite fst_switch -Nat.sub_succ_r. simpl.
+    unfold switch. simpl. simpl in es_le_n. rewrite fst_switch -subnS. simpl.
     do 5 take_step; [eauto|eauto|].
     do 2 take_step.
     eapply (@star_step _ _ _ _ _ E0); try now (simpl; reflexivity).
     { apply CS.eval_kstep_sound. simpl.
       destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
-      - zify. omega.
+      - exfalso. apply Nat2Z.inj in n_eq_0.
+        move/ltP: es_le_n => es_le_n. move/leP: m_le_n => m_le_n.
+        rewrite -minusE in n_eq_0. lia.
       - reflexivity. }
-    apply IH. omega.
+    apply IH. lia.
   Qed.
 
   Lemma switch_spec p' C stk mem es e es' e_else arg :
@@ -199,9 +219,8 @@ Section Definability.
     { unfold switch. rewrite fold_right_app app_length. simpl.
       exists (snd (fold_right switch_add_expr ((length es + S (length es'))%nat, e_else) es')).
       repeat f_equal. rewrite -> surjective_pairing at 1. simpl.
-      rewrite fst_switch Nat.add_succ_r.
-      assert (H : (S (length es + length es') - length es' = S (length es))%nat) by omega.
-      rewrite H. reflexivity. }
+      rewrite fst_switch addnS.
+      repeat f_equal; lia. }
     destruct Eswitch as [e_else' ->]. clear e_else. rename e_else' into e_else.
     assert (Hcont := switch_clause_spec p' stk (Z.of_nat (length es)) e e_else arg Hload).
     rewrite Z.eqb_refl in Hcont.
@@ -209,7 +228,7 @@ Section Definability.
     exists mem'. rewrite Nat2Z.inj_succ. split; trivial.
     apply (fun H => @star_trans _ _ _ _ _ E0 _ H E0 _ _ Hstar2); trivial.
     apply (switch_spec_else p' stk _ arg Hload).
-    reflexivity.
+    exact: leqnn.
   Qed.
 
   (** We use [switch] to define the following function [expr_of_trace], which
@@ -291,7 +310,7 @@ Section Definability.
   Definition program_of_trace (t: trace) : program :=
     {| prog_interface  := intf;
        prog_procedures := procedures_of_trace t;
-       prog_buffers    := mapm (fun _ => inr [Int 0]) intf |}.
+       prog_buffers    := buffers_of_sizes |}.
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
@@ -363,10 +382,15 @@ Section Definability.
       case: e HC He=> [_ P' v C'' /= <-|]; last by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
       by case/orP=> [/eqP [-> ->] //|]; eauto.
-    - by rewrite domm_map.
-    - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
-      rewrite /has_required_local_buffers /= mapmE C_CI /=.
-      eexists; eauto=> /=; omega.
+    - by rewrite /= /buffers_of_sizes domm_mkfmapf.
+    - move=> C; rewrite -mem_domm => HC.
+      rewrite /has_required_local_buffers /= /buffers_of_sizes mkfmapfE HC /=.
+      eexists; eauto=> /=.
+      rewrite length_nseq /buf_size. by lia.
+    - (* buffer values: inert [Int 0] filler is well formed *)
+      move=> C buf /=; rewrite /buffers_of_sizes mkfmapfE.
+      case: ifP => // _ [<-] /=.
+      by elim: (buf_size C) => [|n IH] //=.
     - rewrite /prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
         intros _.
@@ -475,7 +499,9 @@ Section Definability.
         have C_local := wf_mem _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
         apply: switch_spec_else; eauto.
-        rewrite -> size_map; reflexivity.
+        rewrite -> size_map.
+        suff ->: size (comp_subtrace C t) = length (comp_subtrace C t) by [].
+        by elim: (comp_subtrace C t) => //= ? ? ->.
       - move=> cs Et /=.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
         have C_b := valid_procedure_has_block P_exp.
@@ -580,9 +606,12 @@ Section Definability.
         exists [::], [::]. by do ![split; trivial].
       intros C.
       unfold component_buffer, Memory.load.
-      simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
+      simpl. rewrite mapmE /= /buffers_of_sizes mkfmapfE mem_domm.
       case HCint: (intf C) => [Cint|] //=.
-      by rewrite ComponentMemory.load_prealloc /=.
+      rewrite ComponentMemory.load_prealloc /=.
+      have [k ->] : exists k, buf_size C = k.+1.
+      { exists (buf_size C).-1. rewrite /buf_size. by lia. }
+      by [].
     Qed.
 
 End WithTrace.
@@ -593,11 +622,11 @@ Require Import Intermediate.Machine.
 Require Import S2I.Definitions.
 
 (* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
-Lemma matching_mains_backtranslated_program p c intf back m:
+Lemma matching_mains_backtranslated_program p c intf bufsz back m:
   Intermediate.well_formed_program p ->
   Intermediate.well_formed_program c ->
   (* intf = unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *)
-  back = program_of_trace intf m ->
+  back = program_of_trace intf bufsz m ->
   intf Component.main ->
   (* well_formed_trace intf m -> *)
   matching_mains (program_unlink (domm (Intermediate.prog_interface p)) back) p.
@@ -683,9 +712,9 @@ Proof.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
-admit.   (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
-  have := definability Hclosed_intf intf_main wf_m.
-  set back := (program_of_trace intf m') => Hback.
+    exact (CS.intermediate_well_formed_trace _ _ _ _ Hstar Hcs HmainP wf_p_c).
+  have := @definability intf Hclosed_intf intf_main emptym m' wf_m.
+  set back := (program_of_trace intf emptym m') => Hback.
   exists (program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (program_unlink (domm (Intermediate.prog_interface c)) back).
   split=> /=.
@@ -696,7 +725,7 @@ admit.   (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   have wf_back : well_formed_program back by exact: well_formed_events_well_formed_program.
-  have Hback' : back = program_of_trace intf m' by [].
+  have Hback' : back = program_of_trace intf emptym m' by [].
   split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
   split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
   clear Hback'.
@@ -707,4 +736,154 @@ admit.   (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
-Admitted.
+Qed.
+
+(* The same, from a WELL-FORMED TRACE directly — no Intermediate-level run
+   required.  This is the entry point for back-translating traces observed
+   on the MicroPolicies machine (whose trace well-formedness is proven in
+   MicroPolicies/Recomposition/TraceInit.v), where no Intermediate↔MP
+   simulation is available. *)
+Lemma definability_with_linking_trace:
+  forall p c m,
+    Intermediate.well_formed_program p ->
+    Intermediate.well_formed_program c ->
+    linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+    Intermediate.closed_program (Intermediate.program_link p c) ->
+    well_formed_trace (unionm (Intermediate.prog_interface p)
+                              (Intermediate.prog_interface c))
+                      (finpref_trace m) ->
+    not_wrong_finpref m ->
+  exists p' c',
+    Source.prog_interface p' = Intermediate.prog_interface p /\
+    Source.prog_interface c' = Intermediate.prog_interface c /\
+    matching_mains p' p /\
+    matching_mains c' c /\
+    Source.well_formed_program p' /\
+    Source.well_formed_program c' /\
+    Source.closed_program (Source.program_link p' c') /\
+    does_prefix (S.CS.sem (Source.program_link p' c')) m.
+Proof.
+  move=> p c m wf_p wf_c Hlinkable Hclosed wf_m Hnot_wrong.
+  move: wf_m.
+  pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
+  set m' := finpref_trace m => wf_m.
+  have Hclosed_intf : closed_interface intf by case: Hclosed.
+  have intf_main : intf Component.main.
+    case: Hclosed => [? [main_procs [? [/= e ?]]]].
+    rewrite /intf -mem_domm domm_union.
+    do 2![rewrite Intermediate.wfprog_defined_procedures //].
+    by rewrite -domm_union mem_domm e.
+  have wf_events : all (well_formed_event intf) m'.
+    by case/andP: wf_m.
+  have := @definability intf Hclosed_intf intf_main emptym m' wf_m.
+  set back := (program_of_trace intf emptym m') => Hback.
+  exists (program_unlink (domm (Intermediate.prog_interface p)) back).
+  exists (program_unlink (domm (Intermediate.prog_interface c)) back).
+  split=> /=.
+    rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
+    by apply/eq_filterm=> ??; rewrite mem_domm.
+  split.
+    rewrite /intf unionmC; last by case: Hlinkable.
+    rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
+    by apply/eq_filterm=> ??; rewrite mem_domm.
+  have wf_back : well_formed_program back by exact: well_formed_events_well_formed_program.
+  have Hback' : back = program_of_trace intf emptym m' by [].
+  split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
+  split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
+  clear Hback'.
+  split; first exact: well_formed_program_unlink.
+  split; first exact: well_formed_program_unlink.
+  rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
+  exists (Terminates m').
+  split=> // {wf_events back Hback wf_back wf_m}.
+  rewrite {}/m'; case: m Hnot_wrong=> //= t _.
+  by exists (Terminates nil); rewrite /= E0_right.
+Qed.
+
+(* The trace-premised variant with PRESCRIBED buffer sizes: both
+   back-translated sides expose exactly the prescribed silhouette (inert
+   [Int 0] filler), so their compiled images can adopt a target buffer
+   SHAPE — cf. MicroPolicies/Recomposition/BufferShape.v and the weakened
+   recomposition buffer axioms. *)
+Lemma definability_with_linking_trace_bufs:
+  forall p c m bufsz,
+    Intermediate.well_formed_program p ->
+    Intermediate.well_formed_program c ->
+    linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+    Intermediate.closed_program (Intermediate.program_link p c) ->
+    well_formed_trace (unionm (Intermediate.prog_interface p)
+                              (Intermediate.prog_interface c))
+                      (finpref_trace m) ->
+    not_wrong_finpref m ->
+  exists p' c',
+    Source.prog_interface p' = Intermediate.prog_interface p /\
+    Source.prog_interface c' = Intermediate.prog_interface c /\
+    matching_mains p' p /\
+    matching_mains c' c /\
+    Source.well_formed_program p' /\
+    Source.well_formed_program c' /\
+    Source.closed_program (Source.program_link p' c') /\
+    does_prefix (S.CS.sem (Source.program_link p' c')) m /\
+    (forall C, C \in domm (Intermediate.prog_interface p) ->
+       Source.prog_buffers p' C
+       = Some (inr (nseq (buf_size bufsz C) (Int 0)))) /\
+    (forall C, C \in domm (Intermediate.prog_interface c) ->
+       Source.prog_buffers c' C
+       = Some (inr (nseq (buf_size bufsz C) (Int 0)))) /\
+    p' = program_unlink (domm (Intermediate.prog_interface p))
+           (program_of_trace
+              (unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c))
+              bufsz (finpref_trace m)) /\
+    c' = program_unlink (domm (Intermediate.prog_interface c))
+           (program_of_trace
+              (unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c))
+              bufsz (finpref_trace m)).
+Proof.
+  move=> p c m bufsz wf_p wf_c Hlinkable Hclosed wf_m Hnot_wrong.
+  move: wf_m.
+  pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
+  set m' := finpref_trace m => wf_m.
+  have Hclosed_intf : closed_interface intf by case: Hclosed.
+  have intf_main : intf Component.main.
+    case: Hclosed => [? [main_procs [? [/= e ?]]]].
+    rewrite /intf -mem_domm domm_union.
+    do 2![rewrite Intermediate.wfprog_defined_procedures //].
+    by rewrite -domm_union mem_domm e.
+  have wf_events : all (well_formed_event intf) m'.
+    by case/andP: wf_m.
+  have := @definability intf Hclosed_intf intf_main bufsz m' wf_m.
+  set back := (program_of_trace intf bufsz m') => Hback.
+  exists (program_unlink (domm (Intermediate.prog_interface p)) back).
+  exists (program_unlink (domm (Intermediate.prog_interface c)) back).
+  split=> /=.
+    rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
+    by apply/eq_filterm=> ??; rewrite mem_domm.
+  split.
+    rewrite /intf unionmC; last by case: Hlinkable.
+    rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
+    by apply/eq_filterm=> ??; rewrite mem_domm.
+  have wf_back : well_formed_program back by exact: well_formed_events_well_formed_program.
+  have Hback' : back = program_of_trace intf bufsz m' by [].
+  split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
+  split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
+  clear Hback'.
+  split; first exact: well_formed_program_unlink.
+  split; first exact: well_formed_program_unlink.
+  rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
+  split.
+  { exists (Terminates m').
+    split=> // {wf_events back Hback wf_back wf_m}.
+    rewrite {}/m'; case: m Hnot_wrong=> //= t _.
+    by exists (Terminates nil); rewrite /= E0_right. }
+  split.
+  { move=> C HC. rewrite /= filtermE /buffers_of_sizes mkfmapfE.
+    have HCu : C \in domm intf.
+    { rewrite /intf domm_union in_fsetU. by rewrite HC. }
+    by rewrite HCu HC. }
+  split.
+  { move=> C HC. rewrite /= filtermE /buffers_of_sizes mkfmapfE.
+    have HCu : C \in domm intf.
+    { rewrite /intf domm_union in_fsetU. by rewrite HC orbT. }
+    by rewrite HCu HC. }
+  by split.
+Qed.

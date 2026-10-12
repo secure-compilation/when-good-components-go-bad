@@ -1,6 +1,8 @@
 Require Import Coq.Lists.List.
 Require Import FunctionalExtensionality.
 
+Set Universe Polymorphism.
+
 Class Monad (M: Type -> Type) := {
   ret : forall {A}, A -> M A;
   bind : forall {A B}, M A -> (A -> M B) -> M B

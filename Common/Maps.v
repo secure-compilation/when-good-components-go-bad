@@ -13,10 +13,10 @@ Definition NMap T := {fmap nat -> T}.
 
 Definition elementsm {A: Type} : NMap A -> list (nat * A).
 Proof.
-     exact (@FMap.fmval nat_ordType A _)
+     exact (@FMap.fmval nat A _)
   ||
      idtac "ExStructures 0.1 legacy definition inactive";
-     exact (@FMap.fmval nat_ordType A).
+     exact (@FMap.fmval nat A).
 Defined.
 
 (* RB: TODO: These lemmas, with their clean proofs, probably belong in CoqUtils. *)
@@ -120,8 +120,8 @@ Qed.
 Lemma setm_filterm_notin_domm :
   forall (T T' : Type) (m1 : NMap T) (m2 : NMap T') k (v : T'),
     k \notin domm m1 ->
-    setm (filterm (fun (k : nat_ordType) (_ : T') => k \notin domm m1) m2) k v =
-    filterm (fun (k : nat_ordType) (_ : T') => k \notin domm m1) (setm m2 k v).
+    setm (filterm (fun (k : nat) (_ : T') => k \notin domm m1) m2) k v =
+    filterm (fun (k : nat) (_ : T') => k \notin domm m1) (setm m2 k v).
 Proof.
   intros T T' m1 m2 k v Hnotin.
   apply /eq_fmap => n.
@@ -184,44 +184,6 @@ Lemma filterm_id : forall (T : Type) (i : NMap T) p,
 Proof.
   move => T i. by rewrite mapm_id.
 Qed.
-
-Lemma domm_filterm_fdisjoint_unionm
-      (T T' : Type) (i1 i2 : NMap T) (m : NMap T') :
-  fdisjoint (domm i1) (domm i2) ->
-  domm m = domm (unionm i1 i2) ->
-  domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = domm i1.
-Proof.
-  rewrite domm_union => Hdisjoint Hunion.
-  have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) =
-           domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2))
-  by admit.
-  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto.
-  rewrite -filterm_id fdisjoint_filterm_full; auto.
-  Grab Existential Variables.
-  (* have HHH: domm m = (domm i1 :|: domm i2)%fset -> exists m1 m2, m = unionm m1 m2 /\ *)
-  (*                                                          domm m1 = domm i1 /\ domm m2 = domm i2 *)
-  (*       by admit. *)
-  (* specialize (HHH Hunion). destruct HHH as [m1 [m2 [Hu [H1 H2]]]]. *)
-  (* subst. Search _ domm filterm unionm. *)
-  rewrite filterm_union.
-  rewrite (@fdisjoint_filterm_empty T i2 i2). rewrite unionm0.
-  rewrite (@fdisjoint_filterm_full T T).
-  have HHH: exists m1 m2, m = unionm m1 m2 /\ domm m1 = domm i1 /\ domm m2 = domm i2 by admit.
-  destruct HHH as [m1 [m2 [Hu [H1 H2]]]].
-  rewrite Hu. rewrite <- H2.
-  rewrite filterm_id.
-  rewrite fdisjoint_filterm_mapm_unionm. rewrite <- filterm_id.
-  rewrite fdisjoint_filterm_full.
-
-  assumption. rewrite H1 H2; assumption. rewrite H1 H2; assumption.
-  assumption.
-  reflexivity. assumption.
-  Grab Existential Variables.
-  exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i1))) m).
-  exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i2))) m).
-  (* exists (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m). *)
-  split; try split.
-Admitted.
 
 Lemma domm_eq_filterm (T T' T'' : Type) (i1 : NMap T) (m1 : NMap T') (m2 : NMap T''):
     domm m1 = domm m2 ->

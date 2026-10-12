@@ -33,18 +33,25 @@ Source/GlobalEnv.v
 Source/CS.v
 Source/Blame.v
 Source/Definability.v
-Source/Examples/Helper.v
-Source/Examples/Empty.v
-Source/Examples/Identity.v
-Source/Examples/Assign.v
-Source/Examples/Increment.v
-Source/Examples/DefaultInitBuffer.v
-Source/Examples/NestedCalls.v
-Source/Examples/Factorial.v
+# Source/Examples: executable-extraction demos (each does `Extraction "..." to_run`).
+# Excluded under Rocq 9.1: they trigger a Rocq extraction-plugin anomaly
+# (mlutil.ml assertion failed) unrelated to the mathcomp 2.x port.
+# Source/Examples/Helper.v
+# Source/Examples/Empty.v
+# Source/Examples/Identity.v
+# Source/Examples/Assign.v
+# Source/Examples/Increment.v
+# Source/Examples/DefaultInitBuffer.v
+# Source/Examples/NestedCalls.v
+# Source/Examples/Factorial.v
 
 S2I/Definitions.v
 S2I/CompMonad.v
+S2I/SimInject.v
 S2I/Compiler.v
+S2I/LabelUniq.v
+S2I/SimCode.v
+S2I/Simulation.v
 #S2I/Examples/Helper.v
 #S2I/Examples/Empty.v
 #S2I/Examples/Identity.v
@@ -66,12 +73,12 @@ RSC_DC_MD.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
+MicroPolicies/WordExtra.v
 MicroPolicies/Int32.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
 MicroPolicies/Instance.v
-MicroPolicies/Printer.v
 
 
 I2MP/Tmp.v
@@ -81,22 +88,91 @@ I2MP/Tmp.v
 #   that doesn't compile, because this is the level below the one we were interested in.
 # I2MP/MPRecombination.v  -- not yet working
 
-I2MP/Examples/Helper.v
-I2MP/Examples/Assign.v
-I2MP/Examples/Empty.v
-I2MP/Examples/Increment.v
-I2MP/Examples/DefaultInitBuffer.v
-I2MP/Examples/Factorial.v
-I2MP/Examples/Identity.v
-I2MP/Examples/NestedCalls.v
+# I2MP/Examples: executable demos needing QuickChick's `Show` (out of scope) and
+# extraction; excluded from the Rocq 9.1 proof build.
+# I2MP/Examples/Helper.v
+# I2MP/Examples/Assign.v
+# I2MP/Examples/Empty.v
+# I2MP/Examples/Increment.v
+# I2MP/Examples/DefaultInitBuffer.v
+# I2MP/Examples/Factorial.v
+# I2MP/Examples/Identity.v
+# I2MP/Examples/NestedCalls.v
 
 MicroPolicies/Transitional.v # uses value_tag from MicroPolicies/LRC.v
 MicroPolicies/Merged.v
+# ARCHIVED 2026-08-02 (Stage 6 of plan-i2t-redo.md): the I -> Transitional pass
+# (I2T_Static.v, I2T_Correct.v, PASS1_Audit.v, its PASS1_*.md notes and its 362
+# .bak files) moved to MicroPolicies/OldUnused/ + OldUnused/Pass1Bak/.  It is
+# SUPERSEDED, not deleted: the S -> T forward simulation proves the same thing
+# directly (MicroPolicies/T*.v, TSim.t_forward_simulation), in ~13.6k lines with
+# zero admits against the old pass's 27.5k lines with 2 Admitted and ~67
+# Hypothesis.  I2T_Correct.v was a LEAF -- nothing in the build imported it.
 #MicroPolicies/Helper.v
 
+# Recomposition: general-offset (alignment-free) three-way simulation.
+# The NOP-padding stack (archived in Recomposition/OldUnused/Padding*.v) is OFF the
+# build: its LEFT-run does_prefix transfer is genuinely false (compromised contexts can
+# observe code bytes via LOAD + rcom_value), so alignment is handled by generalizing the
+# proofs instead.  Other dead/scratch files (RBScratch*, MWE, RInitTest) are archived
+# there too; MicroPolicies/{Helper,Printer}.v are in MicroPolicies/OldUnused/.
+MicroPolicies/Recomposition/OffsetWord.v
+MicroPolicies/Recomposition/LabelScheme.v
+MicroPolicies/Recomposition/BufferLayout.v
+MicroPolicies/Recomposition/BufferShape.v
 MicroPolicies/Recomposition/Definitions.v
+MicroPolicies/Recomposition/RSCDefs.v
+MicroPolicies/Recomposition/RSCSigs.v
+MicroPolicies/Recomposition/TraceWF.v
+MicroPolicies/Recomposition/EncodeCode.v
+MicroPolicies/Recomposition/TraceBracket.v
+MicroPolicies/Recomposition/TraceInit.v
+MicroPolicies/Recomposition/BackTranslation.v
 MicroPolicies/Recomposition/PreservationLemmas.v
 MicroPolicies/Recomposition/StepSilentStrong.v
+MicroPolicies/Recomposition/StepSilentStrong2.v
+MicroPolicies/Recomposition/StepSilentWeak.v
+MicroPolicies/Recomposition/StepSilentWeak2.v
 MicroPolicies/Recomposition/StepEventCall.v
 MicroPolicies/Recomposition/StepEventReturn.v
-MicroPolicies/Recomposition/RecompositionEnd.v
+MicroPolicies/Recomposition/RecompositionInit.v
+MicroPolicies/Recomposition/PcColor.v
+MicroPolicies/Recomposition/RecBackward.v
+MicroPolicies/Recomposition/RecompositionTop.v
+# --- The Intermediate -> Merged generator ---
+# CORRECTED 2026-08-02 (audit): an earlier note here called LinearizeMerged.v a "fake
+# lin_side linearizer (confused-session detour)".  That was WRONG.  Its [compiler_gen] is
+#     Merged.transitional_to_merged_gen make upd (prog_buffers pr)
+#                                       (Transitional.intermediate_to_transitional pr)
+# i.e. the REAL pipeline, composed from the two main-line definitions; it differs from
+# [Merged.transitional_to_merged] only in taking LabelScheme.v's canonical (collision-free,
+# separately-compilable) label numbering instead of the legacy one.  This file proves the
+# generator's STATIC well-formedness only -- there is no semantic simulation here.
+# What WAS abandoned is the Lin*.v SIMULATION (an Intermediate->Merged proof that had to
+# reconcile Intermediate's gps return stack with the backend's R_RA discipline), archived
+# 2026-07-20 to Recomposition/OldUnused/Lin*.v together with its RSC instantiation
+# (MicroPolicies/OldUnused/K*.v).  An abandoned PROOF, not a fake COMPILER.
+# The S2T/ development supersedes that attempt: T is already the R_RA machine, so a
+# T -> Merged simulation has no gps/R_RA reconciliation to do.
+# RSC_MD_MP.v (the functor) is independent of all of this.
+MicroPolicies/Recomposition/LinearizeMerged.v
+MicroPolicies/Recomposition/RecompositionWrapper.v
+MicroPolicies/RSC_MD_MP.v
+MicroPolicies/Recomposition/RSC_ME_MP.v
+MicroPolicies/Recomposition/RSC_ME_MP_Faithful.v
+T2M/MPos.v
+T2M/MMemBase.v
+BackTranslationMeMP/Backtranslation_ME_MP.v
+BackTranslationMeMP/Backtranslation_ME_MP_Step.v
+BackTranslationMeMP/Backtranslation_ME_MP_Seg.v
+BackTranslationMeMP/Backtranslation_ME_MP_Alloc.v
+BackTranslationMeMP/Backtranslation_ME_MP_Layout.v
+BackTranslationMeMP/Backtranslation_ME_MP_Run.v
+BackTranslationMeMP/Backtranslation_ME_MP_Pos.v
+BackTranslationMeMP/Backtranslation_ME_MP_Trace.v
+BackTranslationMeMP/Backtranslation_ME_MP_Wf.v
+BackTranslationMeMP/Backtranslation_ME_MP_Sim.v
+BackTranslationMeMP/Backtranslation_ME_MP_Obs.v
+BackTranslationMeMP/Backtranslation_ME_MP_Pkg.v
+BackTranslationMeMP/Backtranslation_ME_MP_Inst.v
+RSC_DC_MD_MicroPolicies.v

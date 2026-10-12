@@ -578,13 +578,11 @@ Definition prepare_procedures_initial_memory_aux (p: program) :=
        reserve_component_blocks p C Cmem (elementsm Cprocs))
     (domm (prog_interface p)).
 
-(* Ultimately, we want this equivalence -- possibly modulo an isomorphism on
-   concrete block id values -- to hold. *)
-Theorem prepare_procedures_initial_memory_aux_equiv (p: program) :
-  prepare_procedures_initial_memory_aux p = (* New version. *)
-  prepare_procedures_initial_memory_aux' p. (* Old version. *)
-Proof.
-Admitted.
+(* REMOVED 2026-08-02 (audit): [prepare_procedures_initial_memory_aux_equiv],
+   an [Admitted] conjecture that the new and old [..._aux] agree.  It had NO
+   users anywhere in the tree and, being [Admitted], read as an established
+   fact to anyone grepping.  The old version [..._aux'] is kept above for
+   reference only. *)
 
 (* Decompose the results of the auxiliary call, composed as a whole in the
    result of reserving component blocks, turning a map of triples into a triple
@@ -594,16 +592,10 @@ Definition prepare_procedures_initial_memory (p: program)
   let m := prepare_procedures_initial_memory_aux p in
   (mapm (fun x => x.1.1) m, mapm (fun x => x.1.2) m, mapm snd m).
 
-(* We want to ensure something like this:
-     Goal
-       forall p, prepare_procedures_initial_memory p =
-                 prepare_procedures p (prepare_initial_memory p).
-  Possibly assuming the well-formedness of the program. *)
-Theorem prepare_procedures_initial_memory_equiv :
-  forall p,
-    prepare_procedures_initial_memory p =
-    prepare_procedures p (prepare_initial_memory p).
-Admitted.
+(* REMOVED 2026-08-02 (audit): [prepare_procedures_initial_memory_equiv], an
+   [Admitted] conjecture relating [prepare_procedures_initial_memory] to
+   [prepare_procedures (prepare_initial_memory _)].  No users anywhere; same
+   reason as above.  If it is ever wanted, it may need well-formedness of [p]. *)
 
 (* initialization of a linked program *)
 
@@ -672,7 +664,7 @@ Proof.
   intros p.
   unfold prepare_procedures_initial_memory_aux.
   rewrite domm_mkfmapf.
-  apply fsetid.
+  reflexivity.
 Qed.
 
 (* FG : maybe relocate this in extructures? (when rewritten in proper SSReflect) *)

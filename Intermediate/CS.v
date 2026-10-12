@@ -318,7 +318,7 @@ Ltac step_of_executing :=
       | H : Register.get _ _ = Int 0 |- _ => eapply BnzZ
       | _                                 => eapply BnzNZ
       end
-    | IJump _        => eapply Jump
+    | IJump          => eapply Jump
     | IJal _         => eapply Jal
     | ICall _ _      => eapply Call
     | IReturn        => eapply Return
@@ -951,9 +951,22 @@ Section Semantics.
 
 Import ssreflect eqtype.
 
+(* The caller stack tracked by [well_bracketed_trace] only records
+   cross-component calls.  Under the current semantics [gps] also holds
+   internal (same-component) frames pushed by [IJal], so we collapse runs of
+   frames whose component equals the currently running one. *)
+Fixpoint stack_frames_of (cur : Component.id) (gps : CS.stack) : list Component.id :=
+  match gps with
+  | nil => nil
+  | f :: gps' =>
+    if Component.eqb (Pointer.component f) cur
+    then stack_frames_of cur gps'
+    else Pointer.component f :: stack_frames_of (Pointer.component f) gps'
+  end.
+
 Definition stack_state_of (cs:CS.state) : stack_state :=
   let '(gps, mem, regs, pc) := cs in
-  StackState (Pointer.component pc) (List.map Pointer.component gps).
+  StackState (Pointer.component pc) (stack_frames_of (Pointer.component pc) gps).
 
 Lemma intermediate_well_bracketed_trace t cs cs' :
   Star sem cs t cs' ->
@@ -964,17 +977,32 @@ case: cs1 t1 cs2 / Hstep IH => /=;
 try by move=> *; match goal with
 | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
     rewrite Pointer.inc_preserves_component in H end.
-(* TODO: the notion of well_bracketed_trace do not work anymore. *)
-(*
-- by move=> ???????? /find_label_in_component_1 ->.
-- by move=> ???????? ->.
-- by move=> ??????????? /find_label_in_procedure_1 ->.
-- by move=> ???????????; rewrite eqtype.eqxx Pointer.inc_preserves_component.
-- by move=> ?????????; rewrite !eqtype.eqxx.
-Qed.*)
-Admitted.
-
-Canonical ssrnat.nat_eqType.
+- (* IJal: internal call, pushes a same-component frame -> collapsed away. *)
+  move=> gps _ regs regs' pc pc' l _ /find_label_in_component_1 Heq _ IH.
+  rewrite -Heq Pointer.inc_preserves_component /Component.eqb Nat.eqb_refl /= in IH.
+  exact: IH.
+- (* IJump: internal return, pops a same-component frame. *)
+  move=> gps _ _ pc pc' _ Hpp IH.
+  rewrite Hpp /Component.eqb Nat.eqb_refl /=.
+  rewrite Hpp in IH; exact: IH.
+- (* IBnz (taken): internal jump, no stack change. *)
+  move=> gps _ regs pc pc' r l val _ _ _ /find_label_in_procedure_1 Heq IH.
+  rewrite -Heq in IH; exact: IH.
+- (* ICall: cross-component call, pushes the caller frame. *)
+  move=> gps _ regs pc b C' P call_arg _ Hne _ _ _ IH.
+  rewrite eqtype.eqxx /=.
+  rewrite Pointer.inc_preserves_component in IH.
+  have Hnb : Component.eqb (Pointer.component pc) C' = false.
+  { rewrite /Component.eqb. apply/Nat.eqb_neq. exact: Hne. }
+  rewrite Hnb /= in IH; exact: IH.
+- (* IReturn: cross-component return, pops the caller frame. *)
+  move=> gps' _ regs pc pc' ret_arg _ Hne _ IH.
+  rewrite eqtype.eqxx /=.
+  have Hnb : Component.eqb (Pointer.component pc') (Pointer.component pc) = false.
+  { rewrite /Component.eqb. apply/Nat.eqb_neq. exact: not_eq_sym Hne. }
+  rewrite Hnb /= eqtype.eqxx /=.
+  exact: IH.
+Qed.
 
 Lemma intermediate_well_formed_events st t st' :
   Star sem st t st' ->
@@ -983,9 +1011,10 @@ Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
-- move=> ????????? /eqtype.eqP ->.
-  by move=> /imported_procedure_iff /= ->.
-- by move=> ??????? /eqtype.eqP ->.
+- move=> ????????? Hne /imported_procedure_iff Himp _ _.
+  by rewrite Himp !ssrbool.andbT; apply/eqtype.eqP.
+- move=> ??????? Hne _.
+  by rewrite ssrbool.andbT; apply/eqtype.eqP.
 Qed.
 
 Lemma intermediate_well_formed_trace : forall t cs cs',

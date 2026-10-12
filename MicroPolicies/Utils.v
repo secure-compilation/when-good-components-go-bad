@@ -140,11 +140,11 @@ Import ssrfun.
 
 Notation "'do!' X <- A ; B" :=
   (obind (fun X => B) (A))
-  (at level 200, X ident, A at level 100, B at level 200).
+  (at level 200, X name, A at level 100, B at level 200).
 
 Notation "'do!' X : T <- A ; B" :=
   (obind (fun X : T => B) (A))
-  (at level 200, X ident, A at level 100, B at level 200).
+  (at level 200, X name, A at level 100, B at level 200).
 
 Notation "'do!' 'guard' cond ; rest" :=
   (if cond then rest else None)

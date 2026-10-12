@@ -9,8 +9,11 @@ Require Import Symbolic.
 Require Import Exec.
 Require Import Merged.
 
-Definition mt := concrete_int_32_mt.
-
+Global Opaque mt.
+Global Opaque word_size.
+Global Opaque reg_field_size.
+Global Opaque imm_size.
+  
 Global Instance ops : machine_ops mt := concrete_int_32_ops.
 (* ra := word.as_word 5 *)
 
@@ -26,7 +29,7 @@ Definition table {NC: nat} := Merged.table (NC := NC).
   (*[fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})]. *)
 
 Definition state := (@Symbolic.state mt lrc_tags).
-Definition stepf {NC: nat} := (@Exec.stepf mt ops lrc_tags transfer [eqType of unit] (table (NC := NC))).
+Definition stepf {NC: nat} := (@Exec.stepf mt ops lrc_tags transfer unit (table (NC := NC))).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
@@ -56,8 +59,8 @@ Definition load {ttypes} {internal:eqType} {Other} {start_tag} {start_internal: 
 
 
 Definition step_eval_mp {NC: nat} :=
-  (@Exec.stepf mt ops lrc_tags LRC.transfer [eqType of unit] (table (NC := NC))).
+  (@Exec.stepf mt ops lrc_tags LRC.transfer unit (table (NC := NC))).
 Definition step_eval_me {NC: nat} :=
-  (@Exec.stepf mt ops lrc_tags Merged.transfer [eqType of unit] (table (NC := NC))).
-Definition step_mp {NC: nat} := (@Symbolic.step mt ops lrc_tags LRC.transfer [eqType of unit] (table (NC := NC))).
-Definition step_me {NC: nat} := (@Symbolic.step mt ops lrc_tags Merged.transfer [eqType of unit] (table (NC := NC))).
+  (@Exec.stepf mt ops lrc_tags Merged.transfer unit (table (NC := NC))).
+Definition step_mp {NC: nat} := (@Symbolic.step mt ops lrc_tags LRC.transfer unit (table (NC := NC))).
+Definition step_me {NC: nat} := (@Symbolic.step mt ops lrc_tags Merged.transfer unit (table (NC := NC))).

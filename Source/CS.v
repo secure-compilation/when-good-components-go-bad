@@ -12,11 +12,10 @@ Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 Require Import Lib.Extra.
+Require Import Lia.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
-From mathcomp Require ssrnat.
-
-Canonical ssrnat.nat_eqType.
+From mathcomp Require Import ssrnat.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -481,7 +480,7 @@ Section Semantics.
   elim: s1 t s2 / => //= s1 t1 s2 t2 s3 _ Hstep _ -> ->.
   rewrite map_cat last_cat (kstep_component Hstep).
   move/singleton_traces: Hstep.
-  by case: t1=> [|e [|e' t1]] //= *; omega.
+  by case: t1=> [|e [|e' t1]] //= *; lia.
   Qed.
 
   Lemma initial_state_exists:
