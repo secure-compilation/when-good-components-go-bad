@@ -211,8 +211,8 @@ Theorem pop_preserves_vload m p v m' :
   Transitional.Memory.load m p = Some v ->
   Transitional.Memory.store m p
     ({| Transitional.val := Transitional.val v.1;
-        tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-     {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+        tvtag := moved_tag (tvtag v.1) |},
+     {| vtag := moved_tag (tvtag v.1);
         color := Pointer.component p; entry := None; is_code := false |})
     = Some m' ->
   forall q, vload m' q = vload m q.

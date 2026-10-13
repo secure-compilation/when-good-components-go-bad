@@ -1117,15 +1117,10 @@ Lemma tvrel_retag_s (amap : amap_t) (tval : Transitional.tvalue)
   tvrel cmapS amap tval w ->
   tvrel cmapS amap
     {| Transitional.val := Transitional.val tval;
-       Transitional.tvtag := if is_address (Transitional.tvtag tval)
-                             then Invalidated else Other |} w.
+       Transitional.tvtag := moved_tag (Transitional.tvtag tval) |} w.
 Proof.
-move=> Hv.
-rewrite /tvrel /=.
-case Eaddr: (is_address (Transitional.tvtag tval)).
-- exact: I.
-- have Et : Transitional.tvtag tval = Other := is_address_false Eaddr.
-  move: Hv. rewrite /tvrel Et. exact: id.
+move: tval => [vt v]. rewrite /tvrel /=.
+by case: vt.
 Qed.
 
 Lemma tvrel_eta_s (amap : amap_t) (tv : Transitional.tvalue)
@@ -1158,10 +1153,8 @@ Lemma sync_load_user (amap : amap_t)
   Transitional.Memory.load tmem ptr = Some v ->
   Transitional.Memory.store tmem ptr
     ({| Transitional.val := Transitional.val v.1;
-        Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other |},
-     {| vtag := if is_address (Transitional.tvtag v.1)
-                then Invalidated else Other;
+        Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+     {| vtag := moved_tag (Transitional.tvtag v.1);
         color := Pointer.component ptr; entry := None;
         is_code := false |}) = Some tmem' ->
   addr_of amap (Pointer.component ptr) (Pointer.block ptr) = Some a ->
@@ -1177,8 +1170,7 @@ Lemma sync_load_user (amap : amap_t)
        (Atom wmc (Transitional.tvtag v.1)))
     (setm mmem (@word_of_nat (word_size mt)
                   (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-       (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                            then Invalidated else Other;
+       (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                     color := Pointer.component ptr; entry := None;
                     is_code := false |}))
     (Pointer.inc pc) cur chain F.
@@ -1194,14 +1186,11 @@ have Hrelmc : cellrel cmapS amap v (Atom wmc mtg).
   exact: (Hcs _ _ _ _ _ Hcm Hblk Hnth Ha Hmc). }
 have Hrel' : cellrel cmapS amap
     ({| Transitional.val := Transitional.val v.1;
-        Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other |},
-     {| vtag := if is_address (Transitional.tvtag v.1)
-                then Invalidated else Other;
+        Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+     {| vtag := moved_tag (Transitional.tvtag v.1);
         color := Pointer.component ptr; entry := None;
         is_code := false |})
-    (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                         then Invalidated else Other;
+    (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                  color := Pointer.component ptr; entry := None;
                  is_code := false |}).
 { case: Hrelmc => Hvmc Htmc Hvtmc.
@@ -1213,8 +1202,7 @@ have Hcells : forall c0 b0 j0, cell_synced amap tmem mmem c0 b0 j0 ->
     cell_synced amap tmem'
       (setm mmem (@word_of_nat (word_size mt)
                     (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-         (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other;
+         (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                       color := Pointer.component ptr; entry := None;
                       is_code := false |}))
       c0 b0 j0.
@@ -1476,10 +1464,8 @@ Lemma sync_load_pop (amap : amap_t)
   Transitional.Memory.load tmem ptr = Some v ->
   Transitional.Memory.store tmem ptr
     ({| Transitional.val := Transitional.val v.1;
-        Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other |},
-     {| vtag := if is_address (Transitional.tvtag v.1)
-                then Invalidated else Other;
+        Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+     {| vtag := moved_tag (Transitional.tvtag v.1);
         color := Pointer.component ptr; entry := None;
         is_code := false |}) = Some tmem' ->
   addr_of amap (Pointer.component ptr) (Pointer.block ptr) = Some a ->
@@ -1495,8 +1481,7 @@ Lemma sync_load_pop (amap : amap_t)
        (Atom wmc (Transitional.tvtag v.1)))
     (setm mmem (@word_of_nat (word_size mt)
                   (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-       (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                            then Invalidated else Other;
+       (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                     color := Pointer.component ptr; entry := None;
                     is_code := false |}))
     (Pointer.inc pc) cur chain F.
@@ -1539,8 +1524,7 @@ have HmemT : forall c0 b0 j0, (b0 \in F c0) = false ->
     cell_synced amap tmem'
       (setm mmem (@word_of_nat (word_size mt)
                     (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-         (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other;
+         (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                       color := Pointer.component ptr; entry := None;
                       is_code := false |}))
       c0 b0 j0.
@@ -1552,8 +1536,7 @@ have HframeT : forall b j0 k, cur = Some b ->
     cell_synced amap tmem'
       (setm mmem (@word_of_nat (word_size mt)
                     (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-         (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other;
+         (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                       color := Pointer.component ptr; entry := None;
                       is_code := false |}))
       (Pointer.component pc) b j0.
@@ -1567,8 +1550,7 @@ have HchainT : forall i A j0, nth_error chain i = Some A ->
     cell_synced amap tmem'
       (setm mmem (@word_of_nat (word_size mt)
                     (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-         (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other;
+         (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                       color := Pointer.component ptr; entry := None;
                       is_code := false |}))
       (MDisc.a_comp A) (MDisc.a_blk A) j0.
@@ -1591,8 +1573,7 @@ case Eph: (sv_ph sv0) => //.
         cell_synced amap tmem'
           (setm mmem (@word_of_nat (word_size mt)
                         (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-             (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                                  then Invalidated else Other;
+             (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                           color := Pointer.component ptr; entry := None;
                           is_code := false |}))
           (Pointer.component pc) b (size (sv_sig sv0)).
@@ -1658,8 +1639,7 @@ case Eph: (sv_ph sv0) => //.
           cell_synced amap tmem'
             (setm mmem (@word_of_nat (word_size mt)
                           (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-               (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                                    then Invalidated else Other;
+               (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                             color := Pointer.component ptr; entry := None;
                             is_code := false |}))
             (Pointer.component pc) b (size (sv_sig sv0)).
@@ -1728,14 +1708,11 @@ case Eph: (sv_ph sv0) => //.
         exact: (Hcs _ _ _ _ _ Hcm Hblk Hnth Ha' Hmc'). }
       have Hrel' : cellrel cmapS amap
           ({| Transitional.val := Transitional.val v.1;
-              Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                                    then Invalidated else Other |},
-           {| vtag := if is_address (Transitional.tvtag v.1)
-                      then Invalidated else Other;
+              Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+           {| vtag := moved_tag (Transitional.tvtag v.1);
               color := Pointer.component ptr; entry := None;
               is_code := false |})
-          (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                               then Invalidated else Other;
+          (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                        color := Pointer.component ptr; entry := None;
                        is_code := false |}).
       { case: Hpair => Hvmc Htmc Hvtmc.
@@ -1748,8 +1725,7 @@ case Eph: (sv_ph sv0) => //.
           cell_synced amap tmem'
             (setm mmem (@word_of_nat (word_size mt)
                           (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-               (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                                    then Invalidated else Other;
+               (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                             color := Pointer.component ptr; entry := None;
                             is_code := false |}))
             c0 b0 j0.
@@ -1792,14 +1768,11 @@ case Eph: (sv_ph sv0) => //.
       exact: (Hcs _ _ _ _ _ Hcm Hblk Hnth Ha' Hmc'). }
     have Hrel' : cellrel cmapS amap
         ({| Transitional.val := Transitional.val v.1;
-            Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                                  then Invalidated else Other |},
-         {| vtag := if is_address (Transitional.tvtag v.1)
-                    then Invalidated else Other;
+            Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+         {| vtag := moved_tag (Transitional.tvtag v.1);
             color := Pointer.component ptr; entry := None;
             is_code := false |})
-        (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                             then Invalidated else Other;
+        (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                      color := Pointer.component ptr; entry := None;
                      is_code := false |}).
     { case: Hpair => Hvmc Htmc Hvtmc.
@@ -1812,8 +1785,7 @@ case Eph: (sv_ph sv0) => //.
         cell_synced amap tmem'
           (setm mmem (@word_of_nat (word_size mt)
                         (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-             (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                                  then Invalidated else Other;
+             (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                           color := Pointer.component ptr; entry := None;
                           is_code := false |}))
           c0 b0 j0.
@@ -1875,8 +1847,7 @@ case Eph: (sv_ph sv0) => //.
         cell_synced amap tmem'
           (setm mmem (@word_of_nat (word_size mt)
                         (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-             (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                                  then Invalidated else Other;
+             (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                           color := Pointer.component ptr; entry := None;
                           is_code := false |}))
           (Pointer.component pc) b (size (sv_sig sv0)).
@@ -1893,14 +1864,11 @@ case Eph: (sv_ph sv0) => //.
         exact: (Hold _ _ _ _ _ Hcm Hblk Hnth Ha' Hmc'). }
       have Hrel' : cellrel cmapS amap
           ({| Transitional.val := Transitional.val v.1;
-              Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                                    then Invalidated else Other |},
-           {| vtag := if is_address (Transitional.tvtag v.1)
-                      then Invalidated else Other;
+              Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+           {| vtag := moved_tag (Transitional.tvtag v.1);
               color := Pointer.component ptr; entry := None;
               is_code := false |})
-          (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                               then Invalidated else Other;
+          (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                        color := Pointer.component ptr; entry := None;
                        is_code := false |}).
       { case: Hpair => Hvmc Htmc Hvtmc.
@@ -1911,8 +1879,7 @@ case Eph: (sv_ph sv0) => //.
       have Hnew0 : cell_synced amap tmem'
           (setm mmem (@word_of_nat (word_size mt)
                         (a + BinInt.Z.to_nat (Pointer.offset ptr)))
-             (Atom wmc {| vtag := if is_address (Transitional.tvtag v.1)
-                                  then Invalidated else Other;
+             (Atom wmc {| vtag := moved_tag (Transitional.tvtag v.1);
                           color := Pointer.component ptr; entry := None;
                           is_code := false |}))
           (Pointer.component ptr) (Pointer.block ptr)
@@ -2019,10 +1986,8 @@ Lemma sync_load_pop_clob (amap : amap_t)
   Transitional.Memory.load tmem ptr = Some v ->
   Transitional.Memory.store tmem ptr
     ({| Transitional.val := Transitional.val v.1;
-        Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other |},
-     {| vtag := if is_address (Transitional.tvtag v.1)
-                then Invalidated else Other;
+        Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+     {| vtag := moved_tag (Transitional.tvtag v.1);
         color := Pointer.component ptr; entry := None;
         is_code := false |}) = Some tmem' ->
   addr_of amap (Pointer.component ptr) (Pointer.block ptr) = Some a ->
@@ -2326,16 +2291,16 @@ Lemma reg_synced_retag1 (amap : amap_t)
   reg_syncedS amap
     (Transitional.Register.set r2
        (Transitional.val (Transitional.Register.get r2 tregs))
-       (if is_address vt then Invalidated else Other) tregs)
+       (moved_tag vt) tregs)
     (setm mregs (@word_of_nat (reg_field_size mt)
                    (Intermediate.Register.to_nat r2))
-       (Atom w2 (if is_address vt then Invalidated else Other)))
+       (Atom w2 (moved_tag vt)))
     r2.
 Proof.
 move=> Evt Hr2m [ra [Hra Hv Ht]].
 have Era : ra = Atom w2 ts2 by move: Hra; rewrite Hr2m => -[].
 subst ra.
-exists (Atom w2 (if is_address vt then Invalidated else Other)).
+exists (Atom w2 (moved_tag vt)).
 rewrite tget_set_eq setmE eqxx.
 split.
 - exact: erefl.
@@ -2346,7 +2311,7 @@ split.
   case: tg0 E0 Ht Hv => [n| | |] E0 Ht Hv.
   + exact: I.
   + exact: Hv.
-  + exact: I.
+  + exact: Hv.
   + exact: I.
 - exact: erefl.
 Qed.
@@ -2362,10 +2327,10 @@ Lemma reg_synced_store_any (amap : amap_t)
   reg_syncedS amap
     (Transitional.Register.set r2
        (Transitional.val (Transitional.Register.get r2 tregs))
-       (if is_address vt then Invalidated else Other) tregs)
+       (moved_tag vt) tregs)
     (setm mregs (@word_of_nat (reg_field_size mt)
                    (Intermediate.Register.to_nat r2))
-       (Atom w2 (if is_address vt then Invalidated else Other)))
+       (Atom w2 (moved_tag vt)))
     RX.
 Proof.
 move=> Evt Hr2m Hkeep.
@@ -2409,10 +2374,10 @@ Lemma sync_store_user (amap : amap_t)
   sync_claims amap tmem'
     (Transitional.Register.set r2
        (Transitional.val (Transitional.Register.get r2 tregs))
-       (if is_address vt then Invalidated else Other) tregs)
+       (moved_tag vt) tregs)
     (setm mregs (@word_of_nat (reg_field_size mt)
                    (Intermediate.Register.to_nat r2))
-       (Atom w2 (if is_address vt then Invalidated else Other)))
+       (Atom w2 (moved_tag vt)))
     (setm mmem (@word_of_nat (word_size mt)
                   (a + BinInt.Z.to_nat (Pointer.offset ptr)))
        (Atom w2 {| vtag := vt; color := Pointer.component ptr;
@@ -2458,10 +2423,10 @@ have Hrows : forall v1 : sv,
     sync_claims amap tmem'
       (Transitional.Register.set r2
          (Transitional.val (Transitional.Register.get r2 tregs))
-         (if is_address vt then Invalidated else Other) tregs)
+         (moved_tag vt) tregs)
       (setm mregs (@word_of_nat (reg_field_size mt)
                      (Intermediate.Register.to_nat r2))
-         (Atom w2 (if is_address vt then Invalidated else Other)))
+         (Atom w2 (moved_tag vt)))
       (setm mmem (@word_of_nat (word_size mt)
                     (a + BinInt.Z.to_nat (Pointer.offset ptr)))
          (Atom w2 {| vtag := vt; color := Pointer.component ptr;
@@ -2632,10 +2597,10 @@ Lemma sync_store_push (amap : amap_t)
   sync_claims amap tmem'
     (Transitional.Register.set r2
        (Transitional.val (Transitional.Register.get r2 tregs))
-       (if is_address vt then Invalidated else Other) tregs)
+       (moved_tag vt) tregs)
     (setm mregs (@word_of_nat (reg_field_size mt)
                    (Intermediate.Register.to_nat r2))
-       (Atom w2 (if is_address vt then Invalidated else Other)))
+       (Atom w2 (moved_tag vt)))
     (setm mmem (@word_of_nat (word_size mt)
                   (a + BinInt.Z.to_nat (Pointer.offset ptr)))
        (Atom w2 {| vtag := vt; color := Pointer.component ptr;
@@ -2816,7 +2781,7 @@ Lemma sync_store_push_clob (amap : amap_t)
   sync_claims amap tmem'
     (Transitional.Register.set r2
        (Transitional.val (Transitional.Register.get r2 tregs))
-       (if is_address vt then Invalidated else Other) tregs)
+       (moved_tag vt) tregs)
     (setm mregs (@word_of_nat (reg_field_size mt)
                    (Intermediate.Register.to_nat r2))
        (Atom w2 Invalidated))
@@ -3749,21 +3714,20 @@ Lemma reg_synced_mov_retag (amap : amap_t)
   reg_syncedS amap
     (Transitional.Register.set r1
        (Transitional.val (Transitional.Register.get r1 tregs))
-       (if is_address (Transitional.tvtag (Transitional.Register.get r1 tregs))
-        then Invalidated else Other)
+       (moved_tag (Transitional.tvtag (Transitional.Register.get r1 tregs)))
        (Transitional.Register.set r2 v2 t2 tregs))
     (setm (setm mregs
             (@word_of_nat (reg_field_size mt)
                (Intermediate.Register.to_nat r2)) ra2)
        (@word_of_nat (reg_field_size mt)
           (Intermediate.Register.to_nat r1))
-       (Atom w1 (if is_address ts1 then Invalidated else Other)))
+       (Atom w1 (moved_tag ts1)))
     r1.
 Proof.
 move=> Hr1m [ra [Hra Hv Ht]].
 have Era : ra = Atom w1 ts1 by move: Hra; rewrite Hr1m => -[].
 subst ra.
-exists (Atom w1 (if is_address ts1 then Invalidated else Other)).
+exists (Atom w1 (moved_tag ts1)).
 rewrite tget_set_eq setmE eqxx.
 move: Hv Ht.
 case E1: (Transitional.Register.get r1 tregs) => [vt1 vv1] /=.
@@ -3771,10 +3735,7 @@ move=> Hv Ht.
 rewrite Ht.
 split.
 - exact: erefl.
-- case Eaddr: (is_address vt1).
-  + exact: I.
-  + have Evt1 : vt1 = Other := is_address_false Eaddr.
-    rewrite Evt1 in Hv. exact: Hv.
+- move: Hv. rewrite /tvrel /=. by case: (vt1).
 - exact: erefl.
 Qed.
 
@@ -3790,8 +3751,7 @@ Lemma reg_synced_mov_any (amap : amap_t)
   reg_syncedS amap
     (Transitional.Register.set r1
        (Transitional.val (Transitional.Register.get r1 tregs))
-       (if is_address (Transitional.tvtag (Transitional.Register.get r1 tregs))
-        then Invalidated else Other)
+       (moved_tag (Transitional.tvtag (Transitional.Register.get r1 tregs)))
        (Transitional.Register.set r2
           (Transitional.val (Transitional.Register.get r1 tregs))
           (Transitional.tvtag (Transitional.Register.get r1 tregs)) tregs))
@@ -3800,7 +3760,7 @@ Lemma reg_synced_mov_any (amap : amap_t)
                (Intermediate.Register.to_nat r2)) (Atom w1 ts1))
        (@word_of_nat (reg_field_size mt)
           (Intermediate.Register.to_nat r1))
-       (Atom w1 (if is_address ts1 then Invalidated else Other)))
+       (Atom w1 (moved_tag ts1)))
     RX.
 Proof.
 move=> Hr12 Hr1m Hcopy Hkeep.
@@ -3844,8 +3804,7 @@ Lemma sync_mov (amap : amap_t) (tmem : Transitional.Memory.t)
   sync_claims amap tmem
     (Transitional.Register.set r1
        (Transitional.val (Transitional.Register.get r1 tregs))
-       (if is_address (Transitional.tvtag (Transitional.Register.get r1 tregs))
-        then Invalidated else Other)
+       (moved_tag (Transitional.tvtag (Transitional.Register.get r1 tregs)))
        (Transitional.Register.set r2
           (Transitional.val (Transitional.Register.get r1 tregs))
           (Transitional.tvtag (Transitional.Register.get r1 tregs)) tregs))
@@ -3854,7 +3813,7 @@ Lemma sync_mov (amap : amap_t) (tmem : Transitional.Memory.t)
                (Intermediate.Register.to_nat r2)) (Atom w1 ts1))
        (@word_of_nat (reg_field_size mt)
           (Intermediate.Register.to_nat r1))
-       (Atom w1 (if is_address ts1 then Invalidated else Other)))
+       (Atom w1 (moved_tag ts1)))
     mmem (Pointer.inc pc) cur chain F.
 Proof.
 move=> Hex Ev0 Hr12 Hr1m Hone Hsp HS.

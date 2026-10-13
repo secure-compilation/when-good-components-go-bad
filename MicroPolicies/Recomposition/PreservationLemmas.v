@@ -2608,7 +2608,7 @@ Qed.
       (evinp : ev_inputs) (ov : ovec lrc_tags STORE) (ev : option event),
     LRC.transfer (IVec STORE tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) ->
     ev = None /\ trpc ov = tpc /\
-    tr ov = [hseq t1; (if is_address t2 then Invalidated else Other); (switch_val told t2).1] /\
+    tr ov = [hseq t1; (moved_tag t2); (switch_val told t2).1] /\
     color told = (match tpc with Level _ c => c end) /\ ~~ is_code told.
   Proof.
     move=> tpc ti told t1 t2 tni evinp ov ev.
@@ -2638,8 +2638,8 @@ Qed.
     LRC.transfer (IVec LOAD tpc ti [hseq tp; ts; td] tni) evinp = Some (ov, ev) ->
     ev = None /\ trpc ov = tpc /\
     tr ov = [hseq tp;
-             (switch_val ts (if is_address (vtag ts) then Invalidated else Other)).1;
-             (switch_val ts (if is_address (vtag ts) then Invalidated else Other)).2].
+             (switch_val ts (moved_tag (vtag ts))).1;
+             (switch_val ts (moved_tag (vtag ts))).2].
   Proof.
     move=> tpc ti tp td ts tni evinp ov ev.
     rewrite /LRC.transfer /LRC.instr_rules.
@@ -2648,7 +2648,7 @@ Qed.
     case: (obind_inv H) => u1 [_ {}H].
     case: (obind_inv H) => u2 [_ {}H].
     move: H. case: ifP => // _ H.
-    move: H. case E: (switch_val ts (if is_address (vtag ts) then Invalidated else Other)) => [ts' td'] /=.
+    move: H. case E: (switch_val ts (moved_tag (vtag ts))) => [ts' td'] /=.
     move=> [= <- <-] /=.
     split; first by []. split; first by []. by [].
   Qed.
@@ -2758,7 +2758,7 @@ Qed.
        [:: RegRead r1; MemRead w1; RegWrite r2 w2] = Some (s1', None) ->
     mem s1 w1 = Some (w2 @ t2) /\
     mem s1' = setm (mem s1) w1
-                (w2 @ (switch_val t2 (if is_address (vtag t2) then Invalidated else Other)).1) /\
+                (w2 @ (switch_val t2 (moved_tag (vtag t2))).1) /\
     taga (pc s1') = taga (pc s1) /\
     (is_code t2 \/ color t2 = color_of s1).
   Proof.
@@ -2791,7 +2791,7 @@ Qed.
         (have Hsta : mem sta = mem s1 by rewrite -Esta; exact: erefl);
         (have Hav2' : av2 = w2 @ t2 by move: Hav2; rewrite Hsta Hmems1 Hmw1; congruence);
         (have Hstb : mem stb = setm (mem s1) w1
-            (w2 @ (switch_val t2 (if is_address (vtag t2) then Invalidated else Other)).1)
+            (w2 @ (switch_val t2 (moved_tag (vtag t2))).1)
           by rewrite -Estb /= (updm_set Hmv2) Hsta Hav2'; exact: erefl);
         move: Hfin => [= Hfins1]; subst s1';
         split; [by (rewrite Hmems1; exact: Hmw1)|];

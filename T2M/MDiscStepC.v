@@ -73,7 +73,7 @@ Lemma dinv_step_store :
     dinv cur chain F cs mem'
        (Transitional.Register.set r2
          (Transitional.val (Transitional.Register.get r2 regs))
-         (if is_address vt then Invalidated else Other) regs)
+         (moved_tag vt) regs)
        (Pointer.inc pc) pct.
 Proof.
   move=> mem mem' regs pc tg c pct ptr r1 r2 vt cur chain F cs
@@ -227,7 +227,7 @@ Proof.
                      (Transitional.Register.set r2
                         (Transitional.val
                            (Transitional.Register.get r2 regs))
-                        (if is_address vt then Invalidated else Other)
+                        (moved_tag vt)
                         regs))
                 = Transitional.val
                     (Transitional.Register.get R_ONE regs).
@@ -494,7 +494,7 @@ Proof.
          have Epdw : sv_pend w = sv_pend v by rewrite Epd' Epd0.
          have Evt0 : vt = Other.
          { rewrite Evt. by apply: (di_rtag HI). }
-         have Eia : (if is_address vt then Invalidated else Other) = Other
+         have Eia : (moved_tag vt) = Other
            by rewrite Evt0.
          rewrite Eia.
          have Hcs := store_cell_same Hupd Emem'.
@@ -683,7 +683,7 @@ Proof.
          have Epdw : sv_pend w = sv_pend v by rewrite Epd' Epd0.
          have Evt0 : vt = Other.
          { rewrite Evt. apply: (di_rtag HI). exact: (is_r_neq E2ra). }
-         have Eia : (if is_address vt then Invalidated else Other) = Other
+         have Eia : (moved_tag vt) = Other
            by rewrite Evt0.
          rewrite Eia.
          have Hv2 : Transitional.val (Transitional.Register.get r2 regs)
@@ -953,7 +953,7 @@ Proof.
       have [[Eph' Esg Epd' Eek'] [Ht1 Ht2 Hsc Hon]] := sv_le_fields Hle.
       have Evt0 : vt = Other.
       { rewrite Evt. apply: (di_rtag HI). exact: (is_r_neq E2ra). }
-      have Eia : (if is_address vt then Invalidated else Other) = Other
+      have Eia : (moved_tag vt) = Other
         by rewrite Evt0.
       rewrite Eia.
       have Hx : forall r0, r0 <> r2 ->
@@ -1211,7 +1211,7 @@ Proof.
       have [[Eph' Esg Epd' Eek'] [Ht1 Ht2 Hsc Hon]] := sv_le_fields Hle.
       have Evt0 : vt = Other.
       { rewrite Evt. apply: (di_rtag HI). exact: (is_r_neq E2ra). }
-      have Eia : (if is_address vt then Invalidated else Other) = Other
+      have Eia : (moved_tag vt) = Other
         by rewrite Evt0.
       rewrite Eia.
       have Hx : forall r0, r0 <> r2 ->
@@ -1427,7 +1427,7 @@ Lemma disc_step_store :
     disc_inv (mem',
        Transitional.Register.set r2
          (Transitional.val (Transitional.Register.get r2 regs))
-         (if is_address vt then Invalidated else Other) regs,
+         (moved_tag vt) regs,
        Pointer.inc pc, pct).
 Proof.
   move=> mem mem' regs pc tg c pct ptr r1 r2 vt Hex Hpc Htg1 Hval1
@@ -1446,8 +1446,8 @@ Lemma dinv_step_load :
     Transitional.Memory.load mem ptr = Some v ->
     Transitional.Memory.store mem ptr
       ({| Transitional.val := Transitional.val v.1;
-          tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+          tvtag := moved_tag (tvtag v.1) |},
+       {| vtag := moved_tag (tvtag v.1);
           color := c; entry := None; is_code := false |}) = Some mem' ->
     dinv cur chain F cs mem regs pc pct ->
     dinv cur chain F cs mem'
@@ -3649,8 +3649,8 @@ Lemma disc_step_load :
     Transitional.Memory.load mem ptr = Some v ->
     Transitional.Memory.store mem ptr
       ({| Transitional.val := Transitional.val v.1;
-          tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+          tvtag := moved_tag (tvtag v.1) |},
+       {| vtag := moved_tag (tvtag v.1);
           color := c; entry := None; is_code := false |}) = Some mem' ->
     disc_inv (mem, regs, pc, pct) ->
     disc_inv (mem',

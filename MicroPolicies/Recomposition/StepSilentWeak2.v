@@ -412,7 +412,7 @@ Module StepWeak2 (S: RecompositionContext).
     weak_equiv Right M s2 s3 -> common_equiv M s1 s2 s3 ->
     mem s2 w1 = Some (w2 @ t2) ->
     mem s2' = setm (mem s2) w1
-                (w2 @ (switch_val t2 (if is_address (vtag t2) then Invalidated else Other)).1) ->
+                (w2 @ (switch_val t2 (moved_tag (vtag t2))).1) ->
     taga (pc s2') = taga (pc s2) ->
     (is_code t2 \/ color t2 = color_of s2) ->
     register_domm (regs s2') ->
@@ -441,7 +441,7 @@ Module StepWeak2 (S: RecompositionContext).
       + by rewrite /=; exact: Hncp.
     - have Hnt : forall (tt : tag_type lrc_tags Symbolic.M),
           is_address (vtag tt) = false ->
-          (switch_val tt (if is_address (vtag tt) then Invalidated else Other)).1 = tt.
+          (switch_val tt (moved_tag (vtag tt))).1 = tt.
       { move=> [vt ct et bt] /=. by case: vt. }
       have Hid : mem s2' = mem s2 by (rewrite Hmem' (Hnt t2 Hia); exact: (setm_self Hmw1)).
       exact: (preserves_weak_local_r weak common Hid Htag Hrd Hcap Hpcc2).

@@ -345,7 +345,7 @@ Lemma me_step_mov (m : {fmap mword mt -> matom}) (rg : rmap)
   step_me (NC := NC)
     (@Symbolic.State mt lrc_tags unit m rg (Atom (pcw (pc0 + n)) (Level lv cid)) tt)
     (@Symbolic.State mt lrc_tags unit m
-       (setm (setm rg (rkb r1) (Atom w1 (if is_address t1 then Invalidated else Other)))
+       (setm (setm rg (rkb r1) (Atom w1 (moved_tag t1)))
              (rkb r2) (Atom w1 t1))
        (Atom (pcw (pc0 + n.+1)) (Level lv cid)) tt)
     None.
@@ -449,7 +449,7 @@ Lemma me_step_load (m : {fmap mword mt -> matom}) (rg : rmap)
   step_me (NC := NC)
     (@Symbolic.State mt lrc_tags unit m rg (Atom (pcw (pc0 + n)) (Level lv cid)) tt)
     (@Symbolic.State mt lrc_tags unit
-       (setm m w1 (Atom w2 (MTag (if is_address vt2 then Invalidated else Other) cid e2 false)))
+       (setm m w1 (Atom w2 (MTag (moved_tag vt2) cid e2 false)))
        (setm rg (rk r2) (Atom w2 vt2))
        (Atom (pcw (pc0 + n.+1)) (Level lv cid)) tt)
     None.
@@ -503,7 +503,7 @@ Lemma me_step_store (m : {fmap mword mt -> matom}) (rg : rmap)
     (@Symbolic.State mt lrc_tags unit m rg (Atom (pcw (pc0 + n)) (Level lv cid)) tt)
     (@Symbolic.State mt lrc_tags unit
        (setm m w1 (Atom w2 (MTag t2 cid eo false)))
-       (setm rg (rk r2) (Atom w2 (if is_address t2 then Invalidated else Other)))
+       (setm rg (rk r2) (Atom w2 (moved_tag t2)))
        (Atom (pcw (pc0 + n.+1)) (Level lv cid)) tt)
     None.
 Proof.

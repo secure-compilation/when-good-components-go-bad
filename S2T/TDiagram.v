@@ -604,8 +604,8 @@ Proof.
            Hw) => [tmem' Hst].
   have Hstr : Transitional.Memory.store tmem (C, b'', op')
       ({| Transitional.val := Transitional.val w.1;
-          tvtag := if is_address (tvtag w.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag w.1) then Invalidated else Other;
+          tvtag := moved_tag (tvtag w.1) |},
+       {| vtag := moved_tag (tvtag w.1);
           color := Pointer.component pcD; entry := None;
           is_code := false |}) = Some tmem'
     by rewrite Ec Etw /=; exact: Hst.
@@ -757,7 +757,7 @@ Proof.
                (Transitional.val (Transitional.Register.get R_AUX1 regsA))
                Other regsA,
              Pointer.inc (Pointer.inc (Pointer.inc pcD)), pct).
-  { have -> : Other = (if is_address Other then Invalidated else Other) by [].
+  { have -> : Other = (moved_tag Other) by [].
     eapply TS.Store.
     - exact: (TMacros.code_at_I_head HcA).
     - exact: (TMacros.check_pc_at_I HcA).
@@ -3289,7 +3289,7 @@ Proof.
     by move: TW0'; rewrite /TMem.tload HlSP /= => -[<-].
   (* slot 2 is junk: the ledger has no memory site at all, so [ti_data]
      forbids a live tag there *)
-  have HdeadRA : ~~ TInv.is_live (tvtag wRA.1).
+  have HdeadRA : ~~ TInv.is_ret (tvtag wRA.1).
   { apply/negP => Hlive.
     have Ht : TMem.tload tmem1 (Component.main, fb_ext, 2%Z)
             = Some (tvtag wRA.1) by rewrite /TMem.tload HlRA.

@@ -695,7 +695,7 @@ Lemma tvrel_retag (amap : amap_t) (tval : Transitional.tvalue)
   tvrel cmapWW amap tval w ->
   tvrel cmapWW amap
     (Transitional.MVal
-       (if is_address (Transitional.tvtag tval) then Invalidated else Other)
+       (moved_tag (Transitional.tvtag tval))
        (Transitional.val tval)) w.
 Proof.
 case: tval => vt v.
@@ -957,9 +957,8 @@ Lemma sim_mov (amap : amap_t)
         match_statesW amap tmem
           (Transitional.Register.set r1
              (Transitional.val (Transitional.Register.get r1 tregs))
-             (if is_address (Transitional.tvtag
-                               (Transitional.Register.get r1 tregs))
-              then Invalidated else Other)
+             (moved_tag (Transitional.tvtag
+                               (Transitional.Register.get r1 tregs)))
              (Transitional.Register.set r2
                 (Transitional.val (Transitional.Register.get r1 tregs))
                 (Transitional.tvtag (Transitional.Register.get r1 tregs))
@@ -973,7 +972,7 @@ Lemma sim_mov (amap : amap_t)
         = setm (setm (Symbolic.regs ms)
                  (@word_of_nat (reg_field_size mt)
                     (Intermediate.Register.to_nat r1))
-                 (Atom w1 (if is_address ts1 then Invalidated else Other)))
+                 (Atom w1 (moved_tag ts1)))
             (@word_of_nat (reg_field_size mt)
                (Intermediate.Register.to_nat r2)) (Atom w1 ts1) /\
         Symbolic.mem ms' = Symbolic.mem ms].
@@ -1023,7 +1022,7 @@ have [ra2 Hr2] := mregs_rel_lookup r2 Hregs.
 rewrite /Symbolic.pct in Hpct.
 set key1 := @word_of_nat (reg_field_size mt) (Intermediate.Register.to_nat r1).
 set key2 := @word_of_nat (reg_field_size mt) (Intermediate.Register.to_nat r2).
-set ts' := if is_address (taga ra1) then Invalidated else Other.
+set ts' := moved_tag (taga ra1).
 exists (@Symbolic.State mt lrc_tags unit
           (Symbolic.mem ms)
           (setm (setm (Symbolic.regs ms) key1 (Atom (vala ra1) ts'))
@@ -1637,10 +1636,8 @@ Lemma sim_load (amap : amap_t)
   Transitional.Memory.load tmem ptr = Some v ->
   Transitional.Memory.store tmem ptr
     ({| Transitional.val := Transitional.val v.1;
-        Transitional.tvtag := if is_address (Transitional.tvtag v.1)
-                              then Invalidated else Other |},
-     {| vtag := if is_address (Transitional.tvtag v.1)
-                then Invalidated else Other;
+        Transitional.tvtag := moved_tag (Transitional.tvtag v.1) |},
+     {| vtag := moved_tag (Transitional.tvtag v.1);
         color := c; entry := None; is_code := false |}) = Some tmem' ->
   exists ms' a wmc mtg,
     [/\ step_me (NC := NC) ms ms' None,
@@ -1666,8 +1663,7 @@ Lemma sim_load (amap : amap_t)
                (@word_of_nat (word_size mt)
                   (a + BinInt.Z.to_nat (Pointer.offset ptr)))
                (Atom wmc
-                  (MTag (if is_address (Transitional.tvtag v.1)
-                         then Invalidated else Other)
+                  (MTag (moved_tag (Transitional.tvtag v.1))
                      (Pointer.component tpc) None false)))
         \/
         (clobcell v (Atom wmc mtg) /\
@@ -1736,8 +1732,7 @@ case: Hrelmc => [Hrelmc|Hclob]; last first.
   subst vtgm.
   have Etv1 : Transitional.tvtag v.1 = Other by rewrite Ev1.
   have Evv1 : Transitional.val v.1 = Undef by rewrite Ev1.
-  set ts' := if is_address (Transitional.tvtag v.1)
-             then Invalidated else Other.
+  set ts' := moved_tag (Transitional.tvtag v.1).
   have Ets' : ts' = Other by rewrite /ts' Etv1.
   set tagT := MTag ts' (Pointer.component tpc) None false.
   have Hclob' : clobcell
@@ -1843,7 +1838,7 @@ have HrelK := Hrelmc.
 rewrite Hcomp in HrelK.
 case: Hrelmc => /= Hvmc Htmc Hvtmc.
 have Evt : vtgm = Transitional.tvtag v.1 by rewrite -Hvtmc -Htmc.
-set ts' := if is_address (Transitional.tvtag v.1) then Invalidated else Other.
+set ts' := moved_tag (Transitional.tvtag v.1).
 set tagT := MTag ts' (Pointer.component tpc) None false.
 have Hrel' : cellrel cmapWW amap
     ({| Transitional.val := Transitional.val v.1;
@@ -1986,7 +1981,7 @@ Lemma sim_store (amap : amap_t)
         match_statesW amap tmem'
           (Transitional.Register.set r2
              (Transitional.val (Transitional.Register.get r2 tregs))
-             (if is_address vt then Invalidated else Other) tregs)
+             (moved_tag vt) tregs)
           (Pointer.inc tpc) tpct ms',
         domm (Symbolic.mem ms') = domm (Symbolic.mem ms),
         addr_of amap (Pointer.component ptr) (Pointer.block ptr)
@@ -1998,7 +1993,7 @@ Lemma sim_store (amap : amap_t)
          = setm (Symbolic.regs ms)
              (@word_of_nat (reg_field_size mt)
                 (Intermediate.Register.to_nat r2))
-             (Atom w2 (if is_address ts2 then Invalidated else Other)) /\
+             (Atom w2 (moved_tag ts2)) /\
          Symbolic.mem ms'
            = setm (Symbolic.mem ms)
                (@word_of_nat (word_size mt)
@@ -2103,7 +2098,7 @@ set addr := @word_of_nat (word_size mt)
               (a + BinInt.Z.to_nat (Pointer.offset ptr)).
 set key2 := @word_of_nat (reg_field_size mt)
               (Intermediate.Register.to_nat r2).
-set ts' := if is_address t2 then Invalidated else Other.
+set ts' := moved_tag t2.
 exists (@Symbolic.State mt lrc_tags unit
           (setm (Symbolic.mem ms) addr (Atom w2 tagM))
           (setm (Symbolic.regs ms) key2 (Atom w2 ts'))

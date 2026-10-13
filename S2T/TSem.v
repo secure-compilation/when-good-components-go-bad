@@ -152,8 +152,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
       (mem,
        Transitional.Register.set r1
          (Transitional.val (Transitional.Register.get r1 regs))
-         (if is_address (tvtag (Transitional.Register.get r1 regs))
-          then Invalidated else Other)
+         (moved_tag (tvtag (Transitional.Register.get r1 regs)))
          (Transitional.Register.set r2
             (Transitional.val (Transitional.Register.get r1 regs))
             (tvtag (Transitional.Register.get r1 regs)) regs),
@@ -183,8 +182,8 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     Transitional.Memory.load mem ptr = Some v ->
     Transitional.Memory.store mem ptr
       ({| Transitional.val := Transitional.val v.1;
-          tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+          tvtag := moved_tag (tvtag v.1) |},
+       {| vtag := moved_tag (tvtag v.1);
           color := c; entry := None; is_code := false |}) = Some mem' ->
     step cde (mem, regs, pc, pct) E0
       (mem',
@@ -206,7 +205,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
       (mem',
        Transitional.Register.set r2
          (Transitional.val (Transitional.Register.get r2 regs))
-         (if is_address vt then Invalidated else Other) regs,
+         (moved_tag vt) regs,
        Pointer.inc pc, pct)
 
 | Jal : forall mem regs pc tg c pct pc' l,
@@ -301,7 +300,7 @@ Definition eval_step (cde : code) (s : state) : option (trace * state) :=
               Pointer.inc pc, pct)
     | TrMov r1 r2 =>
         let tv := Transitional.Register.get r1 regs in
-        let ts' := if is_address (tvtag tv) then Invalidated else Other in
+        let ts' := moved_tag (tvtag tv) in
         fall (mem,
               Transitional.Register.set r1 (Transitional.val tv) ts'
                 (Transitional.Register.set r2 (Transitional.val tv) (tvtag tv)
@@ -326,7 +325,7 @@ Definition eval_step (cde : code) (s : state) : option (trace * state) :=
             let c := Pointer.component ptr in
             if Component.eqb c (Pointer.component pc) then
               do v <- Transitional.Memory.load mem ptr;
-              let ts' := if is_address (tvtag v.1) then Invalidated else Other in
+              let ts' := moved_tag (tvtag v.1) in
               do mem' <- Transitional.Memory.store mem ptr
                    ({| Transitional.val := Transitional.val v.1;
                        tvtag := ts' |},
@@ -349,7 +348,7 @@ Definition eval_step (cde : code) (s : state) : option (trace * state) :=
                    (Transitional.Register.get r2 regs,
                     {| vtag := vt; color := c; entry := None;
                        is_code := false |});
-              let ts' := if is_address vt then Invalidated else Other in
+              let ts' := moved_tag vt in
               fall (mem',
                     Transitional.Register.set r2
                       (Transitional.val (Transitional.Register.get r2 regs))

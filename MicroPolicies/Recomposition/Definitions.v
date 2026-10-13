@@ -557,6 +557,11 @@ Module RecompositionDefinitions (S: RecompositionContext).
         + move=> _; constructor.
     Qed.
 
+    Lemma data_match_moved i comp m v1 v2 t :
+      data_match i comp m (Types.Atom v1 t) (Types.Atom v2 t) ->
+      data_match i comp m (Types.Atom v1 (moved_tag t)) (Types.Atom v2 (moved_tag t)).
+    Proof. by case: t => [n|||] //= [_ H]; split. Qed.
+
     Definition data_match' (i: side) (m: metadata) (d: data) (d': data) : Prop :=
       match d, d' with
       | Types.Atom v1 t1, Types.Atom v2 t2 =>
@@ -699,6 +704,10 @@ Module RecompositionDefinitions (S: RecompositionContext).
             (is_relevant_comp i (color (taga v)) -> is_code (taga v))
       | Other | Invalidated => True
       end.
+
+    Lemma address_correctness_moved i w t (mem : memory) :
+      address_correctness i w t mem -> address_correctness i w (moved_tag t) mem.
+    Proof. by case: t. Qed.
 
     Definition memory_address_correctness (i: side) (s: state) :=
       forall v w,

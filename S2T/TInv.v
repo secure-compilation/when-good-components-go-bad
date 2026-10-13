@@ -132,6 +132,12 @@ Definition is_live (t : value_tag) : bool :=
 Lemma is_live_address t : is_live t -> is_address t.
 Proof. by case: t. Qed.
 
+Lemma is_ret_live t : is_ret t -> is_live t.
+Proof. by case: t. Qed.
+
+Lemma is_ret_moved t : is_ret (moved_tag t) = false.
+Proof. by case: t. Qed.
+
 Definition tagat (m : mem) (rs : regs) (s : capsite) : option value_tag :=
   match s with
   | CMem p => TMem.tload m p
@@ -167,7 +173,7 @@ Record tag_inv (L : ledger) (m : mem) (rs : regs) (pct : pc_tag) : Prop :=
 
   (* T4, memory: the only LIVE capability cells are the ledger's.
      (Dead [Invalidated] husks are deliberately unconstrained.) *)
-  ti_data : forall p t, TMem.tload m p = Some t -> is_live t ->
+  ti_data : forall p t, TMem.tload m p = Some t -> is_ret t ->
             List.In (CMem p) (sites L);
 
   ti_uniq : List.NoDup (sites L);
@@ -254,7 +260,7 @@ Qed.
 (** Storing a non-capability at an address that is not a live site. *)
 Lemma tag_inv_store_data L m rs pct p c m' :
   ~ List.In (CMem p) (sites L) ->
-  ~~ is_live (tvtag c.1) ->
+  ~~ is_ret (tvtag c.1) ->
   Transitional.Memory.store m p c = Some m' ->
   tag_inv L m rs pct ->
   tag_inv L m' rs pct.
@@ -293,7 +299,7 @@ Lemma tag_inv_push_ra L m rs pct p t m' :
   tag_inv ((CReg, t) :: L) m rs pct ->
   tag_inv ((CMem p, t) :: L) m'
     (Transitional.Register.set R_RA
-       (Transitional.val (Transitional.Register.get R_RA rs)) Invalidated rs)
+       (Transitional.val (Transitional.Register.get R_RA rs)) (moved_tag t) rs)
     pct.
 Proof.
   move=> Et Hp Hst HI.
@@ -348,8 +354,8 @@ Lemma tag_inv_pop_ra L m rs pct p v m' :
   ~ List.In CReg (sites L) ->
   Transitional.Memory.load m p = Some v ->
   Transitional.Memory.store m p
-    ({| Transitional.val := Transitional.val v.1; tvtag := Invalidated |},
-     {| vtag := Invalidated; color := Pointer.component p; entry := None;
+    ({| Transitional.val := Transitional.val v.1; tvtag := moved_tag (tvtag v.1) |},
+     {| vtag := moved_tag (tvtag v.1); color := Pointer.component p; entry := None;
         is_code := false |}) = Some m' ->
   tag_inv ((CMem p, tvtag v.1) :: L) m rs pct ->
   tag_inv ((CReg, tvtag v.1) :: L) m'
@@ -372,8 +378,7 @@ Proof.
   - move=> s u /= [[_ <-]|Hin]; first exact: Hlive.
     exact: (H3 s u (or_intror Hin)).
   - move=> q u. case: (@eqP _ q p) => [->|Hne].
-    + (* the vacated cell is [Invalidated] — dead, so no obligation *)
-      by rewrite /TMem.tload (TMem.load_store_eq Hst) /= => [[<-]].
+    + by rewrite /TMem.tload (TMem.load_store_eq Hst) /= => [[<-]]; rewrite is_ret_moved.
     + rewrite /TMem.tload (TMem.load_store_neq Hst Hne) => Hq Hl.
       move: (H4 q u Hq Hl) => /= [E|Hin]; first by case: E => Ep; case: Hne.
       by right.

@@ -821,7 +821,7 @@ set Krs := @word_of_nat (reg_field_size mt)
              (Intermediate.Register.to_nat rsize).
 set Krp := @word_of_nat (reg_field_size mt)
              (Intermediate.Register.to_nat rptr).
-set tra2 := if is_address tra then Invalidated else Other.
+set tra2 := moved_tag tra.
 set MAXA := maxaddr (Symbolic.mem ms) (Pointer.component tpc).
 set LEN := BinInt.Z.to_nat zsz.
 pose ADDR := word.addw MAXA (word.as_word (ssrint.Posz 1)).

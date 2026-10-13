@@ -247,7 +247,7 @@ Lemma exec_push m rs pc pct r nxt c C0 fb0 sp m' vt :
      Transitional.Register.set R_SP (Ptr (C0, fb0, (sp + 1)%Z)) Other
        (Transitional.Register.set r
           (Transitional.val (Transitional.Register.get r rs))
-          (if is_address vt then Invalidated else Other) rs),
+          (moved_tag vt) rs),
      Pointer.inc (Pointer.inc pc), pct).
 Proof.
   rewrite /push_T /= => Hcode Htag HSP HONE HrSP HrONE Hcomp Hstore.
@@ -318,7 +318,7 @@ Lemma push_ra_macro L m rs pc pct nxt c C0 fb0 sp m' t :
   let rs' := Transitional.Register.set R_SP (Ptr (C0, fb0, (sp + 1)%Z)) Other
                (Transitional.Register.set R_RA
                   (Transitional.val (Transitional.Register.get R_RA rs))
-                  Invalidated rs) in
+                  (moved_tag t) rs) in
     plus TS.step cde (m, rs, pc, pct) E0
       (m', rs', Pointer.inc (Pointer.inc pc), pct)
     /\ TInv.tag_inv ((TInv.CMem (C0, fb0, sp), t) :: L) m' rs' pct.
@@ -328,12 +328,8 @@ Proof.
   { move: Htag.
     rewrite /Transitional.Register.get_tag /Transitional.Register.get.
     by case: (getm rs _) => [tv|] //= [] ->. }
-  have Haddr : is_address t by exact: TInv.is_live_address.
   rewrite /=. split.
-  - (* the rule writes [if is_address t ..]; the ledger side says [Invalidated] *)
-    have -> : Invalidated = (if is_address t then Invalidated else Other)
-      by rewrite Haddr.
-    exact: (@exec_push m rs pc pct R_RA nxt c C0 fb0 sp m' t
+  - exact: (@exec_push m rs pc pct R_RA nxt c C0 fb0 sp m' t
               Hcode Htag HSP HONE (ltac:(by [])) (ltac:(by []))
               Hcomp Hstore).
   - apply: TInv.tag_inv_setreg; first by [].
@@ -354,8 +350,8 @@ Lemma exec_pop m rs pc pct r nxt c C0 fb0 sp v m' :
   Transitional.Memory.load m (C0, fb0, (sp - 1)%Z) = Some v ->
   Transitional.Memory.store m (C0, fb0, (sp - 1)%Z)
     ({| Transitional.val := Transitional.val v.1;
-        tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-     {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+        tvtag := moved_tag (tvtag v.1) |},
+     {| vtag := moved_tag (tvtag v.1);
         color := C0; entry := None; is_code := false |}) = Some m' ->
   plus TS.step cde (m, rs, pc, pct) E0
     (m',
@@ -402,8 +398,8 @@ Lemma pop_ra_macro L m rs pc pct nxt c C0 fb0 sp v m' :
   ~ List.In TInv.CReg (TInv.sites L) ->
   Transitional.Memory.load m (C0, fb0, (sp - 1)%Z) = Some v ->
   Transitional.Memory.store m (C0, fb0, (sp - 1)%Z)
-    ({| Transitional.val := Transitional.val v.1; tvtag := Invalidated |},
-     {| vtag := Invalidated; color := C0; entry := None; is_code := false |})
+    ({| Transitional.val := Transitional.val v.1; tvtag := moved_tag (tvtag v.1) |},
+     {| vtag := moved_tag (tvtag v.1); color := C0; entry := None; is_code := false |})
     = Some m' ->
   TInv.tag_inv ((TInv.CMem (C0, fb0, (sp - 1)%Z), tvtag v.1) :: L) m rs pct ->
   let rs' := Transitional.Register.set R_RA (Transitional.val v.1) (tvtag v.1)
@@ -414,19 +410,10 @@ Lemma pop_ra_macro L m rs pc pct nxt c C0 fb0 sp v m' :
     /\ TInv.tag_inv ((TInv.CReg, tvtag v.1) :: L) m' rs' pct.
 Proof.
   move=> Hcode Hcomp HSP HONE Hlive HnotReg Hload Hstore HI.
-  have Haddr : is_address (tvtag v.1) by exact: TInv.is_live_address.
-  (* the rule writes back [if is_address .. then Invalidated else Other]; the
-     ledger side states [Invalidated] outright *)
-  have Hstore' : Transitional.Memory.store m (C0, fb0, (sp - 1)%Z)
-      ({| Transitional.val := Transitional.val v.1;
-          tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
-          color := C0; entry := None; is_code := false |}) = Some m'
-    by rewrite Haddr /=; exact: Hstore.
   rewrite /=. split.
   - eapply exec_pop;
       [exact: Hcode | exact: HSP | exact: HONE | exact: Hcomp
-      | exact: Hload | exact: Hstore'].
+      | exact: Hload | exact: Hstore].
   - apply: (TInv.tag_inv_pop_ra Hlive HnotReg Hload Hstore).
     by apply: TInv.tag_inv_setreg.
 Qed.
@@ -502,8 +489,8 @@ Proof.
   move=> Hcode Hcomp HrRA HSP HONE Ev Hfresh Hload Hstore HI.
   have Hstore' : Transitional.Memory.store m (C0, fb0, (sp - 1)%Z)
       ({| Transitional.val := Transitional.val v.1;
-          tvtag := if is_address (tvtag v.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+          tvtag := moved_tag (tvtag v.1) |},
+       {| vtag := moved_tag (tvtag v.1);
           color := C0; entry := None; is_code := false |}) = Some m'
     by rewrite Ev /=; exact: Hstore.
   rewrite /=. split.
@@ -601,7 +588,7 @@ Lemma call_bracket_macro L m rs pc pct t l pc' tg rest C0 fb0 sp m' i tni :
   let rs1 := Transitional.Register.set R_SP (Ptr (C0, fb0, (sp + 1)%Z)) Other
                (Transitional.Register.set R_RA
                   (Transitional.val (Transitional.Register.get R_RA rs))
-                  Invalidated rs) in
+                  (moved_tag t) rs) in
   let rs' := Transitional.Register.set R_RA
                (Ptr (Pointer.inc (Pointer.inc (Pointer.inc pc))))
                InternalJump rs1 in
@@ -670,8 +657,8 @@ Lemma return_bracket_macro L m rs pc pct pcr tg c i tni nxt cr
   ~ List.In TInv.CReg (TInv.sites L) ->
   Transitional.Memory.load m (C0, fb0, (sp - 1)%Z) = Some v ->
   Transitional.Memory.store m (C0, fb0, (sp - 1)%Z)
-    ({| Transitional.val := Transitional.val v.1; tvtag := Invalidated |},
-     {| vtag := Invalidated; color := C0; entry := None; is_code := false |})
+    ({| Transitional.val := Transitional.val v.1; tvtag := moved_tag (tvtag v.1) |},
+     {| vtag := moved_tag (tvtag v.1); color := C0; entry := None; is_code := false |})
     = Some m' ->
   TInv.tag_inv ((TInv.CReg, InternalJump)
                 :: (TInv.CMem (C0, fb0, (sp - 1)%Z), tvtag v.1) :: L)

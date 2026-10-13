@@ -274,7 +274,7 @@ Qed.
 Lemma mov_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
     (t1 told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags MOV) ev,
   LRC.transfer (IVec MOV tpc ti [hseq t1; told] tni) evinp = Some (ov, ev) ->
-  tr ov = [hseq (if is_address t1 then Invalidated else Other); t1].
+  tr ov = [hseq (moved_tag t1); t1].
 Proof.
   move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
   case: tpc => level current'. cbv zeta => H.
@@ -299,7 +299,7 @@ Lemma store_transfer : forall (tpc : tag_type lrc_tags P) (ti told : tag_type lr
     (evinp : ev_inputs) (ov : ovec lrc_tags STORE) (ev : option event),
   LRC.transfer (IVec STORE tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) ->
   ev = None /\ trpc ov = tpc /\
-  tr ov = [hseq t1; (if is_address t2 then Invalidated else Other); (switch_val told t2).1] /\
+  tr ov = [hseq t1; (moved_tag t2); (switch_val told t2).1] /\
   color told = (match tpc with Level _ c => c end) /\ ~~ is_code told.
 Proof.
   move=> tpc ti told t1 t2 tni evinp ov ev.
@@ -329,8 +329,8 @@ Lemma load_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags
   LRC.transfer (IVec LOAD tpc ti [hseq tp; ts; td] tni) evinp = Some (ov, ev) ->
   ev = None /\ trpc ov = tpc /\
   tr ov = [hseq tp;
-           (switch_val ts (if is_address (vtag ts) then Invalidated else Other)).1;
-           (switch_val ts (if is_address (vtag ts) then Invalidated else Other)).2].
+           (switch_val ts (moved_tag (vtag ts))).1;
+           (switch_val ts (moved_tag (vtag ts))).2].
 Proof.
   move=> tpc ti tp td ts tni evinp ov ev.
   rewrite /LRC.transfer /LRC.instr_rules.
@@ -339,7 +339,7 @@ Proof.
   case: (obind_inv H) => u1 [_ {}H].
   case: (obind_inv H) => u2 [_ {}H].
   move: H. case: ifP => // _ H.
-  move: H. case E: (switch_val ts (if is_address (vtag ts) then Invalidated else Other)) => [ts' td'] /=.
+  move: H. case E: (switch_val ts (moved_tag (vtag ts))) => [ts' td'] /=.
   move=> [= <- <-] /=.
   split; first by []. split; first by []. by [].
 Qed.
@@ -646,7 +646,7 @@ Section SilentCap.
           + move=> v n. rewrite /cap_at -Hfin2 -HstbE /= (updm_set Hupdb) setmE.
             have Hr1r2 : r1 != r2 by apply/eqP => Hc; apply: Er2; rewrite Hc.
             rewrite (negbTE Hr1r2) (updm_set Hupda) setmE eqxx.
-            move=> [= _ Ht]. move: Ht. by case: (is_address t1).
+            move=> [= _ Ht]. move: Ht. by case: (t1).
           + move=> p v n Hpr Hpw. case: p Hpr Hpw => [r|w] Hpr Hpw.
             * have Hrr1 : r != r1 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
               have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpw; rewrite Hc.
@@ -680,7 +680,7 @@ Section SilentCap.
           + move=> v n. rewrite /cap_at -Hfin2 -HstbE /= (updm_set Hupdb) setmE.
             have Hr1r2 : r1 != r2 by apply/eqP => Hc; apply: Er2; rewrite Hc.
             rewrite (negbTE Hr1r2) (updm_set Hupda) setmE eqxx.
-            move=> [= _ Ht]. move: Ht. by case: (is_address t1).
+            move=> [= _ Ht]. move: Ht. by case: (t1).
           + move=> p v n Hpr Hpw. case: p Hpr Hpw => [r|w] Hpr Hpw.
             * have Hrr1 : r != r1 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
               have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpw; rewrite Hc.
@@ -754,7 +754,7 @@ Section SilentCap.
         - (* Hsrc: cell w1 is invalidated -> no cap *)
           move=> v n [t [Hmem Hvt]]. move: Hmem Hvt.
           rewrite -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
-          move=> [= _ <-]. rewrite switch_val_vtag. by case: (is_address (vtag t2)).
+          move=> [= _ <-]. rewrite switch_val_vtag. by case: (vtag t2).
         - (* Hoth: every other location unchanged *)
           move=> p v n Hpw Hpr. case: p Hpw Hpr => [r|w] Hpw Hpr.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
@@ -787,7 +787,7 @@ Section SilentCap.
           move=> [= Hw2 Hvt]. exists t2. rewrite ST /= MEM1 -Hw2. by split.
         - move=> v n [t [Hmem Hvt]]. move: Hmem Hvt.
           rewrite -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
-          move=> [= _ <-]. rewrite switch_val_vtag. by case: (is_address (vtag t2)).
+          move=> [= _ <-]. rewrite switch_val_vtag. by case: (vtag t2).
         - move=> p v n Hpw Hpr. case: p Hpw Hpr => [r|w] Hpw Hpr.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE (negbTE Hrr2) (updm_set Hupda) setmE.
@@ -826,7 +826,7 @@ Section SilentCap.
           rewrite /cap_at ST /= R2W Hvt -Hw2. by [].
         - (* Hsrc: source reg r2 is invalidated -> no cap *)
           move=> v n. rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
-          move=> [= _ Ht]. move: Ht. by case: (is_address t2).
+          move=> [= _ Ht]. move: Ht. by case: (t2).
         - (* Hoth: every other location unchanged *)
           move=> p v n Hpr Hpw. case: p Hpr Hpw => [r|w] Hpr Hpw.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
@@ -860,7 +860,7 @@ Section SilentCap.
           move=> [= Hw2 Ht]. move: Hvt. rewrite -Ht switch_val_vtag => Hvt.
           rewrite /cap_at ST /= R2W Hvt -Hw2. by [].
         - move=> v n. rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
-          move=> [= _ Ht]. move: Ht. by case: (is_address t2).
+          move=> [= _ Ht]. move: Ht. by case: (t2).
         - move=> p v n Hpr Hpw. case: p Hpr Hpw => [r|w] Hpr Hpw.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE (negbTE Hrr2) (updm_set Hupda) setmE.

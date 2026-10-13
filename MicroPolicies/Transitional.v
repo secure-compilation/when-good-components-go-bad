@@ -495,7 +495,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     check_pc cde pc tg ->
     Register.set r2 (val (Register.get r1 regs)) ((tvtag (Register.get r1 regs))) regs = regs_tmp ->
     (*remove capability, if any*)
-    let ts' := if (is_address (tvtag (Register.get r1 regs))) then Invalidated else Other in
+    let ts' := moved_tag (tvtag (Register.get r1 regs)) in
     Register.set r1 (val (Register.get r1 regs)) ts' regs_tmp = regs' -> 
     step cde (st, mem, regs, pc, pct) E0
            (st, mem, regs', Pointer.inc pc, pct)
@@ -519,7 +519,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     Memory.load mem ptr = Some v ->
     Register.set r2 (val (fst v)) (tvtag (fst v)) regs = regs' ->
     (*remove capability, if any*)
-    let ts' := if (is_address (tvtag (fst v))) then Invalidated else Other in
+    let ts' := moved_tag (tvtag (fst v)) in
     Memory.store mem ptr ({|val := val (fst v); tvtag := Other |}, {|vtag := ts' ; color := c ; entry := None ; is_code := false|}) = Some mem' ->
     step cde (st, mem, regs, pc, pct) E0
            (st, mem', regs', Pointer.inc pc, pct)
@@ -533,7 +533,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     ((Register.get_tag r2 regs) = Some vt) ->
     Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None ; is_code := false|}) = Some mem' ->
     (*remove capability, if any*)
-    let ts' := if (is_address (tvtag (Register.get r2 regs))) then Invalidated else Other in
+    let ts' := moved_tag (tvtag (Register.get r2 regs)) in
     Register.set r2 (val (Register.get r2 regs)) ts' regs = regs' -> 
     step cde (st, mem, regs, pc, pct) E0
            (st, mem', regs', Pointer.inc pc, pct)
@@ -648,7 +648,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
     | TrMov r1 r2 =>
       let regs' := Register.set r2 (val (Register.get r1 regs)) (tvtag (Register.get r1 regs)) regs in
       (*remove capability, if any*)
-      let ts' := if (is_address (tvtag (Register.get r1 regs))) then Invalidated else Other in
+      let ts' := moved_tag (tvtag (Register.get r1 regs)) in
       let regs'' := Register.set r1 (val (Register.get r1 regs)) ts' regs' in
       ret (E0, (mem, regs'', Pointer.inc pc, pct))
     | TrBinOp op r1 r2 r3 =>
@@ -666,7 +666,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
           do v <- Memory.load mem ptr;
           let regs' := Register.set r2 (val (fst v)) (tvtag (fst v))  regs in
           (*remove capability, if any*)
-          let ts' := if (is_address (tvtag (fst v))) then Invalidated else Other in
+          let ts' := moved_tag (tvtag (fst v)) in
           do mem' <- Memory.store mem ptr ({|val := val (fst v); tvtag := ts' |}, {|vtag := ts' ; color := c ; entry := None ; is_code := false|});
           ret (E0, (mem', regs', Pointer.inc pc, pct))
         else
@@ -681,7 +681,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
             do vt <- Register.get_tag r2 regs ;
             do mem' <- Memory.store mem ptr ((Register.get r2 regs), {|vtag := vt ; color := c ; entry := None ; is_code := false|});
             (*remove capability, if any*)
-            let ts' := if (is_address (vt)) then Invalidated else Other in
+            let ts' := moved_tag (vt) in
             let regs' := Register.set r2 (val (Register.get r2 regs)) ts' regs in
             ret (E0, (mem', regs', Pointer.inc pc, pct))
           else

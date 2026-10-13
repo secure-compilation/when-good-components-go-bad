@@ -445,7 +445,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have [Hw0 [Hmem' [Htag Hguard]]] := weak_load_facts ST MEM1 NEXT.
       case: (w =P w1) => [Hwe | Hne].
       + subst w.
-        exists (w2 @ (switch_val t2 (if is_address (vtag t2) then Invalidated else Other)).1).
+        exists (w2 @ (switch_val t2 (moved_tag (vtag t2))).1).
         have Hv : taga v = t2 by move: Hsw; rewrite Hw0 => -[= <-].
         split; [ by rewrite Hmem' setmE eqxx | by rewrite /= switch_val_iscode -Hv ].
       + exists v; split; [ by rewrite Hmem' setmE (introF eqP Hne) | exact Hcode ].
@@ -1892,7 +1892,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
       exists (@State mt lrc_tags unit (mem s)
-                (setm (setm (regs s) r1 (w1' @ (if is_address t1 then Invalidated else Other)))
+                (setm (setm (regs s) r1 (w1' @ (moved_tag t1)))
                       r2 (w1' @ t1))
                 ((vala (pc s) + 1)%w @ (pct s)) (internal s)), None.
       apply/Exec.stepP.
@@ -2094,7 +2094,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
       (* expose the switch_val components ts' (new loaded-cell M-tag) and td' (new r2 R-tag) *)
-      case Esw : (switch_val t2 (if is_address (vtag t2) then Invalidated else Other))
+      case Esw : (switch_val t2 (moved_tag (vtag t2)))
         => [ts' td'].
       (* the mem update on w1 succeeds (key present) *)
       have [mem' Hmem'] : exists mem', updm (mem s) w1 (vload @ ts') = Some mem'.
@@ -2202,7 +2202,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       exists (@State mt lrc_tags unit
                 (setm (mem s) w1 (w2' @ (switch_val told3 t2).1))
                 (setm (setm (regs s) r1 (w1 @ t1))
-                      r2 (w2' @ (if is_address t2 then Invalidated else Other)))
+                      r2 (w2' @ (moved_tag t2)))
                 ((vala (pc s) + 1)%w @ (pct s)) (internal s)), None.
       apply/Exec.stepP.
       eapply step_store.

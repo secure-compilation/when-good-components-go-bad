@@ -2188,7 +2188,7 @@ Module StepStrong2 (S: RecompositionContext).
 
         
         exists (@State mt lrc_tags _ mem3
-                  (setm (setm regs3 r1 (v1@(if is_address t0 then Invalidated else Other))) r2 (v1@t0))
+                  (setm (setm regs3 r1 (v1@(moved_tag t0))) r2 (v1@t0))
                   ((addw pc3_val onew)@(Level n i0)) tt); exists M. simpl.
         remember (r2 == r1) as cond.
         split.
@@ -2221,7 +2221,7 @@ Module StepStrong2 (S: RecompositionContext).
                 simpl in Hr2; rewrite Hr2; reflexivity.
         * inversion vt_match0 as [? _]. subst t0. unfold_all.
           rewrite ST in Heqa11. simpl in Heqa11. rewrite R1W in Heqa11. simplify_some.
-          rewrite ST. simpl. remember (if is_address t1 then Invalidated else Other) as new_t1.
+          rewrite ST. simpl. remember (moved_tag t1) as new_t1.
           eapply preserves_equiv_right_reg_write with (r := r2) (v := w1@t1) (v' := v1@t1)
             (s1 := @State mt lrc_tags _ (mem s1) (setm (regs s1) r1 (w1@new_t1)) ((addw (vala (pc s1)) onew)@(taga (pc s1))) tt)
             (s3 := @State mt lrc_tags _ (mem s3) (setm (regs s3) r1 (v1@new_t1)) ((addw (vala (pc s3)) onew)@(taga (pc s3))) tt).
@@ -2254,7 +2254,9 @@ Module StepStrong2 (S: RecompositionContext).
                         solve [ exact I
                               | (try (subst new_t1); destruct t1; simpl; auto)
                               | (subst; simpl; eapply (s_reg_cor _ _ R1W))
-                              | (subst; simpl; eapply (s'_reg_cor _ _ vt_eq0)) ]
+                              | (subst; simpl; eapply (s'_reg_cor _ _ vt_eq0))
+                              | (subst; simpl; apply: address_correctness_moved; eapply (s_reg_cor _ _ R1W))
+                              | (subst; simpl; apply: address_correctness_moved; eapply (s'_reg_cor _ _ vt_eq0)) ]
                     | |- capability_correctness' _ _ _ _ _ =>
                         (* closes capability for new_t1 (Invalidated/Other ⇒ True) and non-Ret w1@t1;
                            the 2 Ret-case w1@t1 / v1@t1 capability goals are left for the explicit
@@ -2633,7 +2635,7 @@ Module StepStrong2 (S: RecompositionContext).
           -- eapply star_refl.
           -- done.
         * simpl in *.
-          remember (if is_address vtag1 then Invalidated else Other) as new_t2.
+          remember (moved_tag vtag1) as new_t2.
           rewrite ST in Heqa12, Heqa13. rewrite R1W in Heqa12. rewrite MEM1 in Heqa13.
           do 2 simplify_some. simpl.
           remember ({| vtag := new_t2; color := color; entry := entry1; is_code := false |}) as t2'.
@@ -2951,7 +2953,7 @@ Module StepStrong2 (S: RecompositionContext).
           -- eapply star_refl.
           -- done.
         * simpl in *. remember ({| vtag := t2; color := color ; entry := entry0; is_code := false |}) as t2'.
-          remember (if is_address t2 then Invalidated else Other) as new_t2.
+          remember (moved_tag t2) as new_t2.
           eapply preserves_equiv_right_mem_write with (v := w2@t2') (v' := v0@t2') (w := w1). (* moved to erase the capacity first *)
           eapply preserves_equiv_right_reg_write with (r := r2) (v := w2@new_t2) (v' := v0@new_t2).
           eapply preserves_equiv_right_reg_write with (r := r1) (v := w1@Other) (v' := w1@Other).
@@ -4194,7 +4196,7 @@ Module StepStrong2 (S: RecompositionContext).
         deduce_equality_r OLD.
         destruct vt_match as [? match_t]. subst t. destruct t1; unfold is_other in *; try congruence. subst v0.
         exists (@State mt lrc_tags _
-                  (setm mem3 w1 (v1 @ {| vtag := (if is_address vtag1 then Invalidated else Other);
+                  (setm mem3 w1 (v1 @ {| vtag := (moved_tag vtag1);
                                          color := color; entry := entry1; is_code := false |}))
                   (setm (setm regs3 r1 (w1 @ Other)) r2 (v1 @ vtag1))
                   (((pc0 + as_word off + 1)%w) @ (Level n color))
@@ -4264,7 +4266,7 @@ Module StepStrong2 (S: RecompositionContext).
              into the loaded value w2 / address w1 — like region-A's line 840 — so the step's s1'
              carries w2/w1 directly (not `vala a`/`vala a0`) and state-eq #30 becomes reflexive. *)
           rewrite MEM1s1 in Heqa13. rewrite R1Ws1 in Heqa12. do 2 simplify_some.
-          remember (if is_address vtag1 then Invalidated else Other) as new_t2.
+          remember (moved_tag vtag1) as new_t2.
           remember ({| vtag := new_t2; color := color; entry := entry1; is_code := false |}) as t2'.
           case: (internal s1); case: (internal s3).
           eapply preserves_equiv_right_reg_write with (r := r2) (v := w2@vtag1) (v' := v1@vtag1).
@@ -4296,8 +4298,7 @@ Module StepStrong2 (S: RecompositionContext).
           all: lazymatch goal with
                | |- data_match' _ _ _ _ =>
                    rewrite /data_match'; split; first reflexivity;
-                   rewrite /data_match; split; first reflexivity;
-                   cbn [LRC.vtag]; destruct (is_address vtag1) eqn:Ha; [ exact I | by apply Hw2v1 ]
+                   exact: (data_match_moved Hdm)
                | |- LRC.entry _ = None => cbn [taga LRC.entry]; exact Hent1
                | |- is_relevant_comp _ _ =>
                    cbn [taga LRC.color]; unfold is_relevant_comp; (eapply side_right_in_ic;
@@ -4331,7 +4332,15 @@ Module StepStrong2 (S: RecompositionContext).
                             split; [exact vt_eq0 | cbn [taga is_code]; done]) ]
                | |- address_correctness _ _ _ _ =>
                    first
-                     [ (cbn [mem taga LRC.vtag]; destruct (is_address vtag1); exact I)
+                     [ (cbn [mem taga LRC.vtag vala]; apply: address_correctness_moved;
+                        have Hrel0 : is_relevant_comp Right color by (rewrite /is_relevant_comp; (eapply side_right_in_ic;
+             [ exact col_mem1
+             | first [ (rewrite ST; exact PC) | exact PC ]
+             | first [ reflexivity | assumption ]
+             | first [ exact side_eq
+                     | (rewrite ST in side_eq; simpl in side_eq; exact side_eq)
+                     | (rewrite Hco in side_eq; exact side_eq) ] ]));
+                        first [ exact (s_mem_cor _ w1 Hrel0 MEM1s1) | exact (s'_mem_cor _ w1 Hrel0 vt_eq0) ])
                      | (cbn [mem taga LRC.vtag];
                         have Hrel : is_relevant_comp Right color by (rewrite /is_relevant_comp; (eapply side_right_in_ic;
              [ exact col_mem1
@@ -4366,7 +4375,7 @@ Module StepStrong2 (S: RecompositionContext).
                              | exact I ]) ]) ]
                | |- capability_correctness' ?ws _ _ _ _ =>
                    first
-                     [ (cbn [taga LRC.vtag]; destruct (is_address vtag1); exact I)
+                     [ (cbn [taga LRC.vtag]; case: (vtag1) => [?|||]; exact I)
                      | (cbn [taga LRC.vtag];
                         move: capa_cor1 capa_cor3 MEM1s1 vt_eq0 Hms3 Hrs3; clear;
                         case: vtag1 => [ n0 | | | ]; move=> capa_cor1 capa_cor3 MEM1s1 vt_eq0 Hms3 Hrs3;
@@ -4426,6 +4435,17 @@ Module StepStrong2 (S: RecompositionContext).
              address w2≠w1 by the cell's own address-correctness (s_mem_cor at w2), and at w2=w1 by
              the re-tagged cell being non-code (is_relevant⇒is_code is then contradictory). *)
           Unshelve.
+          all: try have Hrel : is_relevant_comp Right color
+            by (rewrite /is_relevant_comp; (eapply side_right_in_ic;
+             [ exact col_mem1
+             | first [ (rewrite ST; exact PC) | exact PC ]
+             | first [ reflexivity | assumption ]
+             | first [ exact side_eq
+                     | (rewrite ST in side_eq; simpl in side_eq; exact side_eq)
+                     | (rewrite Hco in side_eq; exact side_eq) ] ])).
+          all: try (first
+            [ exact (s_mem_cor (w2 @ {| vtag := vtag1; color := color; entry := entry1; is_code := false |}) w1 Hrel MEM1s1)
+            | exact (s'_mem_cor (v1 @ {| vtag := vtag1; color := color; entry := entry1; is_code := false |}) w1 Hrel vt_eq0) ]).
           1:{ move: (s_mem_cor (w2 @ {| vtag := vtag1; color := color; entry := entry1; is_code := false |}) w1 Hrel MEM1s1);
               move: MEM1s1 Hrel; clear; case: vtag1 => [ n0 | | | ] MEM1s1 Hrel; rewrite /address_correctness /=;
               [ (move=> [v' [Hmw' Hcode]]; rewrite (setmE (mem s1) w1 _ w2); case: ifP => [/eqP Heq | _];
@@ -4640,7 +4660,7 @@ Module StepStrong2 (S: RecompositionContext).
              vtag:=value-tag/color:=cell-color form), color/entry/is_relevant of v, mem s1 pc = code,
              ~is_code v/v' (HE2: is_code told=false ⇒ is_code (switch_val..)=is_code told=false),
              capability/address (Other⇒I), updm×2 (via OLD-domm), state-eqs. *)
-          assert (Hov : ov = OVec STORE tpc0 [hseq Other; (if is_address t2 then Invalidated else Other); s])
+          assert (Hov : ov = OVec STORE tpc0 [hseq Other; (moved_tag t2); s])
             by (destruct x12 as [x12a x12b]; destruct o as [ot otr]; simpl in *; congruence).
           rewrite !Hov /=.
           have Htoldtdm : told = tdm by (move: DMM; rewrite /data_match' => -[H _]; exact H).
@@ -4675,7 +4695,7 @@ Module StepStrong2 (S: RecompositionContext).
           rewrite Hx7 Hx5 ?(fun_if vala) /=.
           case: (internal s1); case: (internal s3).
           eapply preserves_equiv_right_mem_write with (w := w1) (v := w2@s) (v' := vd2@s).
-          eapply preserves_equiv_right_reg_write with (r := r2) (v := (if r2 == r1 then w1 else w2)@(if is_address t2 then Invalidated else Other)) (v' := (if r2 == r1 then w1 else vd2)@(if is_address t2 then Invalidated else Other)).
+          eapply preserves_equiv_right_reg_write with (r := r2) (v := (if r2 == r1 then w1 else w2)@(moved_tag t2)) (v' := (if r2 == r1 then w1 else vd2)@(moved_tag t2)).
           eapply preserves_equiv_right_reg_write with (r := r1) (v := w1@Other) (v' := w1@Other).
           eapply preserves_equiv_right_pc_incr with (pc1' := (vala (pc s1) + 1)%w) (tpc1' := tpc0)
                                                     (pc3' := (vala (pc s1) + 1 + as_word off)%w) (tpc3' := pc3_tag).
@@ -4710,11 +4730,13 @@ Module StepStrong2 (S: RecompositionContext).
                    rewrite ?Hx7 ?Hx5; unfold color_of; simpl; rewrite ?Htpc0; simpl;
                    split; first reflexivity;
                    first [ reflexivity
-                         | (destruct (is_address t2) eqn:Ha; simpl;
-                            [ exact I
-                            | (destruct (r2 == r1) eqn:Hrr; simpl;
-                               [ reflexivity
-                               | by apply Hw2vd2 ]) ]) ]
+                         | (case Hrr: (r2 == r1); simpl;
+                            [ (move/eqP: Hrr => Er; move: R2Ws1 R1Ws1; rewrite Er => -> [= _ Et];
+                               rewrite Et; reflexivity)
+                            | (have VTM2' : data_match Right (color_of s1) M (w2@t2) (vd2@t2);
+                               [ by first [ exact VTM2 | (rewrite Ht2td2; exact VTM2) ]
+                               | move: (data_match_moved VTM2'); rewrite Hco /data_match => -[_ H];
+                                 exact H ]) ]) ]
                | |- LRC.color _ = color_of _ =>
                    cbn [taga]; rewrite Hscol; rewrite /color_of /=; rewrite Htpc0; reflexivity
                | |- forall _, _ \/ _ -> _ =>
@@ -4726,13 +4748,19 @@ Module StepStrong2 (S: RecompositionContext).
                    first [ (exists (old@told); split; [exact OLDs1 | exact Hnc])
                          | (exists (vdm@told); split; [exact OLD3 | exact Hnc]) ]
                | |- address_correctness _ _ _ _ =>
-                   first [ (cbn [taga vtag]; destruct (is_address t2); exact I)
+                   first [ (cbn [taga vtag vala mem]; rewrite ?(fun_if vala) /=; case: ifP => Hrr;
+                            [ (move/eqP: Hrr => Er; move: R2Ws1 R1Ws1; rewrite Er => -> [= _ Et];
+                               rewrite Et; exact I)
+                            | (apply: address_correctness_moved;
+                               first [ exact (s_reg_cor _ _ R2Ws1)
+                                     | exact (s'_reg_cor _ _ VT32)
+                                     | (rewrite Ht2td2; exact (s'_reg_cor _ _ VT32)) ]) ])
                          | (cbn [taga vtag vala mem]; rewrite Hvts;
                             first [ exact (s_reg_cor _ _ R2Ws1) | exact (s'_reg_cor _ _ VT32) ]) ]
                | |- capability_correctness' ?ws _ _ _ _ =>
                    first
                      [ exact I
-                     | (cbn [taga vtag]; destruct (is_address t2); exact I)
+                     | (cbn [taga vtag]; case: (t2) => [?|||]; exact I)
                      | (cbn [taga vtag]; rewrite Hvts;
                         move: capa_cor1 capa_cor3 R2Ws1 VT32; clear;
                         case: t2 => [ n0 | | | ]; move=> capa_cor1 capa_cor3 R2Ws1 VT32;

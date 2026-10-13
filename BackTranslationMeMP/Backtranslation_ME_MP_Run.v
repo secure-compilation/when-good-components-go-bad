@@ -67,7 +67,7 @@ Lemma step_load_blk m (rg : rmap) n lv cid r1 r2 w1 w2 vt2 e2 l :
   rg (rk r1) = Some (Atom w1 Other) ->
   m w1 = Some (Atom w2 (MTag vt2 cid e2 false)) ->
   step_me (NC := NC) (S m rg n lv cid)
-    (S (setm m w1 (Atom w2 (MTag (if is_address vt2 then Invalidated else Other) cid e2 false)))
+    (S (setm m w1 (Atom w2 (MTag (moved_tag vt2) cid e2 false)))
        (setm rg (rk r2) (Atom w2 vt2)) n.+1 lv cid) None.
 Proof.
 move=> Hc Hb [i1 [tg1 [Hn1 Hc1]]] Hok H1 Hm.
@@ -86,7 +86,7 @@ Lemma step_store_blk m (rg : rmap) n lv cid r1 r2 w1 w2 t2 wo vto eo l :
   m w1 = Some (Atom wo (MTag vto cid eo false)) ->
   step_me (NC := NC) (S m rg n lv cid)
     (S (setm m w1 (Atom w2 (MTag t2 cid eo false)))
-       (setm rg (rk r2) (Atom w2 (if is_address t2 then Invalidated else Other))) n.+1 lv cid)
+       (setm rg (rk r2) (Atom w2 (moved_tag t2))) n.+1 lv cid)
     None.
 Proof.
 move=> Hc Hb [i1 [tg1 [Hn1 Hc1]]] Hok H1 H2 Hm.
@@ -101,7 +101,7 @@ Lemma step_mov_blk m (rg : rmap) n lv cid (r1 r2 : register) w1 t1 l :
   regs_ok rg ->
   rg (rk r1) = Some (Atom w1 t1) ->
   step_me (NC := NC) (S m rg n lv cid)
-    (S m (setm (setm rg (rk r1) (Atom w1 (if is_address t1 then Invalidated else Other)))
+    (S m (setm (setm rg (rk r1) (Atom w1 (moved_tag t1)))
                (rk r2) (Atom w1 t1)) n.+1 lv cid) None.
 Proof.
 move=> Hc Hb [i1 [tg1 [Hn1 Hc1]]] Hok H1.
@@ -499,7 +499,7 @@ have H1' : rg2 (rk R_AUX1) = Some (Atom ctrl Other) by rewrite /rg2 /rg1 !setmE 
 have H2'' : rg2 (rk R_AUX2) = Some (Atom (pcw cnt.+1) Other).
 { rewrite /rg2 setmE (eqxx (rk R_AUX2)). exact: erefl. }
 have S3 := step_store_blk lv Hc Hb3 (blk_nxt Hb4 Hl) Hok2 H1' H2'' Hm.
-exists (setm rg2 (rk R_AUX2) (Atom (pcw cnt.+1) (if is_address Other then Invalidated else Other))).
+exists (setm rg2 (rk R_AUX2) (Atom (pcw cnt.+1) (moved_tag Other))).
 split.
 - apply: (msil_step S0). apply: (msil_step S1). apply: (msil_step S2). exact: msil_one S3.
 - by rewrite setmE Hn2.
@@ -565,7 +565,7 @@ have H23 : rg3 (rk R_AUX2) = Some (Atom cap tc).
 { by rewrite /rg3 /rg2 /rg1 !setmE !rk_neq. }
 have S4 := step_store_blk lv Hc Hb3 (blk_nxt Hb4 erefl) Hok3 Ha3 H23 Hold.
 set m1 := setm m (addw ctrl (pcw (2 + d))) (Atom cap (MTag tc cid e2 false)).
-set rg4 := setm rg3 (rk R_AUX2) (Atom cap (if is_address tc then Invalidated else Other)).
+set rg4 := setm rg3 (rk R_AUX2) (Atom cap (moved_tag tc)).
 have Hok4 : regs_ok rg4 := regs_ok_setm _ _ Hok3.
 have Ha4 : rg4 (rk R_ARG) = Some (Atom (addw ctrl (pcw (2 + d))) Other).
 { by rewrite /rg4 setmE rk_neq. }
@@ -595,7 +595,7 @@ have Hsp1 : m1 (addw ctrl (pcw 1)) = Some (Atom (addw ctrl (pcw (2 + d))) (MTag 
 have Hx6 : nxt cde n.+4.+2 cid := blk_nxt Hb6 Hl.
 have S6 := step_store_blk lv Hc1 Hb5 Hx6 Hok5 Hs5 Ha5 Hsp1.
 exists (setm rg5 (rk R_ARG)
-          (Atom (addw ctrl (pcw (2 + d).+1)) (if is_address Other then Invalidated else Other))).
+          (Atom (addw ctrl (pcw (2 + d).+1)) (moved_tag Other))).
 split.
 - apply: (msil_step S1). apply: (msil_step S2). apply: (msil_step S3).
   apply: (msil_step S4). apply: (msil_step S5).
@@ -686,7 +686,7 @@ have Hs4 : rg4 (rk R_SP) = Some (Atom (addw ctrl (pcw 1)) Other).
 have S5 := step_store_blk n'.+1 Hc Hb4 (blk_nxt Hb5 erefl) Hok4 Hs4 Ha4 Hsp.
 set m1 := setm m (addw ctrl (pcw 1)) (Atom (addw ctrl (pcw (2 + d))) (MTag Other cid e1 false)).
 set rg5 := setm rg4 (rk R_ARG) (Atom (addw ctrl (pcw (2 + d)))
-                                  (if is_address Other then Invalidated else Other)).
+                                  (moved_tag Other)).
 have Hok5 : regs_ok rg5 := regs_ok_setm _ _ Hok4.
 have Hc1 : code_in cde pc0 m1 := code_in_setm _ Hc Hnc1.
 have Ha5 : rg5 (rk R_ARG) = Some (Atom (addw ctrl (pcw (2 + d))) Other).
@@ -851,7 +851,7 @@ Lemma step_movs_blk m (rg : rmap) n lv cid (r1 r2 : register + sys_reg) w1 t1 l 
   (exists old, rg (@word_of_nat (reg_field_size mt) (to_nat_bis r2)) = Some old) ->
   step_me (NC := NC) (S m rg n lv cid)
     (S m (setm (setm rg (@word_of_nat (reg_field_size mt) (to_nat_bis r1))
-                    (Atom w1 (if is_address t1 then Invalidated else Other)))
+                    (Atom w1 (moved_tag t1)))
                (@word_of_nat (reg_field_size mt) (to_nat_bis r2)) (Atom w1 t1)) n.+1 lv cid)
     None.
 Proof.
@@ -1002,7 +1002,7 @@ have HmA7 : m7 (pcw A) = Some (Atom 0%w (MTag Other cid e false)).
 { by rewrite /m7 unionmE Hm. }
 have S9 := step_store_blk lv Hc7m Hr3 (blk_nxt Hr4 erefl) Hok8 Hsp8 Ha8 HmA7.
 set m9 := setm m7 (pcw A) (Atom (ctrlw NC cid) (MTag Other cid e false)).
-set rg9 := setm rg8 (rk R_AUX1) (Atom (ctrlw NC cid) (if is_address Other then Invalidated else Other)).
+set rg9 := setm rg8 (rk R_AUX1) (Atom (ctrlw NC cid) (moved_tag Other)).
 have Hc9 : code_in cde pc0 m9 := code_in_setm _ Hc7m HAnc.
 have Hok9 : regs_ok rg9 := regs_ok_setm _ _ Hok8.
 have Ha9 : rg9 (rk R_AUX1) = Some (Atom (ctrlw NC cid) Other).
@@ -1057,7 +1057,7 @@ set m14 := setm m9 (addw (ctrlw NC cid) (pcw 1))
              (Atom (addw (ctrlw NC cid) (pcw 2)) (MTag Other cid None false)).
 have Hc14 : code_in cde pc0 m14 := code_in_setm _ Hc9 (Hregnc _ Hreg1).
 set rg14 := setm rg13 (rk R_ARG)
-              (Atom (addw (ctrlw NC cid) (pcw 2)) (if is_address Other then Invalidated else Other)).
+              (Atom (addw (ctrlw NC cid) (pcw 2)) (moved_tag Other)).
 have Hok14 : regs_ok rg14 := regs_ok_setm _ _ Hok13.
 have S15 := step_label_blk lv Hc14 Hbl Hx Hok14.
 exists rg14. split.

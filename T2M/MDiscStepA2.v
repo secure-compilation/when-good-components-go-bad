@@ -65,8 +65,7 @@ Lemma dinv_step_mov :
     dinv cur chain F cs mem
        (Transitional.Register.set r1
          (Transitional.val (Transitional.Register.get r1 regs))
-         (if is_address (tvtag (Transitional.Register.get r1 regs))
-          then Invalidated else Other)
+         (moved_tag (tvtag (Transitional.Register.get r1 regs)))
          (Transitional.Register.set r2
             (Transitional.val (Transitional.Register.get r1 regs))
             (tvtag (Transitional.Register.get r1 regs)) regs))
@@ -471,8 +470,7 @@ Lemma disc_step_mov :
     disc_inv (mem,
        Transitional.Register.set r1
          (Transitional.val (Transitional.Register.get r1 regs))
-         (if is_address (tvtag (Transitional.Register.get r1 regs))
-          then Invalidated else Other)
+         (moved_tag (tvtag (Transitional.Register.get r1 regs)))
          (Transitional.Register.set r2
             (Transitional.val (Transitional.Register.get r1 regs))
             (tvtag (Transitional.Register.get r1 regs)) regs),

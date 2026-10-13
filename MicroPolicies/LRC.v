@@ -162,6 +162,16 @@ Definition is_jump (t:value_tag) : option unit :=
 Definition is_address (t:value_tag) : bool :=
   match t with | Ret _ | InternalJump | Invalidated => true | Other => false end.
 
+Definition moved_tag (t : value_tag) : value_tag :=
+  match t with
+  | Ret _ | Invalidated => Invalidated
+  | InternalJump => InternalJump
+  | Other => Other
+  end.
+
+Lemma moved_tag_not_ret t n : moved_tag t <> Ret n.
+Proof. by case: t. Qed.
+
 Fixpoint make_hseq n tag : (hseq (tag_type lrc_tags) (nseq n R))  :=
   match n with
   | O => HSeqNil
@@ -189,7 +199,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
 
   | MOV,     [hseq ts; td]     => (*do! _ <- is_not_invalid ts;*)
                                   do! _ <- check_belong current tni;
-                                  let ts' := if (is_address ts) then Invalidated else Other in
+                                  let ts' := moved_tag ts in
                                      Some (OVec MOV       tpc [hseq ts'; ts], None)
 
   | BINOP b, [hseq tx; ty; td] => do! _ <- is_other tx;
@@ -200,7 +210,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
   | LOAD,    [hseq tp; ts; td] => do! _ <- is_other tp;
                                   do! _ <- check_belong current tni;
                                      if orb (belong current (Some ts)) (is_code ts) then
-                                       let ts' := if (is_address (vtag ts)) then Invalidated else Other in
+                                       let ts' := moved_tag (vtag ts) in
                                        let (ts', td') := switch_val ts ts' in
                                        Some (OVec LOAD tpc [hseq tp; ts'; td'], None)
                                      else
@@ -211,7 +221,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                   do! _ <- check_belong current (Some td);
                                   (* TODO: delete this line to allow editing your own static code *)
                                   if (is_code td) then None else
-                                  let ts' := if (is_address ts) then Invalidated else Other in
+                                  let ts' := moved_tag ts in
                                      let (td', _) := switch_val td ts in
                                      Some (OVec STORE tpc [hseq tp; ts'; td'], None)
 

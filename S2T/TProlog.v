@@ -135,8 +135,7 @@ Proof.
       (Transitional.Register.set R_SP (Int (Z.of_nat (4 + ne))) Other
         (Transitional.Register.set R_SP
            (Transitional.val (Transitional.Register.get R_SP regsIn))
-           (if is_address (tvtag (Transitional.Register.get R_SP regsIn))
-            then Invalidated else Other)
+           (moved_tag (tvtag (Transitional.Register.get R_SP regsIn)))
           (Transitional.Register.set R_AUX1
              (Transitional.val (Transitional.Register.get R_SP regsIn))
              (tvtag (Transitional.Register.get R_SP regsIn)) regsIn)))), fbN.
@@ -307,7 +306,7 @@ Lemma push_ra_run C fb sp cap a mem m rs pc pct L tl t :
         [/\ Transitional.Register.get R_SP rs'
               = MVal Other (Ptr (C, fb, (sp + 1)%Z)),
             Transitional.Register.get R_RA rs'
-              = MVal Invalidated
+              = MVal (moved_tag t)
                   (Transitional.val (Transitional.Register.get R_RA rs))
           & forall r', r' <> R_SP -> r' <> R_RA ->
               Transitional.Register.get r' rs'
@@ -406,7 +405,7 @@ Proof.
                    (Transitional.val (Transitional.Register.get R_SP rsA))
                    Other rsA,
              Pointer.inc (Pointer.inc pc), pct).
-  { have -> : Other = (if is_address Other then Invalidated else Other) by [].
+  { have -> : Other = (moved_tag Other) by [].
     eapply TS.Store.
     - exact: (TMacros.code_at_I_head Hc1).
     - exact: (TMacros.check_pc_at_I Hc1).
@@ -596,8 +595,8 @@ Lemma pop_ra_run C fb sp cap a mem m rs pc pct L tl v :
              (m', rs', Pointer.inc (Pointer.inc pc), pct),
         [/\ Transitional.Memory.store m (C, fb, (sp - 1)%Z)
               ({| Transitional.val := Transitional.val v.1;
-                  tvtag := Invalidated |},
-               {| vtag := Invalidated; color := C; entry := None;
+                  tvtag := moved_tag (tvtag v.1) |},
+               {| vtag := moved_tag (tvtag v.1); color := C; entry := None;
                   is_code := false |}) = Some m',
             (forall q, TMem.vload m' q = TMem.vload m q),
             (forall q, q <> (C, fb, (sp - 1)%Z) ->
@@ -617,8 +616,8 @@ Proof.
   case: tl Hcode Htl => [|nxt rest] Hcode _ //.
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val v.1;
-               tvtag := Invalidated |},
-            {| vtag := Invalidated; color := C; entry := None;
+               tvtag := moved_tag (tvtag v.1) |},
+            {| vtag := moved_tag (tvtag v.1); color := C; entry := None;
                is_code := false |}) Hld) => [m' Hst].
   case: (TMacros.pop_ra_macro (TMacros.code_at_I_pop Hcomp Hcode)
            Hcomp HSP HONE Hlive HnotReg Hld Hst Htag) => [Pp Htag'].
@@ -735,7 +734,7 @@ Lemma pop_junk_ra_run C fb sp cap a mem m rs pc pct L tl v told :
   Transitional.Register.get R_SP rs = MVal Other (Ptr (C, fb, sp)) ->
   Transitional.Register.get R_ONE rs = MVal Other (Int 1) ->
   Transitional.Memory.load m (C, fb, (sp - 1)%Z) = Some v ->
-  ~~ TInv.is_live (tvtag v.1) ->
+  ~~ TInv.is_ret (tvtag v.1) ->
   ~ List.In (TInv.CMem (C, fb, (sp - 1)%Z)) (TInv.sites L) ->
   (forall b0, a C b0 <> Some fb) ->
   TInv.is_ret told = false ->
@@ -764,9 +763,8 @@ Proof.
   case: tl Hcode Htl => [|nxt rest] Hcode _ //.
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val v.1;
-               tvtag := if is_address (tvtag v.1) then Invalidated
-                        else Other |},
-            {| vtag := if is_address (tvtag v.1) then Invalidated else Other;
+               tvtag := moved_tag (tvtag v.1) |},
+            {| vtag := moved_tag (tvtag v.1);
                color := C; entry := None; is_code := false |}) Hld)
     => [m' Hst].
   have Pp := TMacros.exec_pop pct (TMacros.code_at_I_pop Hcomp Hcode)
@@ -789,7 +787,7 @@ Proof.
   - apply: (@TInv.tag_inv_setra _ _ _ _ _ _ HnotReg).
     apply: TInv.tag_inv_setreg; first by [].
     apply: (TInv.tag_inv_store_data Hnosite _ Hst Htag0).
-    by move: Hdead; case: (is_address (tvtag v.1)).
+    by rewrite /= TInv.is_ret_moved.
 Qed.
 
 (** ★ The [Kstop] epilogue: pop the saved argument, pop the caller's frame
@@ -1064,7 +1062,7 @@ Proof.
                    (Transitional.val (Transitional.Register.get R_AUX1 rsA))
                    Other rsA,
              Pointer.inc (Pointer.inc pc4), pct).
-  { have -> : Other = (if is_address Other then Invalidated else Other) by [].
+  { have -> : Other = (moved_tag Other) by [].
     eapply TS.Store.
     - exact: (TMacros.code_at_I_head Hc4b).
     - exact: (TMacros.check_pc_at_I Hc4b).
@@ -1434,7 +1432,7 @@ Lemma ef_halt_run C fbE cap a mem m rs pc pct L lret vM vRA vscr vSP mscr
   tvtag vM.1 = Other ->
   Transitional.val vM.1 = Int 0 ->
   Transitional.Memory.load m (C, fbE, 2%Z) = Some vRA ->
-  ~~ TInv.is_live (tvtag vRA.1) ->
+  ~~ TInv.is_ret (tvtag vRA.1) ->
   Transitional.Memory.load m (C, fbE, 1%Z) = Some vscr ->
   tvtag vscr.1 = Other ->
   Transitional.Memory.load m (C, fbE, 0%Z) = Some vSP ->
@@ -1575,7 +1573,7 @@ Proof.
                    (Transitional.val (Transitional.Register.get R_AUX1 rsA))
                    Other rsA,
              Pointer.inc (Pointer.inc pc6), pct).
-  { have -> : Other = (if is_address Other then Invalidated else Other) by [].
+  { have -> : Other = (moved_tag Other) by [].
     eapply TS.Store.
     - exact: (TMacros.code_at_I_head Hc7).
     - exact: (TMacros.check_pc_at_I Hc7).
@@ -1847,8 +1845,8 @@ Proof.
            Hmscr) => [m1 Hst1].
   have Hstr1 : Transitional.Memory.store m (C, 1, 0%Z)
       ({| Transitional.val := Transitional.val mscr.1;
-          tvtag := if is_address (tvtag mscr.1) then Invalidated else Other |},
-       {| vtag := if is_address (tvtag mscr.1) then Invalidated else Other;
+          tvtag := moved_tag (tvtag mscr.1) |},
+       {| vtag := moved_tag (tvtag mscr.1);
           color := Pointer.component (Pointer.inc (Pointer.inc pc));
           entry := None; is_code := false |}) = Some m1
     by rewrite Etm /= !Pointer.inc_preserves_component Hcomp; exact: Hst1.
@@ -1970,8 +1968,8 @@ Proof.
     + by rewrite /pc5 /pc3 !Pointer.inc_preserves_component.
     + exact: (TMacros.code_at_I_tail (TMacros.code_at_I_tail Hc5)).
     + exists m2, ({| Transitional.val := Transitional.val vRA.1;
-                     tvtag := Invalidated |},
-                  {| vtag := Invalidated; color := C; entry := None;
+                     tvtag := moved_tag (tvtag vRA.1) |},
+                  {| vtag := moved_tag (tvtag vRA.1); color := C; entry := None;
                      is_code := false |}).
       split.
       * by move=> q; rewrite Hv4 Hv1.
@@ -2137,10 +2135,8 @@ Proof.
     in S7 *.
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val mscr.1;
-               tvtag := if is_address (tvtag mscr.1) then Invalidated
-                        else Other |},
-            {| vtag := if is_address (tvtag mscr.1) then Invalidated
-                       else Other;
+               tvtag := moved_tag (tvtag mscr.1) |},
+            {| vtag := moved_tag (tvtag mscr.1);
                color := C; entry := None; is_code := false |})
            Hmscr2) => [m3 Hst3].
   have S8 : TS.step cde (m2, rs4, Pointer.inc pc6, pct) E0
@@ -2407,10 +2403,8 @@ Proof.
   (* --- 2. ILoad R_AUX1 R_AUX2: the flag, with its write-back --- *)
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val mflag.1;
-               tvtag := if is_address (tvtag mflag.1) then Invalidated
-                        else Other |},
-            {| vtag := if is_address (tvtag mflag.1) then Invalidated
-                       else Other;
+               tvtag := moved_tag (tvtag mflag.1) |},
+            {| vtag := moved_tag (tvtag mflag.1);
                color := C; entry := None; is_code := false |})
            Hmflag) => [m1 Hst1].
   have S2 : TS.step cde (m, rs1, Pointer.inc pc, pct) E0
@@ -2532,7 +2526,7 @@ Proof.
                    (Transitional.val (Transitional.Register.get R_AUX2 rs4))
                    Other rs4,
              Pointer.inc (Pointer.inc (Pointer.inc pcL)), pct).
-  { have -> : Other = (if is_address Other then Invalidated else Other) by [].
+  { have -> : Other = (moved_tag Other) by [].
     eapply TS.Store.
     - exact: (TMacros.code_at_I_head Hc7).
     - exact: (TMacros.check_pc_at_I Hc7).
@@ -3168,10 +3162,8 @@ Proof.
     in S7 *.
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val mscr.1;
-               tvtag := if is_address (tvtag mscr.1) then Invalidated
-                        else Other |},
-            {| vtag := if is_address (tvtag mscr.1) then Invalidated
-                       else Other;
+               tvtag := moved_tag (tvtag mscr.1) |},
+            {| vtag := moved_tag (tvtag mscr.1);
                color := C; entry := None; is_code := false |})
            Hmscr2) => [m3 Hst3].
   have S8 : TS.step cde (m2, rs4, Pointer.inc pc6, pct) E0
@@ -3307,10 +3299,8 @@ Proof.
                 (Ptr (flag_buf_ptr (scr C))) Other rs7) in S13 *.
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val mflag.1;
-               tvtag := if is_address (tvtag mflag.1) then Invalidated
-                        else Other |},
-            {| vtag := if is_address (tvtag mflag.1) then Invalidated
-                       else Other;
+               tvtag := moved_tag (tvtag mflag.1) |},
+            {| vtag := moved_tag (tvtag mflag.1);
                color := C; entry := None; is_code := false |})
            Hmflag5) => [m6 Hst6].
   have S14 : TS.step cde (m5, rs8, Pointer.inc pc12, pct) E0
@@ -3446,7 +3436,7 @@ Proof.
                     (Transitional.val (Transitional.Register.get R_AUX2 rs12))
                     Other rs12,
               Pointer.inc (Pointer.inc pc19), pct).
-  { have -> : Other = (if is_address Other then Invalidated else Other) by [].
+  { have -> : Other = (moved_tag Other) by [].
     eapply TS.Store.
     - exact: (TMacros.code_at_I_head Hc20).
     - exact: (TMacros.check_pc_at_I Hc20).
@@ -3773,8 +3763,7 @@ Proof.
   exists tmem3,
     (Transitional.Register.set R_COM
        (Transitional.val (Transitional.Register.get R_COM regs5))
-       (if is_address (tvtag (Transitional.Register.get R_COM regs5))
-        then Invalidated else Other)
+       (moved_tag (tvtag (Transitional.Register.get R_COM regs5)))
        (Transitional.Register.set R_ARG
           (Transitional.val (Transitional.Register.get R_COM regs5))
           (tvtag (Transitional.Register.get R_COM regs5)) regs5)),
