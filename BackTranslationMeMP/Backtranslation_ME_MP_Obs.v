@@ -84,12 +84,12 @@ move=> st s' op tpc ti ts updts pc' e.
 rewrite /next_state_updates_and_pc /next_state.
 case Hevi: (evi st) => [evinp|] //=.
 case Hm: (mem st pc') => [ni|] /=.
-- case Htr: (LRC.instr_rules evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
+- case Htr: (LRC.instr_rules_mp evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
   case: ov_ev Htr => ov0 ev Htr /=.
   case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
   move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
   exists evinp, ov0. split; [by [] | exact: Htr].
-- case Htr: (LRC.instr_rules evinp op tpc ti ts None) => [ov_ev|] //=.
+- case Htr: (LRC.instr_rules_mp evinp op tpc ti ts None) => [ov_ev|] //=.
   case: ov_ev Htr => ov0 ev Htr /=.
   case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
   move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
@@ -106,7 +106,7 @@ Lemma transfer_event_arg :
     zarg' e = rcom_value evinp.
 Proof.
   move=> op tpc ti ts tni evinp ov e.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'.
   move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H.
   - rewrite (hseq0 ts) in H.

@@ -72,7 +72,7 @@ Module StepWeak2 (S: RecompositionContext).
       case: ov0 Hlrc Ho => t' r' Hlrc Ho.
       move: Ho => /= [= Hout]; subst out.
       move: Hr => /= [= Hr]; subst r.
-      exact: Hlrc.
+      apply: LRC.instr_rules_mp_of_strict. exact: Hlrc.
     - (* SERVICE: both transfers reduce to the identical SERVICE/fallthrough arms *)
       by rewrite /Merged.transfer /LRC.transfer.
   Qed.

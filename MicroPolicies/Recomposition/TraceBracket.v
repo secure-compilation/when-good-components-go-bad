@@ -254,7 +254,7 @@ Lemma const_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tag
     (told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags CONST) ev,
   LRC.transfer (IVec CONST tpc ti [hseq told] tni) evinp = Some (ov, ev) -> tr ov = [hseq Other].
 Proof.
-  move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   by move: H => [= <-].
@@ -264,7 +264,7 @@ Lemma bnz_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags 
     (t1 : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags BNZ) ev,
   LRC.transfer (IVec BNZ tpc ti [hseq t1] tni) evinp = Some (ov, ev) -> tr ov = [hseq t1].
 Proof.
-  move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   case: (obind_inv H) => u2 [_ {}H].
@@ -276,7 +276,7 @@ Lemma mov_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags 
   LRC.transfer (IVec MOV tpc ti [hseq t1; told] tni) evinp = Some (ov, ev) ->
   tr ov = [hseq (moved_tag t1); t1].
 Proof.
-  move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   by move: H => [= <-].
@@ -287,7 +287,7 @@ Lemma binop_transfer : forall b (tpc : tag_type lrc_tags P) (ti : tag_type lrc_t
   LRC.transfer (IVec (BINOP b) tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) ->
   tr ov = [hseq t1; t2; Other].
 Proof.
-  move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
@@ -303,7 +303,7 @@ Lemma store_transfer : forall (tpc : tag_type lrc_tags P) (ti told : tag_type lr
   color told = (match tpc with Level _ c => c end) /\ ~~ is_code told.
 Proof.
   move=> tpc ti told t1 t2 tni evinp ov ev.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [Hg0 {}H].
   case: (obind_inv H) => u1 [_ {}H].
@@ -333,7 +333,7 @@ Lemma load_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags
            (switch_val ts (moved_tag (vtag ts))).2].
 Proof.
   move=> tpc ti tp td ts tni evinp ov ev.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H].
   case: (obind_inv H) => u1 [_ {}H].
@@ -352,7 +352,7 @@ Lemma load_guard : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Sy
   is_code ts \/ color ts = (match tpc with Level _ c => c end).
 Proof.
   move=> tpc ti tp td ts tni evinp ov ev.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [Hcc {}H].
   case: (obind_inv H) => u1 [_ {}H].
@@ -375,7 +375,7 @@ Lemma jump_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags
   tr ov = HSeqCons rat l.
 Proof.
   move=> tpc ti rat l tni evinp ov ev.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
   rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
   move=> H Hev. case: (obind_inv H) => u0 [_ {}H].
@@ -393,7 +393,7 @@ Lemma jal_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags 
   tr ov = HSeqCons tret (HSeqCons InternalJump (hsbehead l)).
 Proof.
   move=> tpc ti tret l tni evinp ov ev.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
   rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
   move=> H Hev. case: (obind_inv H) => u0 [_ {}H].
@@ -952,7 +952,7 @@ Lemma transfer_silent_trpc :
     trpc ov = tpc.
 Proof.
   move=> op tpc ti ts tni evinp ov ev.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'.
   move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H Hev.
   - rewrite (hseq0 ts) in H.
@@ -1300,7 +1300,7 @@ Lemma jump_event_extra :
         & tr ov = (Invalidated :: Invalidated :: Other :: reg_invalidate_hseq)%hseq ].
 Proof.
   move=> tpc ti rat l tni evinp ov e.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta.
   rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=. move=> H.
   case: (obind_inv H) => u0 [_ {}H].
@@ -1337,7 +1337,7 @@ Lemma jal_event_extra :
         & tr ov = (tret :: Ret (pct_level tpc) :: Other :: reg_invalidate_hseq)%hseq ].
 Proof.
   move=> tpc ti tret l tni evinp ov e.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta.
   rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=. move=> H.
   case: (obind_inv H) => u0 [Hcc {}H].
@@ -1441,13 +1441,13 @@ Proof.
   rewrite /next_state_updates_and_pc /next_state.
   case Hevi: (evi st) => [evinp|] //=.
   case Hm: (mem st pc') => [ni|] /=.
-  - case Htr: (LRC.instr_rules evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
+  - case Htr: (LRC.instr_rules_mp evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
     case: ov_ev Htr => ov0 ev0 Htr /=.
     case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
     move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
     exists evinp, ov0, st0. cbn.
     split; [exact: Htr | exact: Edsu | by [] | by [] | by []].
-  - case Htr: (LRC.instr_rules evinp op tpc ti ts None) => [ov_ev|] //=.
+  - case Htr: (LRC.instr_rules_mp evinp op tpc ti ts None) => [ov_ev|] //=.
     case: ov_ev Htr => ov0 ev0 Htr /=.
     case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
     move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
@@ -1506,7 +1506,7 @@ Lemma nop_emit : forall tpc (ti : tag_type lrc_tags Symbolic.M) tni evinp
     (ov : ovec lrc_tags NOP) ev,
   LRC.transfer (IVec NOP tpc ti [hseq] tni) evinp = Some (ov, ev) -> ev = None.
 Proof.
-  move=> tpc ti tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   by move: H => [= _ <-].
@@ -1516,7 +1516,7 @@ Lemma const_emit : forall tpc (ti : tag_type lrc_tags Symbolic.M)
     (told : tag_type lrc_tags Symbolic.R) tni evinp (ov : ovec lrc_tags CONST) ev,
   LRC.transfer (IVec CONST tpc ti [hseq told] tni) evinp = Some (ov, ev) -> ev = None.
 Proof.
-  move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   by move: H => [= _ <-].
@@ -1526,7 +1526,7 @@ Lemma mov_emit : forall tpc (ti : tag_type lrc_tags Symbolic.M)
     (t1 told : tag_type lrc_tags Symbolic.R) tni evinp (ov : ovec lrc_tags MOV) ev,
   LRC.transfer (IVec MOV tpc ti [hseq t1; told] tni) evinp = Some (ov, ev) -> ev = None.
 Proof.
-  move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   by move: H => [= _ <-].
@@ -1537,7 +1537,7 @@ Lemma binop_emit : forall b tpc (ti : tag_type lrc_tags Symbolic.M)
     (ov : ovec lrc_tags (BINOP b)) ev,
   LRC.transfer (IVec (BINOP b) tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) -> ev = None.
 Proof.
-  move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
@@ -1548,7 +1548,7 @@ Lemma bnz_emit : forall tpc (ti : tag_type lrc_tags Symbolic.M)
     (t1 : tag_type lrc_tags Symbolic.R) tni evinp (ov : ovec lrc_tags BNZ) ev,
   LRC.transfer (IVec BNZ tpc ti [hseq t1] tni) evinp = Some (ov, ev) -> ev = None.
 Proof.
-  move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+  move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
   case: (obind_inv H) => u2 [_ {}H].
@@ -1563,7 +1563,7 @@ Lemma jump_event_eret :
   exists c v c', e = ERet c v c'.
 Proof.
   move=> tpc ti rat l tni evinp ov e.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta.
   rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=. move=> H.
   case: (obind_inv H) => u0 [_ {}H].
@@ -1583,7 +1583,7 @@ Lemma jal_event_ecall :
   exists c p v c', e = ECall c p v c'.
 Proof.
   move=> tpc ti tret l tni evinp ov e.
-  rewrite /LRC.transfer /LRC.instr_rules.
+  rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta.
   rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=. move=> H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].

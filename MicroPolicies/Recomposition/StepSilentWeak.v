@@ -430,7 +430,7 @@ Module StepWeak (S: RecompositionContext).
       trpc ov = tpc.
   Proof.
     move=> op tpc ti ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'.
     move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H Hev; subst ev.
     - (* NOP *)
@@ -780,7 +780,7 @@ Module StepWeak (S: RecompositionContext).
       (told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags CONST) ev,
     LRC.transfer (IVec CONST tpc ti [hseq told] tni) evinp = Some (ov, ev) -> tr ov = [hseq Other].
   Proof.
-    move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+    move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
     by move: H => [= <-].
@@ -790,7 +790,7 @@ Module StepWeak (S: RecompositionContext).
       (t1 : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags BNZ) ev,
     LRC.transfer (IVec BNZ tpc ti [hseq t1] tni) evinp = Some (ov, ev) -> tr ov = [hseq t1].
   Proof.
-    move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+    move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
     case: (obind_inv H) => u2 [_ {}H].
@@ -802,7 +802,7 @@ Module StepWeak (S: RecompositionContext).
     LRC.transfer (IVec MOV tpc ti [hseq t1; told] tni) evinp = Some (ov, ev) ->
     tr ov = [hseq (moved_tag t1); t1].
   Proof.
-    move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+    move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
     by move: H => [= <-].
@@ -813,7 +813,7 @@ Module StepWeak (S: RecompositionContext).
     LRC.transfer (IVec (BINOP b) tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) ->
     tr ov = [hseq t1; t2; Other].
   Proof.
-    move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules.
+    move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
     case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
@@ -840,7 +840,7 @@ Module StepWeak (S: RecompositionContext).
     color told = (match tpc with Level _ c => c end) /\ ~~ is_code told.
   Proof.
     move=> tpc ti told t1 t2 tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [Hg0 {}H].
     case: (obind_inv H) => u1 [_ {}H].
@@ -873,7 +873,7 @@ Module StepWeak (S: RecompositionContext).
              (switch_val ts (moved_tag (vtag ts))).2].
   Proof.
     move=> tpc ti tp td ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H].
     case: (obind_inv H) => u1 [_ {}H].
@@ -895,7 +895,7 @@ Module StepWeak (S: RecompositionContext).
     is_code ts \/ color ts = (match tpc with Level _ c => c end).
   Proof.
     move=> tpc ti tp td ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [Hcc {}H].
     case: (obind_inv H) => u1 [_ {}H].
@@ -932,7 +932,7 @@ Module StepWeak (S: RecompositionContext).
     tr ov = HSeqCons rat l.
   Proof.
     move=> tpc ti rat l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
     rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
     move=> H Hev. case: (obind_inv H) => u0 [_ {}H].
@@ -952,7 +952,7 @@ Module StepWeak (S: RecompositionContext).
     tr ov = HSeqCons tret (HSeqCons InternalJump (hsbehead l)).
   Proof.
     move=> tpc ti tret l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
     rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
     move=> H Hev. case: (obind_inv H) => u0 [_ {}H].
@@ -1658,7 +1658,7 @@ Module StepWeak (S: RecompositionContext).
     hshead (tr ov) = tret.
   Proof.
     move=> tpc ti tret l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
     rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
     move=> H. case: (obind_inv H) => u0 [_ {}H].

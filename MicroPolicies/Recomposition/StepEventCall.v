@@ -243,7 +243,7 @@ Module StepEventCall (S: RecompositionContext).
                 let e := fresh in destruct c eqn:e end; mcbn H).
     all: try (match goal with _ : decode_instr _ = Some _ |- _ =>
                 move: H; case Ejt: (smem _) => [[niv nit]|]; move=> H; mcbn H end).
-    all: unfold transfer, LRC.transfer, instr_rules, LRC.instr_rules in H.
+    all: unfold transfer, LRC.transfer, instr_rules, LRC.instr_rules, LRC.instr_rules_mp in H.
     all: cbv zeta in H; mcbn H.
     all: repeat (first
            [ match goal with HH : (do! _ <- _; _) = Some _ |- _ =>
@@ -1198,8 +1198,8 @@ Module StepEventCall (S: RecompositionContext).
               (w := (pc2v + 1)%w) (taga ret) cn Hret Ha2 Hreg4S1 Hex1.
           move: Hsf2.
           rewrite /next_state_updates_and_pc Hcell1 /next_state. cbn [op].
-          unfold evi, transfer, LRC.transfer, instr_rules, LRC.instr_rules.
-          cbn -[obind belong is_other get_tni_color get_proc_name check_belong check_entry
+          unfold evi, transfer, LRC.transfer, instr_rules, LRC.instr_rules, LRC.instr_rules_mp.
+          cbn -[obind belong is_other is_data get_tni_color get_proc_name check_belong check_entry
                 reg_invalidate_hseq next_state_do_updates getm setm build_tpc rcom_value
                 reg_clear_read hsbehead hshead].
           rewrite Ha2 !obindE. cbn beta.
@@ -1212,7 +1212,7 @@ Module StepEventCall (S: RecompositionContext).
           clear Hl0. case: l0 => l0a l0rest. case: l0rest => trcom l0next. cbn beta iota.
           case Hcb1 : (check_belong cc (Some (taga ret))) => [[]|]; last by [].
           cbn beta iota. rewrite obindE Hbel1'. cbn beta iota.
-          case Hoth1 : (is_other trcom) => [[]|]; last by [].
+          case Hoth1 : (is_data trcom) => [[]|]; last by [].
           cbn beta iota. rewrite obindE Htc1 obindE.
           case Hce1 : (check_entry cc (Some (taga cell1))) => [[]|]; last by [].
           cbn beta iota. rewrite obindE Hpn1. rewrite !obindE. cbn beta iota. cbn [tr trpc].

@@ -736,12 +736,12 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma rb_jump_silent_isjump :
     forall tpc ti (tra tp trcom : tag_type lrc_tags R)
            (next : hseq (tag_type lrc_tags) (nseq 10 R)) tni evi (ov : ovec lrc_tags JUMP),
-      LRC.transfer (IVec (OP JUMP) tpc ti (tra :: tp :: trcom :: next)%hseq tni) evi
+      LRC.instr_rules evi JUMP tpc ti (tra :: tp :: trcom :: next)%hseq tni
         = Some (ov, None) ->
       is_jump tp = Some tt.
   Proof.
     move=> [level current'] ti tra tp trcom next tni evi ov.
-    rewrite /LRC.transfer /LRC.instr_rules; cbv zeta.
+    rewrite /LRC.instr_rules; cbv zeta.
     move=> Htr; case: (obind_inv Htr) => u [Hg Hrest]; clear Htr.
     move: Hg; case Heq: (_ == current') => // _.
     move: Hrest; cbn -[check_belong belong is_other is_jump get_tni_color check_ret].
@@ -757,6 +757,24 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma rb_is_jump_eq : forall t : value_tag, is_jump t = Some tt -> t = InternalJump.
   Proof. by case. Qed.
 
+  Lemma rb_merged_transfer_strict :
+    forall op tpc ti ts tni i (r : vovec lrc_tags (OP op) * option event),
+      Merged.transfer (IVec (OP op) tpc ti ts tni) i = Some r ->
+      exists ov', LRC.instr_rules i op tpc ti ts tni = Some (ov', snd r).
+  Proof.
+    move=> op tpc ti ts tni [rc] r.
+    cbn [Merged.transfer Merged.instr_rules].
+    move=> H. apply obind_inv in H. destruct H as [out [Hir Hr]].
+    apply obind_inv in Hir. destruct Hir as [u1 [_ Hir]].
+    apply obind_inv in Hir. destruct Hir as [u2 [_ Hir]].
+    apply obind_inv in Hir. destruct Hir as [o [Hlrc Ho]].
+    case: o Hlrc Ho => ov0 ev0 Hlrc Ho.
+    case: ov0 Hlrc Ho => t' r' Hlrc Ho.
+    move: Ho => /= [= Hout]; subst out.
+    move: Hr => /= [= Hr]; subst r.
+    eexists. exact: Hlrc.
+  Qed.
+
   (* From a SILENT merged JUMP step ([next_state_updates_and_pc] with [Merged.transfer], target
      [pc' = w], inputs [HSeqCons rat l]), the jump-register tag [hshead l] is [InternalJump]. *)
   Lemma rb_merged_jump_isjump :
@@ -767,7 +785,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       is_jump (hshead l) = Some tt.
   Proof.
     move=> st s' tpc ti rat l updts w H.
-    move: (nsu_and_pc_bridge H); rewrite /next_state_updates_and_pc /next_state.
+    move: H; rewrite /next_state_updates_and_pc /next_state.
     case: (evi st) => [ei|] //=.
     have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
     { rewrite [in LHS](hseq_eta l) [in hsbehead l](hseq_eta (hsbehead l)). by []. }
@@ -775,7 +793,8 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       (case: (obind_inv Hgoal) => -[ov ev] [Htr Hk];
        move: Hk => /= Hk; case: (obind_inv Hk) => st0 [_ Hfin];
        move: Hfin => [= _ Hev]; subst ev;
-       exact: (rb_jump_silent_isjump Htr)).
+       case: (rb_merged_transfer_strict Htr) => ov' Hs;
+       exact: (rb_jump_silent_isjump Hs)).
   Qed.
 
   Lemma rb_belong_color : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
@@ -888,7 +907,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       belong (match ti with {| color := c |} => c end) (Some tret).
   Proof.
     move=> [level current'] [vti cti eti bti] tret l tni evi ov.
-    rewrite /LRC.transfer /LRC.instr_rules. cbv zeta.
+    rewrite /LRC.transfer /LRC.instr_rules_mp. cbv zeta.
     rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
     move=> H. case: (obind_inv H) => u0 [_ {}H].
     case: (obind_inv H) => ucb [Hcb {}H].
@@ -922,7 +941,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
            (tra tp trcom : tag_type lrc_tags R)
            (next : hseq (tag_type lrc_tags) (nseq 10 R)) (tni : option (tag_type lrc_tags Symbolic.M))
            (evi : ev_inputs) (ov : ovec lrc_tags JUMP) (e : event),
-      LRC.transfer (IVec (OP JUMP) tpc ti (tra :: tp :: trcom :: next)%hseq tni) evi
+      LRC.instr_rules evi JUMP tpc ti (tra :: tp :: trcom :: next)%hseq tni
         = Some (ov, Some e) ->
       belong (match ti with {| color := c |} => c end) tni = false /\
       is_other trcom = Some tt /\
@@ -932,7 +951,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       (match ti with {| color := c |} => c end) = (match tpc with Level _ c' => c' end).
   Proof.
     move=> [level current'] ti tra tp trcom next tni evi ov e.
-    rewrite /LRC.transfer /LRC.instr_rules; cbv zeta.
+    rewrite /LRC.instr_rules; cbv zeta.
     move=> Htr; case: (obind_inv Htr) => u [Hg Hrest]; clear Htr.
     move: Hg; case Heq: (_ == current') => // _.
     have Hcur : (match ti with {| color := c |} => c end) = current' by apply/eqP.
@@ -969,7 +988,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       (exists n', hshead l = Ret n' /\ (match tpc with Level level _ => level end) = S n').
   Proof.
     move=> st s' tpc ti rat l updts w e H.
-    move: (nsu_and_pc_bridge H); rewrite /next_state_updates_and_pc /next_state.
+    move: H; rewrite /next_state_updates_and_pc /next_state.
     case: (evi st) => [ei|] //=.
     have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
     { rewrite [in LHS](hseq_eta l) [in hsbehead l](hseq_eta (hsbehead l)). by []. }
@@ -977,7 +996,8 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       (case: (obind_inv Hgoal) => -[ov ev] [Htr Hk];
        move: Hk => /= Hk; case: (obind_inv Hk) => st0 [_ Hfin];
        move: Hfin => [= _ Hev]; subst ev;
-       have [Hbel [Hother [[c' [Hc' _]] [Hret _]]]] := rb_jump_event_inv Htr;
+       case: (rb_merged_transfer_strict Htr) => ov' Hs;
+       have [Hbel [Hother [[c' [Hc' _]] [Hret _]]]] := rb_jump_event_inv Hs;
        (split; [ exact Hbel |]); (split; [ exact Hother |]);
        (split; [ exists c'; exact Hc' | exact Hret ])).
   Qed.
@@ -991,7 +1011,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
            (tnext : tag_type lrc_tags Symbolic.M) (tra trcom : tag_type lrc_tags R)
            (next : hseq (tag_type lrc_tags) (nseq 10 R)) (tni : option (tag_type lrc_tags Symbolic.M))
            (evi : ev_inputs) (ov : ovec lrc_tags JAL) (e : event),
-      LRC.transfer (IVec (OP JAL) tpc ti (tnext :: tra :: trcom :: next)%hseq tni) evi
+      LRC.instr_rules evi JAL tpc ti (tnext :: tra :: trcom :: next)%hseq tni
         = Some (ov, Some e) ->
       check_belong (match ti with {| color := c |} => c end) (Some tnext) = Some tt /\
       belong (match ti with {| color := c |} => c end) tni = false /\
@@ -1001,7 +1021,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       check_entry (match ti with {| color := c |} => c end) tni = Some tt.
   Proof.
     move=> [level current'] ti tnext tra trcom next tni evi ov e.
-    rewrite /LRC.transfer /LRC.instr_rules; cbv zeta.
+    rewrite /LRC.instr_rules; cbv zeta.
     move=> Htr; case: (obind_inv Htr) => u [Hg Hrest]; clear Htr.
     move: Hg; case Heq: (_ == current') => // _.
     case: (obind_inv Hrest) => ucb [Hcb {}Hrest]. case: ucb Hcb => Hcb.
@@ -1036,7 +1056,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
                   (match mem st w with Some ni => Some (taga ni) | None => None end) = Some tt.
   Proof.
     move=> st s' tpc ti tret l updts w e H.
-    move: (nsu_and_pc_bridge H); rewrite /next_state_updates_and_pc /next_state.
+    move: H; rewrite /next_state_updates_and_pc /next_state.
     case: (evi st) => [ei|] //=.
     have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
     { rewrite [in LHS](hseq_eta l) [in hsbehead l](hseq_eta (hsbehead l)). by []. }
@@ -1044,7 +1064,8 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       (case: (obind_inv Hgoal) => -[ov ev] [Htr Hk];
        move: Hk => /= Hk; case: (obind_inv Hk) => st0 [_ Hfin];
        move: Hfin => [= _ Hev]; subst ev;
-       have [Hcb [Hbel [Hother [[c' Hc'] [[p Hp] Hent]]]]] := rb_jal_event_inv Htr;
+       case: (rb_merged_transfer_strict Htr) => ov' Hs;
+       have [Hcb [Hbel [Hother [[c' Hc'] [[p Hp] Hent]]]]] := rb_jal_event_inv Hs;
        (split; [ exact Hcb |]); (split; [ exact Hbel |]); (split; [ exact Hother |]);
        (split; [ by exists c' |]); (split; [ by exists p | exact Hent ])).
   Qed.

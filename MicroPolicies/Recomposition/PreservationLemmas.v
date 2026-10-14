@@ -176,7 +176,7 @@ Lemma silent_transfer_belong :
     belong (match tpc with Level _ c => c end) tni.
 Proof.
   move=> op; destruct op; move=> tpc ti ts tni evi ov;
-    rewrite /LRC.transfer /LRC.instr_rules; case: tpc => [level current']; cbv zeta;
+    rewrite /LRC.transfer /LRC.instr_rules_mp; case: tpc => [level current']; cbv zeta;
     move=> Htr; case: (obind_inv Htr) => u [Hg Hrest]; clear Htr; move: Hg; case Heq: (_ == current') => // _;
     move/eqP: Heq => <-;
     set cur := (match ti with {| color := c |} => c end) in Hrest *;
@@ -2415,7 +2415,7 @@ Qed.
       trpc ov = tpc.
   Proof.
     move=> op tpc ti ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'.
     move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H Hev; subst ev.
     - (* NOP *)
@@ -2612,7 +2612,7 @@ Qed.
     color told = (match tpc with Level _ c => c end) /\ ~~ is_code told.
   Proof.
     move=> tpc ti told t1 t2 tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [Hg0 {}H].
     case: (obind_inv H) => u1 [_ {}H].
@@ -2642,7 +2642,7 @@ Qed.
              (switch_val ts (moved_tag (vtag ts))).2].
   Proof.
     move=> tpc ti tp td ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H].
     case: (obind_inv H) => u1 [_ {}H].
@@ -2661,7 +2661,7 @@ Qed.
     is_code ts \/ color ts = (match tpc with Level _ c => c end).
   Proof.
     move=> tpc ti tp td ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [Hcc {}H].
     case: (obind_inv H) => u1 [_ {}H].
@@ -2823,7 +2823,7 @@ Qed.
     hshead (tr ov) = tret.
   Proof.
     move=> tpc ti tret l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
     rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
     move=> H. case: (obind_inv H) => u0 [_ {}H].
@@ -3197,7 +3197,7 @@ Qed.
       case: ov0 Hlrc Ho => t' r' Hlrc Ho.
       move: Ho => /= [= Hout]; subst out.
       move: Hr => /= [= Hr]; subst r.
-      exact: Hlrc.
+      apply: LRC.instr_rules_mp_of_strict. exact: Hlrc.
     - by rewrite /Merged.transfer /LRC.transfer.
   Qed.
 

@@ -130,7 +130,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       op = JUMP \/ op = JAL.
   Proof.
     move=> op tpc ti ts tni evinp ov e.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'.
     move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H.
     - rewrite (hseq0 ts) in H.
@@ -176,7 +176,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       match trpc ov with Level _ c => c end = color tnitag.
   Proof.
     move=> op tpc ti ts tnitag evinp ov e.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'.
     move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H.
     - rewrite (hseq0 ts) in H.
@@ -242,13 +242,13 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite /next_state_updates_and_pc /next_state.
     case Hevi: (evi st) => [evinp|] //=.
     case Hm: (mem st pc') => [ni|] /=.
-    - case Htr: (LRC.instr_rules evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
+    - case Htr: (LRC.instr_rules_mp evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
       case: ov_ev Htr => ov0 ev Htr /=.
       case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
       move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
       exists evinp, ov0, st0. cbn.
       split; [exact Htr | split; [exact: Edsu | by []]].
-    - case Htr: (LRC.instr_rules evinp op tpc ti ts None) => [ov_ev|] //=.
+    - case Htr: (LRC.instr_rules_mp evinp op tpc ti ts None) => [ov_ev|] //=.
       case: ov_ev Htr => ov0 ev Htr /=.
       case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
       move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
@@ -578,7 +578,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       exists t, tni = Some t /\ next_comp_of_event e = color t.
   Proof.
     move=> op tpc ti ts tni evinp ov e.
-    rewrite /LRC.transfer /LRC.instr_rules.
+    rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'.
     move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H.
     - rewrite (hseq0 ts) in H.

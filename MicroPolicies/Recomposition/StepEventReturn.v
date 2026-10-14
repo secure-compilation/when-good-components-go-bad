@@ -1375,7 +1375,7 @@ Module StepEventReturn (S: RecompositionContext).
       end.
     all: inversion step_s1;
       unfold next_state_updates, next_state_do_updates, next_state_updates_and_pc,
-      next_state, transfer, instr_rules, LRC.transfer, LRC.instr_rules in *.
+      next_state, transfer, instr_rules, LRC.transfer, LRC.instr_rules, LRC.instr_rules_mp in *.
     all: unfold_all; try unfold_match; unfold_all.
     all: try (exfalso; clear -CALL; unfold run_syscall in *; repeat (unfold_all || unfold_match)). (* eliminate alloc cases *)
     all: match goal with
@@ -2613,9 +2613,8 @@ Module StepEventReturn (S: RecompositionContext).
             { case E: (Types.taga a) => [m|||]; rewrite E /= in Heqa36;
                 first [ discriminate Heqa36 | reflexivity ]. }
             have Hva_s2 : Types.vala a = v10 by apply: (data_match_other_val Hta_a vt_match9).
-            have Ha23o : Types.taga a23 = Other.
-            { case E: (Types.taga a23) => [m|||]; rewrite E /= in Heqa48;
-                first [ discriminate Heqa48 | reflexivity ]. }
+            have Ha23r : forall m, Types.taga a23 <> Ret m.
+            { move=> m E. rewrite E /= in Heqa48. discriminate Heqa48. }
             have Hva23 : Types.vala a23 = v10.
             { rewrite -Hva_s2. apply: convert_int_of_word_inj.
               move: Heqa0; rewrite /evi /rcom ST0 /= -Heqa21 /= => [= E1].
@@ -2623,7 +2622,7 @@ Module StepEventReturn (S: RecompositionContext).
               by rewrite -E1 -E2. }
             have Hr0 : r0 <> as_word (ssrint.Posz 1).
             { move=> Er. move: RW0; rewrite Er -Heqa21 => [= Eqa].
-              rewrite Eqa /= in Ha23o. discriminate Ha23o. }
+              rewrite Eqa /= in Ha23r. exact: (Ha23r _ erefl). }
             have Ha44 : Types.vala a44 = v10.
             { have E1 : (as_word (ssrint.Posz 1) == r0) = false.
               { case: eqP => [E|] //. by case: (Hr0 (esym E)). }

@@ -261,11 +261,133 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
 
 
 
+Definition is_data (t : value_tag) : option unit :=
+  match t with Ret _ => None | _ => Some tt end.
+
+Lemma is_data_of_other t u : is_other t = Some u -> is_data t = Some tt.
+Proof. by case: t. Qed.
+
+Lemma is_data_of_jump t u : is_jump t = Some u -> is_data t = Some tt.
+Proof. by case: t. Qed.
+
+Definition instr_rules_mp (evi : ev_inputs) (op : opcode)
+           (tpc : tag_type lrc_tags P)
+           (ti : tag_type lrc_tags M)
+           (ts : hseq (tag_type lrc_tags) (inputs op))
+           (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op * option event) :=
+  let current := match ti with {| color := c |} => c end in
+  let (level, current') := match tpc with Level n c'=> (n, c') end in
+  do! _ <- (if (current == current') then Some tt else None);
+  match op, ts return option (ovec _ op * option event) with
+  | NOP,     [hseq]            => do! _ <- check_belong current tni;
+                                     Some (OVec NOP       tpc [hseq], None)
+
+  | CONST,   [hseq td]         => do! _ <- check_belong current tni;
+                                     Some (OVec CONST     tpc [hseq Other], None)
+
+  | MOV,     [hseq ts; td]     => do! _ <- check_belong current tni;
+                                  let ts' := moved_tag ts in
+                                     Some (OVec MOV       tpc [hseq ts'; ts], None)
+
+  | BINOP b, [hseq tx; ty; td] => do! _ <- is_data tx;
+                                  do! _ <- is_data ty;
+                                  do! _ <- check_belong current tni;
+                                     Some (OVec (BINOP b) tpc [hseq tx; ty; Other], None)
+
+  | LOAD,    [hseq tp; ts; td] => do! _ <- is_data tp;
+                                  do! _ <- check_belong current tni;
+                                     if orb (belong current (Some ts)) (is_code ts) then
+                                       let ts' := moved_tag (vtag ts) in
+                                       let (ts', td') := switch_val ts ts' in
+                                       Some (OVec LOAD tpc [hseq tp; ts'; td'], None)
+                                     else
+                                       None
+
+  | STORE,   [hseq tp; ts; td] => do! _ <- is_data tp;
+                                  do! _ <- check_belong current tni;
+                                  do! _ <- check_belong current (Some td);
+                                  if (is_code td) then None else
+                                  let ts' := moved_tag ts in
+                                     let (td', _) := switch_val td ts in
+                                     Some (OVec STORE tpc [hseq tp; ts'; td'], None)
+
+  | BNZ,     [hseq tx]         => do! _ <- is_data tx;
+                                  do! _ <- check_belong current tni;
+                                     Some (OVec BNZ       tpc [hseq tx], None)
+
+  | JUMP,    (tra :: tp :: trcom :: next)%hseq => if belong current tni then
+                                   do! _ <- is_data tp;
+                                   Some (OVec JUMP tpc (tra :: tp :: trcom :: next)%hseq, None)
+                                      else
+                                   do! _ <- is_data trcom;
+                                   do! c' <- get_tni_color tni;
+                                   let ev := Some (ERet current (rcom_value evi) c') in
+                                   do! _ <- check_ret level tp;
+                                   Some (OVec JUMP (build_tpc (level.-1) c')
+                                           (Invalidated :: Invalidated :: Other :: reg_invalidate_hseq)%hseq, ev)
+
+  | JAL,     (tnext :: tra :: trcom :: next)%hseq =>
+                                   do! _ <- check_belong current (Some tnext);
+                                   if belong current tni then
+                                   Some (OVec JAL tpc (tnext :: InternalJump :: trcom :: next)%hseq, None)
+                                      else
+                                   do! _ <- is_data trcom;
+                                   do! c' <- get_tni_color tni;
+                                   let ev := do! p  <- get_proc_name tni;
+                                             Some (ECall current p (rcom_value evi) c') in
+                                   do! _ <- check_entry current tni;
+                                   Some (OVec JAL (build_tpc (level.+1) c')
+                                           (tnext :: (Ret level) :: Other :: reg_invalidate_hseq)%hseq, ev)
+
+  | _,     _                   => None
+  end.
+
+Ltac same_or_none := first [ exact id | by case ].
+
+Lemma instr_rules_mp_of_strict evi op tpc ti ts tni out :
+  instr_rules evi op tpc ti ts tni = Some out ->
+  instr_rules_mp evi op tpc ti ts tni = Some out.
+Proof.
+rewrite /instr_rules /instr_rules_mp. case: tpc => lvl c0. cbv zeta.
+case: (_ == _) => //=.
+move: ts out; case: op => [|||b||||||||||] ts out.
+- by rewrite (hseq0 ts).
+- by rewrite (hseq_eta ts) (hseq0 (hsbehead ts)).
+- by rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq0 (hsbehead (hsbehead ts))).
+- rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
+          (hseq0 (hsbehead (hsbehead (hsbehead ts)))) /=.
+  move: (hshead ts) (hshead (hsbehead ts)) => tx ty.
+  case: tx => [?|||]; case: ty => [?|||] /=; same_or_none.
+- rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
+          (hseq0 (hsbehead (hsbehead (hsbehead ts)))) /=.
+  move: (hshead ts) => tp.
+  case: tp => [?|||] /=; same_or_none.
+- rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
+          (hseq0 (hsbehead (hsbehead (hsbehead ts)))) /=.
+  move: (hshead ts) => tp.
+  case: tp => [?|||] /=; same_or_none.
+- rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) /=.
+  move: (hshead (hsbehead ts)) (hshead (hsbehead (hsbehead ts))) => tp tr.
+  case: (belong _ _) => /=; case: tp => [?|||]; case: tr => [?|||] /=; same_or_none.
+- rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) /=.
+  move: (hshead ts) => tx.
+  case: tx => [?|||] /=; same_or_none.
+- rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) /=.
+  move: (hshead (hsbehead (hsbehead ts))) => tr.
+  case: (check_belong _ _) => //= _.
+  case: (belong _ _) => /=; case: tr => [?|||] /=; same_or_none.
+- by [].
+- by [].
+- by [].
+- by [].
+- by [].
+Qed.
+
 Definition transfer (iv : ivec lrc_tags) (evi : ev_inputs) : option (vovec lrc_tags (op iv) * option event) :=
   match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
   | IVec vop tpc ti ts tni =>
     match vop, ts, ti, tni return option (vovec _ vop * option event) with
-    | (OP op), ts, ti, tni => instr_rules evi op tpc ti ts tni
+    | (OP op), ts, ti, tni => instr_rules_mp evi op tpc ti ts tni
     (* Monitor stuff *)
     | SERVICE, [hseq], ti, None => Some (tt, None)
     |       _,      _,  _,    _ => None
