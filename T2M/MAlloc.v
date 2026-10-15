@@ -286,44 +286,6 @@ case E: (filter (pfilterC c0) (domm m)) => [|x s].
   by rewrite E0.
 Qed.
 
-Lemma maxaddr_hi (m : {fmap mword mt -> atom (mword mt) mem_tag})
-    (c0 : nat) :
-  1 + c0 < 2 ^ NC ->
-  \val (maxaddr m c0) < (2 + c0) * 2 ^ (word_size mt - NC).
-Proof.
-move=> Hc.
-have E2 : 2 + c0 = (1 + c0) + 1 by lia.
-have Hmul : (2 + c0) * 2 ^ (word_size mt - NC)
-            = (1 + c0) * 2 ^ (word_size mt - NC)
-              + 2 ^ (word_size mt - NC)
-  by rewrite E2 mulnDl mul1n.
-case E: (filter (pfilterC c0) (domm m)) => [|x s].
-- have E0 : maxaddr m c0
-            = LRC.component_memory_prefix (NC := NC) (ssrint.Posz (1 + c0))
-    by rewrite maxaddrE E.
-  have Ev := prefix_val Hc.
-  rewrite E0 Ev.
-  have Hk : 0 < 2 ^ (word_size mt - NC) by rewrite expn_gt0.
-  by lia.
-- have E0 : maxaddr m c0
-            = last (LRC.component_memory_prefix (NC := NC)
-                      (ssrint.Posz (1 + c0))) (x :: s)
-    by rewrite maxaddrE E.
-  have Hp : pfilterC c0
-              (last (LRC.component_memory_prefix (NC := NC)
-                       (ssrint.Posz (1 + c0))) (x :: s)).
-  { have Hin : last (LRC.component_memory_prefix (NC := NC)
-                       (ssrint.Posz (1 + c0))) (x :: s)
-               \in filter (pfilterC c0) (domm m).
-    { rewrite E.
-      have -> : last (LRC.component_memory_prefix (NC := NC)
-                        (ssrint.Posz (1 + c0))) (x :: s) = last x s by [].
-      exact: (mem_last x s). }
-    by move: Hin; rewrite mem_filter => /andP[]. }
-  move: Hp; rewrite /pfilterC pfilter_val // => /andP[_ H2].
-  by rewrite E0.
-Qed.
-
 (* strictly above the bump pointer, inside the region: UNMAPPED *)
 Lemma above_max_none (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 : nat) (w : mword mt) :

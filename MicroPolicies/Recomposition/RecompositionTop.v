@@ -277,26 +277,6 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
       pose proof Hmergeable_ifaces as [[_ Hdis] _].
       have Hnotic := fdisjointP Hdis _ Hip. rewrite Heq in Hnotic. by rewrite Hic in Hnotic.
   Qed.
-  (*   setoid_rewrite (does_prefix_equiv det_sem). *)
-  (*   setoid_rewrite (does_prefix_equiv det_sem'). *)
-  (*   setoid_rewrite (does_prefix_equiv det_sem''). *)
-  (*   intros m dp_sem dp_sem' undef_m_ip. *)
-  (*   pose proof tsim_properties_match_states as props. *)
-  (*   inversion dp_sem; inversion dp_sem'; *)
-  (*     try (match goal with | H : (forall s : Smallstep.state _, ~ Smallstep.initial_state _ s) |- _ => *)
-  (*                              exfalso; eapply H; simpl; unfold initial_state2; unfold initial_state1; eauto end). *)
-  (*   remember (initial_state (code prog'') (prog_buffers prog'') (prog_interface prog'')) as s3. *)
-  (*   assert (match_s3: exists M, match_states M s s0 s3). *)
-  (*   { destruct props as [a]. destruct (a _ _ H0 H5) as [s3' [init match_init]]. *)
-  (*     simpl in init. unfold initial_state3 in init. *)
-  (*     rewrite <- init in Heqs3. subst. done. } *)
-  (*   destruct (tsimulation_star props H1 H6 s3 match_s3) as [s3' [star_sem'' ?]]. *)
-  (*   econstructor. *)
-  (*   - simpl; unfold initial_state3; eauto. *)
-  (*   - eauto. *)
-  (*   - admit. *)
-  (*   - admit. *)
-  (* Admitted. *)
 
 
 End RecTop.

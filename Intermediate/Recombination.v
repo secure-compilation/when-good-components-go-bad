@@ -73,10 +73,6 @@ Section Merge.
     drop_block (Pointer.component f) (f :: s) = drop_block (Pointer.component f) s.
   Proof. simpl. now rewrite Nat.eqb_refl. Qed.
 
-  Lemma take_block_hd f s :
-    take_block (Pointer.component f) (f :: s) = f :: take_block (Pointer.component f) s.
-  Proof. simpl. now rewrite Nat.eqb_refl. Qed.
-
   Lemma drop_block_cons_eq C f s :
     Pointer.component f = C -> drop_block C (f :: s) = drop_block C s.
   Proof. intro H. cbn [drop_block]. rewrite H Nat.eqb_refl. reflexivity. Qed.
@@ -226,18 +222,6 @@ Section Merge.
     intros Hip Heq Hne.
     rewrite (@merge_stacks_cons C frame gps frame'' gps'' Heq Hne).
     now rewrite (@merge_frames_program frame frame'' Hip).
-  Qed.
-
-  Lemma merge_stacks_cons_context C frame gps frame'' gps'' :
-    Pointer.component frame \in domm ic ->
-    Pointer.component frame'' = Pointer.component frame ->
-    Pointer.component frame <> C ->
-    merge_stacks C (frame :: gps) (frame'' :: gps'') =
-    frame'' :: merge_stacks (Pointer.component frame) gps gps''.
-  Proof.
-    intros Hic Heq Hne.
-    rewrite (@merge_stacks_cons C frame gps frame'' gps'' Heq Hne).
-    now rewrite (@merge_frames_context frame frame'' Hic).
   Qed.
 
   Lemma merge_stacks_add_l C frame gps gps'' :
@@ -872,23 +856,6 @@ Section Mergeable.
             | exact IH ]
           end
         end.
-  Qed.
-
-  Lemma mergeable_states_cons_domm
-        frame1   gps1   mem1   regs1   pc1
-        frame1'' gps1'' mem1'' regs1'' pc1'' :
-    mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  )
-                     (frame1'' :: gps1'', mem1'', regs1'', pc1'') ->
-    Pointer.component frame1 = Pointer.component frame1''
-    \/ Pointer.component frame1   \in domm ip \/ Pointer.component frame1   \in domm ic
-    \/ Pointer.component frame1'' \in domm ip \/ Pointer.component frame1'' \in domm ic.
-  Proof.
-    intros Hmerge.
-    pose proof mergeable_states_mergeable_stack Hmerge as H.
-    inversion H; subst.
-    - match goal with He : Pointer.component frame1 = _ |- _ => rewrite He end; tauto.
-    - match goal with He : Pointer.component frame1'' = _ |- _ => rewrite He end; tauto.
-    - tauto.
   Qed.
 
   (* Memory lemmas on mergeable states. *)

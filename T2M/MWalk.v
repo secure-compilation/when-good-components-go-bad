@@ -866,26 +866,4 @@ case: bT / HbT => [s0T bTx HinitT Hsb|Hnoinit_T]; last first.
                   EB6 Hstar_m Hnsm).
 Qed.
 
-(* the existential form *)
-Corollary t2me_bwd_prefix (m : finpref_behavior) :
-  let msI := Merged.initial_state (Definitions.code Wdet)
-               (Definitions.prog_buffers Wdet)
-               (Definitions.prog_interface Wdet) in
-  (forall ts0, TSim.t_initial_base cdeW tpW ts0 ->
-     match_stW (amap0 PB) ts0 msI /\
-     heap_invW (let '(tm, _, _, _) := ts0 in tm) (Symbolic.mem msI) /\
-     mm_dsyncW (amap0 PB) ts0 msI) ->
-  does_prefix (RSCDefs.me_sem NC Wdet) m ->
-  MDefs.run_fits cdeW tpW (finpref_trace m) ->
-  exists beh,
-    program_behaves (TSim.t_sem cdeW tpW) beh /\
-    (CompCertExtensions.prefix m beh \/
-     behavior_improves_finpref beh m).
-Proof.
-move=> msI Hbridge Hdp Hrf.
-have [bT HbT] := @program_behaves_exists (TSim.t_sem cdeW tpW).
-exists bT. split; first exact: HbT.
-exact: (t2me_bwd_prefix_for Hbridge Hdp Hrf HbT).
-Qed.
-
 End Walk.

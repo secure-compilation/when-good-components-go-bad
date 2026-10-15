@@ -54,73 +54,6 @@ move=> H j Hj. rewrite setmE. case: eqP => _; first by eexists.
 exact: H.
 Qed.
 
-Lemma reg_clear_aux_some (l : seq nat) (rg : rmap) top :
-  (forall k, k \in l -> exists a, rg (@word_of_nat (reg_field_size mt) k) = Some a) ->
-  exists h, reg_clear_list_aux l rg top = Some h.
-Proof.
-elim: l top => [|e l IH] top Hl /=; first by eexists.
-have [a Ha] := Hl e (mem_head _ _).
-have -> : rg (word.as_word (ssrint.Posz e)) = Some a := Ha.
-have [h Hh] := IH (taga a) (fun k Hk => Hl k ltac:(by rewrite inE Hk orbT)).
-rewrite /= Hh /=. by eexists.
-Qed.
-
-Lemma reg_clear_aux_shape (e : nat) (l : seq nat) (rg : rmap) top h :
-  reg_clear_list_aux (e :: l) rg top = Some h ->
-  exists a h', [/\ rg (@word_of_nat (reg_field_size mt) e) = Some a,
-                   reg_clear_list_aux l rg (taga a) = Some h'
-                 & h = HSeqCons top h'].
-Proof.
-rewrite /=.
-case Ea: (rg (word.as_word (ssrint.Posz e))) => [a|] //=.
-case Eh: (reg_clear_list_aux l rg (taga a)) => [h'|] //= [<-].
-by exists a, h'.
-Qed.
-
-Lemma regs_ok_clear rg top :
-  regs_ok rg -> exists h, reg_clear_list rg top = Some h.
-Proof.
-move=> H. apply: reg_clear_aux_some => k Hk. apply: H.
-have Hsub : all (fun k => k \in rkeys) reg_list := erefl.
-exact: (allP Hsub) k Hk.
-Qed.
-
-Lemma ndsu_invalidate (st : mstate) (t : value_tag) (l : seq nat) :
-  (forall k, k \in l -> exists a, regs st (@word_of_nat (reg_field_size mt) k) = Some a) ->
-  exists st',
-    [/\ next_state_do_updates st (make_hseq (size l) t)
-          [seq RegRead (word.as_word (ssrint.Posz k)) | k <- l] = Some st',
-        [/\ mem st' = mem st, pc st' = pc st & internal st' = internal st],
-        (forall k, k \notin [seq @word_of_nat (reg_field_size mt) j | j <- l] ->
-                   regs st' k = regs st k)
-      & (forall k, regs st k <> None -> regs st' k <> None)].
-Proof.
-elim: l st => [|e l IH] st Hl /=.
-- exists st. split; [exact: erefl | by split | by [] | by []].
-- have [a Ha] := Hl e (mem_head _ _).
-  set st1 := @Symbolic.State mt lrc_tags unit (mem st)
-               (setm (regs st) (word.as_word (ssrint.Posz e)) (Atom (vala a) t))
-               (pc st) (internal st).
-  have Hl1 : forall k, k \in l ->
-      exists a, regs st1 (@word_of_nat (reg_field_size mt) k) = Some a.
-  { move=> k Hk. rewrite /st1 /= setmE. case: eqP => _; first by eexists.
-    apply: Hl. by rewrite inE Hk orbT. }
-  have [st' [Hu [Hm Hp Hi] Hr Hd]] := IH st1 Hl1.
-  exists st'. split.
-  + have -> : regs st (word.as_word (ssrint.Posz e)) = Some a := Ha.
-    rewrite /= /updm.
-    have -> : regs st (word.as_word (ssrint.Posz e)) = Some a := Ha.
-    exact: Hu.
-  + split; [by rewrite Hm | by rewrite Hp | by rewrite Hi].
-  + move=> k Hk. rewrite Hr; last first.
-    { apply/negP => Hin. move: Hk. by rewrite inE Hin orbT. }
-    rewrite /st1 /= setmE.
-    case: eqP => [Ek|] //.
-    subst k. move: Hk. by rewrite /= inE eqxx.
-  + move=> k Hk. apply: Hd. rewrite /st1 /= setmE.
-    by case: eqP.
-Qed.
-
 Lemma swcast_small (x : nat) :
   x < 2 ^ imm_size mt ->
   @swcast (imm_size mt) (word_size mt) (@word_of_nat (imm_size mt) x) = pcw x.
@@ -130,42 +63,6 @@ Lemma pcw_add a b : addw (pcw a) (pcw b) = pcw (a + b).
 Proof. by rewrite /word_of_nat as_word_addwD. Qed.
 
 Definition rest_keys : seq nat := [:: 0; 2; 3; 5; 6; 7; 16; 17; 18; 19].
-
-Lemma rest_keys_lt k : k \in rest_keys -> k < 20.
-Proof.
-have Hall : all (fun k => k < 20) rest_keys := erefl.
-exact: (allP Hall) k.
-Qed.
-
-Lemma key_notin_rest (x : nat) :
-  x \notin rest_keys -> x < 20 ->
-  @word_of_nat (reg_field_size mt) x
-    \notin [seq @word_of_nat (reg_field_size mt) j | j <- rest_keys].
-Proof.
-move=> Hx Hx20. apply/mapP => -[j Hj Ej].
-have Hj20 := rest_keys_lt Hj.
-have E := won_inj (small_lt_reg (ltn_trans Hx20 (erefl : 20 < 32)))
-                  (small_lt_reg (ltn_trans Hj20 (erefl : 20 < 32))) Ej.
-subst j. by rewrite Hj in Hx.
-Qed.
-
-Lemma regkey_ne (x y : nat) :
-  x <> y -> x < 20 -> y < 20 ->
-  (@word_of_nat (reg_field_size mt) x == @word_of_nat (reg_field_size mt) y) = false.
-Proof.
-move=> Hxy Hx Hy. apply/eqP => E. apply: Hxy.
-exact: (won_inj (small_lt_reg (ltn_trans Hx (erefl : 20 < 32)))
-                (small_lt_reg (ltn_trans Hy (erefl : 20 < 32))) E).
-Qed.
-
-Lemma rest_ok (rg : rmap) :
-  regs_ok rg ->
-  forall k, k \in rest_keys -> exists a, rg (@word_of_nat (reg_field_size mt) k) = Some a.
-Proof.
-move=> H k Hk. apply: H.
-have Hsub : all (fun k => k \in rkeys) rest_keys := erefl.
-exact: (allP Hsub) k Hk.
-Qed.
 
 Notation wk k := (word.as_word (ssrint.Posz k) : reg mt).
 
@@ -194,19 +91,6 @@ have [a6 H6] := H 6 erefl. have [a7 H7] := H 7 erefl.
 have [a16 H16] := H 16 erefl. have [a17 H17] := H 17 erefl.
 have [a18 H18] := H 18 erefl. have [a19 H19] := H 19 erefl.
 by exists a0, a1, a2, a3, a4, a5, a6, a7, a16, a17, a18, a19.
-Qed.
-
-Lemma reg_clear_split (rg : rmap) told :
-  regs_ok rg ->
-  exists a1 h2,
-    [/\ rg (@word_of_nat (reg_field_size mt) 1) = Some a1,
-        reg_clear_list_aux rest_keys rg (taga a1) = Some h2
-      & reg_clear_list rg told = Some (HSeqCons told h2)].
-Proof.
-move=> Hok.
-have [h Hh] := regs_ok_clear told Hok.
-have [a1 [h2 [Ha1 Hh2 Eh]]] := reg_clear_aux_shape Hh.
-exists a1, h2. split; [exact: Ha1 | exact: Hh2 | by rewrite Hh Eh].
 Qed.
 
 Section MEStep.

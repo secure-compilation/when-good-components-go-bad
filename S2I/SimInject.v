@@ -55,17 +55,9 @@ Definition rle (α α' : renaming) : Prop :=
 Lemma rle_refl α : rle α α.
 Proof. by []. Qed.
 
-Lemma rle_trans α1 α2 α3 : rle α1 α2 -> rle α2 α3 -> rle α1 α3.
-Proof. move=> H12 H23 C b b' H. exact: H23 (H12 _ _ _ H). Qed.
-
 Lemma extend_new α C b b' :
   extend α C b b' C b = Some b'.
 Proof. by rewrite /extend !eqxx. Qed.
-
-Lemma extend_old {α C b b'} C0 b0 :
-  (C0 == C) && (b0 == b) = false ->
-  extend α C b b' C0 b0 = α C0 b0.
-Proof. by rewrite /extend => ->. Qed.
 
 Lemma extend_rle {α C b b'} :
   α C b = None ->
@@ -111,21 +103,10 @@ Inductive val_inject (α : renaming) : value -> value -> Prop :=
 Lemma val_inject_int_l α z v' : val_inject α (Int z) v' -> v' = Int z.
 Proof. by move=> H; inversion H. Qed.
 
-Lemma val_inject_int_r α v z : val_inject α v (Int z) -> v = Int z.
-Proof. by move=> H; inversion H. Qed.
-
-Lemma val_inject_undef_l α v' : val_inject α Undef v' -> v' = Undef.
-Proof. by move=> H; inversion H. Qed.
-
 Lemma val_inject_ptr_l α C b o v' :
   val_inject α (Ptr (C, b, o)) v' ->
   exists b', α C b = Some b' /\ v' = Ptr (C, b', o).
 Proof. move=> H; inversion H; subst. by exists b'. Qed.
-
-Lemma val_inject_ptr_r α v C b' o :
-  val_inject α v (Ptr (C, b', o)) ->
-  exists b, α C b = Some b' /\ v = Ptr (C, b, o).
-Proof. move=> H; inversion H; subst. by exists b. Qed.
 
 Lemma val_inject_rle α α' v v' :
   rle α α' -> val_inject α v v' -> val_inject α' v v'.
@@ -236,17 +217,6 @@ Proof.
   have := mi_load _ _ _ Hm _ _ _ i Ha.
   rewrite Hl. case Hl': (Memory.load mt (C, b', i)) => [v'|] //= HR.
   by exists v'.
-Qed.
-
-Lemma load_inject_none {α ms mt C b b' i} :
-  mem_inject α ms mt ->
-  α C b = Some b' ->
-  Memory.load ms (C, b, i) = None ->
-  Memory.load mt (C, b', i) = None.
-Proof.
-  move=> Hm Ha Hl.
-  have := mi_load _ _ _ Hm _ _ _ i Ha.
-  rewrite Hl. by case: (Memory.load mt (C, b', i)).
 Qed.
 
 (* ==================== store transfer ==================== *)

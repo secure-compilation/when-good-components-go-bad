@@ -144,25 +144,6 @@ Proof.
 Qed.
 
 
-(** No ledger site is in the CURRENT frame — the freshness premise every push
-    into the frame needs. It comes from `prot`: every spilled slot lives in a
-    protected frame ([TSM.stack_match_slots_prot]) and the current frame is not
-    protected ([ei_prot]). *)
-Lemma ei_nosite a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb prot
-      temps plm c rest s1 s2 cap :
-  expr_inv a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb prot temps
-           plm c rest s1 s2 cap ->
-  forall o : Z,
-    ~ List.In (TInv.CMem (C, fb, o))
-              (TInv.sites (TMatch.ledger_at rtag Sl)).
-Proof.
-  move=> HI o Hin.
-  have [t Ht] := TInv.in_sites_pair Hin.
-  move: Ht; rewrite /TMatch.ledger_at => -[E|Hin']; first by congruence.
-  exact: (TSM.stack_match_nosite (TMatch.ei_stack HI) (TMatch.ei_prot HI)
-            (TInv.in_sites Hin')).
-Qed.
-
 Lemma vi_nosite a scrs C stk mem k v arg ret rtag Sl tmem tregs pct pc fb prot
       temps plm rest cap :
   val_inv a scrs C stk mem k v arg ret rtag Sl tmem tregs pct pc fb prot temps

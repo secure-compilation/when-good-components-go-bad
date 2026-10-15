@@ -54,10 +54,6 @@ Proof. by rewrite as_word_add. Qed.
 Lemma as_word_int0 : as_word (0 : int) = zerow :> word k.
 Proof. by []. Qed.
 
-(* The raw [intZmod] form used in [offset1]/[offset2] IS ring subtraction. *)
-Lemma addz_oppz_sub (x y : int) : intZmod.addz x (intZmod.oppz y) = x - y.
-Proof. by []. Qed.
-
 (* THE base-shift lemma: the same in-component position [x] placed at bases [a] vs [b]
    differs by the (possibly negative) offset [Posz a - Posz b].
    [word_of_nat n = as_word (Posz n)] definitionally, so this applies to

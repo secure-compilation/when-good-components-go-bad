@@ -81,13 +81,6 @@ Proof.
   by split; last by []; exact: domm_setm_existing E.
 Qed.
 
-Lemma store_b_cwf cm b i v cm' :
-  cwf cm -> Transitional.Memory.store_b cm b i v = Some cm' -> cwf cm'.
-Proof.
-  move=> H Hst b0. case: (store_b_shape Hst) => [Ed En].
-  by rewrite Ed En; exact: H.
-Qed.
-
 (** …and the same, lifted to a whole memory. *)
 Lemma store_shape mt p c mt' :
   Transitional.Memory.store mt p c = Some mt' ->
@@ -153,23 +146,6 @@ Proof.
   move=> H b. rewrite alloc_b_cdomm_in alloc_b_nextblock.
   case/orP => [/eqP ->|Hin]; first by rewrite add1n.
   by rewrite add1n ltnS ltnW //; exact: H.
-Qed.
-
-(** Loads away from the fresh block are untouched. *)
-Lemma vload_alloc_other mt C n mt' p q :
-  Transitional.Memory.alloc mt C n = Some (mt', p) ->
-  (Pointer.component q <> C \/ Pointer.block q <> Pointer.block p) ->
-  TMem.vload mt' q = TMem.vload mt q.
-Proof.
-  move=> Ha Hne. case: (alloc_shape Ha) => [cm [Hcm Ep Emt]].
-  rewrite /TMem.vload /Transitional.Memory.load Emt setmE.
-  case EC: (Pointer.component q == C); last by [].
-  move/eqP: EC => EC. rewrite EC Hcm /=.
-  rewrite /Transitional.Memory.load_b /= setmE.
-  have -> : (Pointer.block q == Transitional.Memory.nextblock cm) = false.
-  { apply/negP => /eqP Eb. case: Hne => [H|H]; first by apply: H.
-    by apply: H; rewrite Eb Ep. }
-  by [].
 Qed.
 
 (** The load half of the injection, from a SOURCE memory to a T memory.
@@ -292,24 +268,6 @@ Proof.
       rewrite Ep (TMem.load_store_eq Hst) => -[<-].
       by rewrite Et; exact: (Hdata C b b' i c Hab Hld').
     + rewrite (TMem.load_store_neq Hst Hne). exact: Hdata Hab.
-Qed.
-
-(** The pop-shaped corollary: every `TrLoad` — hence every `pop` — leaves the
-    injection alone. The premise is exactly the write-back the `TS.Load` rule
-    performs. *)
-Corollary minj_pop a ms mt p v mt' :
-  Transitional.Memory.load mt p = Some v ->
-  tvtag v.1 = Other ->
-  Transitional.Memory.store mt p
-    ({| Transitional.val := Transitional.val v.1;
-        tvtag := moved_tag (tvtag v.1) |},
-     {| vtag := moved_tag (tvtag v.1);
-        color := Pointer.component p; entry := None; is_code := false |})
-    = Some mt' ->
-  minj a ms mt -> minj a ms mt'.
-Proof.
-  move=> Hld Et Hst HI.
-  apply: (minj_store_same Hld _ _ Hst HI); [by [] | by rewrite /= Et].
 Qed.
 
 (** A store OUTSIDE the injection's range — the compiler's own frame and

@@ -86,14 +86,6 @@ Qed.
 Lemma lbl_ok_nil (lo hi : nat) : lbl_ok lo hi [::].
 Proof. by split=> [l []|l]. Qed.
 
-Lemma lbl_ok_widen (lo' hi' lo hi : nat) (c : code) :
-  lo' <= lo -> hi <= hi' -> lbl_ok lo hi c -> lbl_ok lo' hi' c.
-Proof.
-move=> Hlo Hhi [Hb Hc].
-split=> [l HIn|l]; last exact: Hc.
-have [H1 H2] := Hb l HIn. by lia.
-Qed.
-
 (* code with no labels at all satisfies any interval *)
 Lemma lbl_ok_nolab (c : code) :
   (forall l, count (is_ilabel l) c = 0) ->
@@ -171,29 +163,12 @@ Proof. by apply: lbl_ok_nolab => l. Qed.
 Lemma lbl_ok_pop (r : register) (lo hi : nat) : lbl_ok lo hi (pop r).
 Proof. by apply: lbl_ok_nolab => l. Qed.
 
-Lemma lbl_ok_load_arg (b : Pointer.t) (r : register) (lo hi : nat) :
-  lbl_ok lo hi (load_arg b r).
-Proof. by apply: lbl_ok_nolab => l. Qed.
-
-Lemma lbl_ok_store_arg (b : Pointer.t) (r rt : register) (lo hi : nat) :
-  lbl_ok lo hi (store_arg b r rt).
-Proof. by apply: lbl_ok_nolab => l. Qed.
-
 (* ==================== one extra (entry) label ==================== *)
 
 (* labels of c are the distinguished [extra] plus an interval, all unique *)
 Definition lbl_ok1 (extra lo hi : nat) (c : code) : Prop :=
   [/\ (forall l, List.In (ILabel l) c -> l = extra \/ (lo <= l /\ l < hi))
     & (forall l, count (is_ilabel l) c <= 1)].
-
-Lemma lbl1_widen (lo' hi' extra lo hi : nat) (c : code) :
-  lo' <= lo -> hi <= hi' -> lbl_ok1 extra lo hi c -> lbl_ok1 extra lo' hi' c.
-Proof.
-move=> Hlo Hhi [Hb Hc].
-split=> [l HIn|l]; last exact: Hc.
-case: (Hb l HIn) => [->|[H1 H2]]; first by left.
-right. by lia.
-Qed.
 
 Lemma lbl1_cons_nolab (mi : instr) (extra lo hi : nat) (c : code) :
   (forall l, is_ilabel l mi = false) ->
@@ -249,14 +224,6 @@ split=> [l [E|HIn]|l].
   { apply: count_ilabel_In. by rewrite Ec. }
   have [H1 H2] := Hb _ HIn.
   by lia.
-Qed.
-
-Lemma lbl1_of_ok (extra lo hi : nat) (c : code) :
-  lbl_ok lo hi c -> lbl_ok1 extra lo hi c.
-Proof.
-move=> [Hb Hc].
-split=> [l HIn|l]; last exact: Hc.
-right. exact: Hb HIn.
 Qed.
 
 Ltac lbl1_step := apply: lbl1_cons_nolab; [by move=> ?|].
@@ -492,19 +459,6 @@ have [_ En2] := fresh_label_inv E2.
 have [_ En3] := fresh_label_inv E3.
 have [Hm4 _] := compile_expr_labels E4.
 by lia.
-Qed.
-
-(* a compiled procedure has an entry label *)
-Lemma compile_proc_pl (C : Component.id) (lbp scr : Pointer.t)
-    (P_labels : NMap label) (P : Procedure.id) (e : expr)
-    (s : comp_env) (c : code) (s' : comp_env) :
-  compile_proc C lbp scr P_labels P e s = Some (c, s') ->
-  exists pl, getm P_labels P = Some pl.
-Proof.
-rewrite /compile_proc /find_proc_label /= /Comp.bind /Comp.lift
-  /Comp.ret.
-case EL: (getm P_labels P) => [pl|]; last by [].
-move=> _. by exists pl.
 Qed.
 
 (* ==================== label-map generation ==================== *)
@@ -791,36 +745,6 @@ move=> /perm_sumn ->.
 exact: (sum_unzip1_getm l Hgm).
 Qed.
 
-Lemma sumn_count_setm (l : nat) (m : NMap code) (P' : Procedure.id)
-    (w : code) :
-  P' \notin domm m ->
-  count (is_ilabel l) w = 0 ->
-  sumn [seq count (is_ilabel l) (odflt [::] (getm (setm m P' w) k))
-       | k <- domm (setm m P' w)]
-  = sumn [seq count (is_ilabel l) (odflt [::] (getm m k)) | k <- domm m].
-Proof.
-move=> HP' Hw.
-have Hperm : perm_eq (domm (setm m P' w) : seq _) (P' :: domm m).
-{ apply: uniq_perm; [exact: uniq_fset | |].
-  - rewrite /=. apply/andP. split; [exact: HP' | exact: uniq_fset].
-  - move=> k. rewrite in_cons !mem_domm setmE.
-    by case: (k == P'). }
-have := perm_map
-          (fun k => count (is_ilabel l) (odflt [::] (getm (setm m P' w) k)))
-          Hperm.
-move=> /perm_sumn ->.
-rewrite /= setmE eqxx /= Hw add0n.
-have -> : [seq count (is_ilabel l) (odflt [::] (getm (setm m P' w) k))
-          | k <- domm m]
-          = [seq count (is_ilabel l) (odflt [::] (getm m k)) | k <- domm m].
-{ apply/eq_in_map => k Hk /=.
-  rewrite setmE.
-  case E: (k == P') => //.
-  move/eqP: E => E. subst k.
-  by rewrite Hk in HP'. }
-by [].
-Qed.
-
 Lemma uniq_unzip1_elementsm (A : Type) (m : NMap A) :
   uniq (unzip1 (elementsm m)).
 Proof.
@@ -928,34 +852,6 @@ elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
   + by left.
 Qed.
 
-(* origin with the fold-start counter bound *)
-Lemma compile_procedures_aux_origin' (C : Component.id)
-    (lbp scr : Pointer.t) (P_labels : NMap label)
-    (ps : list (Procedure.id * expr)) :
-  forall (acc : list (Procedure.id * code)) (s : comp_env)
-         (res : list (Procedure.id * code)) (s' : comp_env),
-  compile_procedures_aux C lbp scr P_labels acc ps s = Some (res, s') ->
-  forall (P : Procedure.id) (cd : code),
-    List.In (P, cd) res ->
-    List.In (P, cd) acc
-    \/ exists (e : expr) (s0 s1 : comp_env),
-        compile_proc C lbp scr P_labels P e s0 = Some (cd, s1)
-        /\ nlab s C <= nlab s0 C.
-Proof.
-elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
-- rewrite /Comp.ret. move=> [<- _] P cd HIn. by left.
-- rewrite /Comp.bind.
-  case E1: (compile_proc C lbp scr P_labels P0 e0 s) => [[cd0 s1]|];
-    last by [].
-  rewrite /=. move=> Hrest P cd HIn.
-  have [HInacc | [e [s0 [s2 [Hcp Hb]]]]] := IH _ _ _ _ Hrest _ _ HIn.
-  + case: HInacc => [Heq | HIn'].
-    * case: Heq => <- <-. right. exists e0, s, s1. by split.
-    * by left.
-  + right. exists e, s0, s2. split=> //.
-    have := compile_proc_mono E1. by lia.
-Qed.
-
 (* the fold only grows its accumulator *)
 Lemma compile_procedures_aux_mono (C : Component.id)
     (lbp scr : Pointer.t) (P_labels : NMap label)
@@ -972,30 +868,6 @@ elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
     last by [].
   rewrite /=. move=> Hrest x Hx.
   apply: (IH _ _ _ _ Hrest). by right.
-Qed.
-
-(* every source procedure lands in the output with a compile origin *)
-Lemma compile_procedures_aux_forward (C : Component.id)
-    (lbp scr : Pointer.t) (P_labels : NMap label)
-    (ps : list (Procedure.id * expr)) :
-  forall (acc : list (Procedure.id * code)) (s : comp_env)
-         (res : list (Procedure.id * code)) (s' : comp_env),
-  compile_procedures_aux C lbp scr P_labels acc ps s = Some (res, s') ->
-  forall (P : Procedure.id) (e : expr),
-    List.In (P, e) ps ->
-    exists cd s0 s1,
-      List.In (P, cd) res
-      /\ compile_proc C lbp scr P_labels P e s0 = Some (cd, s1).
-Proof.
-elim: ps => [|[P0 e0] ps IH] acc s res s' //=.
-rewrite /Comp.bind.
-case E1: (compile_proc C lbp scr P_labels P0 e0 s) => [[cd0 s1]|];
-  last by [].
-rewrite /=. move=> Hrest P e [Heq | HIn].
-- case: Heq => <- <-.
-  exists cd0, s, s1. split=> //.
-  apply: (compile_procedures_aux_mono Hrest). by left.
-- exact: (IH _ _ _ _ Hrest _ _ HIn).
 Qed.
 
 (* the output keys are a permutation of source keys and accumulator *)
@@ -1017,51 +889,6 @@ elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
   apply: (perm_trans H).
   rewrite /=.
   by rewrite -cat1s perm_catCA.
-Qed.
-
-(* every compiled procedure of a compiled program is nonempty *)
-Theorem compiled_proc_nonempty (p : Source.program)
-    (tp : Intermediate.program) :
-  compile_program p = Some tp ->
-  forall (C : Component.id) (Cprocs : NMap code) (P : Procedure.id)
-         (cd : code),
-    Intermediate.prog_procedures tp C = Some Cprocs ->
-    getm Cprocs P = Some cd ->
-    exists i0, List.nth_error cd 0 = Some i0.
-Proof.
-rewrite /compile_program /run /= /Comp.bind /=.
-case Eg: (gen_all_procedures_labels
-            (elementsm (Source.prog_procedures p)) init_env)
-  => [[labels cenv1]|]; last by [].
-rewrite /=.
-case Ec: (compile_components (gen_buffers (Source.prog_buffers p)) labels
-            (elementsm (Source.prog_procedures p)) cenv1)
-  => [[codeL cenv2]|]; last by rewrite /=.
-rewrite /=.
-have Hbase : forall (C : Component.id) (Cprocs : NMap code)
-                    (P : Procedure.id) (cd : code),
-    getm (mkfmap codeL) C = Some Cprocs ->
-    getm Cprocs P = Some cd ->
-    exists i0, List.nth_error cd 0 = Some i0.
-{ move=> C Cprocs P cd Hget HgetP.
-  have Hin_cs : C \in unzip1 (elementsm (Source.prog_procedures p)).
-  { case Ein: (C \in unzip1 (elementsm (Source.prog_procedures p))) => //.
-    have := compile_components_aux_untouched _ _ _ _ _ _ _ _ Ec (negbT Ein).
-    move: Hget. rewrite mkfmapE => -> //. }
-  have [Cprocs_src HIn] := mem_unzip1_In Hin_cs.
-  have Huniq_cs := uniq_unzip1_elementsm (Source.prog_procedures p).
-  have [plm [sC [cds [sC' [Hpls Hloc Hcp Hout]]]]]
-    := compile_components_aux_getC _ _ _ _ _ _ _ _ _ Ec Huniq_cs HIn.
-  have Ecp' : Cprocs = mkfmap cds.
-  { move: Hget. rewrite mkfmapE Hout. by move=> [->]. }
-  subst Cprocs.
-  move: HgetP. rewrite mkfmapE => /getm_def_In HInP.
-  have [HInnil | [e [s0 [s1 Hcpc]]]]
-    := compile_procedures_aux_origin Hcp HInP; first by [].
-  exact: compile_proc_shape0 Hcpc. }
-(* wrap_main REMOVED: the record is used as built *)
-rewrite /Comp.ret. move=> [<-] C Cprocs P cd /=.
-move=> Hget HgetP. exact: (Hbase _ _ _ _ Hget HgetP).
 Qed.
 
 (* ==================== compiled bodies end in a terminal ==================== *)
@@ -1165,153 +992,6 @@ rewrite /Comp.ret. move=> [<-] C Cprocs P cd /=.
 move=> Hget HgetP. left. exact: (Hbase _ _ _ _ Hget HgetP).
 Qed.
 
-(* origin strengthened with the entry label and its counter bound *)
-Theorem compiled_proc_origin' (p : Source.program)
-    (tp : Intermediate.program) :
-  compile_program p = Some tp ->
-  forall (C : Component.id) (Cprocs : NMap code) (P : Procedure.id)
-         (cd : code),
-    Intermediate.prog_procedures tp C = Some Cprocs ->
-    getm Cprocs P = Some cd ->
-    (exists plm (e : expr) (s0 s1 : comp_env) (pl : label),
-        [/\ compile_proc C (C, 0, 0%Z) (C, 1, 0%Z) plm P e s0
-              = Some (cd, s1),
-            getm plm P = Some pl,
-            pl < nlab s0 C
-          & forall P' l', getm plm P' = Some l' -> l' < nlab s0 C])
-    \/ exists lab, cd = [:: IConst (IInt 1) R_ONE; IJal lab; IHalt].
-Proof.
-rewrite /compile_program /run /= /Comp.bind /=.
-case Eg: (gen_all_procedures_labels
-            (elementsm (Source.prog_procedures p)) init_env)
-  => [[labels cenv1]|]; last by [].
-rewrite /=.
-case Ec: (compile_components (gen_buffers (Source.prog_buffers p)) labels
-            (elementsm (Source.prog_procedures p)) cenv1)
-  => [[codeL cenv2]|]; last by rewrite /=.
-rewrite /=.
-have Hbase : forall (C : Component.id) (Cprocs : NMap code)
-                    (P : Procedure.id) (cd : code),
-    getm (mkfmap codeL) C = Some Cprocs ->
-    getm Cprocs P = Some cd ->
-    exists plm (e : expr) (s0 s1 : comp_env) (pl : label),
-      [/\ compile_proc C (C, 0, 0%Z) (C, 1, 0%Z) plm P e s0
-            = Some (cd, s1),
-          getm plm P = Some pl,
-          pl < nlab s0 C
-        & forall P' l', getm plm P' = Some l' -> l' < nlab s0 C].
-{ move=> C Cprocs P cd Hget HgetP.
-  have Hin_cs : C \in unzip1 (elementsm (Source.prog_procedures p)).
-  { case Ein: (C \in unzip1 (elementsm (Source.prog_procedures p))) => //.
-    have := compile_components_aux_untouched _ _ _ _ _ _ _ _ Ec
-              (negbT Ein).
-    move: Hget. rewrite mkfmapE => -> //. }
-  have [Cprocs_src HIn] := mem_unzip1_In Hin_cs.
-  have Huniq_cs := uniq_unzip1_elementsm (Source.prog_procedures p).
-  have [plm [sC [cds [sC' [Hpls Hloc Hcp Hout]]]]]
-    := compile_components_aux_getC _ _ _ _ _ _ _ _ _ Ec Huniq_cs HIn.
-  have [plm' [Hpls' Hbound' _]]
-    := gen_all_labels_ok Eg Huniq_cs HIn.
-  have Eplm : plm' = plm.
-  { move: Hpls'. rewrite Hpls. by move=> [->]. }
-  subst plm'.
-  have Ecp' : Cprocs = mkfmap cds.
-  { move: Hget. rewrite mkfmapE Hout. by move=> [->]. }
-  subst Cprocs.
-  move: HgetP. rewrite mkfmapE => /getm_def_In HInP.
-  have [HInnil | [e [s0 [s1 [Hcpc Hmon]]]]]
-    := compile_procedures_aux_origin' Hcp HInP; first by [].
-  have [pl Hpl] := compile_proc_pl Hcpc.
-  have EnC : nlab sC C = nlab cenv1 C by rewrite /nlab Hloc.
-  exists plm, e, s0, s1, pl.
-  split=> //.
-  - have Hb := Hbound' _ _ Hpl. by lia.
-  - move=> P' l' Hg'.
-    have Hb := Hbound' _ _ Hg'. by lia. }
-(* wrap_main REMOVED: the record is used as built *)
-rewrite /Comp.ret. move=> [<-] C Cprocs P cd /=.
-move=> Hget HgetP. left. exact: (Hbase _ _ _ _ Hget HgetP).
-Qed.
-
-(* component-level origin: one shared label map per component, all its
-   values below a bound that every procedure's compile start dominates *)
-Theorem compiled_comp_origin (p : Source.program)
-    (tp : Intermediate.program) :
-  compile_program p = Some tp ->
-  forall (C : Component.id) (Cprocs : NMap code),
-    Intermediate.prog_procedures tp C = Some Cprocs ->
-    exists (plm : NMap label) (nb : nat),
-      [/\ (forall P' l', getm plm P' = Some l' -> l' < nb)
-        & forall (P : Procedure.id) (cd : code),
-            getm Cprocs P = Some cd ->
-            (exists (e : expr) (s0 s1 : comp_env) (pl : label),
-                [/\ compile_proc C (C, 0, 0%Z) (C, 1, 0%Z) plm P e s0
-                      = Some (cd, s1),
-                    getm plm P = Some pl
-                  & nb <= nlab s0 C])
-            \/ exists lab,
-                cd = [:: IConst (IInt 1) R_ONE; IJal lab; IHalt]
-                /\ getm plm Procedure.main = Some lab].
-Proof.
-rewrite /compile_program /run /= /Comp.bind /=.
-case Eg: (gen_all_procedures_labels
-            (elementsm (Source.prog_procedures p)) init_env)
-  => [[labels cenv1]|]; last by [].
-rewrite /=.
-case Ec: (compile_components (gen_buffers (Source.prog_buffers p)) labels
-            (elementsm (Source.prog_procedures p)) cenv1)
-  => [[codeL cenv2]|]; last by rewrite /=.
-rewrite /=.
-have Hbase : forall (C : Component.id) (Cprocs : NMap code),
-    getm (mkfmap codeL) C = Some Cprocs ->
-    exists (plm : NMap label) (nb : nat),
-      [/\ getm labels C = Some plm,
-          (forall P' l', getm plm P' = Some l' -> l' < nb)
-        & forall (P : Procedure.id) (cd : code),
-            getm Cprocs P = Some cd ->
-            exists (e : expr) (s0 s1 : comp_env) (pl : label),
-              [/\ compile_proc C (C, 0, 0%Z) (C, 1, 0%Z) plm P e s0
-                    = Some (cd, s1),
-                  getm plm P = Some pl
-                & nb <= nlab s0 C]].
-{ move=> C Cprocs Hget.
-  have Hin_cs : C \in unzip1 (elementsm (Source.prog_procedures p)).
-  { case Ein: (C \in unzip1 (elementsm (Source.prog_procedures p))) => //.
-    have := compile_components_aux_untouched _ _ _ _ _ _ _ _ Ec
-              (negbT Ein).
-    move: Hget. rewrite mkfmapE => -> //. }
-  have [Cprocs_src HIn] := mem_unzip1_In Hin_cs.
-  have Huniq_cs := uniq_unzip1_elementsm (Source.prog_procedures p).
-  have [plm [sC [cds [sC' [Hpls Hloc Hcp Hout]]]]]
-    := compile_components_aux_getC _ _ _ _ _ _ _ _ _ Ec Huniq_cs HIn.
-  have [plm' [Hpls' Hbound' _]]
-    := gen_all_labels_ok Eg Huniq_cs HIn.
-  have Eplm : plm' = plm.
-  { move: Hpls'. rewrite Hpls. by move=> [->]. }
-  subst plm'.
-  have EnC : nlab sC C = nlab cenv1 C by rewrite /nlab Hloc.
-  have Ecp' : Cprocs = mkfmap cds.
-  { move: Hget. rewrite mkfmapE Hout. by move=> [->]. }
-  subst Cprocs.
-  exists plm, (nlab cenv1 C).
-  split; [exact: Hpls | exact: Hbound' |].
-  move=> P cd HgetP.
-  move: HgetP. rewrite mkfmapE => /getm_def_In HInP.
-  have [HInnil | [e [s0 [s1 [Hcpc Hmon]]]]]
-    := compile_procedures_aux_origin' Hcp HInP; first by [].
-  have [pl Hpl] := compile_proc_pl Hcpc.
-  exists e, s0, s1, pl.
-  split=> //.
-  by lia. }
-(* wrap_main REMOVED: the record is used as built *)
-rewrite /Comp.ret. move=> [<-] C Cprocs /=.
-move=> Hget.
-have [plm [nb [_ Hb Hper]]] := Hbase _ _ Hget.
-exists plm, nb.
-split; first exact: Hb.
-move=> P cd HgetP. left. exact: (Hper _ _ HgetP).
-Qed.
-
 (* compiled bodies have a successor after every non-terminal
    instruction (discharges Onext) *)
 Theorem compiled_proc_terminal (p : Source.program)
@@ -1373,171 +1053,3 @@ Definition ra_free_b (i : instr) : bool :=
 Definition ra_free_code (c : code) : Prop :=
   List.Forall (fun i => ra_free_b i = true) c.
 
-Lemma ra_free_cat (c1 c2 : code) :
-  ra_free_code c1 -> ra_free_code c2 -> ra_free_code (c1 ++ c2).
-Proof. move=> H1 H2. apply/List.Forall_app. by split. Qed.
-
-Lemma compile_expr_ra (C : Component.id) (lbp scr : Pointer.t)
-    (P_labels : NMap label) (e : expr) :
-  forall (s : comp_env) (c : code) (s' : comp_env),
-  compile_expr C lbp scr P_labels e s = Some (c, s') ->
-  ra_free_code c.
-Proof.
-elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
-           |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
-  case: v Hc => [i|p|] //= [<- _].
-  by repeat constructor.
-- (* E_arg *)
-  move: Hc => /= [<- _].
-  by repeat constructor.
-- (* E_local *)
-  move: Hc => /= [<- _].
-  by repeat constructor.
-- (* E_binop *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
-  rewrite /=.
-  case E2: (compile_expr C lbp scr P_labels e2 s1) => [[c2 s2]|]; last by [].
-  rewrite /=. move=> [<- _].
-  have Hc1 := IH1 _ _ _ E1.
-  have Hc2 := IH2 _ _ _ E2.
-  by rewrite /push /pop /=;
-     repeat first [ apply List.Forall_nil
-                  | constructor; first by []
-                  | exact: Hc1 | exact: Hc2
-                  | apply: ra_free_cat ].
-- (* E_seq *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
-  rewrite /=.
-  case E2: (compile_expr C lbp scr P_labels e2 s1) => [[c2 s2]|]; last by [].
-  rewrite /=. move=> [<- _].
-  exact: (ra_free_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
-  rewrite /=.
-  case E2: (compile_expr C lbp scr P_labels e2 s1) => [[c2 s2]|]; last by [].
-  rewrite /=.
-  case E3: (compile_expr C lbp scr P_labels e3 s2) => [[c3 s3]|]; last by [].
-  rewrite /=.
-  case E4: (fresh_label C s3) => [[lconseq s4]|]; last by [].
-  rewrite /=.
-  case E5: (fresh_label C s4) => [[lend s5]|]; last by [].
-  rewrite /=. move=> [<- _].
-  have Hc1 := IH1 _ _ _ E1.
-  have Hc2 := IH2 _ _ _ E2.
-  have Hc3 := IH3 _ _ _ E3.
-  by rewrite /=;
-     repeat first [ apply List.Forall_nil
-                  | constructor; first by []
-                  | exact: Hc1 | exact: Hc2 | exact: Hc3
-                  | apply: ra_free_cat ].
-- (* E_alloc *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|]; last by [].
-  rewrite /=. move=> [<- _].
-  have Hc1 := IH _ _ _ E1.
-  by repeat first [ apply List.Forall_nil
-                  | constructor; first by []
-                  | exact: Hc1
-                  | apply: ra_free_cat ].
-- (* E_deref *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|]; last by [].
-  rewrite /=. move=> [<- _].
-  have Hc1 := IH _ _ _ E1.
-  by repeat first [ apply List.Forall_nil
-                  | constructor; first by []
-                  | exact: Hc1
-                  | apply: ra_free_cat ].
-- (* E_assign *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
-  rewrite /=.
-  case E2: (compile_expr C lbp scr P_labels e2 s1) => [[c2 s2]|]; last by [].
-  rewrite /=. move=> [<- _].
-  have Hc1 := IH1 _ _ _ E1.
-  have Hc2 := IH2 _ _ _ E2.
-  by rewrite /push /pop /=;
-     repeat first [ apply List.Forall_nil
-                  | constructor; first by []
-                  | exact: Hc1 | exact: Hc2
-                  | apply: ra_free_cat ].
-- (* E_call *)
-  move: Hc; rewrite /= /Comp.bind /Comp.ret.
-  case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|]; last by [].
-  rewrite /=.
-  have Hc1 := IH _ _ _ E1.
-  case Heqb: (Component.eqb C' C).
-  + rewrite /find_proc_label /Comp.lift.
-    case EL: (getm P_labels P') => [tl|]; last by [].
-    rewrite /=. move=> [<- _].
-    by rewrite /push /pop /=;
-       repeat first [ apply List.Forall_nil
-                    | constructor; first by []
-                    | exact: Hc1
-                    | apply: ra_free_cat ].
-  + move=> [<- _].
-    by rewrite /push /pop /load_arg /store_arg /=;
-       repeat first [ apply List.Forall_nil
-                    | constructor; first by []
-                    | exact: Hc1
-                    | apply: ra_free_cat ].
-- (* E_exit *)
-  move: Hc => /= [<- _].
-  by repeat constructor.
-Qed.
-
-Lemma compile_proc_ra (C : Component.id) (lbp scr : Pointer.t)
-    (P_labels : NMap label) (P : Procedure.id) (e : expr)
-    (s : comp_env) (c : code) (s' : comp_env) :
-  compile_proc C lbp scr P_labels P e s = Some (c, s') ->
-  ra_free_code c.
-Proof.
-rewrite /compile_proc /find_proc_label /= /Comp.bind /Comp.lift /Comp.ret.
-case EL: (getm P_labels P) => [pl|]; last by [].
-rewrite /=.
-case E2: (fresh_label C s) => [[lmain s2]|]; last by [].
-rewrite /=.
-case E3: (fresh_label C s2) => [[lreturn s3]|]; last by [].
-rewrite /=.
-case E4: (compile_expr C lbp scr P_labels e s3) => [[pcode s4]|]; last by [].
-rewrite /=. move=> [<- _].
-have Hc4 := compile_expr_ra E4.
-case Hm: (Component.eqb C Component.main && Procedure.eqb P Procedure.main)
-  => /=.
-- case Hf: (immediately_final e) => /=;
-    by rewrite /push /pop /load_arg /store_arg /=;
-       repeat first [ apply List.Forall_nil
-                    | constructor; first by []
-                    | exact: Hc4
-                    | apply: ra_free_cat ].
-- by rewrite /push /pop /load_arg /store_arg /=;
-     repeat first [ apply List.Forall_nil
-                  | constructor; first by []
-                  | exact: Hc4
-                  | apply: ra_free_cat ].
-Qed.
-
-(* every instruction of every compiled procedure body is R_RA-free
-   (discharges [sr_ra] for compiled sides) *)
-Theorem compiled_ra_free (p : Source.program) (tp : Intermediate.program) :
-  compile_program p = Some tp ->
-  forall (C : Component.id) (Cprocs : NMap code) (P : Procedure.id)
-         (cd : code) (o : nat) (i : instr),
-    Intermediate.prog_procedures tp C = Some Cprocs ->
-    getm Cprocs P = Some cd ->
-    List.nth_error cd o = Some i ->
-    ra_free_b i = true.
-Proof.
-move=> Hcomp C Cprocs P cd o i Hget HgetP Hnth.
-have Hin := List.nth_error_In _ _ Hnth.
-have [[plm [e [s0 [s1 Hcpc]]]] | [lab Ecd]]
-  := compiled_proc_origin Hcomp Hget HgetP.
-- have Hra := compile_proc_ra Hcpc.
-  exact: (proj1 (List.Forall_forall _ _) Hra i Hin).
-- rewrite Ecd in Hin.
-  by case: Hin => [<-|[<-|[<-|//]]].
-Qed.

@@ -73,39 +73,6 @@ Fixpoint ksize (k : cont) : nat :=
 Definition measure (s : S.CS.state) : nat :=
   esize (S.CS.s_expr s) + ksize (S.CS.s_cont s).
 
-(* Every administrative step decreases the measure. *)
-Lemma measure_descend_binop1 op e1 e2 k :
-  esize e1 + ksize (Kbinop1 op e2 k) < esize (E_binop op e1 e2) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_seq1 e1 e2 k :
-  esize e1 + ksize (Kseq e2 k) < esize (E_seq e1 e2) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_seq2 v e2 k :
-  esize e2 + ksize k < esize (E_val v) + ksize (Kseq e2 k).
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_if1 e1 e2 e3 k :
-  esize e1 + ksize (Kif e2 e3 k) < esize (E_if e1 e2 e3) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_alloc1 e k :
-  esize e + ksize (Kalloc k) < esize (E_alloc e) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_deref1 e k :
-  esize e + ksize (Kderef k) < esize (E_deref e) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_assign1 e1 e2 k :
-  esize e2 + ksize (Kassign1 e1 k) < esize (E_assign e1 e2) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
-Lemma measure_descend_initcall C' P' e k :
-  esize e + ksize (Kcall C' P' k) < esize (E_call C' P' e) + ksize k.
-Proof. rewrite /=. lia. Qed.
-
 (* ==================== frame bookkeeping ==================== *)
 
 (* canonical per-component pointers *)
@@ -526,15 +493,6 @@ Arguments ei_stack {p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot tem
 Arguments ei_mainnf {p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm c rest s1 s2 cap}.
 
 (* ==================== diagram plumbing: descend steps ==================== *)
-
-(* code_at is invariant under concatenation reassociation *)
-Lemma code_at_reassoc4 {G1 : global_env} {pc} (p1 a b c t : code) :
-  code_at G1 pc (p1 ++ (a ++ (b ++ c)) ++ t) ->
-  code_at G1 pc (p1 ++ a ++ b ++ c ++ t).
-Proof.
-  suff -> : p1 ++ a ++ b ++ c ++ t = p1 ++ (a ++ (b ++ c)) ++ t by [].
-  by rewrite -!catA.
-Qed.
 
 (* KS_Binop1: descending into e1 re-anchors the pc at c1 and folds the rest
    of the binop code into the continuation. Zero target steps. *)
@@ -976,14 +934,6 @@ Proof.
   - by intros; eapply CMJ_base; eauto.
   - by intros; eapply CMJ_label; eauto.
   - by intros; eapply CMJ_bnzjoin; eauto.
-Qed.
-
-Lemma cont_match_rle α α' C plm k rest temps :
-  rle α α' ->
-  cont_match α C plm k rest temps ->
-  cont_match α' C plm k rest temps.
-Proof.
-  move=> Hrle. exact: (proj1 (cont_match_rle_all _ _ C plm Hrle)).
 Qed.
 
 Lemma cont_matchJ_rle α α' C plm k rest temps :

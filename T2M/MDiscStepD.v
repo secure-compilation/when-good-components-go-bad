@@ -641,27 +641,4 @@ Proof.
     * exact: (di_chain2 HI).
 Qed.
 
-Lemma disc_step_alloc :
-  forall mem mem' regs pc tg c pct rsize rptr size ptr,
-    Transitional.executing cde pc (TrAlloc rptr rsize) tg c ->
-    Transitional.check_pc cde pc tg ->
-    tvtag (Transitional.Register.get rsize regs) = Other ->
-    Transitional.val (Transitional.Register.get rsize regs) = Int size ->
-    (size > 0)%Z ->
-    Transitional.Memory.alloc mem c (Z.to_nat size) = Some (mem', ptr) ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem', Transitional.Register.set rptr (Ptr ptr) Other regs,
-       Pointer.inc pc, pct).
-Proof.
-  move=> mem mem' regs pc tg c pct rsize rptr size ptr Hex Hpc Htg
-         Hval Hpos Halloc [cur [chain [F [cs HI]]]].
-  case: (dinv_step_alloc Hex Hpc Htg Hval Hpos Halloc HI)
-    => [[_ HI']|[cm [_ _ _ HI']]].
-  - by exists cur, chain, F, cs.
-  - by exists (Some (Transitional.Memory.nextblock cm)), chain,
-       (fun c0 => if Nat.eqb c0 c
-                  then Transitional.Memory.nextblock cm :: F c0
-                  else F c0), cs.
-Qed.
-
 End DiscStepD.

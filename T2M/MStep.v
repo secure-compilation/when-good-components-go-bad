@@ -1597,28 +1597,6 @@ have Hcc : forall pr : Intermediate.program,
 case: (In_cat HIn) => H; exact: Hcc H.
 Qed.
 
-(* updating a DATA address never disturbs the code region *)
-Lemma mm_code_setm (mmem : {fmap mword mt -> matom}) (addr : mword mt)
-    (mcold mcnew : matom) :
-  (forall w v, encode_code codeW pc0 w = Some v -> mmem w = Some v) ->
-  mmem addr = Some mcold ->
-  is_code (taga mcold) = false ->
-  forall w v, encode_code codeW pc0 w = Some v ->
-    setm mmem addr mcnew w = Some v.
-Proof.
-move=> Hcode Hold Hicf w v Hw.
-rewrite setmE.
-case: (altP (w =P addr)) => [Ew|_]; last exact: Hcode.
-exfalso.
-subst w.
-have Hv := Hcode _ _ Hw.
-have Emc : v = mcold by move: Hv; rewrite Hold => -[].
-have [n [i [t [Hn Htag]]]] := encode_code_tag Hw.
-have Hicc := codeW_is_code Hn.
-rewrite -Emc Htag Hicc in Hicf.
-by discriminate Hicf.
-Qed.
-
 Lemma sim_load (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
     (tpc : Pointer.t) (tpct : Transitional.pc_tag)

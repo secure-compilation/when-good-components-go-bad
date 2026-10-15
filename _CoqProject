@@ -156,7 +156,6 @@ MicroPolicies/Recomposition/RecompositionTop.v
 # T -> Merged simulation has no gps/R_RA reconciliation to do.
 # RSC_MD_MP.v (the functor) is independent of all of this.
 MicroPolicies/Recomposition/LinearizeMerged.v
-MicroPolicies/Recomposition/RecompositionWrapper.v
 MicroPolicies/RSC_MD_MP.v
 MicroPolicies/Recomposition/RSC_ME_MP.v
 MicroPolicies/Recomposition/RSC_ME_MP_Faithful.v

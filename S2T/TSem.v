@@ -85,19 +85,6 @@ Definition has_next (cde : code) (pc : Pointer.t) : bool :=
   | None => false
   end.
 
-Lemma has_nextP cde pc tg :
-  has_next cde pc -> Transitional.check_pc cde pc tg.
-Proof.
-  rewrite /has_next.
-  case E: (cde (Pointer.component (Pointer.inc pc))) => [C_code|] //.
-  case E0: (0 <=? Pointer.offset (Pointer.inc pc))%Z => //.
-  case E1: (nth_error C_code _) => [[i tni]|] // _.
-  apply: (@PcFall cde pc tg i tni (Pointer.component (Pointer.inc pc))).
-  exists C_code. split; first by []. split; first by [].
-  split; last exact: E1.
-  by move: E0 => /Z.leb_le; lia.
-Qed.
-
 Lemma has_nextPn cde pc tg :
   Transitional.check_pc cde pc tg -> has_next cde pc.
 Proof.

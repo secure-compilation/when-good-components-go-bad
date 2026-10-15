@@ -1411,31 +1411,6 @@ Proof.
       -- exact: (di_chain2 HI).
 Qed.
 
-Lemma disc_step_store :
-  forall mem mem' regs pc tg c pct ptr r1 r2 vt,
-    Transitional.executing cde pc (TrStore r1 r2) tg c ->
-    Transitional.check_pc cde pc tg ->
-    tvtag (Transitional.Register.get r1 regs) = Other ->
-    Transitional.val (Transitional.Register.get r1 regs) = Ptr ptr ->
-    Pointer.component ptr = c ->
-    Transitional.Register.get_tag r2 regs = Some vt ->
-    Transitional.Memory.store mem ptr
-      (Transitional.Register.get r2 regs,
-       {| vtag := vt; color := c; entry := None; is_code := false |})
-      = Some mem' ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem',
-       Transitional.Register.set r2
-         (Transitional.val (Transitional.Register.get r2 regs))
-         (moved_tag vt) regs,
-       Pointer.inc pc, pct).
-Proof.
-  move=> mem mem' regs pc tg c pct ptr r1 r2 vt Hex Hpc Htg1 Hval1
-         Hcptr Hgt2 Hstore [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_store Hex Hpc Htg1 Hval1 Hcptr Hgt2 Hstore HI).
-Qed.
-
 Lemma dinv_step_load :
   forall mem mem' regs pc tg c pct r1 r2 ptr v cur chain F cs,
     Transitional.executing cde pc (TrLoad r1 r2) tg c ->
@@ -3639,30 +3614,6 @@ Proof.
     * exact: (di_chain2 HI).
 Qed.
 
-Lemma disc_step_load :
-  forall mem mem' regs pc tg c pct r1 r2 ptr v,
-    Transitional.executing cde pc (TrLoad r1 r2) tg c ->
-    Transitional.check_pc cde pc tg ->
-    tvtag (Transitional.Register.get r1 regs) = Other ->
-    Transitional.val (Transitional.Register.get r1 regs) = Ptr ptr ->
-    Pointer.component ptr = c ->
-    Transitional.Memory.load mem ptr = Some v ->
-    Transitional.Memory.store mem ptr
-      ({| Transitional.val := Transitional.val v.1;
-          tvtag := moved_tag (tvtag v.1) |},
-       {| vtag := moved_tag (tvtag v.1);
-          color := c; entry := None; is_code := false |}) = Some mem' ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem',
-       Transitional.Register.set r2 (Transitional.val v.1) (tvtag v.1) regs,
-       Pointer.inc pc, pct).
-Proof.
-  move=> mem mem' regs pc tg c pct r1 r2 ptr cl Hex Hpc Htg1 Hval1
-         Hcptr Hload Hwb [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_load Hex Hpc Htg1 Hval1 Hcptr Hload Hwb HI).
-Qed.
-
 Lemma dinv_step_jal :
   forall mem regs pc tg c pct pc' l cur chain F cs,
     Transitional.executing cde pc (TrJalNat l) tg c ->
@@ -3849,21 +3800,6 @@ Proof.
           exact: (di_bodycarg HI Ev Hekv).
        ++ by rewrite Hiw.
     -- exact: (di_chain2 HI HA0).
-Qed.
-
-Lemma disc_step_jal :
-  forall mem regs pc tg c pct pc' l,
-    Transitional.executing cde pc (TrJalNat l) tg c ->
-    Transitional.find_label_in_comp cde c l = Some pc' ->
-    Transitional.check_pc_jump cde tg pc' c ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem,
-       Transitional.Register.set R_RA (Ptr (Pointer.inc pc)) InternalJump regs,
-       pc', pct).
-Proof.
-  move=> mem regs pc tg c pct pc' l Hex Hfl Hcj [cur [chain [F [cs HI]]]].
-  have [b [cvnew [Hcur HI']]] := dinv_step_jal Hex Hfl Hcj HI.
-  by eexists _, _, _, _; exact: HI'.
 Qed.
 
 Lemma dinv_step_jump :
@@ -4053,21 +3989,6 @@ Proof.
     have HH := di_chain2 HI HA0'.
     rewrite Echain /= in HH.
     exact: HH.
-Qed.
-
-Lemma disc_step_jump :
-  forall mem regs pc tg c pct pc' r,
-    Transitional.executing cde pc (TrJump r) tg c ->
-    Transitional.Register.get r regs = MVal InternalJump (Ptr pc') ->
-    Pointer.component pc' = Pointer.component pc ->
-    Transitional.check_pc_jump cde tg pc' c ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, regs, pc', pct).
-Proof.
-  move=> mem regs pc tg c pct pc' r Hex Hget Hcomp Hcj
-         [cur [chain [F [cs HI]]]].
-  have [A [chain' [_ _ _ HI']]] := dinv_step_jump Hex Hget Hcomp Hcj HI.
-  by eexists _, _, _, _; exact: HI'.
 Qed.
 
 Lemma dinv_step_jumpret :
@@ -4338,24 +4259,6 @@ Proof.
     exact: HH.
 Qed.
 
-Lemma disc_step_jumpret :
-  forall mem regs pc tg c pct pc' r rcomval,
-    Transitional.executing cde pc (TrJump r) tg c ->
-    Transitional.val (Transitional.Register.get r regs) = Ptr pc' ->
-    Pointer.component pc' <> Pointer.component pc ->
-    Some pct = value_to_pc_tag (tvtag (Transitional.Register.get r regs)) ->
-    Transitional.val (Transitional.Register.get R_COM regs) = Int rcomval ->
-    Transitional.check_pc_jump cde tg pc' (Pointer.component pc') ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, TS.invalidate_ret regs, pc', dec_pc_tag pct).
-Proof.
-  move=> mem regs pc tg c pct pc' r rcomval Hex Hval Hcomp Hpct Hcom
-         Hcj [cur [chain [F [cs HI]]]].
-  have [A [chain' [_ _ _ HI']]] :=
-    dinv_step_jumpret Hex Hval Hcomp Hpct Hcom Hcj HI.
-  by eexists _, _, _, _; exact: HI'.
-Qed.
-
 Lemma dinv_step_call :
   forall mem regs pc tg c pct pc' i tni c' pid call_arg n cur chain F cs,
     Transitional.executing cde pc (TrJalProc (c', pid)) tg c ->
@@ -4596,28 +4499,6 @@ Proof.
           apply: nth1cargP.
           move: Eg6. by rewrite Hekv.
     -- exact: (di_chain2 HI HA0).
-Qed.
-
-Lemma disc_step_call :
-  forall mem regs pc tg c pct pc' i tni c' pid call_arg n,
-    Transitional.executing cde pc (TrJalProc (c', pid)) tg c ->
-    Transitional.find_plabel_in_code cde c' pid = Some pc' ->
-    Transitional.executing cde pc' i tni c' ->
-    c <> c' ->
-    Transitional.check_pc_call c tni pid ->
-    pct = Level n ->
-    Transitional.val (Transitional.Register.get R_COM regs) = Int call_arg ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem,
-       Transitional.Register.set R_RA (Ptr (Pointer.inc pc)) (Ret n)
-         (Transitional.Register.invalidate regs),
-       pc', inc_pc_tag pct).
-Proof.
-  move=> mem regs pc tg c pct pc' i tni c' pid call_arg n
-         Hex Hfl Hex' Hneq Hcpc Epct Hcom [cur [chain [F [cs HI]]]].
-  have [b [cvnew [Hcur HI']]] :=
-    dinv_step_call Hex Hfl Hex' Hneq Hcpc Epct Hcom HI.
-  by eexists _, _, _, _; exact: HI'.
 Qed.
 
 End DiscStepC.

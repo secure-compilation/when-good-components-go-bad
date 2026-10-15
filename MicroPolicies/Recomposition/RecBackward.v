@@ -312,21 +312,6 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     move=> [Htt _] Hr. subst t'. by exists v'.
   Qed.
 
-  (* Memory-operand reflection (non-code, relevant-colour cell): the merged read reflects to a
-     strong-side read.  Discharges LOAD/STORE [mem w1] [do!]s (the [is_other tp] gate forces the
-     address tag [Other], so the addresses coincide, and the accessed cell is non-code colour-c). *)
-  Lemma mem_data_reflect : forall i M s s3 w d3,
-    memory_match i M s s3 ->
-    is_code (taga d3) = false -> is_relevant_comp i (color (taga d3)) ->
-    mem s3 w = Some d3 ->
-    exists d', mem s w = Some d'.
-  Proof.
-    move=> i M s s3 w d3 Hmm Hncode Hrel Hm3.
-    have Hn : ~ is_code (taga d3) by rewrite Hncode.
-    have [d' [_ Hm]] := proj1 (Hmm w d3 Hn Hrel) Hm3.
-    by exists d'.
-  Qed.
-
   (* ===== Runtime code-region immutability (the invariant that makes stepf_reflect TRUE) =====
      The merged run never overwrites its code region (the LRC/Merged STORE rule refuses [is_code td],
      LOAD refuses [is_code ts] in Merged, alloc lands above the code) — so the code cells stay equal
@@ -334,192 +319,6 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
      PROVEN (no new hypothesis): initial = [encode_code] (unionm prefers it), preserved per step. *)
   Definition code_present (codemem : memory) (s : state) : Prop :=
     forall w v0, codemem w = Some v0 -> exists v, mem s w = Some v /\ is_code (taga v).
-
-  Lemma code_present_initial : forall cde pb pi,
-    (forall w v, encode_code cde (size (initial_memory (mt := mt) pb)) w = Some v -> is_code (taga v)) ->
-    code_present (encode_code cde (size (initial_memory (mt := mt) pb)))
-                 (initial_state cde pb pi).
-  Proof.
-    move=> cde pb pi Hcode w v0 Henc.
-    have Hmem : mem (initial_state cde pb pi)
-              = unionm (encode_code cde (size (initial_memory (mt := mt) pb)))
-                       (initial_memory (mt := mt) pb) by [].
-    exists v0; split; [ by rewrite Hmem unionmE Henc | exact: (Hcode _ _ Henc) ].
-  Qed.
-
-  (* Generic (any-event) mem-unchanged extractor: updates without Mem ops leave memory intact. *)
-  Lemma nsuap_nomw_mem : forall (s s' : state) (kiv : k_ivec lrc_tags) updts pc' ev,
-    @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit s kiv updts pc' = Some (s', ev) ->
-    (forall w v, ~ List.In (MemWrite w v) updts) -> (forall w, ~ List.In (MemRead w) updts) ->
-    mem s' = mem s.
-  Proof.
-    move=> s s' kiv updts pc' ev.
-    rewrite /next_state_updates_and_pc /next_state.
-    case: (evi s) => [evinp|] //=.
-    case: (LRC.transfer _ evinp) => [ov_ev|] //=.
-    case: (op _) ov_ev => [op0|] ov_ev //=.
-    case: ov_ev => ov0 ev0.
-    case Edsu: (next_state_do_updates s (tr ov0) updts) => [st0|] //=.
-    move=> [= Hs _] Hnomw Hnomr. subst s'.
-    by rewrite /= (ndsu_mem_noM Hnomw Hnomr Edsu).
-  Qed.
-
-  (* Preservation of [code_present] by any LRC step (hence by [step_me] via [step_me_mp], hence by
-     every [sem]/[sem''] step).  OP/jump/bnz: memory unchanged; jal: identity MemRead; LOAD: the
-     re-tag keeps [is_code] ([switch_val_iscode]); STORE: the written cell is non-code so it misses
-     the code region; alloc: [unionm (mem s) blk] keeps the already-present code cells. *)
-  Lemma code_present_step_mp : forall cm s s' ev,
-    step_mp (NC := NC) s s' ev -> code_present cm s -> code_present cm s'.
-  Proof.
-    move=> cm s s' ev Hstep Hcp w v0 Hcm.
-    have [v [Hsw Hcode]] := Hcp w v0 Hcm.
-    case: ev Hstep => [e|] Hstep.
-    { (* event step (Some e): jump/jal leave memory unchanged; the rest cannot emit an event. *)
-      inversion Hstep.
-      - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* jump *) unfold mvec in NEXT.
-        have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] := nsuap_event_inv NEXT.
-        have Hmm : mem s' = mem s.
-        { rewrite Hmem (ndsu_mem_noM (st := s) _ _ Hdsu); [ by rewrite ST | nomw | nomr ]. }
-        exists v; rewrite Hmm; by [].
-      - (* bnz *) unfold mvec, pc' in NEXT.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* jal *) unfold mvec, pc' in NEXT.
-        have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] := nsuap_event_inv NEXT.
-        have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
-        have Hhead := jal_head_tret Htr.
-        have Hmm : mem s' = mem s.
-        { rewrite Hmem.
-          apply: (@mem_unchanged_jal s st0 (pc0+1)%w vret tret (nseq 12 R) (tr ov0)
-                    (RegWrite ra (pc0+1)%w :: reg_clear_read) Hmemcell Hhead _ _ Hdsu); [ nomw | nomr ]. }
-        exists v; rewrite Hmm; by [].
-      - (* syscall (alloc): unionm (mem s) blk keeps code cells *)
-        have Halloc := run_syscall_alloc GETCALL CALL.
-        move: Halloc. rewrite /alloc_fun. cbv zeta. move=> H.
-        case: (obind_inv H) => ra_val [Hra {}H].
-        case: (obind_inv H) => u1 [_ {}H].
-        case: (obind_inv H) => ret_addr [Hret {}H].
-        case: (obind_inv H) => uret [Hretchk {}H].
-        move: Hretchk; case: ifP => Hretcol Hretchk; last by []; clear uret Hretchk.
-        case: (obind_inv H) => sz [Hsz {}H].
-        case: (obind_inv H) => u2 [_ {}H].
-        case: (obind_inv H) => len [Hlen {}H].
-        case: (obind_inv H) => u3 [_ {}H].
-        move: H. case: ifP => // _ H.
-        case: (obind_inv H) => addr [Haddr {}H].
-        case: (obind_inv H) => regs' [Hregs' {}H].
-        move: H => [= HSt]. subst s'.
-        exists v; split; [ rewrite /= unionmE Hsw; reflexivity | exact Hcode ]. }
-    inversion Hstep.
-    - (* nop *) rewrite /next_state_updates in NEXT.
-      have Hmm : mem s' = mem s by apply: (nsuap_nomw_mem NEXT); [ nomw | nomr ].
-      exists v; rewrite Hmm; by [].
-    - (* const *) rewrite /next_state_updates in NEXT.
-      have Hmm : mem s' = mem s by apply: (nsuap_nomw_mem NEXT); [ nomw | nomr ].
-      exists v; rewrite Hmm; by [].
-    - (* mov *) rewrite /next_state_updates in NEXT.
-      have Hmm : mem s' = mem s by apply: (nsuap_nomw_mem NEXT); [ nomw | nomr ].
-      exists v; rewrite Hmm; by [].
-    - (* binop *) rewrite /next_state_updates in NEXT.
-      have Hmm : mem s' = mem s by apply: (nsuap_nomw_mem NEXT); [ nomw | nomr ].
-      exists v; rewrite Hmm; by [].
-    - (* load: the re-tag keeps is_code *)
-      have [Hw0 [Hmem' [Htag Hguard]]] := weak_load_facts ST MEM1 NEXT.
-      case: (w =P w1) => [Hwe | Hne].
-      + subst w.
-        exists (w2 @ (switch_val t2 (moved_tag (vtag t2))).1).
-        have Hv : taga v = t2 by move: Hsw; rewrite Hw0 => -[= <-].
-        split; [ by rewrite Hmem' setmE eqxx | by rewrite /= switch_val_iscode -Hv ].
-      + exists v; split; [ by rewrite Hmem' setmE (introF eqP Hne) | exact Hcode ].
-    - (* store: the written cell is non-code, so it is not a code-region address *)
-      have [vnew [oldd [Hw0 [Hmem' [Htag [Hcolv [Hcolold [Hncv [Hncold He]]]]]]]]]
-        := weak_store_facts ST OLD NEXT.
-      case: (w =P w1) => [Hwe | Hne].
-      + exfalso. move: Hsw; rewrite Hwe Hw0 => -[= Hv]; subst v. exact: (Hncold Hcode).
-      + exists v; split; [ by rewrite Hmem' setmE (introF eqP Hne) | exact Hcode ].
-    - (* jump: memory unchanged *)
-      unfold mvec in NEXT.
-      have Hmm : mem s' = mem s by apply: (nsuap_nomw_mem NEXT); [ nomw | nomr ].
-      exists v; rewrite Hmm; by [].
-    - (* bnz: memory unchanged *)
-      unfold mvec, pc' in NEXT.
-      have Hmm : mem s' = mem s by apply: (nsuap_nomw_mem NEXT); [ nomw | nomr ].
-      exists v; rewrite Hmm; by [].
-    - (* jal: identity MemRead, memory unchanged *)
-      unfold mvec, pc' in NEXT.
-      have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
-      have Hmm : mem s' = mem s.
-      { move: NEXT. rewrite /next_state_updates_and_pc /next_state.
-        case Hevi: (evi s) => [evinp|] //=.
-        case Hpc'2: (mem s (swcast imm)) => [ni|]; rewrite /=; move=> Hgoal;
-          ( case: (obind_inv Hgoal) => ov_ev [Htr Hk];
-            case: ov_ev Htr Hk => ov ev Htr Hk;
-            have Hhead := jal_head_tret Htr;
-            move: Hk => /= Hk;
-            case: (obind_inv Hk) => st' [Hndsu Hfin];
-            move: Hfin => [= Hfins _]; rewrite -Hfins /=;
-            apply: (@mem_unchanged_jal s st' (pc0+1)%w vret tret (nseq 12 R) (tr ov)
-                      (RegWrite ra (pc0+1)%w :: reg_clear_read) Hmemcell Hhead _ _ Hndsu);
-            [ by (move=> w' v' Hin; cbn in Hin;
-                  repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin)
-            | by (move=> w' Hin; cbn in Hin;
-                  repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ] ). }
-      exists v; rewrite Hmm; by [].
-    - (* syscall (alloc): unionm (mem s) blk keeps the already-present code cells *)
-      have Halloc := run_syscall_alloc GETCALL CALL.
-      move: Halloc. rewrite /alloc_fun. cbv zeta. move=> H.
-      case: (obind_inv H) => ra_val [Hra {}H].
-      case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => ret_addr [Hret {}H].
-      case: (obind_inv H) => uret [Hretchk {}H].
-      move: Hretchk; case: ifP => Hretcol Hretchk; last by []; clear uret Hretchk.
-      case: (obind_inv H) => sz [Hsz {}H].
-      case: (obind_inv H) => u2 [_ {}H].
-      case: (obind_inv H) => len [Hlen {}H].
-      case: (obind_inv H) => u3 [_ {}H].
-      move: H. case: ifP => // _ H.
-      case: (obind_inv H) => addr [Haddr {}H].
-      case: (obind_inv H) => regs' [Hregs' {}H].
-      move: H => [= HSt]. subst s'.
-      exists v; split; [ rewrite /= unionmE Hsw; reflexivity | exact Hcode ].
-  Qed.
-
-  (* A [sem''] step preserves [code_present] (via [step_me_mp] + [code_present_step_mp]). *)
-  Lemma sem''_step_code_present : forall cm s s' t,
-    Step sem'' s t s' -> code_present cm s -> code_present cm s'.
-  Proof.
-    move=> cm s s' t Hstep. simpl in Hstep. destruct t as [|e [|? ?]].
-    - exact: (code_present_step_mp (step_me_mp Hstep)).
-    - exact: (code_present_step_mp (step_me_mp Hstep)).
-    - by case: Hstep.
-  Qed.
-
-  (* Reachability: every state reachable in [sem''] keeps its code region [encode_code]-shaped. *)
-  Lemma reachable_code_present : forall cm s t s',
-    Star sem'' s t s' -> code_present cm s -> code_present cm s'.
-  Proof.
-    move=> cm s t s' H. elim: H => [s0 | s1 t1 s2 t2 s3 t0 Hstep Hstar IH Heqt].
-    - by [].
-    - move=> Hcp1. apply: IH. exact: (sem''_step_code_present Hstep Hcp1).
-  Qed.
 
   (* ===== WP-G: backward STEP reflection ===== *)
 
@@ -554,12 +353,6 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma strong_reg_addr2 : forall i m s s',
     strong_equiv i m s s' -> register_address_correctness i s'.
   Proof. by move=> i m s s' [? ? ? ? ? ? ? H ? ?]. Qed.
-  Lemma strong_mem_addr2 : forall i m s s',
-    strong_equiv i m s s' -> memory_address_correctness i s'.
-  Proof. by move=> i m s s' [? ? ? ? H ? ? ? ? ?]. Qed.
-  Lemma strong_entry_off : forall i m s s',
-    strong_equiv i m s s' -> entry_points_offset i (mem s) (mem s').
-  Proof. by move=> i m s s' [? ? ? ? ? H ? ? ? ?]. Qed.
 
   (* ===== Binop helpers ===== *)
   (* [updm] succeeds (and equals a [setm]) on any in-domain key. *)
@@ -1186,41 +979,6 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     exact: (IH rs (taga ve) l'' Hrec n Hn).
   Qed.
 
-  (* A [RegRead k] update succeeds (returns [Some _]) iff register [k] exists; it preserves the
-     register domain ([updm] is in-place).  Hence a fold of [RegRead]s succeeds and preserves the
-     domain whenever every read key is present.  Used to discharge the cross-component RETURN/CALL
-     [next_state_do_updates] (all reads/writes), where the OUTPUT tag-hseq is the invalidation hseq
-     rather than the silent identity — so [jump_do_updates_result] (which fixes the tags) does not
-     apply, but mere success does. *)
-  Lemma ndsu_regread_some_dom :
-    forall (ks : seq (reg mt)) (tags : hseq (tag_type lrc_tags) (nseq (size ks) R))
-           (st : state),
-      (forall k, k \in ks -> exists a, regs st k = Some a) ->
-      exists st', next_state_do_updates st tags [seq RegRead k | k <- ks] = Some st'
-        /\ domm (regs st') = domm (regs st).
-  Proof.
-    elim => [|k ks' IH] tags st Hex.
-    - by exists st.
-    - move: tags; rewrite [size _]/= => tags.
-      have [a Hk] := Hex k (mem_head _ _).
-      have Hstep : exists st1, next_state_do_update st (hshead tags : tag_type lrc_tags R) (RegRead k) = Some st1
-                            /\ domm (regs st1) = domm (regs st).
-      { rewrite /next_state_do_update /= Hk /= /updm Hk /=.
-        eexists; (split; [reflexivity |]).
-        by rewrite (updm_domm_eq (m := regs st) (k := k) (v := (vala a)@(hshead tags)) _) // /updm Hk. }
-      have [st1 [Hst1 Hdom1]] := Hstep.
-      rewrite [[seq RegRead k0 | k0 <- k :: ks']]/= (hseq_eta tags) ndsu_cons Hst1 /=.
-      have Hex1 : forall k0, k0 \in ks' -> exists a0, regs st1 k0 = Some a0.
-      { move=> k0 Hk0.
-        have Hk0' : k0 \in k :: ks' by rewrite in_cons Hk0 orbT.
-        have [a0 Ha0] := Hex k0 Hk0'.
-        have Hin : k0 \in domm (regs st1) by rewrite Hdom1 mem_domm Ha0.
-        move: Hin; rewrite mem_domm.
-        by case E: (regs st1 k0) => [a1|] // _; exists a1. }
-      have [st' [Hst' Hdom']] := IH (hsbehead tags) st1 Hex1.
-      exists st'. split; [exact Hst' | by rewrite Hdom' Hdom1].
-  Qed.
-
   (* The [reg_clear_read] fold ([= map (RegRead \o (as_word \o Posz)) reg_list]) succeeds for ANY
      R-kind output-tag hseq, given that [reg_clear_list_aux reg_list] succeeds (so every read register
      exists); it also preserves the register domain.  Proven by induction over [reg_list], so no
@@ -1393,29 +1151,6 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       rewrite /pct.
     - by rewrite Htg1 Htg3.
     - by rewrite Htg2 Htg3.
-  Qed.
-
-  (* [next_state_updates_and_pc] succeeds once the [transfer] at the lifted target tag succeeds and
-     the resulting [do_updates] fold succeeds.  This is a clean unfolding of the [nsuap]/[next_state]
-     definition, isolated so the cross-component event corners need only supply the two component
-     facts (transfer-Some and do_updates-Some) without fighting the dependent [op iv] match. *)
-  Lemma nsuap_some_of_parts :
-    forall (s : state) (op : opcode) (tpc : tag_type lrc_tags P)
-           (ti : tag_type lrc_tags Symbolic.M) (ts : hseq (tag_type lrc_tags) (inputs op))
-           (pc' : mword mt) (updts : seq update) (ei : ev_inputs)
-           (ov : ovec lrc_tags op) (e : option event) (st' : state),
-      evi s = Some ei ->
-      Merged.transfer (IVec (OP op) tpc ti ts
-                        (match mem s pc' with Some ni => Some (taga ni) | None => None end)) ei
-        = Some (Symbolic.OVec op (trpc ov) (tr ov), e) ->
-      next_state_do_updates s (tr ov) updts = Some st' ->
-      @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s (IVec (OP op) tpc ti ts) updts pc'
-        = Some (@Symbolic.State mt lrc_tags unit (mem st') (regs st') pc'@(trpc ov) (internal st'), e).
-  Proof.
-    move=> s op tpc ti ts pc' updts ei ov e st' Hevi Htr Hupd.
-    rewrite /next_state_updates_and_pc /next_state Hevi /=.
-    case Em : (mem s pc') => [ni|]; rewrite Em in Htr;
-      rewrite Htr /= Hupd /=; by [].
   Qed.
 
   (* ===== the big lemma ===== *)

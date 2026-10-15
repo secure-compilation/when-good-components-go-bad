@@ -61,8 +61,6 @@ Module Preservation (S: RecompositionContext).
   Proof. by []. Qed.
   Lemma is_otherE : is_other Other = Some tt.
   Proof. by []. Qed.
-  Lemma ifFalseE (A : Type) (b : bool) (vT vF : A) : b = false -> (if b then vT else vF) = vF.
-  Proof. by move=> ->. Qed.
 
   (* [data_match] always equates the two tags; for an [Other] cell it also equates the
      values.  Used by the syscall (alloc_fun) case to transfer the [s1] register reads
@@ -152,17 +150,6 @@ Proof.
   rewrite Hmem Hpc unionmE Hret /= => -[= Hd] Hcode. subst d.
   move: Hchk => /andP [_ /eqP Hc].
   by rewrite Hcol (color_ofE s).
-Qed.
-
-Lemma pc_code_color_extend : forall (s s' : state),
-    (forall w d, mem s' w = Some d -> mem s w = Some d \/ ~ is_code (taga d)) ->
-    vala (pc s') = vala (pc s) -> color_of s' = color_of s ->
-    pc_code_color s -> pc_code_color s'.
-Proof.
-  move=> s s' Hext2 Hpc Hcol Hpcc d. rewrite Hpc => Hd Hcode.
-  case: (Hext2 _ _ Hd) => [Hd0 | Hnc].
-  - rewrite Hcol. exact: (Hpcc d Hd0 Hcode).
-  - by case: (Hnc Hcode).
 Qed.
 
 (* Every silent (ev = None) LRC opcode runs [check_belong current tni] (directly for
@@ -2848,41 +2835,6 @@ Qed.
     by rewrite (ndsu_mem_noM Hnmw Hnmr Hndsu).
   Qed.
 
-  Lemma jal_step_mem : forall (s s' : state)
-      (mem0 : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
-      (reg0 : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)})
-      (pc0 pcw1 : mword mt) (tpc0 : tag_type lrc_tags P) (extra : unit)
-      (ti0 : tag_type lrc_tags Symbolic.M) (imm : mword mt)
-      (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R))
-      (vret : mword mt) (tret : tag_type lrc_tags Symbolic.M),
-    s = {| mem := mem0; regs := reg0; pc := pc0 @ tpc0; internal := extra |} ->
-    mem0 pcw1 = Some (vret @ tret) ->
-    @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit s
-      (IVec JAL tpc0 ti0 (HSeqCons tret l))
-      (MemRead pcw1 :: RegWrite ra pcw1 :: reg_clear_read) (swcast imm)
-      = Some (s', None) ->
-    mem s' = mem s.
-  Proof.
-    move=> s s' mem0 reg0 pc0 pcw1 tpc0 extra ti0 imm l vret tret Hs Hra NEXT.
-    have Hmemcell : mem s pcw1 = Some (vret @ tret) by rewrite Hs.
-    move: NEXT. rewrite /next_state_updates_and_pc /next_state.
-    case Hevi: (evi s) => [evinp|] //=.
-    case Hpc': (mem s (swcast imm)) => [ni|]; rewrite /=; move=> Hgoal;
-      ( case: (obind_inv Hgoal) => ov_ev [Htr Hk];
-        case: ov_ev Htr Hk => ov ev Htr Hk;
-        have Hhead := jal_head_tret Htr;
-        move: Hk => /= Hk;
-        case: (obind_inv Hk) => st' [Hndsu Hfin];
-        move: Hfin => [= Hfins _]; subst s';
-        rewrite /=;
-        apply: (@mem_unchanged_jal s st' pcw1 vret tret (nseq 12 R) (tr ov)
-                  (RegWrite ra pcw1 :: reg_clear_read) Hmemcell Hhead _ _ Hndsu);
-        [ by (move=> w' v' Hin; cbn in Hin;
-              repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin)
-        | by (move=> w' Hin; cbn in Hin;
-              repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ] ).
-  Qed.
-
   Ltac nomw :=
     let w := fresh "w" in let v := fresh "v" in let Hin := fresh "Hin" in
     move=> w v Hin; cbn in Hin;
@@ -3084,14 +3036,6 @@ Qed.
       case: (obind_inv H) => regs' [Hregs' {}H].
       by move: H => [= <-].
   Qed.
-
-  (* [pc_code_color] depends only on [mem], [vala (pc ·)] and the running colour, so it transports
-     across any two states agreeing on those (used to bridge the diagram's [step_mp] result and the
-     [pc_incr] master's reconstructed [s1'], which differ only in registers / pc-tag representation). *)
-  Lemma pc_code_color_transport : forall (s s' : state),
-    pc_code_color s -> mem s' = mem s -> vala (pc s') = vala (pc s) -> color_of s' = color_of s ->
-    pc_code_color s'.
-  Proof. move=> s s' Hpcc Hmem Hval Hcol d. rewrite Hmem Hval Hcol. exact: (Hpcc d). Qed.
 
   (* PRE-mem variant: the new-pc cell IN THE PRE-STEP memory [mem s] is running-coloured-if-code.
      The [pc_incr] master reconstructs its [s1'] with mem = [mem s1] (the PRE mem; any data write is a

@@ -947,32 +947,6 @@ rewrite in_cons => /orP [/eqP ->|Hx]; first by left.
 by right; exact: IH.
 Qed.
 
-(* the whole linearized component carries a passing class map *)
-Theorem component_frag (p : Source.program) (tp : Intermediate.program)
-    (PI : Program.interface) (C : Component.id)
-    (Cprocs : NMap Machine.code) :
-  compile_program p = Some tp ->
-  Intermediate.prog_procedures tp C = Some Cprocs ->
-  exists M,
-    frag (C, 1, 0%Z) (linearize_component_gen PI tp C) M
-      (fun _ => None) sv0 sv0.
-Proof.
-move=> Hcomp Hget.
-have [plm [Horig Hdom]] := compiled_component_origin Hcomp Hget.
-rewrite /linearize_component_gen Hget /=.
-apply: frag_flatten => pc /List.in_map_iff [P [Epc HInP]].
-have HP : P \in domm Cprocs := In_mem HInP.
-move: HP. rewrite mem_domm.
-case EP: (Cprocs P) => [cd|] // _.
-have [e [s0 [s1 Hcp]]] := Horig _ _ EP.
-have [Mp [Fp _]] := compile_proc_frag C Hcp (fun _ => None).
-exists (sv0 :: Mp).
-rewrite -Epc /linearize_proc_gen Hget /= EP /=.
-have Fh := @frag_hdr (C, 1, 0%Z) (fun _ => None) (C, P)
-             (head_tag_gen PI C P).
-exact: (frag_cat Fh Fp).
-Qed.
-
 (* the full component package: the frag, the shared origin, and the
    entry-label witnesses transported to the component level *)
 Theorem component_full (p : Source.program) (tp : Intermediate.program)
@@ -1168,47 +1142,3 @@ elim: l => [|[c0 t0] l IH] //= [E|HIn'].
   split=> //. by exists x; right.
 Qed.
 
-(* comp_ok at the real linearized code *)
-Theorem cdeW_comp_ok (p : Source.program) (tp : Intermediate.program)
-    (PI : Program.interface) (c : Component.id)
-    (S : seq (Transitional.instr * mem_tag)) :
-  compile_program p = Some tp ->
-  getm (intermediate_to_transitional_gen PI tp) c = Some S ->
-  exists M, comp_ok (c, 1, 0%Z) S M.
-Proof.
-move=> Hcomp.
-rewrite /intermediate_to_transitional_gen mkfmapE => /getm_def_In HIn.
-have [ES [x HInx]] := ccl_In HIn.
-subst S.
-have Egetm : getm (Intermediate.prog_procedures tp) c = Some x
-  := In_getm HInx.
-exact: (component_comp_ok PI Hcomp Egetm).
-Qed.
-
-(* the per-component maps, packaged by (classical) choice *)
-Theorem cdeW_maps (p : Source.program) (tp : Intermediate.program)
-    (PI : Program.interface) :
-  compile_program p = Some tp ->
-  exists MM : Component.id -> seq sv,
-    forall c S, getm (intermediate_to_transitional_gen PI tp) c = Some S ->
-      comp_ok (c, 1, 0%Z) S (MM c).
-Proof.
-move=> Hcomp.
-pose pick := fun c =>
-  match getm (intermediate_to_transitional_gen PI tp) c
-        as o return (getm (intermediate_to_transitional_gen PI tp) c = o
-                     -> seq sv)
-  with
-  | Some Sc => fun E =>
-      proj1_sig (ClassicalEpsilon.constructive_indefinite_description
-                   _ (cdeW_comp_ok Hcomp E))
-  | None => fun _ => [::]
-  end (erefl _).
-exists pick => c S E.
-rewrite /pick.
-move: (erefl _).
-rewrite {2 3}E.
-move=> E'.
-exact: (proj2_sig (ClassicalEpsilon.constructive_indefinite_description
-          _ (cdeW_comp_ok Hcomp E'))).
-Qed.

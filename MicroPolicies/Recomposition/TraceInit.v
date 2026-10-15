@@ -206,9 +206,6 @@ Section InitGeneric.
                     (@initial_memory mt pb).
   Proof. by []. Qed.
 
-  Lemma initial_regs_shape : regs s0 = Merged.reg0.
-  Proof. by []. Qed.
-
   Lemma initial_pc_tag : taga (pc s0) = build_tpc 0 Component.main.
   Proof. by []. Qed.
 

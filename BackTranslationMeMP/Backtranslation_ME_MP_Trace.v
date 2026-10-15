@@ -31,9 +31,6 @@ Fixpoint pend_r (r : trace) : seq pent :=
 
 Definition pend (pre : trace) : seq pent := pend_r (rev pre).
 
-Lemma pend_nil : pend [::] = [::].
-Proof. by []. Qed.
-
 Lemma pend_rcons pre e : pend (rcons pre e) = pend_step (pend pre) pre e.
 Proof. by rewrite /pend rev_rcons /= revK. Qed.
 

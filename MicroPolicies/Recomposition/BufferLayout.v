@@ -34,10 +34,6 @@ Unset Printing Implicit Defensive.
 
 Section MapkToolkit.
 
-Lemma mem_In_domm: forall {T: ordType} {S: Type} (m: {fmap T -> S}) x,
-  x \in domm m -> In x (domm m).
-Proof. intros. apply Extra.In_in. exact H. Qed.
-
 (* Tmp.mapk preserves values: if mapk f m k' = Some v, then
    exists k such that f k = k' and m k = Some v *)
 Lemma foldl_unionm_In: forall {T : ordType} {S : Type} (ms : seq {fmap T -> S}) k v,

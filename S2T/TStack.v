@@ -86,18 +86,6 @@ Proof.
   by elim: S => //= s S ->.
 Qed.
 
-(** The freshness side condition the macros ask for
-    ([push_ra_macro]'s `~ List.In (CMem p) (sites L)`) reduces to "p is not one
-    of the live slot addresses" — which is what the frame layout gives. *)
-Lemma fresh_of_addrs S p :
-  ~ List.In p (addrs S) -> ~ List.In (TInv.CMem p) (TInv.sites (ledger_of S)).
-Proof.
-  move=> Hp. rewrite sites_ledger_of => Hin. apply: Hp.
-  elim: (addrs S) Hin => //= a as' IH [E|Hin].
-  - by left; case: E.
-  - by right; exact: IH.
-Qed.
-
 Lemma in_addrs_of_slot S s : List.In s S -> List.In (ra_addr s) (addrs S).
 Proof. move=> H. exact: (List.in_map ra_addr S s H). Qed.
 
@@ -121,48 +109,9 @@ Proof.
   exact: (H s Hin).
 Qed.
 
-(** The same, phrased against the [addrs] list, which is how a diagram will
-    have it. *)
-Lemma slots_ok_store_fresh m p c m' S :
-  ~ List.In p (addrs S) ->
-  Transitional.Memory.store m p c = Some m' ->
-  slots_ok m S -> slots_ok m' S.
-Proof.
-  move=> Hp Hst H. apply: (slots_ok_store _ Hst H).
-  move=> s Hin Eq. apply: Hp. rewrite -Eq. exact: in_addrs_of_slot Hin.
-Qed.
-
 (* ================================================================== *)
 (* The chain feeds tag_inv                                            *)
 (* ================================================================== *)
-
-(** The ledger's entries hold what the ledger says ([ti_slot]) and are live
-    capabilities ([ti_addr]) — both directly from [slots_ok]. This is the
-    connection that lets a diagram discharge two of `tag_inv`'s six clauses
-    from the frame layout alone. *)
-Lemma slots_ti_slot m rs S :
-  slots_ok m S ->
-  forall s t, List.In (s, t) (ledger_of S) -> TInv.tagat m rs s = Some t.
-Proof.
-  move=> H s t. rewrite /ledger_of => Hin.
-  have [x [Ex Hx]] : exists x, (TInv.CMem (ra_addr x), ra_tag x) = (s, t)
-                            /\ List.In x S
-    by move: Hin => /List.in_map_iff [x [Ex Hx]]; exists x.
-  case: (H x Hx) => [_ [Ht _]].
-  by case: Ex => <- <-; rewrite /TInv.tagat.
-Qed.
-
-Lemma slots_ti_live m S :
-  slots_ok m S ->
-  forall s t, List.In (s, t) (ledger_of S) -> TInv.is_live t.
-Proof.
-  move=> H s t. rewrite /ledger_of => Hin.
-  have [x [Ex Hx]] : exists x, (TInv.CMem (ra_addr x), ra_tag x) = (s, t)
-                            /\ List.In x S
-    by move: Hin => /List.in_map_iff [x [Ex Hx]]; exists x.
-  case: (H x Hx) => [_ [_ Hl]].
-  by case: Ex => _ <-.
-Qed.
 
 (* ================================================================== *)
 (* T3 — the external-frame count drives ti_lvl                        *)
@@ -200,57 +149,6 @@ Proof.
   elim: S => //= s S IH.
   by case: (ra_tag s) => [n| | |] /=; rewrite IH.
 Qed.
-
-(** T3, with no capability in [R_RA]. *)
-Lemma ti_lvl_of_slots S pct :
-  levels_ok S (level pct) ->
-  perm_eq [seq TInv.ret_lvl st.2 | st <- ledger_of S & TInv.is_ret st.2]
-          (iota 0 (level pct)).
-Proof. by rewrite ledger_of_rets. Qed.
-
-(** T3, with an INTRA-component capability in [R_RA]: the head is filtered
-    out, so the count is untouched. *)
-Lemma ti_lvl_of_slots_ij S pct :
-  levels_ok S (level pct) ->
-  perm_eq [seq TInv.ret_lvl st.2
-          | st <- (TInv.CReg, InternalJump) :: ledger_of S & TInv.is_ret st.2]
-          (iota 0 (level pct)).
-Proof. by rewrite /= ledger_of_rets. Qed.
-
-(** T3, with a CROSS-component capability in [R_RA] — the state between an
-    [ICall] and the callee's spill. Here the register holds the innermost
-    level and the chain holds the rest, which is exactly [perm_iota_push]. *)
-Lemma ti_lvl_of_slots_ret S n pct :
-  level pct = n.+1 ->
-  levels_ok S n ->
-  perm_eq [seq TInv.ret_lvl st.2
-          | st <- (TInv.CReg, Ret n) :: ledger_of S & TInv.is_ret st.2]
-          (iota 0 (level pct)).
-Proof.
-  move=> El H. rewrite /= ledger_of_rets El.
-  exact: TInv.perm_iota_push.
-Qed.
-
-(** The chain-level transition an [ICall]'s spill performs: the capability
-    moves from [R_RA] into a new slot, and the external count goes up by one.
-    (The ledger-level counterpart is [TInv.tag_inv_push_ra].) *)
-Lemma levels_ok_spill S n a r :
-  levels_ok S n -> levels_ok (RASlot a r (Ret n) :: S) n.+1.
-Proof.
-  rewrite /levels_ok /ext_levels /= => H. exact: TInv.perm_iota_push.
-Qed.
-
-(** …and its inverse, performed by the matching reload. *)
-Lemma levels_ok_reload S n a r :
-  levels_ok (RASlot a r (Ret n) :: S) n.+1 -> levels_ok S n.
-Proof.
-  rewrite /levels_ok /ext_levels /= => H. exact: TInv.perm_iota_pop.
-Qed.
-
-(** An INTRA-component spill leaves the external count alone. *)
-Lemma levels_ok_spill_ij S k a r :
-  levels_ok S k -> levels_ok (RASlot a r InternalJump :: S) k.
-Proof. by rewrite /levels_ok /ext_levels /=. Qed.
 
 (* ================================================================== *)
 (* frame_temps / frame_cap, retargeted                                *)
@@ -293,31 +191,6 @@ Lemma frame_cap_store m p c m' C fb cap :
 Proof.
   move=> Hst H j Hj. case: (H j Hj) => [v Hv].
   exact: (TMem.vload_store_total Hst Hv).
-Qed.
-
-(** Both are [vload]-shaped, so a VALUE-PRESERVING store — the pop write-back —
-    leaves them alone outright. No per-pop obligation, in either. *)
-Lemma frame_temps_store_same m p c c' m' C fb temps :
-  Transitional.Memory.load m p = Some c ->
-  Transitional.val c'.1 = Transitional.val c.1 ->
-  tvtag c'.1 = tvtag c.1 ->
-  Transitional.Memory.store m p c' = Some m' ->
-  frame_temps m C fb temps -> frame_temps m' C fb temps.
-Proof.
-  move=> Hld Ev Et Hst H i Hi.
-  rewrite (TMem.vload_store_same Hld Ev Hst)
-          (TMem.tload_store_same Hld Et Hst).
-  exact: H.
-Qed.
-
-Lemma frame_cap_store_same m p c c' m' C fb cap :
-  Transitional.Memory.load m p = Some c ->
-  Transitional.val c'.1 = Transitional.val c.1 ->
-  Transitional.Memory.store m p c' = Some m' ->
-  frame_cap m C fb cap -> frame_cap m' C fb cap.
-Proof.
-  move=> Hld Ev Hst H j Hj.
-  by rewrite (TMem.vload_store_same Hld Ev Hst); exact: H.
 Qed.
 
 (** A store elsewhere also leaves them alone. *)
@@ -408,41 +281,6 @@ Proof. move=> Ha Hne. by rewrite /TMem.tload (load_alloc_other Ha Hne). Qed.
 Lemma ptr_expand (q : Pointer.t) :
   q = (Pointer.component q, Pointer.block q, Pointer.offset q).
 Proof. by case: q => [[x y] z]. Qed.
-
-(** A live slot cannot be in the block just allocated: slots are loadable and
-    the fresh block was not. *)
-Lemma slot_not_fresh mt C n mt' p Sl :
-  Transitional.Memory.alloc mt C n = Some (mt', p) ->
-  (forall (o : Z) w,
-     Transitional.Memory.load mt (C, Pointer.block p, o) = Some w -> False) ->
-  slots_ok mt Sl ->
-  forall s, List.In s Sl ->
-    Pointer.component (ra_addr s) <> C
-    \/ Pointer.block (ra_addr s) <> Pointer.block p.
-Proof.
-  move=> Ha Hfresh H s Hin.
-  case: (H s Hin) => [Hv _].
-  case: (@eqP _ (Pointer.component (ra_addr s)) C) => [EC|HC]; last by left.
-  case: (@eqP _ (Pointer.block (ra_addr s)) (Pointer.block p)) => [EB|HB];
-    last by right.
-  move: Hv. rewrite /TMem.vload.
-  case Hl: (Transitional.Memory.load mt (ra_addr s)) => [w|] //= _.
-  by case: (Hfresh (Pointer.offset (ra_addr s)) w);
-     rewrite -EC -EB -ptr_expand.
-Qed.
-
-(** …so the chain survives an allocation. *)
-Lemma slots_ok_alloc mt C n mt' p Sl :
-  Transitional.Memory.alloc mt C n = Some (mt', p) ->
-  (forall s, List.In s Sl ->
-     Pointer.component (ra_addr s) <> C
-     \/ Pointer.block (ra_addr s) <> Pointer.block p) ->
-  slots_ok mt Sl -> slots_ok mt' Sl.
-Proof.
-  move=> Ha Hne H s Hin.
-  rewrite /TMem.vload /TMem.tload (load_alloc_other Ha (Hne s Hin)).
-  exact: (H s Hin).
-Qed.
 
 (** A freshly allocated cell reads back the tag it was initialised with —
     [Other], since the chunk is [repeat tUndef n]. Needed because [tag_inv]'s

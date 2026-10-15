@@ -268,13 +268,4 @@ rewrite Hsplit (cc_split L P C PI PB t) /Sc Hm eqxx.
 by rewrite -!catA.
 Qed.
 
-Lemma lab_at_1 :
-  cid = Component.main ->
-  lab_at cde (rp_lab L cid 1) (size Apre + size (init_pre L t cid AD 1)) cid.
-Proof.
-move=> Hm. apply: lab_at_of. have H := blk_start Hm.
-rewrite rp_init_split -catA in H.
-have [_ H2] := blk_cat H. have [H3 _] := blk_cons H2. exact: H3.
-Qed.
-
 End Pos.

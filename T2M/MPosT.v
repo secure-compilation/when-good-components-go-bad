@@ -534,14 +534,3 @@ move=> Hx.
 by rewrite /swcast /word_of_nat (as_wordK Hx).
 Qed.
 
-(* the me Bnz/Jal-relative target: pc + cast displacement, in nat *)
-Lemma addw_word_of_nat_small (a b : nat) :
-  b < 2 ^ imm_size mt ->
-  addw (@word_of_nat (word_size mt) a)
-       (@swcast _ (word_size mt) (@word_of_nat (imm_size mt) b))
-  = @word_of_nat (word_size mt) (a + b).
-Proof.
-move=> Hb.
-rewrite (swcast_word_of_nat_small Hb) /word_of_nat as_word_addwD.
-by [].
-Qed.

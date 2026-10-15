@@ -460,14 +460,6 @@ Proof.
   by rewrite Hall; last by left.
 Qed.
 
-Lemma findopt_rcons {A : Type} (pred : A -> bool) (s : seq A) (x : A) :
-  findopt pred (rcons s x) = if pred x then Some (size s) else findopt pred s.
-Proof.
-  rewrite /findopt. elim: s => [|a s IH] /=.
-  - by case: (pred x).
-  - rewrite IH. case: (pred x) => //=. by rewrite addn1.
-Qed.
-
 Lemma In_rcons {A : Type} (s : seq A) (x y : A) :
   List.In y (rcons s x) <-> List.In y s \/ y = x.
 Proof.
@@ -1107,14 +1099,6 @@ Proof.
 Qed.
 
 End LinSide.
-
-(* [head_tag_gen] no longer depends on the compiled program at all (§3.8:
-   both sides share the joint interface), so the cross-variant agreement
-   this lemma used to provide is reflexivity; kept by name for callers. *)
-Lemma head_tag_iface (PI : Program.interface) (pr1 pr2 : Intermediate.program) c p :
-  Intermediate.prog_interface pr1 = Intermediate.prog_interface pr2 ->
-  head_tag_gen PI c p = head_tag_gen PI c p.
-Proof. by []. Qed.
 
 (* ------------------------------------------------------------------ *)
 (* 7. Cross-program facts: label disjointness + foreign-call resolution *)

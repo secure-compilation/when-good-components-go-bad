@@ -706,21 +706,6 @@ exact: (proj2_sig (ClassicalEpsilon.constructive_indefinite_description
           _ (cdeW_link_comp_ok E'))).
 Qed.
 
-(* ---- [disc_inv] holds at every initial state of the compiled+linked
-   program, and is carried along executions ---- *)
-Theorem disch_disc_t_initial :
-  exists MM : Component.id -> seq sv,
-    (forall c S, getm cdeW c = Some S -> comp_ok (c, 1, 0%Z) S (MM c))
-    /\ (forall S0, S2T.TSim.TSim.t_initial cdeW tp S0 ->
-          MDisc.disc_inv cdeW MM S0).
-Proof.
-have [MM HMM] := disch_HMM.
-exists MM. split; first exact: HMM.
-move=> S0 Hinit.
-exact: (MDiscInit.disc_t_initial HMM disch_HcstT disch_HuniqT Hinit
-          disch_P1 disch_P2 disch_P3 disch_P5).
-Qed.
-
 (* ---- the assembled INITIAL [mm_dsync] discharge: the carried invariant
    (dinv + sync) holds at every base initial state, under the run's fit
    (the initial buffer values must fit for the sync half's cell relation) ---- *)

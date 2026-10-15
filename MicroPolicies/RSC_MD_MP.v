@@ -1049,29 +1049,11 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     rewrite (bt_Cs_iface BT) -iface_p_compiled. exact: linkability_pc.
   Qed.
 
-  Lemma wf_p_Cs :
-    Source.well_formed_program (Source.program_link X.p (bt_Cs BT)).
-  Proof.
-    exact: (Source.linking_well_formedness X.well_formed_p (bt_Cs_wf BT)
-              linkable_p_Cs).
-  Qed.
-
   Lemma closed_p_Cs :
     Source.closed_program (Source.program_link X.p (bt_Cs BT)).
   Proof.
     apply (Source.interface_preserves_closedness_l (bt_src_closed BT)
              iface_P'_p (bt_P'_wf BT) X.well_formed_p).
-  Qed.
-
-  Lemma compile_p_Cs :
-    compile_program (Source.program_link X.p (bt_Cs BT))
-    = Some (Intermediate.program_link X.p_compiled (bt_ic' BT)).
-  Proof.
-    have [pc0 Hpc0] := Compiler.well_formed_compilable _ wf_p_Cs.
-    rewrite Hpc0.
-    by rewrite (Compiler.separate_compilation _ _ _ _ _ X.well_formed_p
-                  (bt_Cs_wf BT) linkable_p_Cs X.successful_compilation
-                  (bt_compile_Cs BT) Hpc0).
   Qed.
 
   (* ---- small prefix algebra ---- *)

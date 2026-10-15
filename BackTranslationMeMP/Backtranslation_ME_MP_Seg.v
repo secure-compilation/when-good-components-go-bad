@@ -134,13 +134,6 @@ case: l => [//|i l] H _. have [H0 _] := blk_cons H.
 by exists i, (def_mem_tag cid true).
 Qed.
 
-Lemma blk_nxt_cat n cid l1 l2 :
-  blk n cid (l1 ++ l2) -> 0 < size l2 -> nxt (n + size l1) cid.
-Proof. move=> /blk_cat [_ H] Hs. exact: blk_nxt H Hs. Qed.
-
-Lemma nxt_cell n cid : nxt n cid -> exists i tg, List.nth_error cde n = Some (i, tg) /\ color tg = cid.
-Proof. by []. Qed.
-
 Lemma step_const_blk m (rg : rmap) n lv cid imm r l :
   code_in cde pc0 m ->
   blk n cid (MrConst imm r :: l) -> nxt n.+1 cid ->

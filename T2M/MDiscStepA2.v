@@ -462,25 +462,6 @@ Proof.
          exact: (di_a2 HI Ev).
 Qed.
 
-Lemma disc_step_mov :
-  forall mem regs pc tg c pct r1 r2,
-    Transitional.executing cde pc (TrMov r1 r2) tg c ->
-    Transitional.check_pc cde pc tg ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem,
-       Transitional.Register.set r1
-         (Transitional.val (Transitional.Register.get r1 regs))
-         (moved_tag (tvtag (Transitional.Register.get r1 regs)))
-         (Transitional.Register.set r2
-            (Transitional.val (Transitional.Register.get r1 regs))
-            (tvtag (Transitional.Register.get r1 regs)) regs),
-       Pointer.inc pc, pct).
-Proof.
-  move=> mem regs pc tg c pct r1 r2 Hex Hpc [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_mov Hex Hpc HI).
-Qed.
-
 Lemma dinv_step_bnznz :
   forall mem regs pc tg c pct pc' r l vz cur chain F cs,
     Transitional.executing cde pc (TrBnz r l) tg c ->
@@ -507,24 +488,6 @@ Proof.
   exact: (dinv_pcmove HI Ec' Ev Ew Hle).
 Qed.
 
-Lemma disc_step_bnznz :
-  forall mem regs pc tg c pct pc' r l vz,
-    Transitional.executing cde pc (TrBnz r l) tg c ->
-    Transitional.check_pc cde pc tg ->
-    tvtag (Transitional.Register.get r regs) = Other ->
-    Transitional.val (Transitional.Register.get r regs) = Int vz ->
-    (vz <> 0)%Z ->
-    Transitional.find_label_in_comp cde c l = Some pc' ->
-    Transitional.check_pc_jump cde tg pc' c ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, regs, pc', pct).
-Proof.
-  move=> mem regs pc tg c pct pc' r l vz Hex Hpc Htag Hval Hnz Hfl Hcj
-         [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_bnznz Hex Hpc Htag Hval Hnz Hfl Hcj HI).
-Qed.
-
 Lemma dinv_step_bnzz :
   forall mem regs pc tg c pct r l cur chain F cs,
     Transitional.executing cde pc (TrBnz r l) tg c ->
@@ -544,21 +507,6 @@ Proof.
   have Ec : Pointer.component (Pointer.inc pc) = Pointer.component pc.
   { by case: (pc) => [[c0 b0] o0]. }
   exact: (dinv_pcmove HI Ec Ev Ew Hle).
-Qed.
-
-Lemma disc_step_bnzz :
-  forall mem regs pc tg c pct r l,
-    Transitional.executing cde pc (TrBnz r l) tg c ->
-    Transitional.check_pc cde pc tg ->
-    tvtag (Transitional.Register.get r regs) = Other ->
-    Transitional.val (Transitional.Register.get r regs) = Int 0 ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, regs, Pointer.inc pc, pct).
-Proof.
-  move=> mem regs pc tg c pct r l Hex Hpc Htag Hval
-         [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_bnzz Hex Hpc Htag Hval HI).
 Qed.
 
 End DiscStepA2.

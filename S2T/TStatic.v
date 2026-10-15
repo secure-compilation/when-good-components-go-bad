@@ -73,28 +73,6 @@ Proof.
     by case: E => Ec _; move: Hne; rewrite ?Ec -?Ec eqxx.
 Qed.
 
-(** ★ THE decomposition: the array splits at any procedure's header. *)
-Lemma linearize_split pr c Cprocs P cd :
-  getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
-  getm Cprocs P = Some cd ->
-  exists pre post,
-    Transitional.linearize_component pr c
-    = pre ++ (Transitional.TrLabel (inr (c, P)),
-              Transitional.head_tag pr c P)
-            :: [seq Transitional.instr_to_transitional c i | i <- cd]
-            ++ post.
-Proof.
-  move=> Hg HgP.
-  have HP : P \in domm Cprocs by rewrite mem_domm HgP.
-  rewrite /Transitional.linearize_component /Transitional.linearize_component_gen Hg /=.
-  case: (seq_split HP) => [l1 [l2 Esp]]. rewrite Esp.
-  exists (flatten [seq Transitional.linearize_proc pr c q | q <- l1]),
-         (flatten [seq Transitional.linearize_proc pr c q | q <- l2]).
-  rewrite map_cat flatten_cat map_cons /=.
-  congr (_ ++ _).
-  by rewrite /Transitional.linearize_proc /Transitional.linearize_proc_gen Hg HgP.
-Qed.
-
 (* ================================================================== *)
 (* Where a procedure HEADER is, and that the machine finds it there    *)
 (* ================================================================== *)
@@ -674,40 +652,6 @@ Qed.
 (* …and up to the whole compiled program                               *)
 (* ================================================================== *)
 
-(** ★ The per-procedure lemmas, lifted through `compile_prog_procedures_spec`
-    to a statement about a SOURCE program and its compilation. This is
-    `entry_int` for one callee, with the label map now the compiler's own
-    `labelsP p` rather than an abstract parameter. *)
-Lemma entry_int_whole p tp C P P_expr plm tl :
-  Source.well_formed_program p ->
-  compile_program p = Some tp ->
-  Source.find_procedure (Source.prog_procedures p) C P = Some P_expr ->
-  getm (labelsP p) C = Some plm ->
-  getm plm P = Some tl ->
-  Component.eqb C Component.main && Procedure.eqb P Procedure.main = false ->
-  exists pcE cbody sA sB,
-    [/\ Pointer.component pcE = C,
-        compile_expr C (lbp C) (scr C) plm P_expr sA = Some (cbody, sB)
-      & TMacros.code_at_I (Transitional.intermediate_to_transitional tp) C pcE
-          ([:: ILabel tl; IMov R_SP R_AUX1;
-               IConst (IInt (Z.of_nat (4 + stack_need P_expr))) R_SP;
-               IAlloc R_SP R_SP]
-           ++ push R_AUX1 ++ push R_ARG ++ [:: IMov R_COM R_ARG]
-           ++ cbody ++ pop R_ARG ++ pop R_SP ++ [:: IJump])].
-Proof.
-  move=> Hwf Hcomp Hfind Hplm Htl Hmain.
-  move: Hfind. rewrite /Source.find_procedure.
-  case HgC: (getm (Source.prog_procedures p) C) => [Cprocs|] //= HgP.
-  case: (compile_prog_procedures_spec Hwf Hcomp)
-    => [labels [cenv1 [Egen HSPEC]]].
-  have Elab : labelsP p = labels by rewrite /labelsP Egen.
-  case: (HSPEC _ _ _ _ HgC HgP)
-    => [plm' [Cprocs' [cd [s1 [s2 [Hplm' HgT HgTP Hcp]]]]]].
-  have Eplm : plm' = plm by move: Hplm; rewrite Elab Hplm' => -[->].
-  subst plm'.
-  exact: (entry_int_of_compiled HgT HgTP Hcp Htl Hmain).
-Qed.
-
 (** ★ …and the guard-free version, which is `TSim.entry_int` itself once the
     global environment's procedure map is unfolded. *)
 Lemma entry_int_whole_any p tp C P P_expr plm tl :
@@ -764,71 +708,6 @@ Proof.
   apply: check_comp_belongs_in.
   rewrite mem_filter. apply/andP; split; last by rewrite mem_domm HC.
   by rewrite /= Hc HC Hex Him.
-Qed.
-
-(** ★ `entry_ext` for one callee, over a source program and its compilation:
-    the header resolution, the header's own `executing` and LRC entry check,
-    the WRAPPER one cell past it, and the body. *)
-Lemma entry_ext_whole p tp C Cf P P_expr plmf pl CIf CIC :
-  Source.well_formed_program p ->
-  compile_program p = Some tp ->
-  Source.find_procedure (Source.prog_procedures p) Cf P = Some P_expr ->
-  getm (labelsP p) Cf = Some plmf ->
-  getm plmf P = Some pl ->
-  Component.eqb Cf Component.main && Procedure.eqb P Procedure.main = false ->
-  getm (Intermediate.prog_interface tp) Cf = Some CIf ->
-  P \in Component.export CIf ->
-  getm (Intermediate.prog_interface tp) C = Some CIC ->
-  (Cf, P) \in Component.import CIC ->
-  exists pcW tniW pcE cbody sA sB,
-    [/\ [/\ Transitional.find_plabel_in_code
-              (Transitional.intermediate_to_transitional tp) Cf P = Some pcW,
-            Transitional.executing
-              (Transitional.intermediate_to_transitional tp) pcW
-              (Transitional.TrLabel (inr (Cf, P))) tniW Cf
-          & Transitional.check_pc_call C tniW P],
-        TMacros.code_at_I (Transitional.intermediate_to_transitional tp) Cf
-          (Pointer.inc pcW)
-          (IConst (IInt 1) R_ONE
-           :: [:: IMov R_SP R_AUX1;
-                  IConst (IInt (Z.of_nat (4 + stack_need P_expr))) R_SP;
-                  IAlloc R_SP R_SP]
-              ++ push R_AUX1 ++ load_arg (scr Cf) R_AUX1 ++ push R_AUX1
-              ++ push R_RA
-              ++ IJal pl
-                 :: pop R_RA ++ pop R_AUX1
-                    ++ store_arg (scr Cf) R_AUX1 R_AUX2
-                    ++ pop R_SP ++ [:: IReturn]),
-        Pointer.component pcE = Cf,
-        compile_expr Cf (lbp Cf) (scr Cf) plmf P_expr sA = Some (cbody, sB)
-      & TMacros.code_at_I (Transitional.intermediate_to_transitional tp) Cf pcE
-          ([:: ILabel pl; IMov R_SP R_AUX1;
-               IConst (IInt (Z.of_nat (4 + stack_need P_expr))) R_SP;
-               IAlloc R_SP R_SP]
-           ++ push R_AUX1 ++ push R_ARG ++ [:: IMov R_COM R_ARG]
-           ++ cbody ++ pop R_ARG ++ pop R_SP ++ [:: IJump])].
-Proof.
-  move=> Hwf Hcomp Hfind Hplm Hpl Hmain Hif Hex Hic Him.
-  move: Hfind. rewrite /Source.find_procedure.
-  case HgC: (getm (Source.prog_procedures p) Cf) => [Cprocs|] //= HgP.
-  case: (compile_prog_procedures_spec Hwf Hcomp)
-    => [labels [cenv1 [Egen HSPEC]]].
-  have Elab : labelsP p = labels by rewrite /labelsP Egen.
-  case: (HSPEC _ _ _ _ HgC HgP)
-    => [plm' [Cprocs' [cd [s1 [s2 [Hplm' HgT HgTP Hcp]]]]]].
-  have Eplm : plm' = plmf by move: Hplm; rewrite Elab Hplm' => -[->].
-  subst plm'.
-  case: (find_plabel_in_code_at HgT HgTP) => [pre [post [Elin _ Hfind]]].
-  case: (entry_ext_of_compiled HgT HgTP Hcp Hpl Hmain)
-    => [pcW0 [pcE [cbody [sA [sB [Hfind0 HcodeW EcE Hce HcodeE]]]]]].
-  have EpcW : pcW0 = (Cf, 0, Z.of_nat (size pre))
-    by move: Hfind0; rewrite Hfind => -[->].
-  exists pcW0, (Transitional.head_tag tp Cf P), pcE, cbody, sA, sB.
-  split=> //.
-  split.
-  - exact: Hfind0.
-  - rewrite EpcW. exact: (executing_header HgT HgTP Elin).
-  - exact: (check_pc_call_header Hif Hex Hic Him).
 Qed.
 
 (** ★ `entry_ext`'s CODE half for every callee, main included — a THREE-way
@@ -1289,14 +1168,6 @@ Proof.
   - by move=> _; exact: VI_undef.
 Qed.
 
-Lemma val_inject_init_buffer_in C vs v :
-  Source.well_formed_buffer C (inr vs) ->
-  List.In v vs -> val_inject init_renaming v v.
-Proof.
-  move=> /= /List.forallb_forall Hall Hin.
-  by apply: val_inject_init_buffer; exact: Hall.
-Qed.
-
 (** `mj_data` at the initial state: every cell of a component's block 0 is
     `Other`-tagged, because `prealloc` builds it either from `repeat tUndef`
     (the `inl` case) or from `to_tagged_block`, whose `to_tagged_cell` is
@@ -1386,22 +1257,6 @@ Proof.
   - by rewrite !nth_error_repeat_if; case: (k < sz).
   - rewrite /Transitional.to_tagged_block nth_error_map_omap.
     by case: (List.nth_error chunk k).
-Qed.
-
-(** …and the same cells are `Other`-tagged, which is `mj_data`'s content
-    stated at the chunk level. *)
-Lemma chunk_tags C ib k w :
-  List.nth_error
-    (match ib with
-     | inl size => repeat (tUndef, def_mem_tag C false) size
-     | inr chunk => Transitional.to_tagged_block C chunk
-     end) k = Some w ->
-  tvtag w.1 = Other.
-Proof.
-  case: ib => [sz|chunk].
-  - by rewrite nth_error_repeat_if; case: (k < sz) => // -[<-].
-  - rewrite /Transitional.to_tagged_block nth_error_map_omap.
-    by case: (List.nth_error chunk k) => [v|] //= [<-].
 Qed.
 
 (** The SOURCE side's block 0, via `ComponentMemory.load_prealloc` — the

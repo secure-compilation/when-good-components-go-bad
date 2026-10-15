@@ -56,19 +56,6 @@ rewrite nth_error_cat_r nth_error_cat_l ?size_tagged //.
 by rewrite nth_error_tagged (nth_error_nth' (@MrNop mt) Hi).
 Qed.
 
-Lemma flatten_split {A : eqType} {B : Type} (f : A -> seq B) (s : seq A) x :
-  x \in s ->
-  exists pre post, flatten [seq f y | y <- s] = pre ++ f x ++ post.
-Proof.
-move=> Hx.
-have Hi : index x s < size s by rewrite index_mem.
-have Es : s = take (index x s) s ++ x :: drop (index x s).+1 s.
-{ by rewrite -{2}(nth_index x Hx) -drop_nth // cat_take_drop. }
-exists (flatten [seq f y | y <- take (index x s) s]),
-       (flatten [seq f y | y <- drop (index x s).+1 s]).
-by rewrite {1}Es map_cat flatten_cat /= catA.
-Qed.
-
 Section Layout.
 
 Variables (L P C : nat) (PI : Program.interface)
@@ -80,17 +67,6 @@ Local Notation cc := (rp_comp_code L P C PI PB t).
 Local Notation codeP := (code (rp_program L P C PI PB t Ip Bp)).
 Local Notation codeC := (code (rp_program L P C PI PB t Ic Bc)).
 Local Notation cde := (codeP ++ codeC).
-
-Lemma comp_split cid :
-  (cid \in domm Ip) || (cid \in domm Ic) ->
-  exists A B, cde = A ++ cc cid ++ B.
-Proof.
-case/orP => H.
-- have [pre [post E]] := flatten_split cc H.
-  exists pre, (post ++ codeC). by rewrite /= E -!catA.
-- have [pre [post E]] := flatten_split cc H.
-  exists (codeP ++ pre), post. by rewrite /= E -!catA.
-Qed.
 
 Definition Sc cid : @Merged.code mt :=
   if cid == Component.main
@@ -109,16 +85,6 @@ Definition Tl cid : seq minstr :=
 
 Lemma cc_split cid : cc cid = Sc cid ++ Ec cid ++ rp_tagged cid (Tl cid).
 Proof. by []. Qed.
-
-Lemma blk_Tl A B cid :
-  cde = A ++ cc cid ++ B ->
-  blk cde (size A + size (Sc cid) + size (Ec cid)) cid (Tl cid).
-Proof.
-move=> E.
-have H := @blk_of_tagged cde (A ++ Sc cid ++ Ec cid) B cid (Tl cid).
-rewrite !size_cat addnA in H. apply: H.
-by rewrite E cc_split -!catA.
-Qed.
 
 End Layout.
 

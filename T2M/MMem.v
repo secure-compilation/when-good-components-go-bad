@@ -89,11 +89,6 @@ Lemma elementsm_sorted (T : Type) (m : NMap T) :
   sorted Ord.lt (unzip1 (Maps.elementsm m)).
 Proof. by case: m. Qed.
 
-(* [sumn] with associated re-bracketing, used to thread accumulators *)
-Lemma sumn_cat_acc (s1 : seq nat) (n acc : nat) :
-  sumn s1 + (n + acc) = (sumn s1 + n) + acc.
-Proof. by lia. Qed.
-
 (* ================================================================== *)
 (* 1. The fold half.                                                  *)
 (* ================================================================== *)

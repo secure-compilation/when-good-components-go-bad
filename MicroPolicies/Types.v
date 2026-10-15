@@ -176,9 +176,6 @@ HB.instance Definition _ := PcanHasOrd pickle_opcodeK.
 
 Definition max_opcode := 24.
 
-Lemma max_opcodeP (o : opcode) : pickle o <= max_opcode.
-Proof. by move: o; do! case. Qed.
-
 Definition opcode_enum :=
   [::
    NOP;
@@ -250,13 +247,6 @@ HB.instance Definition _ := PCanHasChoice pickle_vopcodeK.
 HB.instance Definition _ := PCanIsCountable pickle_vopcodeK.
 
 Definition vopcode_enum := SERVICE :: [seq OP x | x <- enum opcode].
-
-Lemma vopcode_enumP : Finite.axiom vopcode_enum.
-Proof.
-case => [x|] //=; rewrite count_map /=.
-  by rewrite -(@eq_count _ (pred1 x)) // enumT enumP.
-by rewrite -(@eq_count _ pred0) // count_pred0.
-Qed.
 
 Record machine_types := {
   word_size : nat;
@@ -366,17 +356,6 @@ Class machine_ops_spec mt (ops : machine_ops mt) := {
 
 }.
 
-Lemma max_word_bound mt : (31 < val (monew : mword mt)).
-Proof.
-have lb : 1 < 2 ^ word_size mt.
-  rewrite -{1}(expn0 2) ltn_exp2l //.
-  by have := ltn_trans _ (word_size_lb mt); apply.
-rewrite -[31]/(2 ^ 5 - 1) /= !modz_nat !absz_nat !modn_mod ?modn_small //;
-  try by rewrite subn1 prednK ?expn_gt0 // leqnn.
-apply: ltn_sub2r=> //; rewrite ltn_exp2l //.
-by have := ltn_trans _ (word_size_lb mt); apply.
-Qed.
-
 Section Ops.
 
 Local Open Scope word_scope.
@@ -424,9 +403,6 @@ do !case=> //=;
 by rewrite /word_of_op /op_of_word as_wordK //;
 apply: leq_ltn_trans lb.
 Qed.
-
-Lemma word_of_op_inj : injective word_of_op.
-Proof. by apply (pcan_inj word_of_opK). Qed.
 
 End FixK.
 

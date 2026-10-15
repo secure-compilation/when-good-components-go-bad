@@ -189,16 +189,6 @@ Proof.
   - by [].
 Qed.
 
-Lemma setm_mem_nonret :
-  forall (mm : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)}) w x t,
-  (forall n, vtag t <> Ret n) ->
-  forall w' v t' n, setm mm w (x @ t) w' = Some (v @ t') -> vtag t' = Ret n -> mm w' = Some (v @ t').
-Proof.
-  move=> mm w x t Hnr w' v t' n. rewrite setmE. case: eqP => [Heq|Hne].
-  - move=> [= Hx Ht]. subst t'. move=> Hvt. exfalso. exact: (Hnr n Hvt).
-  - by [].
-Qed.
-
 Lemma ndsu_nil_updts : forall (tks : seq tag_kind) (tags : hseq (tag_type lrc_tags) tks) (st st0 : state),
   next_state_do_updates st tags [::] = Some st0 -> st0 = st.
 Proof. move=> [|tk tks] tags st st0 /=; [by move=> [<-] | by []]. Qed.
@@ -1409,11 +1399,6 @@ Proof.
     split; first exact: Hg0.
     rewrite in_cons negb_or Hnk andbT. by apply/eqP.
 Qed.
-
-Lemma reg_clear_read_map :
-  reg_clear_read
-  = [seq RegRead k | k <- [seq (as_word (ssrint.Posz n) : reg mt) | n <- reg_list]].
-Proof. by rewrite /reg_clear_read -map_comp. Qed.
 
 Lemma reg_invalidate_nonret :
   all_nonret (((Other : tag_type lrc_tags Symbolic.R) :: reg_invalidate_hseq)%hseq

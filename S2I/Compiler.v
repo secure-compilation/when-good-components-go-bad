@@ -530,40 +530,6 @@ Proof.
   - by move=> v r /List.in_app_iff [HIn|HIn]; [exact: V1 HIn|exact: V2 HIn].
 Qed.
 
-Lemma code_shape_push r : code_shape (push r).
-Proof.
-  split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; rewrite /push in HIn; by in_discr HIn.
-Qed.
-
-Lemma code_shape_pop r : code_shape (pop r).
-Proof.
-  split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; rewrite /pop in HIn; by in_discr HIn.
-Qed.
-
-Lemma code_shape_load_arg r : code_shape (load_arg scratch_buf_ptr r).
-Proof.
-  split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; rewrite /load_arg in HIn;
-    try by in_discr HIn.
-  destruct HIn as [E|HIn]; [|by in_discr HIn].
-  case: E => <- _. by apply/Or43.
-Qed.
-
-Lemma code_shape_store_arg r rtemp : code_shape (store_arg scratch_buf_ptr r rtemp).
-Proof.
-  split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; rewrite /store_arg in HIn;
-    try by in_discr HIn.
-  destruct HIn as [E|HIn]; [|by in_discr HIn].
-  case: E => <- _. by apply/Or43.
-Qed.
-
-Lemma code_shape_reload_sp : code_shape (reload_sp scratch_buf_ptr).
-Proof.
-  split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; rewrite /reload_sp in HIn;
-    try by in_discr HIn.
-  destruct HIn as [E|HIn]; [|by in_discr HIn].
-  case: E => <- _. by apply/Or43.
-Qed.
-
 Lemma code_shape_int i r : code_shape [:: IConst (IInt i) r].
 Proof.
   split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; try by in_discr HIn.
@@ -577,18 +543,6 @@ Proof.
   destruct HIn as [E|HIn]; [|by in_discr HIn].
   case: E => <- _. by apply/Or42.
 Qed.
-
-Lemma code_shape_binop1 bop r1 r2 r3 : code_shape [:: IBinOp bop r1 r2 r3].
-Proof. split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; by in_discr HIn. Qed.
-
-Lemma code_shape_alloc1 r1 r2 : code_shape [:: IAlloc r1 r2].
-Proof. split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; by in_discr HIn. Qed.
-
-Lemma code_shape_load1 r1 r2 : code_shape [:: ILoad r1 r2].
-Proof. split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; by in_discr HIn. Qed.
-
-Lemma code_shape_store1 r1 r2 : code_shape [:: IStore r1 r2].
-Proof. split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; by in_discr HIn. Qed.
 
 Lemma code_shape_mov1 r1 r2 : code_shape [:: IMov r1 r2].
 Proof. split=> [r' l HIn|l HIn|C' P' HIn|v r' HIn]; by in_discr HIn. Qed.
@@ -2042,42 +1996,6 @@ Definition generate_fresh_procedure_id comp (procs: NMap (NMap code)) : Procedur
     Nat.succ (fold_left (fun proc_id proc => Nat.max proc_id (fst proc)) (elementsm comp_procs) 0)
   end.
 
-(* Bounds toolkit for the max-fold. *)
-Lemma fold_max_acc_le {A : Type} (l : list (nat * A)) (acc : nat) :
-  acc <= fold_left (fun proc_id proc => Nat.max proc_id (fst proc)) l acc.
-Proof.
-  elim: l acc => [|p l IH] acc //=.
-  apply: leq_trans (IH (Nat.max acc p.1)). by lia.
-Qed.
-
-Lemma fold_max_In_le {A : Type} (l : list (nat * A)) (acc : nat) k v :
-  List.In (k, v) l ->
-  k <= fold_left (fun proc_id proc => Nat.max proc_id (fst proc)) l acc.
-Proof.
-  elim: l acc => [|[k' v'] l IH] acc //= [E|HIn].
-  - case: E => E1 _. subst k'.
-    apply: leq_trans (fold_max_acc_le l (Nat.max acc k)). by lia.
-  - exact: IH.
-Qed.
-
-(* NOTE: restated. The original Admitted statement (freshness w.r.t. [domm procs],
-   the COMPONENT ids) was false — e.g. a component whose id exceeds all its
-   procedure ids. Freshness holds w.r.t. the component's own procedure map,
-   which is what [wrap_main] needs. *)
-Lemma generate_fresh_procedure_id_fresh:
-  forall comp procs comp_procs,
-    getm procs comp = Some comp_procs ->
-    (generate_fresh_procedure_id comp procs \in domm comp_procs) = false.
-Proof.
-  move=> comp procs comp_procs Hget.
-  rewrite /generate_fresh_procedure_id Hget.
-  apply: negbTE. apply/negP => Hin.
-  case/dommP: Hin => cd Hcd.
-  have HIn := getm_In_elementsm Hcd.
-  have Hle := fold_max_In_le _ 0 _ _ HIn.
-  by rewrite ltnn in Hle.
-Qed.
-
 Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program) : COMP Intermediate.program :=
   match p.(Intermediate.prog_main) with
   | true =>
@@ -2215,43 +2133,6 @@ Proof.
     destruct (Hmain1' Logic.eq_refl) as [? Hcontra]; inversion Hcontra.
 Qed.
 
-Remark mains_without_source : forall p pc pc',
-  Source.well_formed_program p ->
-  compile_program p = Some pc ->
-  Source.prog_main p = None ->
-  Intermediate.linkable_mains pc pc'.
-Proof.
-  intros p pc pc' Hwf Hcomp Hmain.
-  pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
-  rewrite Hmain in Hpreserve2.
-  destruct (Intermediate.prog_main pc) as [|] eqn: Hpc.
-  - specialize (Hpreserve2 Logic.eq_refl) as [? Hcontra]; inversion Hcontra.
-  - unfold Intermediate.linkable_mains. rewrite Hpc. reflexivity.
-Qed.
-
-Lemma compilation_preserves_main_linkability :
-  forall {p p_compiled c c_compiled},
-    Source.well_formed_program p ->
-    Source.well_formed_program c ->
-    linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_compiled ->
-    compile_program c = Some c_compiled ->
-    Intermediate.linkable_mains p_compiled c_compiled.
-Proof.
-  intros p p_compiled c c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
-  pose proof Source.linkable_disjoint_mains Hwfp Hwfc Hlinkable as Hmains.
-  destruct (Source.prog_main p) as [mp |] eqn:Hmainp;
-    destruct (Source.prog_main c) as [mc |] eqn:Hmainc.
-  - unfold Source.linkable_mains in Hmains.
-    rewrite Hmainp in Hmains.
-    rewrite Hmainc in Hmains.
-    inversion Hmains.
-  - apply Intermediate.linkable_mains_sym.
-    now eapply (mains_without_source c).
-  - now eapply (mains_without_source p).
-  - now eapply (mains_without_source p).
-Qed.
-
 Lemma compilation_has_matching_mains :
   forall {p p_compiled},
     Source.well_formed_program p ->
@@ -2320,13 +2201,6 @@ Proof.
   rewrite /gen_buffers mapmE !unionmE !mapmE.
   by case: (getm bp k) => [v|] /=.
 Qed.
-
-(* The compiled fresh main-procedure id only looks at the main component's map. *)
-Lemma generate_fresh_procedure_id_ext (procs1 procs2 : NMap (NMap code)) :
-  getm procs1 Component.main = getm procs2 Component.main ->
-  generate_fresh_procedure_id Component.main procs1
-  = generate_fresh_procedure_id Component.main procs2.
-Proof. by rewrite /generate_fresh_procedure_id => ->. Qed.
 
 (* The source main flag of a link is the disjunction of the sides' flags
    (under disjoint procedure maps). *)

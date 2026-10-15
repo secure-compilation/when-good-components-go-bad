@@ -73,18 +73,6 @@ Proof.
   exact: (dinv_pcmove HI Ec Ev Ew Hle).
 Qed.
 
-Lemma disc_step_nop :
-  forall mem regs pc tg c pct,
-    Transitional.executing cde pc TrNop tg c ->
-    Transitional.check_pc cde pc tg ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, regs, Pointer.inc pc, pct).
-Proof.
-  move=> mem regs pc tg c pct Hex Hpc [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_nop Hex Hpc HI).
-Qed.
-
 Lemma dinv_step_label :
   forall mem regs pc tg c pct l cur chain F cs,
     Transitional.executing cde pc (TrLabel l) tg c ->
@@ -99,18 +87,6 @@ Proof.
   have Ec : Pointer.component (Pointer.inc pc) = Pointer.component pc.
   { by case: (pc) => [[c0 b0] o0]. }
   exact: (dinv_pcmove HI Ec Ev Ew Hle).
-Qed.
-
-Lemma disc_step_label :
-  forall mem regs pc tg c pct l,
-    Transitional.executing cde pc (TrLabel l) tg c ->
-    Transitional.check_pc cde pc tg ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, regs, Pointer.inc pc, pct).
-Proof.
-  move=> mem regs pc tg c pct l Hex Hpc [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_label Hex Hpc HI).
 Qed.
 
 Lemma dinv_step_const :
@@ -405,19 +381,6 @@ Proof.
       rewrite ?wone_ek ?wtaint_ek in Eek'.
       move: Hekw. by rewrite Eek'.
     * exact: (di_chain2 HI).
-Qed.
-
-Lemma disc_step_const :
-  forall mem regs pc tg c pct r iv,
-    Transitional.executing cde pc (TrConst iv r) tg c ->
-    Transitional.check_pc cde pc tg ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem, Transitional.Register.set r (imm_to_val iv) Other regs,
-              Pointer.inc pc, pct).
-Proof.
-  move=> mem regs pc tg c pct r iv Hex Hpc [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_const Hex Hpc HI).
 Qed.
 
 End DiscStepA.

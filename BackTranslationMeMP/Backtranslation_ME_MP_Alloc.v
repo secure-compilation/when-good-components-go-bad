@@ -379,16 +379,6 @@ Lemma cellw_region (c0 j : nat) :
   1 + c0 < 2 ^ NC -> j.+2 <= 2 ^ (word_size mt - NC) -> pfilterC c0 (cellw c0 j).
 Proof. move=> Hc Hj. rewrite cellwE. exact: (region_key Hc Hj). Qed.
 
-Lemma cellw_inj (c0 j j' : nat) :
-  1 + c0 < 2 ^ NC -> j.+2 <= 2 ^ (word_size mt - NC) -> j'.+2 <= 2 ^ (word_size mt - NC) ->
-  cellw c0 j = cellw c0 j' -> j = j'.
-Proof.
-move=> Hc Hj Hj' E.
-have H := congr1 (fun w : mword mt => (\val w : nat)) E.
-have H' := etrans (esym (cellw_val Hc Hj)) (etrans H (cellw_val Hc Hj')).
-clear -H'. lia.
-Qed.
-
 Lemma region_disj (c1 c2 : nat) (w : mword mt) :
   1 + c1 < 2 ^ NC -> 1 + c2 < 2 ^ NC ->
   pfilterC c1 w -> pfilterC c2 w -> c1 = c2.

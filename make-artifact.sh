@@ -184,7 +184,6 @@ CHAIN=(
   T2M/MStep.v
   T2M/MSync.v
   T2M/MAlloc.v
-  T2M/MDiscStep.v
   T2M/MInit.v
   T2M/MStar.v
   T2M/MWalk.v

@@ -144,21 +144,6 @@ End T2MPos.
 Definition isize (i : Machine.instr) : nat :=
   match i with IAlloc _ _ => 5 | _ => 1 end.
 
-Lemma texp_isize c i : texp_size (instr_to_transitional c i).1 = isize i.
-Proof.
-case: i => //=.
-by move=> c' P; case: (Nat.eqb c c').
-Qed.
-
-Lemma tseg_size_map c (l : seq Machine.instr) :
-  tseg_size [seq instr_to_transitional c i | i <- l]
-  = sumn [seq isize i | i <- l].
-Proof.
-elim: l => [|i0 l IH] //.
-rewrite map_cons tseg_size_cons IH texp_isize.
-by [].
-Qed.
-
 (* flat offset of instruction [o] within a procedure's linearized segment:
    the entry-label cell (position 0) plus the expansions of the earlier
    instructions *)
@@ -173,52 +158,11 @@ Variable pr : Intermediate.program.
 Variable PB : NMap {fmap Block.id -> nat + seq value}.
 Variable PI : Program.interface.
 
-(* the k-th expansion cell of the o-th instruction of procedure (c,p) sits
-   at offset [proc_off Pcode o + k] within the procedure's linearized
-   segment (position 0 being the entry-label cell) *)
-Lemma linearize_proc_nth c p Cprocs Pcode o i k :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error (t2m_flat make upd msz (linearize_proc_gen PI pr c p))
-                 (proc_off Pcode o + k)
-  = List.nth_error (cell_exp make upd msz (instr_to_transitional c i)) k.
-Proof.
-move=> HC HP Ho Hk.
-have -> : linearize_proc_gen PI pr c p
-          = (TrLabel (inr (c, p)), head_tag_gen PI c p)
-              :: [seq instr_to_transitional c i0 | i0 <- Pcode].
-{ by rewrite /linearize_proc_gen HC /= HP. }
-have -> : t2m_flat make upd msz
-            ((TrLabel (inr (c, p)), head_tag_gen PI c p)
-               :: [seq instr_to_transitional c i0 | i0 <- Pcode])
-          = List.app
-              (cell_exp make upd msz (TrLabel (inr (c, p)), head_tag_gen PI c p))
-              (t2m_flat make upd msz [seq instr_to_transitional c i0 | i0 <- Pcode])
-  by rewrite app_catE.
-have Hentry :
-  length (cell_exp make upd msz (TrLabel (inr (c, p)), head_tag_gen PI c p)) = 1.
-{ by rewrite lin_size_length size_cell_exp. }
-rewrite List.nth_error_app2; last by rewrite Hentry /proc_off; lia.
-rewrite Hentry.
-have -> : Nat.sub (proc_off Pcode o + k) 1
-          = tseg_size (take o [seq instr_to_transitional c i0 | i0 <- Pcode]) + k.
-{ rewrite /proc_off -map_take tseg_size_map. by lia. }
-apply: t2m_flat_nth.
-- apply: map_nth_error_seq. exact: Ho.
-- by rewrite texp_isize.
-Qed.
-
 End ProcSegment.
 
 (* ==================== generic position toolkit ==================== *)
 
 Lemma sumn_consE (a : nat) (l : seq nat) : sumn (a :: l) = a + sumn l.
-Proof. by []. Qed.
-
-Lemma take_consSE (A : Type) (x : A) (s : seq A) j :
-  take j.+1 (x :: s) = x :: take j s.
 Proof. by []. Qed.
 
 Lemma nth_error_cat1 (A : Type) (l1 l2 : seq A) n :
@@ -329,14 +273,6 @@ elim: l o => [|a l IH] [|o] //=.
 exact: IH.
 Qed.
 
-Lemma nth_error_nth_d (A : Type) (d : A) (l : seq A) o x :
-  List.nth_error l o = Some x -> nth d l o = x.
-Proof.
-elim: l o => [|a l IH] [|o] //=.
-- by move=> [= ->].
-- exact: IH.
-Qed.
-
 (* ==================== transitional-level segment sizes ==================== *)
 
 Lemma tseg_size_cat (l1 l2 : seq (Transitional.instr * mem_tag)) :
@@ -355,21 +291,6 @@ elim: ll => [|s ll IH] //.
 have -> : flatten (s :: ll) = s ++ flatten ll by [].
 rewrite tseg_size_cat IH.
 by rewrite map_cons sumn_consE.
-Qed.
-
-Lemma isize_gt0 (i : Machine.instr) : 0 < isize i.
-Proof. by case: i. Qed.
-
-(* advance: stepping one Intermediate instruction shifts the flat offset by
-   the instruction's expansion size *)
-Lemma proc_off_S (Pcode : seq Machine.instr) o i :
-  List.nth_error Pcode o = Some i ->
-  proc_off Pcode o.+1 = proc_off Pcode o + isize i.
-Proof.
-move=> Ho.
-rewrite /proc_off (take_nth i (nth_error_size Ho)) (nth_error_nth_d i Ho).
-rewrite -cats1 map_cat sumn_cat /=.
-by lia.
 Qed.
 
 (* ==================== per-procedure / per-component bases ==================== *)
@@ -421,35 +342,6 @@ have -> : flatten (t2m_flat make upd msz s
 by [].
 Qed.
 
-Lemma sumn_size_take_t2m_linproc (c : Component.id)
-    (procs : seq Procedure.id) j :
-  sumn [seq size s
-       | s <- take j [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-                     | p' <- procs]]
-  = sumn (take j [seq tseg_size (linearize_proc_gen PI pr c p') | p' <- procs]).
-Proof.
-elim: procs j => [|q procs IH] [|j] //.
-have -> : take j.+1 [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-                    | p' <- q :: procs]
-          = t2m_flat make upd msz (linearize_proc_gen PI pr c q)
-            :: take j [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-                      | p' <- procs] by [].
-have -> : take j.+1 [seq tseg_size (linearize_proc_gen PI pr c p') | p' <- q :: procs]
-          = tseg_size (linearize_proc_gen PI pr c q)
-            :: take j [seq tseg_size (linearize_proc_gen PI pr c p') | p' <- procs]
-  by [].
-have -> : [seq size s
-          | s <- t2m_flat make upd msz (linearize_proc_gen PI pr c q)
-                 :: take j [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-                           | p' <- procs]]
-          = size (t2m_flat make upd msz (linearize_proc_gen PI pr c q))
-            :: [seq size s
-               | s <- take j [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-                             | p' <- procs]] by [].
-rewrite !sumn_consE size_t2m_flat IH.
-by [].
-Qed.
-
 Lemma sumn_size_take_t2m_snd
     (l : seq (nat * seq (Transitional.instr * mem_tag))) j :
   sumn [seq size s
@@ -473,28 +365,6 @@ rewrite !sumn_consE size_t2m_flat IH.
 by [].
 Qed.
 
-(* within-procedure positions stay inside the procedure's segment *)
-Lemma proc_off_lt (c : Component.id) Cprocs p Pcode o i k :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  proc_off Pcode o + k < tseg_size (linearize_proc_gen PI pr c p).
-Proof.
-move=> HC HP Ho Hk.
-have -> : linearize_proc_gen PI pr c p
-          = (TrLabel (inr (c, p)), head_tag_gen PI c p)
-              :: [seq instr_to_transitional c i0 | i0 <- Pcode].
-{ by rewrite /linearize_proc_gen HC /= HP. }
-rewrite tseg_size_cons tseg_size_map /proc_off.
-have -> : texp_size (TrLabel (inr (c, p)), head_tag_gen PI c p).1 = 1 by [].
-have Hnth : List.nth_error [seq isize x | x <- Pcode] o = Some (isize i).
-{ apply: map_nth_error_seq. exact: Ho. }
-have Hle := sumn_take_le Hnth.
-rewrite -map_take in Hle.
-by lia.
-Qed.
-
 Lemma tseg_size_lincomp (c : Component.id) Cprocs :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   tseg_size (linearize_component_gen PI pr c)
@@ -506,45 +376,6 @@ have -> : linearize_component_gen PI pr c
 { by rewrite /linearize_component_gen HC. }
 rewrite tseg_size_flatten.
 by rewrite -map_comp.
-Qed.
-
-(* master: within-component fetch *)
-Lemma linearize_component_nth (c : Component.id) Cprocs p Pcode o i k :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error (t2m_flat make upd msz (linearize_component_gen PI pr c))
-                 (proc_base PI pr c p + (proc_off Pcode o + k))
-  = List.nth_error (cell_exp make upd msz (instr_to_transitional c i)) k.
-Proof.
-move=> HC HP Ho Hk.
-have -> : linearize_component_gen PI pr c
-          = flatten [seq linearize_proc_gen PI pr c p' | p' <- domm Cprocs].
-{ by rewrite /linearize_component_gen HC. }
-rewrite t2m_flat_flatten.
-have -> : [seq t2m_flat make upd msz l
-          | l <- [seq linearize_proc_gen PI pr c p' | p' <- domm Cprocs]]
-          = [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-            | p' <- domm Cprocs].
-{ by rewrite -map_comp. }
-have Hpin : p \in domm Cprocs by rewrite mem_domm HP.
-have Hprocs : comp_procs pr c = domm Cprocs.
-{ by rewrite /comp_procs HC. }
-rewrite /proc_base Hprocs.
-rewrite -(sumn_size_take_t2m_linproc c (domm Cprocs)
-            (seq.index p (domm Cprocs))).
-have Hj : List.nth_error
-            [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-            | p' <- domm Cprocs]
-            (seq.index p (domm Cprocs))
-          = Some (t2m_flat make upd msz (linearize_proc_gen PI pr c p)).
-{ apply: map_nth_error_seq. exact: (nth_error_index Hpin). }
-have Hb : proc_off Pcode o + k
-          < size (t2m_flat make upd msz (linearize_proc_gen PI pr c p)).
-{ rewrite size_t2m_flat. exact: (proc_off_lt HC HP Ho Hk). }
-rewrite (flatten_nth_error Hj Hb).
-exact: (linearize_proc_nth make upd msz PI HC HP Ho Hk).
 Qed.
 
 (* master: component segment within the full linearized code *)
@@ -573,53 +404,6 @@ rewrite (flatten_nth_error Hj Hqb).
 by [].
 Qed.
 
-(* GRAND MASTER: absolute fetch in the generated merged code.
-   The k-th expansion cell of instruction o of procedure (c,p) sits at
-   [flat_pos PI pr c p Pcode o + k] in [compiler_gen pr make upd PB PI]. *)
-Lemma compiler_gen_nth (c : Component.id) Cprocs p Pcode o i k :
-  msz = memory_lengths PB ->
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error (compiler_gen pr make upd PB PI) (flat_pos PI pr c p Pcode o + k)
-  = List.nth_error (cell_exp make upd msz (instr_to_transitional c i)) k.
-Proof.
-move=> E HC HP Ho Hk.
-have -> : compiler_gen pr make upd PB PI
-          = transitional_to_merged_gen (mt := mt) make upd
-              PB
-              (intermediate_to_transitional_gen PI pr) by [].
-rewrite (t2m_genE make upd (intermediate_to_transitional_gen PI pr) E).
-rewrite /flat_pos.
-have Hcget : intermediate_to_transitional_gen PI pr c
-             = Some (linearize_component_gen PI pr c).
-{ by rewrite i2t_getm HC. }
-have -> : comp_base (intermediate_to_transitional_gen PI pr) c
-            + (proc_base PI pr c p + proc_off Pcode o) + k
-          = comp_base (intermediate_to_transitional_gen PI pr) c
-            + (proc_base PI pr c p + (proc_off Pcode o + k)) by lia.
-have Hpin : p \in domm Cprocs by rewrite mem_domm HP.
-have Hprocs : comp_procs pr c = domm Cprocs.
-{ by rewrite /comp_procs HC. }
-have Hb1 := proc_off_lt HC HP Ho Hk.
-have Hnths : List.nth_error
-               [seq tseg_size (linearize_proc_gen PI pr c p') | p' <- domm Cprocs]
-               (seq.index p (domm Cprocs))
-             = Some (tseg_size (linearize_proc_gen PI pr c p)).
-{ apply: map_nth_error_seq. exact: (nth_error_index Hpin). }
-have Hb2 := sumn_take_le Hnths.
-have Htotal := tseg_size_lincomp HC.
-have Hbound : proc_base PI pr c p + (proc_off Pcode o + k)
-              < tseg_size (linearize_component_gen PI pr c).
-{ rewrite /proc_base Hprocs Htotal.
-  apply: leq_trans Hb2.
-  rewrite ltn_add2l.
-  exact: Hb1. }
-rewrite (t2m_flat_code_nth Hcget Hbound).
-exact: (linearize_component_nth HC HP Ho Hk).
-Qed.
-
 (* ---- entry cells ---- *)
 
 (* the procedure segment is non-empty (it starts with the entry label cell) *)
@@ -634,57 +418,6 @@ have -> : linearize_proc_gen PI pr c p
               :: [seq instr_to_transitional c i0 | i0 <- Pcode].
 { by rewrite /linearize_proc_gen HC /= HP. }
 by [].
-Qed.
-
-(* the entry cell of procedure (c,p) is position 0 of its segment *)
-Lemma linearize_proc_entry (c : Component.id) Cprocs p Pcode :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error (t2m_flat make upd msz (linearize_proc_gen PI pr c p)) 0
-  = Some (MrLabel (make (c, p)), head_tag_gen PI c p).
-Proof.
-move=> HC HP.
-have -> : linearize_proc_gen PI pr c p
-          = (TrLabel (inr (c, p)), head_tag_gen PI c p)
-              :: [seq instr_to_transitional c i0 | i0 <- Pcode].
-{ by rewrite /linearize_proc_gen HC /= HP. }
-by [].
-Qed.
-
-(* segment view: position q inside procedure (c,p)'s segment, seen from the
-   component's flat code *)
-Lemma linearize_component_seg (c : Component.id) Cprocs p q :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  p \in domm Cprocs ->
-  q < tseg_size (linearize_proc_gen PI pr c p) ->
-  List.nth_error (t2m_flat make upd msz (linearize_component_gen PI pr c))
-                 (proc_base PI pr c p + q)
-  = List.nth_error (t2m_flat make upd msz (linearize_proc_gen PI pr c p)) q.
-Proof.
-move=> HC Hpin Hq.
-have -> : linearize_component_gen PI pr c
-          = flatten [seq linearize_proc_gen PI pr c p' | p' <- domm Cprocs].
-{ by rewrite /linearize_component_gen HC. }
-rewrite t2m_flat_flatten.
-have -> : [seq t2m_flat make upd msz l
-          | l <- [seq linearize_proc_gen PI pr c p' | p' <- domm Cprocs]]
-          = [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-            | p' <- domm Cprocs].
-{ by rewrite -map_comp. }
-have Hprocs : comp_procs pr c = domm Cprocs.
-{ by rewrite /comp_procs HC. }
-rewrite /proc_base Hprocs.
-rewrite -(sumn_size_take_t2m_linproc c (domm Cprocs)
-            (seq.index p (domm Cprocs))).
-have Hj : List.nth_error
-            [seq t2m_flat make upd msz (linearize_proc_gen PI pr c p')
-            | p' <- domm Cprocs]
-            (seq.index p (domm Cprocs))
-          = Some (t2m_flat make upd msz (linearize_proc_gen PI pr c p)).
-{ apply: map_nth_error_seq. exact: (nth_error_index Hpin). }
-have Hb : q < size (t2m_flat make upd msz (linearize_proc_gen PI pr c p)).
-{ by rewrite size_t2m_flat. }
-by rewrite (flatten_nth_error Hj Hb).
 Qed.
 
 (* compiler_gen view of a component segment *)
@@ -703,42 +436,6 @@ have -> : compiler_gen pr make upd PB PI
               (intermediate_to_transitional_gen PI pr) by [].
 rewrite (t2m_genE make upd (intermediate_to_transitional_gen PI pr) E).
 exact: (t2m_flat_code_nth Hc Hq).
-Qed.
-
-(* GRAND: the entry-label cell of procedure (c,p) sits at
-   [comp_base + proc_base] in [compiler_gen] *)
-Lemma compiler_gen_entry_nth (c : Component.id) Cprocs p Pcode :
-  msz = memory_lengths PB ->
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error (compiler_gen pr make upd PB PI)
-                 (comp_base (intermediate_to_transitional_gen PI pr) c
-                  + (proc_base PI pr c p + 0))
-  = Some (MrLabel (make (c, p)), head_tag_gen PI c p).
-Proof.
-move=> E HC HP.
-have Hcget : intermediate_to_transitional_gen PI pr c
-             = Some (linearize_component_gen PI pr c).
-{ by rewrite i2t_getm HC. }
-have Hpin : p \in domm Cprocs by rewrite mem_domm HP.
-have Hprocs : comp_procs pr c = domm Cprocs.
-{ by rewrite /comp_procs HC. }
-have Hb1 := tseg_size_linproc_gt0 HC HP.
-have Hnths : List.nth_error
-               [seq tseg_size (linearize_proc_gen PI pr c p') | p' <- domm Cprocs]
-               (seq.index p (domm Cprocs))
-             = Some (tseg_size (linearize_proc_gen PI pr c p)).
-{ apply: map_nth_error_seq. exact: (nth_error_index Hpin). }
-have Hb2 := sumn_take_le Hnths.
-have Htotal := tseg_size_lincomp HC.
-have Hbound : proc_base PI pr c p + 0 < tseg_size (linearize_component_gen PI pr c).
-{ rewrite /proc_base Hprocs Htotal.
-  apply: leq_trans Hb2.
-  rewrite ltn_add2l.
-  exact: Hb1. }
-rewrite (compiler_gen_seg E Hcget Hbound).
-rewrite (linearize_component_seg HC Hpin Hb1).
-exact: (linearize_proc_entry HC HP).
 Qed.
 
 End Assembly.
@@ -1100,61 +797,6 @@ rewrite ssrnat.addn0.
 exact: Hb.
 Qed.
 
-(* the entry cell survives the trailing-halt extension at the same position *)
-Lemma compiler_code_entry_nth Cprocs Pcode :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error (compiler_code L P C PB PI pr)
-                 (comp_base (intermediate_to_transitional_gen PI pr) c
-                  + (proc_base PI pr c p + 0))
-  = Some (MrLabel (can_make L P C (c, p)), head_tag_gen PI c p).
-Proof.
-move=> HCc HPp.
-have Hg := compiler_gen_entry_nth (can_make L P C) (can_upd L) PI
-             (erefl (memory_lengths PB)) HCc HPp.
-have Hg' : List.nth_error (compiler_body L P C PB PI pr)
-             (comp_base (intermediate_to_transitional_gen PI pr) c
-              + (proc_base PI pr c p + 0))
-           = Some (MrLabel (can_make L P C (c, p)), head_tag_gen PI c p)
-  by exact: Hg.
-rewrite /compiler_code.
-case E: (compiler_body L P C PB PI pr) => [|cell rest].
-- rewrite E in Hg'.
-  by case: (comp_base (intermediate_to_transitional_gen PI pr) c
-            + (proc_base PI pr c p + 0)) Hg'.
-- rewrite E in Hg'.
-  rewrite -cats1 nth_error_cat1; first exact: Hg'.
-  exact: (nth_error_size Hg').
-Qed.
-
-(* MASTER: the entry label of (c,p) resolves — via [encode_code]'s findopt —
-   to exactly the entry-cell position *)
-Lemma compiler_code_entry_findopt Cprocs Pcode :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  findopt (is_label_def lab) (compiler_code L P C PB PI pr)
-  = Some (comp_base (intermediate_to_transitional_gen PI pr) c
-          + (proc_base PI pr c p + 0)).
-Proof.
-move=> HCc HPp.
-apply: (findopt_unique_pos count_entry_compiler_code (compiler_code_entry_nth HCc HPp)).
-by rewrite /is_label_def /= /lab /can_make /= eqxx.
-Qed.
-
-(* corollary in [encode_code]'s own resolver: a Jal to the entry label of
-   (c,p) targets exactly the entry cell's address *)
-Lemma code_label_pos_entry Cprocs Pcode (pc0 default : nat) :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  code_label_pos (compiler_code L P C PB PI pr) pc0 lab default
-  = pc0 + (comp_base (intermediate_to_transitional_gen PI pr) c
-           + (proc_base PI pr c p + 0)).
-Proof.
-move=> HCc HPp.
-rewrite /code_label_pos (compiler_code_entry_findopt HCc HPp).
-by [].
-Qed.
-
 End LabelResolution.
 
 (* ==================== label resolution across a LINK ==================== *)
@@ -1214,44 +856,6 @@ apply: (fdisjointP Hdisj).
 by rewrite mem_domm HCc.
 Qed.
 
-Lemma link_count_entry_l : count (is_label_def lab) codeW <= 1.
-Proof.
-rewrite /codeW count_cat.
-have Ha := count_entry_compiler_code PB PI Hlab_a Hproc_a Hcomp_a c HpP.
-have Hb := count_entry_compiler_code_absent PB PI Hlab_b Hproc_b Hcomp_b HpP Hcb.
-rewrite /lab.
-by lia.
-Qed.
-
-Lemma link_entry_nth_l :
-  List.nth_error codeW
-                 (comp_base (intermediate_to_transitional_gen PI pra) c
-                  + (proc_base PI pra c p + 0))
-  = Some (MrLabel (can_make L P C (c, p)), head_tag_gen PI c p).
-Proof.
-have Hn := compiler_code_entry_nth L P C PB PI HCc HPp.
-rewrite /codeW nth_error_cat1; first exact: Hn.
-exact: (nth_error_size Hn).
-Qed.
-
-Lemma link_entry_findopt_l :
-  findopt (is_label_def lab) codeW
-  = Some (comp_base (intermediate_to_transitional_gen PI pra) c
-          + (proc_base PI pra c p + 0)).
-Proof.
-apply: (findopt_unique_pos link_count_entry_l link_entry_nth_l).
-by rewrite /is_label_def /= /lab /can_make /= eqxx.
-Qed.
-
-Lemma link_label_pos_entry_l (pc0 default : nat) :
-  code_label_pos codeW pc0 lab default
-  = pc0 + (comp_base (intermediate_to_transitional_gen PI pra) c
-           + (proc_base PI pra c p + 0)).
-Proof.
-rewrite /code_label_pos link_entry_findopt_l.
-by [].
-Qed.
-
 End LeftTarget.
 
 (* ---- target procedure on the RIGHT side ---- *)
@@ -1275,47 +879,6 @@ move: Hdisj. rewrite fdisjointC => /fdisjointP HD.
 apply: HD. by rewrite mem_domm HCc.
 Qed.
 
-Lemma link_count_entry_r : count (is_label_def lab) codeW <= 1.
-Proof.
-rewrite /codeW count_cat.
-have Hb := count_entry_compiler_code PB PI Hlab_b Hproc_b Hcomp_b c HpP.
-have Ha := count_entry_compiler_code_absent PB PI Hlab_a Hproc_a Hcomp_a HpP Hca.
-rewrite /lab.
-by lia.
-Qed.
-
-Lemma link_entry_nth_r :
-  List.nth_error codeW
-                 (size (compiler_code L P C PB PI pra)
-                  + (comp_base (intermediate_to_transitional_gen PI prb) c
-                     + (proc_base PI prb c p + 0)))
-  = Some (MrLabel (can_make L P C (c, p)), head_tag_gen PI c p).
-Proof.
-have Hn := compiler_code_entry_nth L P C PB PI HCc HPp.
-rewrite /codeW nth_error_cat2.
-exact: Hn.
-Qed.
-
-Lemma link_entry_findopt_r :
-  findopt (is_label_def lab) codeW
-  = Some (size (compiler_code L P C PB PI pra)
-          + (comp_base (intermediate_to_transitional_gen PI prb) c
-             + (proc_base PI prb c p + 0))).
-Proof.
-apply: (findopt_unique_pos link_count_entry_r link_entry_nth_r).
-by rewrite /is_label_def /= /lab /can_make /= eqxx.
-Qed.
-
-Lemma link_label_pos_entry_r (pc0 default : nat) :
-  code_label_pos codeW pc0 lab default
-  = pc0 + (size (compiler_code L P C PB PI pra)
-           + (comp_base (intermediate_to_transitional_gen PI prb) c
-              + (proc_base PI prb c p + 0))).
-Proof.
-rewrite /code_label_pos link_entry_findopt_r.
-by [].
-Qed.
-
 End RightTarget.
 
 End LinkResolution.
@@ -1331,78 +894,6 @@ Variable PI : Program.interface.
 
 Let can_msz := memory_lengths PB.
 
-(* instruction-cell positions survive the trailing-halt extension *)
-Lemma compiler_code_nth (c : Component.id) Cprocs p Pcode o i k :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error (compiler_code L P C PB PI pr) (flat_pos PI pr c p Pcode o + k)
-  = List.nth_error
-      (cell_exp (can_make L P C) (can_upd L) can_msz
-                (instr_to_transitional c i)) k.
-Proof.
-move=> HC HP Ho Hk.
-have Hg := compiler_gen_nth (can_make L P C) (can_upd L) PI
-             (erefl (memory_lengths PB)) HC HP Ho Hk.
-have Hg' : List.nth_error (compiler_body L P C PB PI pr) (flat_pos PI pr c p Pcode o + k)
-           = List.nth_error
-               (cell_exp (can_make L P C) (can_upd L) can_msz
-                         (instr_to_transitional c i)) k
-  by exact: Hg.
-have Hcs : exists cell,
-    List.nth_error
-      (cell_exp (can_make L P C) (can_upd L) can_msz
-                (instr_to_transitional c i)) k = Some cell.
-{ apply: nth_error_Some_ex.
-  rewrite lin_size_length size_cell_exp texp_isize. exact: Hk. }
-case: Hcs => cell Hcell.
-rewrite /compiler_code.
-case E: (compiler_body L P C PB PI pr) => [|hd rest].
-- exfalso.
-  rewrite E Hcell in Hg'.
-  by case: (flat_pos PI pr c p Pcode o + k) Hg'.
-- rewrite E in Hg'.
-  rewrite -cats1 nth_error_cat1; first exact: Hg'.
-  rewrite Hcell in Hg'.
-  exact: (nth_error_size Hg').
-Qed.
-
-(* THE me-machine fetch: at address pc0 + flat position, the encoded memory
-   holds the cell's tag and decodes to the cell's instruction with labels
-   resolved by [code_label_pos] *)
-Lemma compiler_code_encoded_fetch (c : Component.id) Cprocs p Pcode o i k
-    (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
-  pc0 + size (compiler_code L P C PB PI pr) < 2 ^ word_size mt ->
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error
-    (cell_exp (can_make L P C) (can_upd L) can_msz
-              (instr_to_transitional c i)) k = Some cell ->
-  exists v : matom,
-    encode_code (compiler_code L P C PB PI pr) pc0
-      (word_of_nat ((flat_pos PI pr c p Pcode o + k) + pc0)) = Some v
-    /\ taga v = cell.2
-    /\ Types.decode_instr (vala v)
-       = Some (instr_merged_to_mp cell.1
-                 (code_label_pos (compiler_code L P C PB PI pr) pc0)
-                 (pc0 + (flat_pos PI pr c p Pcode o + k))).
-Proof.
-move=> Hbound HC HP Ho Hk Hcell.
-have Hnth : List.nth_error (compiler_code L P C PB PI pr)
-              (flat_pos PI pr c p Pcode o + k) = Some cell.
-{ by rewrite (compiler_code_nth HC HP Ho Hk). }
-case: cell Hnth Hcell => mi tg Hnth Hcell.
-have [v [Hv [Htag Hval]]] := encode_code_fetch Hbound Hnth.
-exists v.
-split; first exact: Hv.
-split; first exact: Htag.
-rewrite Hval /encode_instr_mp.
-by rewrite encodeK.
-Qed.
-
 End LinCodeFetch.
 
 (* ==================== end-to-end fetch across a LINK ==================== *)
@@ -1417,115 +908,6 @@ Variable PI : Program.interface.
 Let codeW := compiler_code L P C PB PI pra ++ compiler_code L P C PB PI prb.
 Let msza := memory_lengths PB.
 Let mszb := memory_lengths PB.
-
-(* instruction cells of the LEFT side keep their positions in the link *)
-Lemma link_code_nth_l (c : Component.id) Cprocs p Pcode o i k :
-  Intermediate.prog_procedures pra c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error codeW (flat_pos PI pra c p Pcode o + k)
-  = List.nth_error
-      (cell_exp (can_make L P C) (can_upd L) msza
-                (instr_to_transitional c i)) k.
-Proof.
-move=> HC HP Ho Hk.
-have Hn := compiler_code_nth L P C PB PI HC HP Ho Hk.
-have Hcs : exists cell,
-    List.nth_error
-      (cell_exp (can_make L P C) (can_upd L) msza
-                (instr_to_transitional c i)) k = Some cell.
-{ apply: nth_error_Some_ex.
-  rewrite lin_size_length size_cell_exp texp_isize. exact: Hk. }
-case: Hcs => cell Hcell.
-rewrite /codeW nth_error_cat1; first exact: Hn.
-rewrite Hcell in Hn.
-exact: (nth_error_size Hn).
-Qed.
-
-(* instruction cells of the RIGHT side shift by the left code's size *)
-Lemma link_code_nth_r (c : Component.id) Cprocs p Pcode o i k :
-  Intermediate.prog_procedures prb c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error codeW
-                 (size (compiler_code L P C PB PI pra) + (flat_pos PI prb c p Pcode o + k))
-  = List.nth_error
-      (cell_exp (can_make L P C) (can_upd L) mszb
-                (instr_to_transitional c i)) k.
-Proof.
-move=> HC HP Ho Hk.
-rewrite /codeW nth_error_cat2.
-exact: (compiler_code_nth L P C PB PI HC HP Ho Hk).
-Qed.
-
-(* THE linked me-machine fetch, LEFT side *)
-Lemma link_encoded_fetch_l (c : Component.id) Cprocs p Pcode o i k
-    (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
-  pc0 + size codeW < 2 ^ word_size mt ->
-  Intermediate.prog_procedures pra c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error
-    (cell_exp (can_make L P C) (can_upd L) msza
-              (instr_to_transitional c i)) k = Some cell ->
-  exists v : matom,
-    encode_code codeW pc0
-      (word_of_nat ((flat_pos PI pra c p Pcode o + k) + pc0)) = Some v
-    /\ taga v = cell.2
-    /\ Types.decode_instr (vala v)
-       = Some (instr_merged_to_mp cell.1 (code_label_pos codeW pc0)
-                 (pc0 + (flat_pos PI pra c p Pcode o + k))).
-Proof.
-move=> Hbound HC HP Ho Hk Hcell.
-have Hn : List.nth_error codeW (flat_pos PI pra c p Pcode o + k) = Some cell.
-{ by rewrite (link_code_nth_l HC HP Ho Hk). }
-case: cell Hn Hcell => mi tg Hn _.
-have [v [Hv [Htag Hval]]] := encode_code_fetch Hbound Hn.
-exists v.
-split; first exact: Hv.
-split; first exact: Htag.
-rewrite Hval /encode_instr_mp.
-by rewrite encodeK.
-Qed.
-
-(* THE linked me-machine fetch, RIGHT side *)
-Lemma link_encoded_fetch_r (c : Component.id) Cprocs p Pcode o i k
-    (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
-  pc0 + size codeW < 2 ^ word_size mt ->
-  Intermediate.prog_procedures prb c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some i ->
-  k < isize i ->
-  List.nth_error
-    (cell_exp (can_make L P C) (can_upd L) mszb
-              (instr_to_transitional c i)) k = Some cell ->
-  exists v : matom,
-    encode_code codeW pc0
-      (word_of_nat
-         ((size (compiler_code L P C PB PI pra) + (flat_pos PI prb c p Pcode o + k)) + pc0))
-    = Some v
-    /\ taga v = cell.2
-    /\ Types.decode_instr (vala v)
-       = Some (instr_merged_to_mp cell.1 (code_label_pos codeW pc0)
-                 (pc0 + (size (compiler_code L P C PB PI pra)
-                         + (flat_pos PI prb c p Pcode o + k)))).
-Proof.
-move=> Hbound HC HP Ho Hk Hcell.
-have Hn : List.nth_error codeW
-            (size (compiler_code L P C PB PI pra) + (flat_pos PI prb c p Pcode o + k))
-          = Some cell.
-{ by rewrite (link_code_nth_r HC HP Ho Hk). }
-case: cell Hn Hcell => mi tg Hn _.
-have [v [Hv [Htag Hval]]] := encode_code_fetch Hbound Hn.
-exists v.
-split; first exact: Hv.
-split; first exact: Htag.
-rewrite Hval /encode_instr_mp.
-by rewrite encodeK.
-Qed.
 
 End LinkFetch.
 
@@ -1727,45 +1109,6 @@ rewrite ssrnat.addn0.
 exact: Hb.
 Qed.
 
-(* the defining occurrence sits at its flat position *)
-Lemma compiler_code_body_nth Cprocs p Pcode o :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some (ILabel l) ->
-  List.nth_error (compiler_code L P C PB PI pr) (flat_pos PI pr c p Pcode o + 0)
-  = Some (MrLabel (can_upd L c l), def_mem_tag c true).
-Proof.
-move=> HCc HPp Ho.
-have Hk : 0 < isize (ILabel l) by [].
-by rewrite (compiler_code_nth L P C PB PI HCc HPp Ho Hk).
-Qed.
-
-(* MASTER: the body label resolves to its defining occurrence *)
-Lemma compiler_code_body_findopt Cprocs p Pcode o :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some (ILabel l) ->
-  findopt (is_label_def lab) (compiler_code L P C PB PI pr)
-  = Some (flat_pos PI pr c p Pcode o + 0).
-Proof.
-move=> HCc HPp Ho.
-apply: (findopt_unique_pos count_body_compiler_code
-          (compiler_code_body_nth HCc HPp Ho)).
-by rewrite /is_label_def /= /lab /can_upd eqxx.
-Qed.
-
-Lemma code_label_pos_body Cprocs p Pcode o (pc0 default : nat) :
-  Intermediate.prog_procedures pr c = Some Cprocs ->
-  Cprocs p = Some Pcode ->
-  List.nth_error Pcode o = Some (ILabel l) ->
-  code_label_pos (compiler_code L P C PB PI pr) pc0 lab default
-  = pc0 + (flat_pos PI pr c p Pcode o + 0).
-Proof.
-move=> HCc HPp Ho.
-rewrite /code_label_pos (compiler_code_body_findopt HCc HPp Ho).
-by [].
-Qed.
-
 (* the non-owning side of a link contributes nothing *)
 Lemma count_body_compiler_code_absent (pr' : Intermediate.program) :
   (forall cid Cprocs Pid Pcode l0,
@@ -1896,39 +1239,6 @@ Qed.
 Let Hcb : c \notin domm (Intermediate.prog_procedures prb).
 Proof. apply: (fdisjointP Hdisj). by rewrite mem_domm HCc. Qed.
 
-Lemma link_count_body_l : count (is_label_def lab) codeW <= 1.
-Proof.
-rewrite /codeW count_cat.
-have Ha := @count_body_compiler_code L P C pra PB PI Hlab_a c l HcC HlL Huniq_a.
-have Hb := @count_body_compiler_code_absent L P C PB PI c l HcC HlL prb Hlab_b Hcb.
-rewrite /lab.
-by lia.
-Qed.
-
-Lemma link_body_nth_l :
-  List.nth_error codeW (flat_pos PI pra c p Pcode o + 0)
-  = Some (MrLabel (can_upd L c l), def_mem_tag c true).
-Proof.
-have Hn := @compiler_code_body_nth L P C pra PB PI c l Cprocs p Pcode o HCc HPp Ho.
-rewrite /codeW nth_error_cat1; first exact: Hn.
-exact: (nth_error_size Hn).
-Qed.
-
-Lemma link_body_findopt_l :
-  findopt (is_label_def lab) codeW = Some (flat_pos PI pra c p Pcode o + 0).
-Proof.
-apply: (findopt_unique_pos link_count_body_l link_body_nth_l).
-by rewrite /is_label_def /= /lab /can_upd eqxx.
-Qed.
-
-Lemma link_label_pos_body_l (pc0 default : nat) :
-  code_label_pos codeW pc0 lab default
-  = pc0 + (flat_pos PI pra c p Pcode o + 0).
-Proof.
-rewrite /code_label_pos link_body_findopt_l.
-by [].
-Qed.
-
 End BodyLeft.
 
 (* ---- defining occurrence on the RIGHT side ---- *)
@@ -1962,41 +1272,6 @@ Let Hca : c \notin domm (Intermediate.prog_procedures pra).
 Proof.
 move: Hdisj. rewrite fdisjointC => /fdisjointP HD.
 apply: HD. by rewrite mem_domm HCc.
-Qed.
-
-Lemma link_count_body_r : count (is_label_def lab) codeW <= 1.
-Proof.
-rewrite /codeW count_cat.
-have Hb := @count_body_compiler_code L P C prb PB PI Hlab_b c l HcC HlL Huniq_b.
-have Ha := @count_body_compiler_code_absent L P C PB PI c l HcC HlL pra Hlab_a Hca.
-rewrite /lab.
-by lia.
-Qed.
-
-Lemma link_body_nth_r :
-  List.nth_error codeW
-                 (size (compiler_code L P C PB PI pra) + (flat_pos PI prb c p Pcode o + 0))
-  = Some (MrLabel (can_upd L c l), def_mem_tag c true).
-Proof.
-have Hn := @compiler_code_body_nth L P C prb PB PI c l Cprocs p Pcode o HCc HPp Ho.
-rewrite /codeW nth_error_cat2.
-exact: Hn.
-Qed.
-
-Lemma link_body_findopt_r :
-  findopt (is_label_def lab) codeW
-  = Some (size (compiler_code L P C PB PI pra) + (flat_pos PI prb c p Pcode o + 0)).
-Proof.
-apply: (findopt_unique_pos link_count_body_r link_body_nth_r).
-by rewrite /is_label_def /= /lab /can_upd eqxx.
-Qed.
-
-Lemma link_label_pos_body_r (pc0 default : nat) :
-  code_label_pos codeW pc0 lab default
-  = pc0 + (size (compiler_code L P C PB PI pra) + (flat_pos PI prb c p Pcode o + 0)).
-Proof.
-rewrite /code_label_pos link_body_findopt_r.
-by [].
 Qed.
 
 End BodyRight.
@@ -2215,16 +1490,6 @@ Qed.
 
 End FindComp.
 
-(* [initial_state]'s find uses a pattern lambda; bridge it *)
-Lemma find_pred_pairE (c : Component.id)
-    (l : seq (@Merged.instr mt * mem_tag)) :
-  find (fun '(_, tag) => color tag == c) l
-  = find (fun cell : @Merged.instr mt * mem_tag => color cell.2 == c) l.
-Proof.
-apply: eq_find => -[i t] /=.
-by [].
-Qed.
-
 Section FindLin.
 
 Variables L P C : nat.
@@ -2357,16 +1622,6 @@ have Hhas : has (fun cell : @Merged.instr mt * mem_tag =>
 { by rewrite has_find Hfc. }
 rewrite Hhas.
 exact: Hfc.
-Qed.
-
-(* seq membership to List.In (local bridge) *)
-Lemma mem_seq_In_lp (T : eqType) (l : seq T) (x : T) :
-  x \in l -> List.In x l.
-Proof.
-elim: l => [|a l IH] //=.
-rewrite in_cons => /orP[/eqP -> | /IH H].
-- by left.
-- by right.
 Qed.
 
 (* no cell of a colour-free block matches the colour test *)

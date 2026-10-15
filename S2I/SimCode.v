@@ -92,29 +92,6 @@ Proof.
   split=> //. by rewrite Hcode -catA.
 Qed.
 
-Lemma code_at_app_r {G pc c1 c2} :
-  code_at G pc (c1 ++ c2) ->
-  code_at G (Pointer.add pc (Z.of_nat (size c1))) c2.
-Proof.
-  move=> [C_procs [P_code [pre [post [HC HP Hcode Hoff]]]]].
-  exists C_procs, P_code, (pre ++ c1), post.
-  split.
-  - by rewrite Pointer.add_preserves_component.
-  - by rewrite Pointer.add_preserves_block.
-  - by rewrite Hcode -!catA.
-  - case: pc Hoff {HC HP} => [[C b] o] /= Hoff.
-    rewrite size_cat Hoff. lia.
-Qed.
-
-(* pc arithmetic conveniences *)
-Lemma pointer_inc_add pc n :
-  (0 <= n)%Z ->
-  Pointer.inc (Pointer.add pc n) = Pointer.add pc (n + 1)%Z.
-Proof. case: pc => [[C b] o] _ /=. by rewrite /Pointer.inc /= Z.add_assoc. Qed.
-
-Lemma pointer_add_0 pc : Pointer.add pc 0 = pc.
-Proof. case: pc => [[C b] o] /=. by rewrite Z.add_0_r. Qed.
-
 (* ==================== per-instruction step lemmas ==================== *)
 
 Section StepLemmas.
@@ -566,11 +543,6 @@ Proof. by case: i => // l' /(_ l'). Qed.
 Lemma labels_of_label l' c : labels_of (ILabel l' :: c) = l' :: labels_of c.
 Proof. by []. Qed.
 
-Lemma labels_of_skip i c :
-  (forall l', i <> ILabel l') ->
-  labels_of (i :: c) = labels_of c.
-Proof. by case: i => // l' /(_ l'). Qed.
-
 Lemma find_label_aux_cat_notin pre l o rest :
   l \notin labels_of pre ->
   find_label_aux (pre ++ rest) l o
@@ -820,18 +792,6 @@ Proof.
     + exact: In_elementsm_getm HInP0.
 Qed.
 
-(* the anchor, in [code_at] form: a whole procedure block anchors at offset 0 *)
-Lemma code_at_block {G C b CprocsB cd} :
-  getm (genv_procedures G) C = Some CprocsB ->
-  getm CprocsB b = Some cd ->
-  code_at G (C, b, 0%Z) cd.
-Proof.
-  move=> H1 H2.
-  exists CprocsB, cd, [::], [::].
-  split=> //=.
-  by rewrite cats0.
-Qed.
-
 (* ==================== per-procedure fold extraction ==================== *)
 
 (* mirror of Compiler.v's [compile_components_aux_untouched]/[_getC], one level
@@ -991,18 +951,6 @@ Proof.
   apply/hasPn => x Hx2. apply/negP => Hx1.
   by move: (Hdisj _ Hx1); rewrite Hx2.
 Qed.
-
-Lemma labels_of_push r : labels_of (push r) = [::].
-Proof. by []. Qed.
-
-Lemma labels_of_pop r : labels_of (pop r) = [::].
-Proof. by []. Qed.
-
-Lemma labels_of_load_arg buf r : labels_of (load_arg buf r) = [::].
-Proof. by []. Qed.
-
-Lemma labels_of_store_arg buf r rt : labels_of (store_arg buf r rt) = [::].
-Proof. by []. Qed.
 
 Lemma notin_all_window x a b ls :
   all (in_window a b) ls -> (x < a) || (b <= x) -> x \notin ls.
@@ -1320,37 +1268,6 @@ Proof.
 Qed.
 
 (* ==================== entry-label values (phase 1) ==================== *)
-
-(* The label-generation pass hands out CONSECUTIVE counter values: entry
-   labels are all below the post-pass counter and pairwise distinct. *)
-Lemma gen_component_labels_values comp ps acc s m s' :
-  gen_component_procedures_labels_aux comp acc ps s = Some (m, s') ->
-  [/\ cnt s comp <= cnt s' comp,
-      (forall P, P \notin unzip1 ps -> getm m P = getm acc P)
-    & (forall P pl, getm m P = Some pl ->
-         getm acc P = Some pl \/ in_window (cnt s comp) (cnt s' comp) pl)].
-Proof.
-  elim: ps acc s => [|[P0 e0] ps IH] acc s /=.
-  - rewrite /Comp.ret. move=> [<- <-]. split=> //.
-    move=> P pl H. by left.
-  - rewrite /Comp.bind fresh_labelE /=. move=> Hrest.
-    have [M Hout Hval] := IH _ _ Hrest.
-    rewrite {1}/cnt /= setmE eqxx /= -/(cnt s comp) in M.
-    rewrite {1}/cnt /= setmE eqxx /= -/(cnt s comp) in Hval.
-    split.
-    + lia.
-    + move=> P. rewrite in_cons negb_or => /andP [HneP Hnotin].
-      rewrite (Hout _ Hnotin) setmE.
-      by rewrite (negbTE HneP).
-    + move=> P pl Hm.
-      case: (Hval _ _ Hm) => [Hacc'|Hwin]; last first.
-      * right. move: Hwin. by apply: in_window_widen.
-      * move: Hacc'. rewrite setmE.
-        case EP: (P == P0).
-        -- move=> [E]. right. subst pl.
-           rewrite /in_window -/(cnt s comp). lia.
-        -- move=> Hacc. by left.
-Qed.
 
 (* entry labels are INJECTIVE per component (distinct counter values) *)
 Lemma gen_component_labels_inj comp ps acc s m s' :

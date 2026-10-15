@@ -53,11 +53,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   (* Import Strong. *)
   (*** Diagrams ***)
 
-  (* Bridge: x \in domm m -> In x (domm m). Uses Extra.In_in. *)
-  Lemma mem_In_domm: forall {T: ordType} {S: Type} (m: {fmap T -> S}) x,
-    x \in domm m -> In x (domm m).
-  Proof. intros. apply Extra.In_in. exact H. Qed.
-
   (* Tmp.mapk preserves values: if mapk f m k' = Some v, then
      exists k such that f k = k' and m k = Some v *)
   Lemma foldl_unionm_In: forall {T : ordType} {S : Type} (ms : seq {fmap T -> S}) k v,
@@ -720,29 +715,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exact: (leq_trans Hn (ltnW Hsz)).
   Qed.
     
-  (* Lemma initial_memory_prefix: forall pb w v, *)
-  (*     initial_memory (mt := mt) pb w = Some v -> *)
-  (*     andw w (@mask mt NC) = *)
-  (*       @component_memory_prefix mt NC (ssrint.Posz (1 + color (taga v))). *)
-  (* Proof. *)
-  (*   intros pb w v Hmem. *)
-  (*   unfold initial_memory in Hmem. *)
-  (*   apply mapk_Some in Hmem. destruct Hmem as [k [Hw Hmem]]. *)
-  (*   rewrite mapmE in Hmem. *)
-  (*   destruct (linearize_bufs pb k) as [val_tag |] eqn:Hbufs; simpl in Hmem; [| discriminate]. *)
-  (*   injection Hmem => <-. simpl. *)
-  (*   (* Hw : f k = w, where f maps (c,b,o) triples to word addresses *) *)
-  (*   (* taga = snd val_tag = def_mem_tag c false, so color = c *) *)
-  (*   have [c0 [Htag Hdom]] := linearize_bufs_color Hbufs. *)
-  (*   rewrite Htag. simpl. *)
-  (*   destruct k as [p o]. *)
-  (*   destruct p as [c b]. *)
-  (*   simpl in *. *)
-  (*   (* Goal: andw w mask = component_memory_prefix (Posz (1 + c0)) *) *)
-  (*   (* w = as_word (concretize (k, Z.of_nat ...)) *) *)
-  (*   (* Need: the address computation puts c0's data in c0's prefix region *) *)
-  (*   admit. *)
-  (* Admitted. *)
   Lemma findopt_bound: forall {A} (pred : A -> bool) (l : seq A) m,
       findopt pred l = Some m -> m < size l.
   Proof.
@@ -1108,87 +1080,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hfind' in Hfind. discriminate.
   Qed.
   
-  (* Lemma encode_code_end_condition: forall cde pc0 w v, *)
-  (*   (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) -> *)
-  (*   encode_code cde pc0 w = Some v -> *)
-  (*   is_code (taga v) -> *)
-  (*   (decode_instr (vala v) = Some (Halt _)) \/ *)
-  (*   (exists v', encode_code cde pc0 (w + 1)%w = Some v' *)
-  (*          /\ is_code (taga v') = true). *)
-  (* Proof. *)
-  (*   intros cde pc0 w v Hwf Henc Hcode. *)
-  (*   destruct (encode_code_nth_inv Henc) as [n [Hw [Hlt Hnth]]]. *)
-  (*   set cde' := cde ++ [:: (@MrHalt mt, MTag Other Component.main None true)] in Hlt, Hnth. *)
-  (*   (* n < size cde', and nth_error (foldr ...) n = Some v *) *)
-  (*   (* Case: is n the last entry (n = size cde' - 1) or not? *) *)
-  (*   destruct (Nat.eq_dec n (size cde' - 1)) as [Hlast | Hnotlast]. *)
-  (*   - (* n is the last entry: it's the appended Halt *) *)
-  (*     left. *)
-  (*     (* v is the n-th entry where n = size cde' - 1 = last position. *)
-  (*        The last entry in cde' = cde ++ [halt] is (MrHalt, MTag ...). *)
-  (*        encode_instr_atom (MrHalt, _) lp pos = (encode_instr_mp (Halt mt)) @ _. *)
-  (*        decode_instr (encode_instr_mp (Halt mt)) = Some (Halt mt) by encodeK. *) *)
-  (*     destruct (encode_code_foldr_nth Hnth) as [i [t [Hnth_cde [Htag Hval]]]]. *)
-  (*     (* Hnth_cde : nth_error cde' n = Some (i, t), with n = size cde' - 1 *) *)
-  (*     (* The last entry of cde' is (MrHalt, ...) *) *)
-  (*     have Hlast_entry: nth_error cde' (size cde' - 1) = Some (@MrHalt mt, MTag Other Component.main None true). *)
-  (*     { subst cde'. *)
-  (*       rewrite size_cat /= addnK. *)
-  (*       rewrite nth_error_app2; [| done]. *)
-  (*       rewrite Nat.sub_diag /=. reflexivity. } *)
-  (*     rewrite Hlast in Hnth_cde. rewrite Hlast_entry in Hnth_cde. *)
-  (*     inversion Hnth_cde as [[Hi Ht]]. subst i. *)
-  (*     (* i = MrHalt, so instr_merged_to_mp MrHalt lp pos = Halt mt *) *)
-  (*     rewrite Hval. rewrite encodeK. done. *)
-  (*   - (* n is not the last: n+1 < size cde', so successor exists *) *)
-  (*     right. *)
-  (*     assert (Hlt' : n + 1 < size cde'). *)
-  (*     { rewrite addn1 ltn_neqAle Hlt andbT. *)
-  (*       apply /eqP => Heq. apply Hnotlast. *)
-  (*       rewrite -Heq. rewrite subn1 succnK. reflexivity. } *)
-  (*     (* nth_error (foldr ...) (n+1) = Some v' for some v' *) *)
-  (*     set (f := (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) => *)
-  (*              (encode_instr_atom x *)
-  (*                 (fun l default : nat => *)
-  (*                  match *)
-  (*                    findopt *)
-  (*                      (fun p : Merged.instr * mem_tag => *)
-  (*                       match p.1 with *)
-  (*                       | MrLabel l0 => l == l0 *)
-  (*                       | _ => false *)
-  (*                       end) cde' *)
-  (*                  with *)
-  (*                  | Some m => pc0 + m *)
-  (*                  | None => if l == alloc_label then l else default *)
-  (*                  end) (pc0 + size cde' - 1 - acc.2) :: acc.1, acc.2.+1))). *)
-  (*     assert (Hnth' : exists v', nth_error (foldr f ([::], 0) cde').1 (n+1) = Some v'). *)
-  (*     { apply nth_error_Some_ex. *)
-  (*       change (n + 1 < size (foldr f ([::], 0) cde').1). *)
-  (*       rewrite /f encode_code_foldr_size. exact Hlt'. } *)
-  (*     destruct Hnth' as [v' Hv']. *)
-  (*     exists v'. split. *)
-  (*     + (* encode_code cde pc0 (w + 1) = Some v' *) *)
-  (*       rewrite Hw. *)
-  (*       (* word_of_nat (n + pc0) + 1 = word_of_nat ((n+1) + pc0) *) *)
-  (*       replace ((word_of_nat (n + pc0) + 1)%w) with (@word_of_nat (word_size mt) (n + 1 + pc0)). *)
-  (*       2: { (* word_of_nat (n + pc0) + 1 = word_of_nat (n + 1 + pc0) *) *)
-  (*         rewrite /word_of_nat. *)
-  (*         apply val_inj. *)
-  (*         rewrite /addw /onew. simpl. *)
-  (*         (* congr fintype.Ordinal. *) *)
-  (*         (* rewrite val_as_word. *) *)
-  (*         rewrite !intdiv.modz_nat !ssrint.absz_nat. *)
-  (*         rewrite div.modnDmr div.modnDml. *)
-  (*         rewrite addnAC. *)
-  (*         apply fintype.ord_inj. simpl. *)
-  (*         rewrite !div.modn_mod. *)
-  (*         rewrite -div.modnDm. done. } *)
-  (*       apply (encode_code_nth (pc0 := pc0)). *)
-  (*       rewrite /f in Hv'. exact Hv'. *)
-  (*     + (* is_code (taga v') = true *) *)
-  (*       destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]]. *)
-  (*       rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1. *)
-  (* Qed. *)
   
   (* Well-formedness leaf (per policy): the last cell of well-formed code is a Halt — the
      compiler emits a trailing Halt per code block; not derivable from code_tags_wf alone. *)
@@ -1377,10 +1268,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     { apply: (ltn_trans _ alloc_label_lt_w). by lia. }
     by rewrite (initial_memory_size_eq Hb).
   Qed.
-  Lemma memory_size_wo_code:
-    size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c)))
-    < alloc_label.
-  Proof. apply: (leq_ltn_trans _ memory_size). exact: leq_addr. Qed.
 
   Lemma memory_size':
     size (initial_memory (mt := mt) (unionm (prog_buffers p') (prog_buffers c'))) +
@@ -1391,10 +1278,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     { apply: (ltn_trans _ alloc_label_lt_w). by lia. }
     by rewrite (initial_memory_size_eq Hb).
   Qed.
-  Lemma memory_size'_wo_code:
-    size (initial_memory (mt := mt) (unionm (prog_buffers p') (prog_buffers c')))
-    < alloc_label.
-  Proof. apply: (leq_ltn_trans _ memory_size'). exact: leq_addr. Qed.
 
   Lemma memory_size'':
     size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c'))) +
@@ -1405,10 +1288,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     { apply: (ltn_trans _ alloc_label_lt_w). by lia. }
     by rewrite (initial_memory_size_eq Hb).
   Qed.
-  Lemma memory_size''_wo_code:
-    size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))
-    < alloc_label.
-  Proof. apply: (leq_ltn_trans _ memory_size''). exact: leq_addr. Qed.
 
   Lemma lin_size_wo_code:
     size (linearize_bufs (unionm (prog_buffers p) (prog_buffers c))) < alloc_label.
@@ -1511,9 +1390,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma total_bound_prog' : size (linearize_bufs (prog_buffers prog')) < 2 ^ (word_size mt).
   Proof. apply: (ltn_trans _ alloc_label_lt_w). exact: lin_size_wo_code'. Qed.
 
-  Lemma total_bound_prog'' : size (linearize_bufs (prog_buffers prog'')) < 2 ^ (word_size mt).
-  Proof. apply: (ltn_trans _ alloc_label_lt_w). exact: lin_size_wo_code''. Qed.
-
   (* DATA-SIZE alignment: the data-segment size is shape-determined. *)
   Lemma align_data_size: size (initial_memory (mt := mt) (prog_buffers prog'))
                        = size (initial_memory (mt := mt) (prog_buffers prog'')).
@@ -1531,17 +1407,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma align_data_domm_left: domm (initial_memory (mt := mt) (prog_buffers prog))
                             = domm (initial_memory (mt := mt) (prog_buffers prog'')).
   Proof. exact: (initial_memory_shape_domm bufs_shape_prog_prog'' total_bound_prog). Qed.
-
-  (* unfolded-union forms (syntactic rewrite handles) *)
-  Lemma align_data_size_u :
-    size (@initial_memory mt (unionm (prog_buffers p') (prog_buffers c')))
-    = size (@initial_memory mt (unionm (prog_buffers p) (prog_buffers c'))).
-  Proof. exact: align_data_size. Qed.
-
-  Lemma align_data_size_left_u :
-    size (@initial_memory mt (unionm (prog_buffers p) (prog_buffers c)))
-    = size (@initial_memory mt (unionm (prog_buffers p) (prog_buffers c'))).
-  Proof. exact: align_data_size_left. Qed.
 
   Lemma align_data_domm_u :
     domm (@initial_memory mt (unionm (prog_buffers p') (prog_buffers c')))
@@ -1630,26 +1495,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
 
   Lemma encode_int_of_nat : forall n, encode_int (Z.of_nat n) = ssrint.Posz n.
   Proof. case=> [//|m] /=. by rewrite nat_of_pos_succ. Qed.
-
-  Lemma encode_int_sub : forall (A B : nat), (B <= A)%nat ->
-    encode_int (Z.of_nat A - Z.of_nat B) = (ssrint.Posz A - ssrint.Posz B)%R.
-  Proof.
-    move=> A B H. rewrite -Nat2Z.inj_sub; last by apply/leP.
-    by rewrite encode_int_of_nat (subzn H).
-  Qed.
-
-  (* [addw] = the word zmod [+%R], so [as_word] is additive for [%w] too. *)
-  Lemma as_word_addw (x y : ssrint.int) :
-    (as_word x + as_word y)%w = as_word (x + y)%R :> mword mt.
-  Proof. by rewrite as_word_add. Qed.
-
-  Lemma word_of_nat_offset: forall (A B : nat), (B <= A)%nat ->
-      @word_of_nat (word_size mt) A =
-        (@word_of_nat (word_size mt) B + as_word (encode_int (Z.of_nat A - Z.of_nat B)))%w.
-  Proof.
-    move=> A B H. rewrite /word_of_nat (encode_int_sub H) as_word_addw. congr as_word.
-    by rewrite GRing.addrC GRing.subrK.
-  Qed.
 
   
   Lemma size_domm_fmap: forall (T: ordType) (S: Type) (m: {fmap T -> S}),
@@ -2052,32 +1897,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   (* [jal_findopt_shared]: a Jal in the shared prefix [code p] resolves its label identically in
      [code prog] and [code prog''] (mirror of [bnz_findopt_shared]; extra [alloc_label] case where
      [findopt] is [None] on both via [no_mrlabel_alloc_prog{,''}]). *)
-  (* LOCAL-resolution variant (the label is the prefix's own; foreign labels resolve at
-     different positions in prog/prog'' and are handled by the [jal_target_corresp] foreign
-     branch instead). *)
-  Lemma jal_findopt_shared : forall k l t,
-      k < size (code p) ->
-      nth_error (code prog) k = Some (@MrJal mt l, t) ->
-      (exists m0, findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code p) = Some m0) ->
-      findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code prog)
-      = findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code prog'').
-  Proof.
-    move=> k l t Hkp Hk Hlocp.
-    have Hkp_p : nth_error (code p) k = Some (@MrJal mt l, t).
-    { move: Hk. have ->: code prog = code p ++ code c by [].
-      rewrite nth_error_app1; last by apply/ltP; exact: Hkp. by []. }
-    case Hal: (l == alloc_label).
-    - move/eqP: Hal => ->. by rewrite no_mrlabel_alloc_prog no_mrlabel_alloc_prog''.
-    - have Hne : l <> alloc_label by move/eqP: Hal.
-      have [m0 Hm0] := Hlocp.
-      have [Hnc Hnc'] :
-        findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code c) = None
-        /\ findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code c') = None.
-      { apply: labels_disjoint_prefix. by rewrite Hm0. }
-      have ->: code prog = code p ++ code c by [].
-      have ->: code prog'' = code p ++ code c' by [].
-      by rewrite !findopt_cat Hnc Hnc'.
-  Qed.
 
   (* [valjal]: the encoded value of a Jal cell whose label resolves to [findopt = Some m] is
      [Jal (word_of_nat (pc0 + m))] (absolute target; unlike [valbnz] the [pos] argument is unused).

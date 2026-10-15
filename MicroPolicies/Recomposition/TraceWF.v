@@ -461,21 +461,6 @@ Definition mem_shape_extends
     (exists d0, m0 w = Some d0 /\ tag_shape (taga d) = tag_shape (taga d0))
     \/ (entry (taga d) = None /\ is_code (taga d) = false).
 
-Lemma mem_shape_extends_refl : forall m, mem_shape_extends m m.
-Proof. move=> m w d Hd. left. by exists d. Qed.
-
-Lemma mem_shape_extends_trans : forall m0 m1 m2,
-  mem_shape_extends m0 m1 -> mem_shape_extends m1 m2 -> mem_shape_extends m0 m2.
-Proof.
-  move=> m0 m1 m2 H01 H12 w d Hd.
-  case: (H12 _ _ Hd) => [[d1 [Hd1 Esh]]|Hfresh]; last by right.
-  case: (H01 _ _ Hd1) => [[d0 [Hd0 Esh0]]|Hfresh1].
-  - left. exists d0. split; first by [].
-    by rewrite Esh.
-  - right. case: Hfresh1 => F1 F2. move: Esh. rewrite /tag_shape.
-    move=> [= E1 E2 E3]. by rewrite E2 E3 F1 F2.
-Qed.
-
 (* ==================== entry-tag interface soundness ==================== *)
 
 (* every allowed-caller list recorded in an entry tag is sanctioned by the
@@ -830,17 +815,6 @@ Section StepEventFacts.
   Qed.
 
   (* -------- star-level corollaries -------- *)
-
-  Lemma star_cell_shape : forall (W : program) (s : state) tw (s' : state),
-    Star (mp_sem NC W) s tw s' -> mem_shape_extends (mem s) (mem s').
-  Proof.
-    move=> W s tw s' Hstar.
-    elim: Hstar => [s0 | s1 t1 s2 t2 s3 tw0 Hstep Hstar IH _].
-    - exact: mem_shape_extends_refl.
-    - apply: (mem_shape_extends_trans _ IH).
-      move: Hstep. rewrite /= /prog_step_mp.
-      by case: t1 => [|e [|??]] // Hstep; exact: (step_cell_shape Hstep).
-  Qed.
 
   (* Every event of a machine run is well-formed for any interface whose
      import relation sanctions the entry tags of the initial memory. *)

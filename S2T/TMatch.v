@@ -195,38 +195,6 @@ Record val_inv (a : renaming) (scrs : NMap value) (C : Component.id)
 (* What the invariant hands the macros                                *)
 (* ================================================================== *)
 
-(** The macros' register premises come straight out of the invariant — this is
-    the point of stating `ei_one`/`ei_sp` over tagged values. *)
-Lemma ei_macro_regs a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb
-      prot temps plm c rest s1 s2 cap :
-  expr_inv a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb prot
-           temps plm c rest s1 s2 cap ->
-  Transitional.Register.get R_SP tregs
-    = MVal Other (Ptr (C, fb, Z.of_nat (2 + size temps)))
-  /\ Transitional.Register.get R_ONE tregs = MVal Other (Int 1).
-Proof. by move=> H; split; [exact: ei_sp H | exact: ei_one H]. Qed.
-
-(** …and so does `push_ra_macro`'s capability premise. *)
-Lemma ei_ra_tag a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb
-      prot temps plm c rest s1 s2 cap :
-  expr_inv a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb prot
-           temps plm c rest s1 s2 cap ->
-  Transitional.Register.get_tag R_RA tregs = Some rtag.
-Proof.
-  move=> H. move: (ei_ra H).
-  rewrite /Transitional.Register.get_tag /Transitional.Register.get.
-  by case: (getm tregs _) => [tv|] //= ->.
-Qed.
-
-(** The ledger a state induces always has its [CReg] entry at the head, so
-    `push_ra_macro`'s `tag_inv ((CReg, t) :: L)` premise is immediate. *)
-Lemma ei_ledger a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb
-      prot temps plm c rest s1 s2 cap :
-  expr_inv a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb prot
-           temps plm c rest s1 s2 cap ->
-  TInv.tag_inv ((TInv.CReg, rtag) :: TStack.ledger_of Sl) tmem tregs pct.
-Proof. by move=> H; exact: ei_tag H. Qed.
-
 End WithProgram.
 
 End TMatch.

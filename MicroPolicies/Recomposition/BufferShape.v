@@ -329,27 +329,6 @@ rewrite (initial_memory_domm_iota Hb) (initial_memory_domm_iota Hb').
 by rewrite (total_shape Hsh).
 Qed.
 
-Lemma initial_memory_shape_tag pb pb' w d :
-  bufs_shape pb = bufs_shape pb' ->
-  size (linearize_bufs pb) < 2 ^ (word_size mt) ->
-  initial_memory (mt := mt) pb w = Some d ->
-  exists d', initial_memory (mt := mt) pb' w = Some d' /\ taga d' = taga d.
-Proof.
-move=> Hsh Hb Hmem.
-have [k [cell [Hk Hd Hw]]] := initial_memory_invE Hmem.
-case: k Hk Hw => [[c b] o] Hk Hw.
-have Hb' : size (linearize_bufs pb') < 2 ^ (word_size mt).
-{ by rewrite -(total_shape Hsh). }
-have Hkd : (c, b, o) \in domm (linearize_bufs pb').
-{ rewrite -(lb_domm_shape Hsh). by apply/dommP; exists cell. }
-case/dommP: Hkd => cell' Hk'.
-exists (imem_enc pb' cell'). split.
-- have := initial_memory_atE Hb' Hk'.
-  by rewrite -(nat_addr_shape Hsh ((c, b, o) : nat * nat * nat)) -Hw.
-- rewrite Hd /imem_enc /=.
-  by rewrite (linearize_bufs_cell_tag Hk') (linearize_bufs_cell_tag Hk).
-Qed.
-
 (* ==================== unionm lifting and agreement glue ==================== *)
 
 Lemma bufs_shape_unionm a b :

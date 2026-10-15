@@ -433,24 +433,4 @@ Proof.
     exact: (dinv_binop_gen Values.Leq HI Ev Ew Hle Hg).
 Qed.
 
-Lemma disc_step_binop :
-  forall mem regs pc tg c pct r1 r2 r3 op,
-    Transitional.executing cde pc (TrBinOp op r1 r2 r3) tg c ->
-    Transitional.check_pc cde pc tg ->
-    tvtag (Transitional.Register.get r1 regs) = Other ->
-    tvtag (Transitional.Register.get r2 regs) = Other ->
-    disc_inv (mem, regs, pc, pct) ->
-    disc_inv (mem,
-       Transitional.Register.set r3
-         (eval_binop op (Transitional.val (Transitional.Register.get r1 regs))
-                        (Transitional.val (Transitional.Register.get r2 regs)))
-         Other regs,
-       Pointer.inc pc, pct).
-Proof.
-  move=> mem regs pc tg c pct r1 r2 r3 op Hex Hpc Htg1 Htg2
-         [cur [chain [F [cs HI]]]].
-  exists cur, chain, F, cs.
-  exact: (dinv_step_binop Hex Hpc Htg1 Htg2 HI).
-Qed.
-
 End DiscStepB.

@@ -1,6 +1,5 @@
-(** * T2M — [disc_inv] at the initial state and its star corollaries:
-    [disc_initial] establishes it at [TSim.t_initial_base] from the
-    initial-memory layout facts; [disc_star]/[disc_t_initial] extend it. *)
+(** * T2M — [dinv_initial]: the discipline invariant at [TSim.t_initial_base],
+    from the initial-memory layout facts. *)
 
 Require Import Common.Definitions.
 Require Import Common.Values.
@@ -26,7 +25,7 @@ Require Import T2M.MDiscStepA.
 Require Import T2M.MDiscStepB.
 Require Import T2M.MDiscStepC.
 Require Import T2M.MDiscStepD.
-Require Import T2M.MDiscStep.
+Require T2M.MDiscStepA2.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -149,62 +148,6 @@ constructor.
 * move=> w0; rewrite EvT => -[<-] _. by [].
 * move=> w0; rewrite EvT => -[<-] Hekw. by [].
 * move=> i A. by case: i.
-Qed.
-
-Lemma disc_initial (tp : Intermediate.program) (S0 : TS.state) :
-  TSim.t_initial_base cde tp S0 ->
-  (forall c b j cv tg,
-     cell_at (mem0 tp) c b j = Some (cv, tg) ->
-     tvtag cv = Other /\
-     (forall q, Transitional.val cv = Ptr q ->
-        Pointer.component q = c /\ Pointer.block q = 0)) ->
-  (forall c cm, getm (mem0 tp) c = Some cm ->
-     2 <= Transitional.Memory.nextblock cm) ->
-  (forall c cm, getm (mem0 tp) c = Some cm ->
-     exists tg0 tg1,
-       cell_at (mem0 tp) c 1 0 = Some (Transitional.tUndef, tg0)
-       /\ cell_at (mem0 tp) c 1 1
-          = Some (Transitional.to_tvalue (Int 0), tg1)) ->
-  (forall c S, getm cde c = Some S ->
-     exists cm, getm (mem0 tp) c = Some cm) ->
-  disc_inv S0.
-Proof.
-move=> [pc [Hfl ->]] P1 P2 P3 P5.
-exists None, [::], (fun _ => [::]), Undef.
-exact: (dinv_initial Hfl P1 P2 P3 P5).
-Qed.
-
-(* the invariant is carried along any execution *)
-Corollary disc_star (s1 : TS.state) (tr : trace) (s2 : TS.state) :
-  star TS.step cde s1 tr s2 -> disc_inv s1 -> disc_inv s2.
-Proof.
-elim=> // s1' tr1 s2' tr2 s3' tr3 Hstep Hstar IH _ HI.
-apply: IH.
-exact: (disc_step HMM Hcst Huniq Hstep HI).
-Qed.
-
-(* ... in particular from any (star-closed) initial state *)
-Corollary disc_t_initial (tp : Intermediate.program) (S : TS.state) :
-  TSim.t_initial cde tp S ->
-  (forall c b j cv tg,
-     cell_at (mem0 tp) c b j = Some (cv, tg) ->
-     tvtag cv = Other /\
-     (forall q, Transitional.val cv = Ptr q ->
-        Pointer.component q = c /\ Pointer.block q = 0)) ->
-  (forall c cm, getm (mem0 tp) c = Some cm ->
-     2 <= Transitional.Memory.nextblock cm) ->
-  (forall c cm, getm (mem0 tp) c = Some cm ->
-     exists tg0 tg1,
-       cell_at (mem0 tp) c 1 0 = Some (Transitional.tUndef, tg0)
-       /\ cell_at (mem0 tp) c 1 1
-          = Some (Transitional.to_tvalue (Int 0), tg1)) ->
-  (forall c S1, getm cde c = Some S1 ->
-     exists cm, getm (mem0 tp) c = Some cm) ->
-  disc_inv S.
-Proof.
-move=> [S1 [Hbase Hstar]] P1 P2 P3 P5.
-apply: (disc_star Hstar).
-exact: (disc_initial Hbase P1 P2 P3 P5).
 Qed.
 
 End DiscInit.

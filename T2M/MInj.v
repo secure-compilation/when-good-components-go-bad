@@ -77,18 +77,6 @@ case Hb: (bmap b) => [bf|] //= [<-].
 by exists bmap, bf.
 Qed.
 
-(* corollary of the keystone: the base baked into an [IConst (IPtr …)]
-   immediate equals the base the injection assigns *)
-Corollary baked_base_is_addr_of c bmap b bf :
-  pb c = Some bmap -> bmap b = Some bf ->
-  obind (getm ^~ b) (memory_lengths pb c) = addr_of amap0 c b.
-Proof.
-move=> Hc Hb.
-have [m [Hm Hmb]] := memory_lengths_bl_base Hc Hb.
-rewrite Hm /= Hmb.
-by rewrite (amap0_static Hc Hb).
-Qed.
-
 (* ================================================================== *)
 (* 2. The value relation.                                             *)
 (* ================================================================== *)
@@ -153,17 +141,6 @@ Definition clobcell (tc : Transitional.tvalue * mem_tag)
 Definition cellrelw (amap : amap_t)
     (tc : Transitional.tvalue * mem_tag) (mc : matom) : Prop :=
   cellrel amap tc mc \/ clobcell tc mc.
-
-(* a defined T-value is never clobbered, so definedness upgrades the
-   weak relation to [cellrel] *)
-Lemma cellrelw_defined (amap : amap_t)
-    (tc : Transitional.tvalue * mem_tag) (mc : @matom mt) :
-  Transitional.val tc.1 <> Undef ->
-  cellrelw amap tc mc -> cellrel amap tc mc.
-Proof.
-move=> Hnu [Hrel|[[E1 _ _] _]] //.
-exfalso. apply: Hnu. by rewrite E1.
-Qed.
 
 (* ================================================================== *)
 (* 3. Address-map well-formedness.                                    *)

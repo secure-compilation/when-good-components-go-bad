@@ -177,9 +177,6 @@ Proof. by case: x. Qed.
 Lemma o_le_trans (x y z : bool) : o_le x y -> o_le y z -> o_le x z.
 Proof. by case: x; case: y; case: z. Qed.
 
-Lemma o_le_top (x : bool) : o_le x false.
-Proof. by case: x. Qed.
-
 Lemma o_le_true (x y : bool) : o_le x y -> y = true -> x = true.
 Proof. by case: x; case: y. Qed.
 
@@ -255,23 +252,6 @@ apply/and5P; split.
   + exact: t_le_trans H4 G4.
   + exact: t_le_trans H5 G5.
   + exact: sc_le_trans H6 G6.
-Qed.
-
-Lemma sv_eqb_le (v w : sv) : sv_eqb v w -> sv_le v w.
-Proof.
-case/and5P => H1 H0 HK HA
-  /and5P [H2 H3 /t_eqb_eq H4 /t_eqb_eq H5 /sc_eqb_eq H6].
-apply/and5P; split.
-- exact: H1.
-- move/Bool.eqb_prop: H0 => ->. exact: o_le_refl.
-- exact: HK.
-- move/Bool.eqb_prop: HA => ->. exact: o_le_refl.
-- apply/and5P; split.
-  + exact: H2.
-  + exact: H3.
-  + by rewrite H4 t_le_refl.
-  + by rewrite H5 t_le_refl.
-  + by rewrite H6 sc_le_refl.
 Qed.
 
 Lemma sv_le_taint (ph : sphase) (sg : seq class3) (pd : option class3)
@@ -962,25 +942,6 @@ apply/andP; split.
   exact: sv_le_trans Hv' Hle.
 Qed.
 
-(* promises only ADD ways to satisfy the Bnz condition *)
-Lemma frag_mono (c : seq (Transitional.instr * mem_tag)) (M : seq sv)
-    (L : label -> option sv) (vin vout : sv) :
-  frag c M (fun _ => None) vin vout -> frag c M L vin vout.
-Proof.
-case/and3P => Hs Hh Ha.
-rewrite /frag Hs Hh /=.
-apply/allP => n Hn.
-have := allP Ha n Hn.
-rewrite /frag_at.
-case: (nth_error c n) => [[i tg]|] //.
-case: (nth_error M n) => [v|] //.
-case: (vstep v i) => [v'|] //.
-case/andP => H1 H2.
-rewrite H1 {H1} /=.
-case: i H2 => //= r l.
-by case/orP => [-> //|].
-Qed.
-
 Lemma lbl_ok_impl (c : seq (Transitional.instr * mem_tag))
     (M : seq sv) (l : label) (p q : sv -> bool) :
   (forall w, p w -> q w) -> lbl_ok c M l p -> lbl_ok c M l q.
@@ -1082,61 +1043,6 @@ rewrite /frag /= /frag_at /= rev_rcons /= revK Ha1 Ha2;
 by rewrite !sv_le_refl.
 Qed.
 
-Lemma frag_pop_sp (L : label -> option sv)
-    (tg1 tg2 : mem_tag) (a1 a2 : taint) (sc : scst) (ag : bool) :
-  sc_eqb sc SCpark = false ->
-  t_eqb a1 ASp = false -> t_eqb a2 ASp = false ->
-  frag [:: (TrBinOp Minus R_SP R_ONE R_SP, tg1); (TrLoad R_SP R_SP, tg2)]
-       [:: SV PBody (rcons [::] CSp) None a1 a2 sc true true ag;
-           SV PBody [::] (Some CSp) a1 a2 sc true true ag]
-       L (SV PBody (rcons [::] CSp) None a1 a2 sc true true ag)
-       (SV PTear [::] None a1 a2 sc true true ag).
-Proof.
-move=> Hnp Ha1 Ha2.
-case: sc Hnp => // _;
-rewrite /frag /= /frag_at /= Ha1 Ha2;
-by rewrite !sv_le_refl.
-Qed.
-
-Lemma frag_pop_scr (L : label -> option sv)
-    (tg1 tg2 : mem_tag) (sg : seq class3) (a1 a2 : taint) (sc : scst)
-    (ag : bool) :
-  sc_eqb sc SCpark = false ->
-  t_eqb a1 ASp = false -> t_eqb a2 ASp = false ->
-  cseq_eqb sg [::] = false ->
-  frag [:: (TrBinOp Minus R_SP R_ONE R_SP, tg1);
-           (TrLoad R_SP R_AUX1, tg2)]
-       [:: SV PBody (rcons sg CSp) None a1 a2 sc true true ag;
-           SV PBody sg (Some CSp) a1 a2 sc true true ag]
-       L (SV PBody (rcons sg CSp) None a1 a2 sc true true ag)
-       (SV PBody sg None ASp a2 sc true true ag).
-Proof.
-move=> Hnp Ha1 Ha2 Hsg.
-case: sc Hnp => // _;
-rewrite /frag /= /frag_at /= rev_rcons /= revK Ha1 Ha2 Hsg /=;
-by rewrite !sv_le_refl.
-Qed.
-
-(* the R_ARG restore pop: the slot class is CArg (pushed before the
-   arg fetch), and the resumed flow drops the R_ARG sync claim *)
-Lemma frag_pop_arg (L : label -> option sv)
-    (tg1 tg2 : mem_tag) (sg : seq class3) (a1 a2 : taint) (sc : scst)
-    (ag : bool) :
-  sc_eqb sc SCpark = false ->
-  t_eqb a1 ASp = false -> t_eqb a2 ASp = false ->
-  frag [:: (TrBinOp Minus R_SP R_ONE R_SP, tg1);
-           (TrLoad R_SP R_ARG, tg2)]
-       [:: SV PBody (rcons sg CArg) None a1 a2 sc true true ag;
-           SV PBody sg (Some CArg) a1 a2 sc true true ag]
-       L (SV PBody (rcons sg CArg) None a1 a2 sc true true ag)
-       (SV PBody sg None a1 a2 sc true true false).
-Proof.
-move=> Hnp Ha1 Ha2.
-case: sc Hnp => // _;
-rewrite /frag /= /frag_at /= rev_rcons /= revK Ha1 Ha2;
-by rewrite !sv_le_refl.
-Qed.
-
 (* the canonical map for a fragment: thread vstep from the entry
    (junk after a rejection — callers only use it where vstep runs) *)
 Fixpoint mkmap (v : sv) (c : seq (Transitional.instr * mem_tag))
@@ -1149,13 +1055,6 @@ Fixpoint mkmap (v : sv) (c : seq (Transitional.instr * mem_tag))
            | None => mkmap v c'
            end
   end.
-
-Lemma size_mkmap (v : sv) (c : seq (Transitional.instr * mem_tag)) :
-  size (mkmap v c) = size c.
-Proof.
-elim: c v => [|[i tg] c IH] v //=.
-by case: (vstep v i) => [v'|]; rewrite IH.
-Qed.
 
 (* the translated form of a compiled fragment (the component id only
    picks tags, which the checker ignores) *)
@@ -1281,21 +1180,6 @@ apply/andP; split.
        |lj|plj|] EI EV Hside //=.
   +    by move: Hside; rewrite orbF.
   +    exact: Hjal EI.
-Qed.
-
-(* folding sv0-to-sv0 pieces (List.In: no eqType on instr) *)
-Lemma frag_flatten (L : label -> option sv)
-    (pieces : seq (seq (Transitional.instr * mem_tag))) :
-  (forall pc, List.In pc pieces ->
-     exists Mp, frag pc Mp L sv0 sv0) ->
-  exists M, frag (flatten pieces) M L sv0 sv0.
-Proof.
-elim: pieces => [|pc pieces IH] Hall.
-- exists [::]. exact: frag_nil.
-- have [Mp Fp] := Hall pc (or_introl (erefl _)).
-  have [M FM] := IH (fun q Hq => Hall q (or_intror Hq)).
-  exists (Mp ++ M).
-  exact: (frag_cat Fp FM).
 Qed.
 
 (* terminality composes *)

@@ -904,9 +904,6 @@ case Eop: op => /=.
   exact: (sync_binop_gen Ev Ew Hle Hg Hv HS).
 Qed.
 
-Lemma is_address_false (t : value_tag) : is_address t = false -> t = Other.
-Proof. by case: t. Qed.
-
 Lemma to_nat_neq (ra rb : register) : ra <> rb ->
   Intermediate.Register.to_nat ra <> Intermediate.Register.to_nat rb.
 Proof.

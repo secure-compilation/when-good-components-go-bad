@@ -651,10 +651,6 @@ Proof.
       discriminate.
 Qed.
 
-Lemma fsetid (T : ordType) (s: seq.seq T) :
-  fset (fset s) = fset s.
-Proof. by apply /eq_fset => x; rewrite in_fset. Qed.
-
 (* First, prove domain preservation for all of the (already existing, plus
    recent improvements) initialization code. *)
 Lemma domm_prepare_procedures_initial_memory_aux: forall p,

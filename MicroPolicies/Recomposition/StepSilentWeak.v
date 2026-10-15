@@ -757,17 +757,6 @@ Module StepWeak (S: RecompositionContext).
     - by [].
   Qed.
 
-  (* A memory setm with a non-Ret [vtag] introduces no Ret cap. *)
-  Lemma setm_mem_nonret :
-    forall (mm : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)}) w x t,
-    (forall n, vtag t <> Ret n) ->
-    forall w' v t' n, setm mm w (x @ t) w' = Some (v @ t') -> vtag t' = Ret n -> mm w' = Some (v @ t').
-  Proof.
-    move=> mm w x t Hnr w' v t' n. rewrite setmE. case: eqP => [Heq|Hne].
-    - move=> [= Hx Ht]. subst t'. move=> Hvt. exfalso. exact: (Hnr n Hvt).
-    - by [].
-  Qed.
-
   (* An empty update list leaves the state unchanged. *)
   Lemma ndsu_nil_updts : forall (tks : seq tag_kind) (tags : hseq (tag_type lrc_tags) tks) (st st0 : state),
     next_state_do_updates st tags [::] = Some st0 -> st0 = st.
@@ -1685,87 +1674,6 @@ Module StepWeak (S: RecompositionContext).
     have Hid := mem_read_update_id Hmem. cbn [taga] in Hid.
     move: Hndsu. rewrite (hseq_eta tags) Hhead ndsu_cons Hid /=. move=> Hndsu.
     by rewrite (ndsu_mem_noM Hnmw Hnmr Hndsu).
-  Qed.
-
-  (* A silent JAL step leaves memory unchanged: the prologue's MemRead(pc+1) re-tags the cell with
-     its own tag ([jal_head_tret] ⇒ head output tag = tret), and the ra-write + register clear touch
-     no memory.  Peels [next_state_updates_and_pc] then [mem_unchanged_jal]. *)
-  Lemma jal_step_mem : forall (s s' : state)
-      (mem0 : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
-      (reg0 : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)})
-      (pc0 pcw1 : mword mt) (tpc0 : tag_type lrc_tags P) (extra : unit)
-      (ti0 : tag_type lrc_tags Symbolic.M) (imm : mword mt)
-      (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R))
-      (vret : mword mt) (tret : tag_type lrc_tags Symbolic.M),
-    s = {| mem := mem0; regs := reg0; pc := pc0 @ tpc0; internal := extra |} ->
-    mem0 pcw1 = Some (vret @ tret) ->
-    @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit s
-      (IVec JAL tpc0 ti0 (HSeqCons tret l))
-      (MemRead pcw1 :: RegWrite ra pcw1 :: reg_clear_read) (swcast imm)
-      = Some (s', None) ->
-    mem s' = mem s.
-  Proof.
-    move=> s s' mem0 reg0 pc0 pcw1 tpc0 extra ti0 imm l vret tret Hs Hra NEXT.
-    have Hmemcell : mem s pcw1 = Some (vret @ tret) by rewrite Hs.
-    move: NEXT. rewrite /next_state_updates_and_pc /next_state.
-    case Hevi: (evi s) => [evinp|] //=.
-    case Hpc': (mem s (swcast imm)) => [ni|]; rewrite /=; move=> Hgoal;
-      ( case: (obind_inv Hgoal) => ov_ev [Htr Hk];
-        case: ov_ev Htr Hk => ov ev Htr Hk;
-        have Hhead := jal_head_tret Htr;
-        move: Hk => /= Hk;
-        case: (obind_inv Hk) => st' [Hndsu Hfin];
-        move: Hfin => [= Hfins _]; subst s';
-        rewrite /=;
-        apply: (@mem_unchanged_jal s st' pcw1 vret tret (nseq 12 R) (tr ov)
-                  (RegWrite ra pcw1 :: reg_clear_read) Hmemcell Hhead _ _ Hndsu);
-        [ by (move=> w' v' Hin; cbn in Hin;
-              repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin)
-        | by (move=> w' Hin; cbn in Hin;
-              repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ] ).
-  Qed.
-
-  (* The two facts [preserves_weak_local] needs for a silent JAL step (NEXT in [_and_pc] form):
-     memory is unchanged (the prologue's MemRead(pc+1) re-tags the cell with its own tag, via
-     [jal_head_tret]; ra-write + register clear touch no memory) and the pc-tag is kept (silent
-     ⇒ [trpc]=[tpc], via [op_silent_trpc]).  Stated with the WHOLE input hseq [ts] (not
-     [HSeqCons tret l]) so applying it at the call site does NOT force unification to destructure
-     the let-bound [mvec]'s hseq (which makes the application hang). *)
-  Lemma weak_jal_facts : forall (s s' : state)
-      (mem0 : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
-      (reg0 : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)})
-      (pc0 pcw1 : mword mt) (tpc0 : tag_type lrc_tags P) (extra : unit)
-      (ti0 : tag_type lrc_tags Symbolic.M) (imm : mword mt)
-      (ts : hseq (tag_type lrc_tags) (inputs JAL)) (vret : mword mt),
-    s = {| mem := mem0; regs := reg0; pc := pc0 @ tpc0; internal := extra |} ->
-    @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit s
-      (IVec (OP JAL) tpc0 ti0 ts)
-      (MemRead pcw1 :: RegWrite ra pcw1 :: reg_clear_read) (swcast imm) = Some (s', None) ->
-    mem0 pcw1 = Some (vret @ (hshead ts)) ->
-    mem s' = mem s /\ taga (pc s') = tpc0.
-  Proof.
-    move=> s s' mem0 reg0 pc0 pcw1 tpc0 extra ti0 imm ts vret Hs NEXT Hra.
-    have Hmemcell : mem s pcw1 = Some (vret @ (hshead ts)) by rewrite Hs.
-    move: NEXT. rewrite /next_state_updates_and_pc /next_state.
-    case Hevi: (evi s) => [evinp|] //=.
-    case Hpc': (mem s (swcast imm)) => [ni|]; rewrite /=; move=> Hgoal;
-      ( case: (obind_inv Hgoal) => ov_ev [Htr Hk];
-        case: ov_ev Htr Hk => ov ev Htr Hk;
-        rewrite (hseq_eta ts) in Htr;
-        have Hhead := jal_head_tret Htr;
-        move: Hk => /= Hk;
-        case: (obind_inv Hk) => st' [Hndsu Hfin];
-        move: Hfin => [= Hfins Hev]; subst s';
-        have Htrpc := op_silent_trpc Htr Hev;
-        split;
-          [ rewrite /=;
-            apply: (@mem_unchanged_jal s st' pcw1 vret (hshead ts) (nseq 12 R) (tr ov)
-                      (RegWrite ra pcw1 :: reg_clear_read) Hmemcell Hhead _ _ Hndsu);
-            [ by (move=> w' v' Hin; cbn in Hin;
-                  repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin)
-            | by (move=> w' Hin; cbn in Hin;
-                  repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ]
-          | by rewrite /= Htrpc ] ).
   Qed.
 
   (* A successful alloc step preserves [general_memory_correctness]: it EXTENDS [mem s] with a fresh

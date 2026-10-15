@@ -205,22 +205,4 @@ Qed.
     completely unchanged, so a memory conjunct phrased over [vload] needs NO
     per-pop re-establishment. The Stage-0b risk is retired. *)
 
-(** The statement that actually matters, done directly on the Load rule's
-    premises (the shape [exec_pop_T] produces). *)
-Theorem pop_preserves_vload m p v m' :
-  Transitional.Memory.load m p = Some v ->
-  Transitional.Memory.store m p
-    ({| Transitional.val := Transitional.val v.1;
-        tvtag := moved_tag (tvtag v.1) |},
-     {| vtag := moved_tag (tvtag v.1);
-        color := Pointer.component p; entry := None; is_code := false |})
-    = Some m' ->
-  forall q, vload m' q = vload m q.
-Proof.
-  move=> Hld Hst q.
-  case: (@eqP _ q p) => [->|Hne].
-  - by rewrite /vload (load_store_eq Hst) Hld /=.
-  - by rewrite /vload (load_store_neq Hst Hne).
-Qed.
-
 End TMem.

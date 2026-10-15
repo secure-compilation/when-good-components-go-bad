@@ -294,12 +294,6 @@ Lemma tget_invalidate_com (regs : Transitional.Register.t) :
   = Transitional.Register.get R_COM regs.
 Proof. by []. Qed.
 
-Lemma tget_invalidate_ra (regs : Transitional.Register.t) :
-  Transitional.Register.get R_RA
-    (Transitional.Register.invalidate regs)
-  = Transitional.Register.get R_RA regs.
-Proof. by []. Qed.
-
 (* ================================================================== *)
 (* The dynamic invariant                                              *)
 (* ================================================================== *)
@@ -914,15 +908,6 @@ Lemma pend_sig_some (v : sv) (k : class3) :
   sv_pend v = Some k -> pend_sig v = rcons (sv_sig v) k.
 Proof. by rewrite /pend_sig => ->. Qed.
 
-(* a pend-inclusive discipline restricts to the bare sig *)
-Lemma bodycarg_pend_sig (v : sv) :
-  bodycarg (pend_sig v) -> bodycarg (sv_sig v).
-Proof.
-rewrite /pend_sig.
-case: (sv_pend v) => [k|] //.
-exact: bodycarg_pop.
-Qed.
-
 Lemma sv_le_fields (v w : sv) :
   sv_le v w ->
   [/\ sv_ph w = sv_ph v, sv_sig w = sv_sig v, sv_pend w = sv_pend v
@@ -1337,22 +1322,6 @@ move=> H p E.
 have [H1 H2 H3] := H p E.
 split=> //.
 exact: alloc_vblock H3.
-Qed.
-
-Lemma alloc_frame_ok (F : Component.id -> seq Block.id)
-    (c1 : Component.id) (b1 : Block.id) (sg : seq class3)
-    (carry cscr : value) (rcap : Transitional.tvalue) :
-  (c1 == c) && (b1 == nb) = false ->
-  frame_ok F mem c1 b1 sg carry cscr rcap ->
-  frame_ok F mem' c1 b1 sg carry cscr rcap.
-Proof.
-move=> Hne HF j k Hk.
-have [cv [tg0 [Hcell Hrow]]] := HF j k Hk.
-exists cv, tg0.
-rewrite (alloc_cell_old j Hne).
-split=> //.
-case: k {Hk} Hrow => //= -[T1 T2]; split=> //;
-exact: alloc_goodu T2.
 Qed.
 
 Lemma alloc_scr_val (c0 : Component.id) (x : value) :

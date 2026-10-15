@@ -129,12 +129,6 @@ Definition ret_lvl (t : value_tag) : nat := if t is Ret n then n else 0.
 Definition is_live (t : value_tag) : bool :=
   match t with Ret _ | InternalJump => true | _ => false end.
 
-Lemma is_live_address t : is_live t -> is_address t.
-Proof. by case: t. Qed.
-
-Lemma is_ret_live t : is_ret t -> is_live t.
-Proof. by case: t. Qed.
-
 Lemma is_ret_moved t : is_ret (moved_tag t) = false.
 Proof. by case: t. Qed.
 
@@ -232,9 +226,6 @@ Qed.
 (* ================================================================== *)
 (* Framing — the data cases                                           *)
 (* ================================================================== *)
-
-Lemma not_address_Other t : ~~ is_address t -> t = Other.
-Proof. by case: t. Qed.
 
 (** Writing an [Other]-tagged value to a register other than [R_RA]. Covers
     every [IConst], [IBinOp] and data [IMov]. ([R_RA] is excluded now only

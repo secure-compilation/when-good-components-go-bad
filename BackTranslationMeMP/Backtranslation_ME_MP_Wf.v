@@ -427,9 +427,6 @@ apply: in_catr. apply: in_catl. rewrite /Ec.
 apply: (in_flat_map_intro (mem_in_seq Hp)). by left.
 Qed.
 
-Lemma size_length' (T : Type) (s : seq T) : length s = size s.
-Proof. by elim: s => //= x s ->. Qed.
-
 Lemma rp_wf : well_formed_program q.
 Proof.
 split.

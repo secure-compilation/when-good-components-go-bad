@@ -224,19 +224,6 @@ apply: mregs_rel_synced Hrel _ => E.
 by rewrite E in Hv.
 Qed.
 
-Lemma get_tag_synced (amap : amap_t)
-    (tregs : Transitional.Register.t)
-    (mregs : {fmap reg mt -> @ratom mt}) (r : register) (vt : value_tag) :
-  mregs_relW amap tregs mregs ->
-  Transitional.tvtag (Transitional.Register.get r tregs) = vt ->
-  vt <> Other ->
-  reg_syncedW amap tregs mregs r.
-Proof.
-move=> Hrel Ht Hne.
-apply: mregs_rel_synced Hrel _ => E.
-by rewrite E /= in Ht; rewrite -Ht in Hne.
-Qed.
-
 (* the [rtaint]-row map: every register the checker taints [AU] at a
    [dinv]+[sync_claims] state has its me image in the synced branch.
    The only reader of the [rtaint] shape. *)

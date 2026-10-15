@@ -169,9 +169,6 @@ Definition moved_tag (t : value_tag) : value_tag :=
   | Other => Other
   end.
 
-Lemma moved_tag_not_ret t n : moved_tag t <> Ret n.
-Proof. by case: t. Qed.
-
 Fixpoint make_hseq n tag : (hseq (tag_type lrc_tags) (nseq n R))  :=
   match n with
   | O => HSeqNil
@@ -263,12 +260,6 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
 
 Definition is_data (t : value_tag) : option unit :=
   match t with Ret _ => None | _ => Some tt end.
-
-Lemma is_data_of_other t u : is_other t = Some u -> is_data t = Some tt.
-Proof. by case: t. Qed.
-
-Lemma is_data_of_jump t u : is_jump t = Some u -> is_data t = Some tt.
-Proof. by case: t. Qed.
 
 Definition instr_rules_mp (evi : ev_inputs) (op : opcode)
            (tpc : tag_type lrc_tags P)
