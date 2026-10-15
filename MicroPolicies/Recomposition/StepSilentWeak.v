@@ -450,7 +450,6 @@ Module StepWeak (S: RecompositionContext).
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
       move: H => [= <-]; exact: erefl.
     - (* LOAD *)
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
@@ -478,7 +477,6 @@ Module StepWeak (S: RecompositionContext).
     - (* BNZ *)
       rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H].
       move: H => [= <-]; exact: erefl.
     - (* JAL *)
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
@@ -793,7 +791,6 @@ Module StepWeak (S: RecompositionContext).
     move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H].
     by move: H => [= <-].
   Qed.
 
@@ -816,7 +813,6 @@ Module StepWeak (S: RecompositionContext).
     move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'. cbv zeta => H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
     by move: H => [= <-].
   Qed.
 

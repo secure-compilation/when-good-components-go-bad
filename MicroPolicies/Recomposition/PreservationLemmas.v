@@ -191,7 +191,6 @@ Proof.
   - (* MOV *) case: ts Hrest => t0 [t1 ts] Hrest; rewrite (hseq0 ts) /= in Hrest.
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
   - (* BINOP *) case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
-    case: (obind_inv Hrest) => ? [_ {}Hrest]; case: (obind_inv Hrest) => ? [_ {}Hrest].
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
   - (* LOAD *) case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
     case: (obind_inv Hrest) => ? [_ {}Hrest].
@@ -205,7 +204,6 @@ Proof.
     exfalso; case: (obind_inv Hrest) => ? [_ {}Hrest]; case: (obind_inv Hrest) => ? [_ {}Hrest].
     case: (obind_inv Hrest) => ? [_ {}Hrest]; by move: Hrest => [= _].
   - (* BNZ *) case: ts Hrest => t0 ts Hrest; rewrite (hseq0 ts) /= in Hrest.
-    case: (obind_inv Hrest) => ? [_ {}Hrest].
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
   - (* JAL: silent => intra; the cross/call branch needs check_entry, which forces an entry tag,
        so get_proc_name succeeds and ev = Some (ECall ..) <> None *)
@@ -2435,7 +2433,6 @@ Qed.
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
       move: H => [= <-]; exact: erefl.
     - (* LOAD *)
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
@@ -2463,7 +2460,6 @@ Qed.
     - (* BNZ *)
       rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H].
       move: H => [= <-]; exact: erefl.
     - (* JAL *)
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.

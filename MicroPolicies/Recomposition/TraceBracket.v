@@ -267,7 +267,6 @@ Proof.
   move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-  case: (obind_inv H) => u2 [_ {}H].
   by move: H => [= <-].
 Qed.
 
@@ -290,7 +289,6 @@ Proof.
   move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-  case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
   by move: H => [= <-].
 Qed.
 
@@ -969,7 +967,6 @@ Proof.
             (hseq_eta (hsbehead (hsbehead ts)))
             (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
     by move: H => [= <- _].
   - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts)))
@@ -996,7 +993,7 @@ Proof.
       move: Hev. by rewrite -Hc.
   - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H]. by move: H => [= <- _].
+    by move: H => [= <- _].
   - (* jal *)
     rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts))) in H.
@@ -1540,7 +1537,6 @@ Proof.
   move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-  case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
   by move: H => [= _ <-].
 Qed.
 
@@ -1551,7 +1547,6 @@ Proof.
   move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
   case: tpc => level current'. cbv zeta => H.
   case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-  case: (obind_inv H) => u2 [_ {}H].
   by move: H => [= _ <-].
 Qed.
 

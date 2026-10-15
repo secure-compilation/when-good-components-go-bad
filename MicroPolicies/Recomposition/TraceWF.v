@@ -537,7 +537,6 @@ Proof.
             (hseq_eta (hsbehead (hsbehead ts)))
             (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
     by move: H => [=].
   - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts)))
@@ -572,7 +571,7 @@ Proof.
       * by move=> c p v c'0; rewrite -He.
   - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H]. by move: H => [=].
+    by move: H => [=].
   - (* JAL — the cross-component call branch emits *)
     rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts))) in H.

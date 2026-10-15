@@ -142,7 +142,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H]. by move: H => [=].
+      by move: H => [=].
     - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -156,7 +156,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - (* JUMP *) by left.
     - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. by move: H => [=].
+      by move: H => [=].
     - (* JAL *) by right.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
@@ -188,7 +188,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H]. by move: H => [=].
+      by move: H => [=].
     - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -208,7 +208,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         move: Hc'; case: tnitag => ? c0 ? ? /=; congruence.
     - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. by move: H => [=].
+      by move: H => [=].
     - (* JAL — event (call) branch *)
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -590,7 +590,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H]. by move: H => [=].
+      by move: H => [=].
     - rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -611,7 +611,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         exists t; split; first by []. by rewrite -He /= Hc'.
     - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. by move: H => [=].
+      by move: H => [=].
     - (* JAL — call branch *)
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H]. move: H. case: ifP => _ H.

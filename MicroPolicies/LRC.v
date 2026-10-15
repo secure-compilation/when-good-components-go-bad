@@ -289,9 +289,7 @@ Definition instr_rules_mp (evi : ev_inputs) (op : opcode)
                                   let ts' := moved_tag ts in
                                      Some (OVec MOV       tpc [hseq ts'; ts], None)
 
-  | BINOP b, [hseq tx; ty; td] => do! _ <- is_data tx;
-                                  do! _ <- is_data ty;
-                                  do! _ <- check_belong current tni;
+  | BINOP b, [hseq tx; ty; td] => do! _ <- check_belong current tni;
                                      Some (OVec (BINOP b) tpc [hseq tx; ty; Other], None)
 
   | LOAD,    [hseq tp; ts; td] => do! _ <- is_data tp;
@@ -311,8 +309,7 @@ Definition instr_rules_mp (evi : ev_inputs) (op : opcode)
                                      let (td', _) := switch_val td ts in
                                      Some (OVec STORE tpc [hseq tp; ts'; td'], None)
 
-  | BNZ,     [hseq tx]         => do! _ <- is_data tx;
-                                  do! _ <- check_belong current tni;
+  | BNZ,     [hseq tx]         => do! _ <- check_belong current tni;
                                      Some (OVec BNZ       tpc [hseq tx], None)
 
   | JUMP,    (tra :: tp :: trcom :: next)%hseq => if belong current tni then
