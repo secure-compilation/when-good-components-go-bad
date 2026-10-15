@@ -359,57 +359,57 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
   Proof.
     move=> s s' e Hstep. inversion Hstep.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
-        TDiag.nsuap_event_inv NEXT.
+        TraceWF.nsuap_event_inv NEXT.
       rewrite Hmem.
-      apply: TDiag.ndsu_mem_noM Hdsu.
+      apply: TraceWF.ndsu_mem_noM Hdsu.
       + by (move=> w' v' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (TDiag.no_mw_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mw_reg_clear_read Hin))).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (TDiag.no_mr_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
     -
       unfold mvec, pc' in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
-        TDiag.nsuap_event_inv NEXT.
+        TraceWF.nsuap_event_inv NEXT.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
-      have Hhead := TDiag.jal_head_tret Htr.
+      have Hhead := TraceWF.jal_head_tret Htr.
       rewrite Hmem.
-      apply: (@TDiag.mem_unchanged_jal s st0 (pc0+1)%w vret tret (nseq 12 R)
+      apply: (@TraceWF.mem_unchanged_jal s st0 (pc0+1)%w vret tret (nseq 12 R)
                 (tr ov0) (RegWrite ra (pc0+1)%w :: reg_clear_read)
                 Hmemcell Hhead _ _ Hdsu).
       + by (move=> w' v' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (TDiag.no_mw_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mw_reg_clear_read Hin))).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (TDiag.no_mr_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
     -
-      have Hev := TDiag.run_syscall_event_none CALL. discriminate Hev.
+      have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
   (* an event step's target colour is the colour of an existing memory cell *)
@@ -422,26 +422,26 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     have Hcol := TDiag.event_step_color Hstep.
     inversion Hstep.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     -
       unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := TDiag.event_nextcomp_and_some Htr.
       move: Htni. rewrite ST /=.
       case Hmw : (mem0 w) => [ni|] // [Etn]. subst tn.
@@ -451,11 +451,11 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
         exact/Extra.In_in.
     -
       unfold mvec, pc' in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
     -
       unfold mvec, pc' in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := TDiag.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := TDiag.event_nextcomp_and_some Htr.
       move: Htni. rewrite ST /=.
       case Hmw : (mem0 (swcast imm)) => [ni|] // [Etn]. subst tn.
@@ -464,7 +464,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       case: (Hcim _ _ Hcell) => HIn; apply/orP; [left | right];
         exact/Extra.In_in.
     -
-      have Hev := TDiag.run_syscall_event_none CALL. discriminate Hev.
+      have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
   (* the run-local invariant of the machine run *)

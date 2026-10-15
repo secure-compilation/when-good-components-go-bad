@@ -33,6 +33,8 @@ Import DoNotation.
 Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
+Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
+Import TraceBracket(jal_do_updates_result, jump_do_updates_result).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentStrong.
 

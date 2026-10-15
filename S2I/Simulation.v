@@ -494,16 +494,30 @@ Arguments ei_mainnf {p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot te
 
 (* ==================== diagram plumbing: descend steps ==================== *)
 
-(* KS_Binop1: descending into e1 re-anchors the pc at c1 and folds the rest
-   of the binop code into the continuation. Zero target steps. *)
-Lemma binop1_replumb (G0 : global_env) α C plm op e1 e2 k c rest temps s1 s2 pc :
+Module TReplumb.
+
+Local Set Implicit Arguments.
+Local Unset Strict Implicit.
+
+Notation icode := Intermediate.Machine.code.
+
+Section WithCodePred.
+
+(* the only thing the seven proofs need of a code predicate: nothing *)
+Variable P : icode -> Prop.
+
+Variable a : renaming.
+Variable C : Component.id.
+Variable plm : NMap label.
+
+Lemma binop1_replumb op e1 e2 k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_binop op e1 e2) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists c1 rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e1 sA = Some (c1, sB),
-        code_at G0 pc (c1 ++ rest')
-      & cont_matchJ α C plm (Kbinop1 op e2 k) rest' temps].
+        P (c1 ++ rest')
+      & cont_matchJ a C plm (Kbinop1 op e2 k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C (lbp C) (scr C) plm e1 s1) => [[c1 sA]|]; last by [].
@@ -519,14 +533,14 @@ Proof.
   - apply: CMJ_base. exact: CM_binop1 E2 Hk.
 Qed.
 
-Lemma seq1_replumb (G0 : global_env) α C plm e1 e2 k c rest temps s1 s2 pc :
+Lemma seq1_replumb e1 e2 k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_seq e1 e2) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists c1 rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e1 sA = Some (c1, sB),
-        code_at G0 pc (c1 ++ rest')
-      & cont_matchJ α C plm (Kseq e2 k) rest' temps].
+        P (c1 ++ rest')
+      & cont_matchJ a C plm (Kseq e2 k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C (lbp C) (scr C) plm e1 s1) => [[c1 sA]|]; last by [].
@@ -539,14 +553,14 @@ Proof.
   - apply: CMJ_base. exact: CM_seq E2 Hk.
 Qed.
 
-Lemma if1_replumb (G0 : global_env) α C plm e1 e2 e3 k c rest temps s1 s2 pc :
+Lemma if1_replumb e1 e2 e3 k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_if e1 e2 e3) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists c1 rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e1 sA = Some (c1, sB),
-        code_at G0 pc (c1 ++ rest')
-      & cont_matchJ α C plm (Kif e2 e3 k) rest' temps].
+        P (c1 ++ rest')
+      & cont_matchJ a C plm (Kif e2 e3 k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C (lbp C) (scr C) plm e1 s1) => [[c1 sA]|]; last by [].
@@ -560,20 +574,21 @@ Proof.
                                           (1 + odflt 0 (next_label sC C)) C));
                    ILabel (odflt 0 (next_label sC C))]
       ++ c2 ++ ILabel (odflt 0 (setm (next_label sC) C
-                                  (1 + odflt 0 (next_label sC C)) C)) :: rest), s1, sA.
+                                  (1 + odflt 0 (next_label sC C)) C)) :: rest),
+    s1, sA.
   split=> //.
   - move: Hcode. by do 10!rewrite -?catA ?cat_cons ?cat0s ?cats0.
   - apply: CMJ_base. exact: CM_if E2 E3 Hk.
 Qed.
 
-Lemma alloc1_replumb (G0 : global_env) α C plm e k c rest temps s1 s2 pc :
+Lemma alloc1_replumb e k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_alloc e) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists c0 rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e sA = Some (c0, sB),
-        code_at G0 pc (c0 ++ rest')
-      & cont_matchJ α C plm (Kalloc k) rest' temps].
+        P (c0 ++ rest')
+      & cont_matchJ a C plm (Kalloc k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C (lbp C) (scr C) plm e s1) => [[c0 sA]|]; last by [].
@@ -584,14 +599,14 @@ Proof.
   - apply: CMJ_base. exact: CM_alloc Hk.
 Qed.
 
-Lemma deref1_replumb (G0 : global_env) α C plm e k c rest temps s1 s2 pc :
+Lemma deref1_replumb e k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_deref e) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists c0 rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e sA = Some (c0, sB),
-        code_at G0 pc (c0 ++ rest')
-      & cont_matchJ α C plm (Kderef k) rest' temps].
+        P (c0 ++ rest')
+      & cont_matchJ a C plm (Kderef k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C (lbp C) (scr C) plm e s1) => [[c0 sA]|]; last by [].
@@ -602,14 +617,14 @@ Proof.
   - apply: CMJ_base. exact: CM_deref Hk.
 Qed.
 
-Lemma assign1_replumb (G0 : global_env) α C plm e1 e2 k c rest temps s1 s2 pc :
+Lemma assign1_replumb e1 e2 k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_assign e1 e2) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists c2 rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e2 sA = Some (c2, sB),
-        code_at G0 pc (c2 ++ rest')
-      & cont_matchJ α C plm (Kassign1 e1 k) rest' temps].
+        P (c2 ++ rest')
+      & cont_matchJ a C plm (Kassign1 e1 k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C (lbp C) (scr C) plm e1 s1) => [[c1 sA]|]; last by [].
@@ -623,14 +638,14 @@ Proof.
   - apply: CMJ_base. exact: CM_assign1 E1 Hk.
 Qed.
 
-Lemma initcall_replumb (G0 : global_env) α C plm C' P' e k c rest temps s1 s2 pc :
+Lemma initcall_replumb C' P' e k c rest temps s1 s2 :
   compile_expr C (lbp C) (scr C) plm (E_call C' P' e) s1 = Some (c, s2) ->
-  code_at G0 pc (c ++ rest) ->
-  cont_matchJ α C plm k rest temps ->
+  P (c ++ rest) ->
+  cont_matchJ a C plm k rest temps ->
   exists ce rest' sA sB,
     [/\ compile_expr C (lbp C) (scr C) plm e sA = Some (ce, sB),
-        code_at G0 pc (ce ++ rest')
-      & cont_matchJ α C plm (Kcall C' P' k) rest' temps].
+        P (ce ++ rest')
+      & cont_matchJ a C plm (Kcall C' P' k) rest' temps].
 Proof.
   rewrite /= /Comp.bind /Comp.ret /find_proc_label /Comp.lift.
   case E1: (compile_expr C (lbp C) (scr C) plm e s1) => [[ce sA]|]; last by [].
@@ -655,6 +670,10 @@ Proof.
     + move: Hcode. by do 10!rewrite -?catA ?cat_cons ?cat0s ?cats0.
     + apply: CMJ_base. exact: CM_call_ext HneC Hk.
 Qed.
+
+End WithCodePred.
+
+End TReplumb.
 
 
 (* ==================== cont_match inversion lemmas ==================== *)
@@ -6029,7 +6048,7 @@ Proof.
     inversion Hstep; subst; try by case: (Hnev _ erefl).
     + (* KS_Binop1 *)
       right.
-      case: (binop1_replumb _ _ _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.binop1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1
@@ -6040,7 +6059,7 @@ Proof.
       * apply: MS_expr; [exact: He' | by []].
     + (* KS_Seq1 *)
       right.
-      case: (seq1_replumb _ _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.seq1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1
@@ -6051,7 +6070,7 @@ Proof.
       * apply: MS_expr; [exact: He' | by []].
     + (* KS_If1 *)
       right.
-      case: (if1_replumb _ _ _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.if1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1
@@ -6092,7 +6111,7 @@ Proof.
       eapply plus_left; [exact: S0 | exact: Sp | by []].
     + (* KS_Alloc1 *)
       right.
-      case: (alloc1_replumb _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.alloc1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1
@@ -6103,7 +6122,7 @@ Proof.
       * apply: MS_expr; [exact: He' | by []].
     + (* KS_Deref1 *)
       right.
-      case: (deref1_replumb _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.deref1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1
@@ -6114,7 +6133,7 @@ Proof.
       * apply: MS_expr; [exact: He' | by []].
     + (* KS_Assign1 *)
       right.
-      case: (assign1_replumb _ _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.assign1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1
@@ -6125,7 +6144,7 @@ Proof.
       * apply: MS_expr; [exact: He' | by []].
     + (* KS_InitCall *)
       right.
-      case: (initcall_replumb _ _ _ _ _ _ _ _ _ _ _ _ _ _ (ei_comp He)
+      case: (TReplumb.initcall_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
         => [c1 [rest' [sA' [sB' [E1 Hc1 Hk1]]]]].
       have He' := expr_inv_replumb He E1 Hc1 Hk1

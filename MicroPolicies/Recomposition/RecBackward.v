@@ -34,6 +34,9 @@ Import Types.
 
 Require Import MicroPolicies.Recomposition.OffsetWord.
 Require Import MicroPolicies.Recomposition.Definitions.
+Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
+Import TraceWF(nsuap_event_inv).
+Import TraceBracket(jal_do_updates_result).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 Require Import MicroPolicies.Recomposition.PcColor.
@@ -327,17 +330,9 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
      Reconstructs the [step_me] on the strong side from the [s3] step via backward [combined_codes]
      (same instruction, [decode_match]) + [registers_match]/[memory_match] (operands) + the
      offset bookkeeping.  PER-OPCODE; built incrementally below. *)
-  Lemma rb_belong_some_eq : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
-    belong c (Some t) -> c = color t.
-  Proof. by move=> c [vt ct et ict] /= /eqP. Qed.
-
   Lemma rb_belong_someE : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
     belong c (Some t) = (c == color t).
   Proof. by move=> c [vt ct et ict]. Qed.
-
-  Lemma rb_color_ofE : forall s0 : state,
-    color_of s0 = match taga (pc s0) with Level _ c => c end.
-  Proof. by move=> [m r [v tp] e]. Qed.
 
   (* [evi] succeeds on the strong side whenever it succeeds on the merged side (same [rcom] register
      domain via [reg_reflect]). *)
@@ -590,10 +585,6 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
        exact: (rb_jump_silent_isjump Hs)).
   Qed.
 
-  Lemma rb_belong_color : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
-    belong c (Some t) -> c = color t.
-  Proof. by move=> c [vt ct et bt] /= /eqP. Qed.
-
   (* Belong-gate reflection for the JUMP target, driven from the MERGED side.  GENERAL-OFFSET
      version: the merged target sits at [addw w (as_word off)] where [w] is the strong-side
      target; the caller supplies the merged cell [d3], its CODE-ness (from the s3 run's
@@ -612,7 +603,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     move=> i s s3 w off d3 Hcc Hrel Hoff Hm3 Hcode3 Hbel3.
     move: Hm3 Hcode3 Hbel3; case: d3 => v3 t3 /= Hm3 Hcode3 Hbel3.
     have Hcolc3 : color t3 = color_of s
-      by have H := rb_belong_color Hbel3; exact: (esym H).
+      by have H := belong_some_eq Hbel3; exact: (esym H).
     have [v' Hsw] := succ_code_reflect Hcc Hrel Hoff Hcode3 Hcolc3 Hm3.
     rewrite Hsw /belong /=. clear Hm3 Hsw Hcode3 Hbel3.
     by case: t3 Hcolc3 => vt ct et ict /= ->; rewrite eqxx.
@@ -1272,7 +1263,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
           by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
         have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
         have Hiscode : is_code td by rewrite Htag.
-        have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+        have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
         (* CROSS-COMPONENT RETURN colour bridge: the running register [r] and the merged register [r]
            share a [Ret n']-tagged value living in the SAME metadata stack frame; via [wf_stack] the
            strong-side target cell [mem s w'] and the merged-side target cell [mem s3 w] then have a
@@ -1404,7 +1395,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         have Hcolret : color tret = color_of s.
         { have Hbel : belong (color ti3) (Some tret).
           { move: Hcb3; rewrite /check_belong. by case: (belong (color ti3) (Some tret)). }
-          by rewrite -Hcolti3 -(rb_belong_some_eq Hbel). }
+          by rewrite -Hcolti3 -(belong_some_eq Hbel). }
         have [v0 [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
         have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
         { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1419,7 +1410,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
           by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
         have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
         have Hiscode : is_code td by rewrite Htag.
-        have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+        have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
         (* CROSS-COMPONENT CALL: the strong call target [mem s (swcast imm')] = [Some dd] has the SAME
            memory tag [taga dd = taga dd'] as the merged target [mem s3 (swcast imm)] = [Some dd']
            (from [combined_codes]/[decode_match_JAL], [Htagd]).  So every LRC gate the merged side
@@ -1528,7 +1519,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s.
       { by rewrite Hcoleq ST3 /=. }
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
       { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1543,7 +1534,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s
-        by rewrite rb_color_ofE.
+        by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s) (regs s)
                 ((vala (pc s) + 1)%w @ (pct s)) (internal s)), None.
       apply/Exec.stepP.
@@ -1577,7 +1568,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
       { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1593,7 +1584,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s) (setm (regs s) r3 ((swcast n3) @ Other))
                 ((vala (pc s) + 1)%w @ (pct s)) (internal s)), None.
       apply/Exec.stepP.
@@ -1629,7 +1620,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
       { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1646,7 +1637,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s)
                 (setm (setm (regs s) r1 (w1' @ (moved_tag t1)))
                       r2 (w1' @ t1))
@@ -1685,7 +1676,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
       { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1705,7 +1696,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s)
                 (setm (setm (setm (regs s) r1 (w1' @ t1))
                             r2 (w2' @ t2))
@@ -1771,7 +1762,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
       { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1848,7 +1839,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       (* aux facts for the builder *)
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       (* expose the switch_val components ts' (new loaded-cell M-tag) and td' (new r2 R-tag) *)
       case Esw : (switch_val t2 (moved_tag (vtag t2)))
         => [ts' td'].
@@ -1918,7 +1909,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
       { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
@@ -1954,7 +1945,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit
                 (setm (mem s) w1 (w2' @ (switch_val told3 t2).1))
                 (setm (setm (regs s) r1 (w1 @ t1))
@@ -2034,7 +2025,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have Hbeldj : belong (color_of s) (Some (taga dj)).
       { by move: Hbel; rewrite Htpc3c Hdj. }
       have Hdjcol : color (taga dj) = color_of s
-        by have H := rb_belong_color Hbeldj; exact (esym H).
+        by have H := belong_some_eq Hbeldj; exact (esym H).
       have Hdjc : is_code (taga dj).
       { apply: Hdjimp. rewrite Hdjcol. exact Hrel. }
       have Hdj' : mem s3 (addw w' (as_word offr)) = Some dj by rewrite <- Hweq.
@@ -2048,7 +2039,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       have Hcdpc : color td = match pct s with Level _ c => c end by rewrite Hcd Hpccol.
       (* build the strong-side jump step *)
       exists (@State mt lrc_tags unit (mem s) (regs s) (w' @ (pct s)) (internal s)), None.
@@ -2131,7 +2122,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         move: Hdm; case: d' Hrs => vv tt0 Hrs /= [Htt0 Hvv]; subst tt0 vv.
         by rewrite Hrs. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       have Hiscode : is_code td by rewrite Htag.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       (* target cell at pc' on the merged side: code, colour [color_of s]; carried to [s].
@@ -2152,7 +2143,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
       have Hpc3val : vala (pc s3) = pc3 by rewrite ST3.
       have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite /NEXT3 -Hpc3val Hd3s Htpc3 => /rb_belong_some_eq H. by rewrite H. }
+      { move: Hbel; rewrite /NEXT3 -Hpc3val Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
       have Hshift : addw (vala (pc s3)) (if w == 0%w then onew else swcast n)
                   = addw (addw (vala (pc s)) (if w == 0%w then onew else swcast n)) (as_word offr).
@@ -2191,7 +2182,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
       have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
       (* colour of the running pc-tag *)
-      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
+      have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       (* RA cell (pc+1) on the merged side; it is the end_condition successor, hence code colour=current *)
       have HRA3 : mem s3 (vala (pc s3) + 1)%w = Some (vret @ tret) by rewrite ST3 /=.
       have [d3s [Hd3s Hcode3s]] :
@@ -2218,7 +2209,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have Hcolti3 : color ti3 = color_of s.
       { have := Hpci (i3 @ ti3) Hd3; cbn [taga] => H. by rewrite H Hcoleq. }
       have Hcoltret : color tret = color_of s.
-      { have HtretEq := rb_belong_color HtretBel. by rewrite -HtretEq -Hcolti3. }
+      { have HtretEq := belong_some_eq HtretBel. by rewrite -HtretEq -Hcolti3. }
       (* --- strong-side operand facts shared by both decode_match cases --- *)
       (* strong-side RA cell (pc+1): reflect the merged code RA cell *)
       have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
@@ -2278,7 +2269,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         { rewrite -[NEXT3]/(swcast imm) -Himm3. exact Htgt3. }
         have Hcoljd' : color (taga jd') = color_of s.
         { have Hbel' := Hbel. rewrite Htgt3' in Hbel'.
-          have := rb_belong_color Hbel'. move=> Heq.
+          have := belong_some_eq Hbel'. move=> Heq.
           have Htpc3c : match tpc3 with Level _ c => c end = color_of s
             by rewrite Hcoleq ST3 /=.
           by rewrite -Htpc3c -Heq. }
@@ -2359,9 +2350,9 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
           by move: Hoth3; rewrite /is_other; case: (taga sz).
         (* running-colour facts for [s], [s3] (shared via [Hcoleq]) *)
         have Hccs : match taga (pc s) with Level _ c => c end = color_of s
-          by rewrite -rb_color_ofE.
+          by rewrite -color_ofE.
         have Hcc3 : match taga (pc s3) with Level _ c => c end = color_of s
-          by rewrite -rb_color_ofE Hcoleq.
+          by rewrite -color_ofE Hcoleq.
         (* the merged return-cell check forces [reta3] to be running CODE *)
         move: Hretcol3; rewrite Hcc3 => /andP [Hic3 /eqP Hcol3].
         (* the [ra] value is offset-mapped (InternalJump): merged value = strong value + offr *)

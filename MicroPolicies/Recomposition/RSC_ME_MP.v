@@ -122,57 +122,57 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
   Proof.
     move=> s s' e Hstep. inversion Hstep.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - (* jump *)
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
-        T.nsuap_event_inv NEXT.
+        TraceWF.nsuap_event_inv NEXT.
       rewrite Hmem.
-      apply: T.ndsu_mem_noM Hdsu.
+      apply: TraceWF.ndsu_mem_noM Hdsu.
       + by (move=> w' v' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (T.no_mw_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mw_reg_clear_read Hin))).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (T.no_mr_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
     - (* bnz *)
       unfold mvec, pc' in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - (* jal *)
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
-        T.nsuap_event_inv NEXT.
+        TraceWF.nsuap_event_inv NEXT.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
-      have Hhead := T.jal_head_tret Htr.
+      have Hhead := TraceWF.jal_head_tret Htr.
       rewrite Hmem.
-      apply: (@T.mem_unchanged_jal s st0 (pc0+1)%w vret tret (nseq 12 R)
+      apply: (@TraceWF.mem_unchanged_jal s st0 (pc0+1)%w vret tret (nseq 12 R)
                 (tr ov0) (RegWrite ra (pc0+1)%w :: reg_clear_read)
                 Hmemcell Hhead _ _ Hdsu).
       + by (move=> w' v' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (T.no_mw_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mw_reg_clear_read Hin))).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-            (case: Hin || exact: (T.no_mr_reg_clear_read Hin))).
+            (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
     - (* syscall: no event *)
-      have Hev := T.run_syscall_event_none CALL. discriminate Hev.
+      have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
   (* an event step's target colour is the colour of an existing memory cell *)
@@ -185,26 +185,26 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     have Hcol := T.event_step_color Hstep.
     inversion Hstep.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - (* jump: the target cell is [mem s w] *)
       unfold mvec in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := T.event_nextcomp_and_some Htr.
       move: Htni. rewrite ST /=.
       case Hmw : (mem0 w) => [ni|] // [Etn]. subst tn.
@@ -214,11 +214,11 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
         exact/Extra.In_in.
     - (* bnz *)
       unfold mvec, pc' in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
     - (* jal: the target cell is [mem s (swcast imm)] *)
       unfold mvec, pc' in NEXT.
-      have [evinp [ov0 [st0 [Htr _]]]] := T.nsuap_event_inv NEXT.
+      have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := T.event_nextcomp_and_some Htr.
       move: Htni. rewrite ST /=.
       case Hmw : (mem0 (swcast imm)) => [ni|] // [Etn]. subst tn.
@@ -227,7 +227,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       case: (Hcim _ _ Hcell) => HIn; apply/orP; [left | right];
         exact/Extra.In_in.
     - (* syscall *)
-      have Hev := T.run_syscall_event_none CALL. discriminate Hev.
+      have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
   (* the run-local invariant of the machine run *)

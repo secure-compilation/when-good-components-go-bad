@@ -32,6 +32,9 @@ Import DoNotation.
 Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
+Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
+Import TraceWF(ndsu_mem_noM, jal_head_tret, mem_unchanged_jal, nsuap_event_inv, get_tni_color_eq, run_syscall_event_none).
+Import TraceBracket(nsu_silent_extract, switch_val_color).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 
@@ -222,38 +225,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-  Qed.
-
-  (* Event analogue of [nsu_silent_extract]: peel a [next_state_updates_and_pc] producing an
-     event, KEEPING the transfer equation (to feed [event_trpc_tni]/[transfer_event_jumpjal])
-     and the [next_state_do_updates] (to read off [mem s']). *)
-  Lemma nsuap_event_inv : forall (st s' : state) (op : opcode) tpc ti
-      (ts : hseq (tag_type lrc_tags) (inputs op)) updts pc' e,
-    @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit st
-      (IVec (OP op) tpc ti ts) updts pc' = Some (s', Some e) ->
-    exists evinp ov0 st0,
-      LRC.transfer (IVec (OP op) tpc ti ts
-        (match mem st pc' with Some ni => Some (taga ni) | None => None end)) evinp
-        = Some (ov0, Some e) /\
-      next_state_do_updates st (tr ov0) updts = Some st0 /\
-      mem s' = mem st0 /\ pc s' = pc'@(trpc ov0).
-  Proof.
-    move=> st s' op tpc ti ts updts pc' e.
-    rewrite /next_state_updates_and_pc /next_state.
-    case Hevi: (evi st) => [evinp|] //=.
-    case Hm: (mem st pc') => [ni|] /=.
-    - case Htr: (LRC.instr_rules_mp evinp op tpc ti ts (Some (taga ni))) => [ov_ev|] //=.
-      case: ov_ev Htr => ov0 ev Htr /=.
-      case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
-      move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
-      exists evinp, ov0, st0. cbn.
-      split; [exact Htr | split; [exact: Edsu | by []]].
-    - case Htr: (LRC.instr_rules_mp evinp op tpc ti ts None) => [ov_ev|] //=.
-      case: ov_ev Htr => ov0 ev Htr /=.
-      case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
-      move=> [= Hs Hev]. subst s'. rewrite Hev in Htr.
-      exists evinp, ov0, st0. cbn.
-      split; [exact Htr | split; [exact: Edsu | by []]].
   Qed.
 
   (* A silent LRC step lands the pc on a cell of the running colour.  Mirrors the
@@ -564,10 +535,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
 
   (* ===== Running-colour tracking along a trace (for undef_running_left) ===== *)
 
-  Lemma get_tni_color_eq : forall t : tag_type lrc_tags Symbolic.M,
-    get_tni_color (Some t) = Some (color t).
-  Proof. by case. Qed.
-
   (* An EVENT transfer's [tni] is present and the event's target [next_comp_of_event] is its colour.
      Mirror of [event_trpc_tni]/[transfer_event_jumpjal], generic in [tni]. *)
   Lemma event_nextcomp_and_some :
@@ -627,15 +594,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-  Qed.
-
-  (* A system call never emits an event (the only syscall, alloc, returns [Some (_, None)]). *)
-  Lemma run_syscall_event_none : forall sc (s s' : state) ev,
-    @run_syscall mt ops lrc_tags LRC.transfer unit sc s = Some (s', ev) -> ev = None.
-  Proof.
-    move=> sc s s' ev. rewrite /run_syscall.
-    case: (evi s) => [i|] //=.
-    case: (Symbolic.sem sc s) => [ss|] //=. by move=> [= _ <-].
   Qed.
 
   (* The running colour after an EVENT step is the event's target component. *)

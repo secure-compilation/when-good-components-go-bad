@@ -32,6 +32,9 @@ Import DoNotation.
 Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
+Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
+Import TraceWF(jal_head_tret, mem_unchanged_jal).
+Import TraceBracket(switch_val_color, switch_val_iscode, setm_self).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentWeak.
 
@@ -46,83 +49,7 @@ Module StepWeak2 (S: RecompositionContext).
 
   (* Chain off StepWeak so the whole recomposition shares ONE Defs instance. *)
   Include StepWeak S.
-
-  (* ===================================================================================== *)
-  (* BRIDGE: a [step_me] (Merged.transfer) step IS a [step_mp] (LRC.transfer) step.         *)
-  (* [Merged.transfer] = (two extra is_code guards) >>= [LRC.instr_rules]; when it succeeds  *)
-  (* the LRC transfer succeeds IDENTICALLY (the guards only ever make it fail MORE).  So the *)
-  (* s2 run in [sem'] (which steps via [step_me]) can be converted to a [step_mp] step and    *)
-  (* then ALL the (LRC-transfer) weak1 step-machinery applies verbatim.                       *)
-  (* ===================================================================================== *)
-
-  Lemma merged_transfer_lrc :
-    forall (iv : ivec lrc_tags) (i : ev_inputs)
-           (r : vovec lrc_tags (op iv) * option event),
-      Merged.transfer iv i = Some r -> LRC.transfer iv i = Some r.
-  Proof.
-    intros iv i r. destruct iv as [vop tpc ti ts tni]. destruct i as [rc].
-    simpl in r. revert ts ti r. destruct vop as [op0|]; intros ts ti r.
-    - (* OP op: peel the two Merged guards, then the shared LRC.instr_rules call *)
-      cbn [Merged.transfer Merged.instr_rules].
-      move=> H. apply obind_inv in H. destruct H as [out [Hir Hr]].
-      apply obind_inv in Hir. destruct Hir as [u1 [_ Hir]].
-      apply obind_inv in Hir. destruct Hir as [u2 [_ Hir]].
-      apply obind_inv in Hir. destruct Hir as [o [Hlrc Ho]].
-      case: o Hlrc Ho => ov0 ev0 Hlrc Ho.
-      case: ov0 Hlrc Ho => t' r' Hlrc Ho.
-      move: Ho => /= [= Hout]; subst out.
-      move: Hr => /= [= Hr]; subst r.
-      apply: LRC.instr_rules_mp_of_strict. exact: Hlrc.
-    - (* SERVICE: both transfers reduce to the identical SERVICE/fallthrough arms *)
-      by rewrite /Merged.transfer /LRC.transfer.
-  Qed.
-
-  Lemma nsu_and_pc_bridge :
-    forall (st : state) (kiv : k_ivec lrc_tags) (updts : seq update)
-           (pc' : mword mt) (res : _),
-      @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit st kiv updts pc' = Some res ->
-      @next_state_updates_and_pc mt ops lrc_tags LRC.transfer    unit st kiv updts pc' = Some res.
-  Proof.
-    move=> st kiv updts pc' res.
-    rewrite /next_state_updates_and_pc /next_state.
-    case: (evi st) => [i|] //=.
-    case E: (Merged.transfer _ i) => [ov|] //=.
-    by rewrite (merged_transfer_lrc E).
-  Qed.
-
-  Lemma nsu_bridge :
-    forall (st : state) (kiv : k_ivec lrc_tags) (updts : seq update) (res : _),
-      @next_state_updates mt ops lrc_tags Merged.transfer unit st kiv updts = Some res ->
-      @next_state_updates mt ops lrc_tags LRC.transfer    unit st kiv updts = Some res.
-  Proof.
-    move=> st kiv updts res. exact: nsu_and_pc_bridge.
-  Qed.
-
-  Lemma run_syscall_bridge :
-    forall (sc : syscall lrc_tags unit) (st : state) (res : _),
-      @run_syscall mt ops lrc_tags Merged.transfer unit sc st = Some res ->
-      @run_syscall mt ops lrc_tags LRC.transfer    unit sc st = Some res.
-  Proof.
-    move=> sc st res. rewrite /run_syscall.
-    by case: (evi st) => [i|] //=.
-  Qed.
-
-  Lemma step_me_mp : forall (s s' : state) ev,
-      step_me (NC:=NC) s s' ev -> step_mp (NC:=NC) s s' ev.
-  Proof.
-    move=> s s' ev H. inversion H;
-      [ eapply step_nop
-      | eapply step_const
-      | eapply step_mov
-      | eapply step_binop
-      | eapply step_load
-      | eapply step_store
-      | eapply step_jump
-      | eapply step_bnz
-      | eapply step_jal
-      | eapply step_syscall ];
-      eauto using nsu_bridge, nsu_and_pc_bridge, run_syscall_bridge.
-  Qed.
+  Import PCCM.
 
   (* [Step sem'] IS [step_me] (sem'.(step) = step1, and step1 _ _ [::] _ = step_me _ _ None). *)
   Lemma weak2_step1 : forall s2 s2', Step sem' s2 E0 s2' -> step_me (NC:=NC) s2 s2' None.

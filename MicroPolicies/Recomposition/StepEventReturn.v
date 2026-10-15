@@ -33,6 +33,9 @@ Import DoNotation.
 Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
+Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
+Import TraceWF(table_sem_alloc).
+Import TraceBracket(reg_index_neq).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepEventCall.
 
@@ -285,29 +288,15 @@ Module StepEventReturn (S: RecompositionContext).
   Qed.
 
   (* [data_match] closer for the cleared-register chains: two atoms with equal tags agree under
-     [data_match Left] whenever the (only non-trivial) [Other] case has equal values — which is all
+     [data_match i] whenever the (only non-trivial) [Other] case has equal values — which is all
      a return needs, since every register is re-tagged [Invalidated] except reg 1 ([Other]). *)
-  Lemma dmc : forall (c : Component.id) (m : metadata) (da db : atom (mword mt) value_tag),
+  Lemma dmc : forall (i : side) (c : Component.id) (m : metadata) (da db : atom (mword mt) value_tag),
       Types.taga da = Types.taga db ->
       (Types.taga da = Other -> Types.vala da = Types.vala db) ->
       (Types.taga da = Invalidated \/ Types.taga da = Other) ->
-      data_match Left c m da db.
+      data_match i c m da db.
   Proof.
-    move=> c m [va ta] [vb tb] /= Et Ev Ht.
-    rewrite /data_match /=. subst tb. split=> //.
-    case: Ht => Ht; rewrite Ht /=; [done | exact: (Ev Ht)].
-  Qed.
-
-  (* [Right]-side analogue of [dmc].  [data_match] differs from [Left] only in the [Ret] case,
-     which is unreachable here (the hypotheses force [Other]/[Invalidated]), so the proof is the
-     same. *)
-  Lemma dmc_right : forall (c : Component.id) (m : metadata) (da db : atom (mword mt) value_tag),
-      Types.taga da = Types.taga db ->
-      (Types.taga da = Other -> Types.vala da = Types.vala db) ->
-      (Types.taga da = Invalidated \/ Types.taga da = Other) ->
-      data_match Right c m da db.
-  Proof.
-    move=> c m [va ta] [vb tb] /= Et Ev Ht.
+    move=> i c m [va ta] [vb tb] /= Et Ev Ht.
     rewrite /data_match /=. subst tb. split=> //.
     case: Ht => Ht; rewrite Ht /=; [done | exact: (Ev Ht)].
   Qed.
@@ -317,8 +306,8 @@ Module StepEventReturn (S: RecompositionContext).
      the coinciding reg-1 value, the chains are register-matched.  Discharges the substantive
      [registers_match] obligation from the [s3'] exports + the concrete [s1'] chain, without
      re-deriving the (expensive) merged post-state. *)
-  Lemma registers_match_clear_left :
-    forall (m : metadata) (s s' : state) (v : mword mt),
+  Lemma registers_match_clear :
+    forall (i : side) (m : metadata) (s s' : state) (v : mword mt),
       domm (regs s) = domm (regs s') ->
       (forall w d, regs s  w = Some d ->
          (w = as_word (ssrint.Posz 1) /\ Types.taga d = Other) \/
@@ -328,9 +317,9 @@ Module StepEventReturn (S: RecompositionContext).
          (w <> as_word (ssrint.Posz 1) /\ Types.taga d = Invalidated)) ->
       omap Types.vala (regs s  (as_word (ssrint.Posz 1))) = Some v ->
       omap Types.vala (regs s' (as_word (ssrint.Posz 1))) = Some v ->
-      registers_match Left m s s'.
+      registers_match i m s s'.
   Proof.
-    move=> m s s' v Hdomm Hs Hs' V1 V3 w d; split=> Hw.
+    move=> i m s s' v Hdomm Hs Hs' V1 V3 w d; split=> Hw.
     - have wd : w \in domm (regs s) by rewrite Hdomm; apply/dommP; exists d.
       move/dommP: wd => [d' Hd']. exists d'; split=> //.
       apply: dmc.
@@ -345,47 +334,6 @@ Module StepEventReturn (S: RecompositionContext).
     - have wd : w \in domm (regs s') by rewrite -Hdomm; apply/dommP; exists d.
       move/dommP: wd => [d' Hd']. exists d'; split=> //.
       apply: dmc.
-      + case: (Hs _ _ Hw) => [[E1 ->] | [E1 ->]];
-        case: (Hs' _ _ Hd') => [[E2 ->] | [E2 ->]] //;
-        first [ by case: (E2 E1) | by case: (E1 E2) ].
-      + move=> To1.
-        have Ew : w = as_word (ssrint.Posz 1).
-        { case: (Hs _ _ Hw) => [[E1 _] | [_ Ti1]] //. by rewrite Ti1 in To1. }
-        subst w. move: V1 V3. by rewrite Hw Hd' /= => [= ->] [= ->].
-      + case: (Hs _ _ Hw) => [[_ H] | [_ H]]; [by right | by left].
-  Qed.
-
-  (* Mirror of [registers_match_clear_left] for the [Right] side.  The cleared registers are only
-     ever [Other]/[Invalidated] (never [Ret]), so [data_match] on them is side-independent and the
-     proof is identical with [Right] in the conclusion. *)
-  Lemma registers_match_clear_right :
-    forall (m : metadata) (s s' : state) (v : mword mt),
-      domm (regs s) = domm (regs s') ->
-      (forall w d, regs s  w = Some d ->
-         (w = as_word (ssrint.Posz 1) /\ Types.taga d = Other) \/
-         (w <> as_word (ssrint.Posz 1) /\ Types.taga d = Invalidated)) ->
-      (forall w d, regs s' w = Some d ->
-         (w = as_word (ssrint.Posz 1) /\ Types.taga d = Other) \/
-         (w <> as_word (ssrint.Posz 1) /\ Types.taga d = Invalidated)) ->
-      omap Types.vala (regs s  (as_word (ssrint.Posz 1))) = Some v ->
-      omap Types.vala (regs s' (as_word (ssrint.Posz 1))) = Some v ->
-      registers_match Right m s s'.
-  Proof.
-    move=> m s s' v Hdomm Hs Hs' V1 V3 w d; split=> Hw.
-    - have wd : w \in domm (regs s) by rewrite Hdomm; apply/dommP; exists d.
-      move/dommP: wd => [d' Hd']. exists d'; split=> //.
-      apply: dmc_right.
-      + case: (Hs _ _ Hd') => [[E1 ->] | [E1 ->]];
-        case: (Hs' _ _ Hw) => [[E2 ->] | [E2 ->]] //;
-        first [ by case: (E2 E1) | by case: (E1 E2) ].
-      + move=> To1.
-        have Ew : w = as_word (ssrint.Posz 1).
-        { case: (Hs _ _ Hd') => [[E1 _] | [_ Ti1]] //. by rewrite Ti1 in To1. }
-        subst w. move: V1 V3. by rewrite Hd' Hw /= => [= ->] [= ->].
-      + case: (Hs _ _ Hd') => [[_ H] | [_ H]]; [by right | by left].
-    - have wd : w \in domm (regs s') by rewrite -Hdomm; apply/dommP; exists d.
-      move/dommP: wd => [d' Hd']. exists d'; split=> //.
-      apply: dmc_right.
       + case: (Hs _ _ Hw) => [[E1 ->] | [E1 ->]];
         case: (Hs' _ _ Hd') => [[E2 ->] | [E2 ->]] //;
         first [ by case: (E2 E1) | by case: (E1 E2) ].
@@ -653,7 +601,7 @@ Module StepEventReturn (S: RecompositionContext).
     case Ef: (smem spc) => [[i ti]|]; last first.
     - (* syscall: [sem sc = alloc_fun] (table_sem_alloc), [run_syscall] gives [sem sc st = Some st'] *)
       move=> H; apply obind_inv in H as [sc [Et H]].
-      have Hsem := PCCM.table_sem_alloc Et.
+      have Hsem := table_sem_alloc Et.
       have Hsemst := PCCM.run_syscall_sem_gen H.
       rewrite Hsem in Hsemst.
       exact: (alloc_fun_regs_domm Hsemst).
@@ -1252,7 +1200,7 @@ Module StepEventReturn (S: RecompositionContext).
                 by eexists; split; [exact: d''eq | reflexivity].
               destruct (capa_cor3 (w0 + as_word off0)%w n2 (inr w') prem) as [is_in unicity].
               exact: (unicity (inl r0) (w0 + as_word off0)%w vt_eq10). }
-          -- (* registers_match: re-tagged regs.  Via [registers_match_clear_left] from the
+          -- (* registers_match: re-tagged regs.  Via [registers_match_clear] from the
                 s3' classification export ([Htagexport]) + the concrete s1' chain classification
                 ([regtag_closer]) + the reg-1 (com register) value coincidence: its value is
                 preserved by the return on both chains ([Ha44] on s1', [nsuap_regread_vala] on s3'),
@@ -1271,7 +1219,7 @@ Module StepEventReturn (S: RecompositionContext).
               move: Heqa27. rewrite !setmE E1.
               rewrite simpl_as_word_equal; [| by [] | by [] | by [] ].
               rewrite H12 /= => [= ->]. exact: Hv23. }
-            apply: (@registers_match_clear_left M' _ s3' v10);
+            apply: (@registers_match_clear Left M' _ s3' v10);
               [ have D1 := reg_domm_step step_s1 reg_domm1;
                 have D3 := reg_domm_nsuap G' reg_domm3;
                 rewrite /register_domm in D1 D3; by rewrite D1 D3
@@ -1704,7 +1652,7 @@ Module StepEventReturn (S: RecompositionContext).
               move: (capa_cor3 dv'' n (inr w')
                        (ex_intro _ _ (conj d''eq (Logic.eq_refl (Ret n))))) => [is_in unicity].
               exact: (unicity (inl r0) _ vt_eq10). }
-          -- (* registers_match Right s2' s3': via registers_match_clear_right + Htagexport
+          -- (* registers_match Right s2' s3': via registers_match_clear + Htagexport
                 + regtag_closer reg_domm2 + reg-1 value coincidence (vala a = v10). *)
             have Hta_a : Types.taga a = Other.
             { case E: (Types.taga a) => [m|||]; rewrite E /= in Heqa36;
@@ -1731,7 +1679,7 @@ Module StepEventReturn (S: RecompositionContext).
             { have E1 : (as_word (ssrint.Posz 1) == r) = false.
               { case: eqP => [E|] //. by case: (Hr (esym E)). }
               move: Heqa65. rewrite E1 ST /= -Heqa9 /= => [= ->]. exact: Hva. }
-            apply: (@registers_match_clear_right M' _ s3' v10);
+            apply: (@registers_match_clear Right M' _ s3' v10);
               [ have D2 := reg_domm_step step_s2 reg_domm2;
                 have D3 := reg_domm_nsuap G' reg_domm3;
                 rewrite /register_domm in D2 D3; by rewrite D2 D3
@@ -2065,7 +2013,7 @@ Module StepEventReturn (S: RecompositionContext).
               move: (capa_cor3 dv'' n (inr w')
                        (ex_intro _ _ (conj d''eq (Logic.eq_refl (Ret n))))) => [is_in unicity].
               exact: (unicity (inl r) _ vt_eq10). }
-          -- (* registers_match Left s1' s3': registers_match_clear_left + Htagexport + reg-1 value
+          -- (* registers_match Left s1' s3': registers_match_clear + Htagexport + reg-1 value
                 coincidence [vala a23 = v10] (a23 = s1 reg-1).  s1-side has no registers_match (weak),
                 so via the shared event: [vt_match9] (s2<->s3, Right) gives [vala a = v10] (a = s2 reg-1),
                 and [evi s1 = evi s2 = {rcom_value1}] gives [vala a23 = vala a] by convert_int_of_word_inj. *)
@@ -2090,7 +2038,7 @@ Module StepEventReturn (S: RecompositionContext).
                 by apply: (reg_index_neq (x:=1) (y:=4)).
               move: Heqa26; rewrite setmE E1 setmE (introF eqP H14a) ST0 /= -Heqa21 /=;
                 move=> [= ->]. exact: Hva23. }
-            apply: (@registers_match_clear_left M' _ s3' v10);
+            apply: (@registers_match_clear Left M' _ s3' v10);
               [ have D1 := reg_domm_step_mp step_s1 reg_domm1;
                 have D3 := reg_domm_nsuap G' reg_domm3;
                 rewrite /register_domm in D1 D3; by rewrite D1 D3
@@ -2516,7 +2464,7 @@ Module StepEventReturn (S: RecompositionContext).
               move: (capa_cor3 dv'' n (inr w')
                        (ex_intro _ _ (conj d''eq (Logic.eq_refl (Ret n))))) => [is_in unicity].
               exact: (unicity (inl r) _ vt_eq10). }
-          -- (* registers_match Right: re-tagged regs.  Via [registers_match_clear_right] from the
+          -- (* registers_match Right: re-tagged regs.  Via [registers_match_clear] from the
                 s3' classification export ([Htagexport]) + the concrete s2' chain classification
                 ([regtag_closer reg_domm2]) + the reg-1 (com register) value coincidence: its value is
                 preserved by the return on both chains, and the two pre-values agree ([Hv_a] from
@@ -2533,7 +2481,7 @@ Module StepEventReturn (S: RecompositionContext).
             { have E1 : (as_word (ssrint.Posz 1) == r) = false.
               { case: eqP => [E|] //. by case: (Hr (esym E)). }
               move: Heqa62. rewrite E1 H11 /= => [= ->]. exact: Hv_a. }
-            apply: (@registers_match_clear_right M' _ s3' v10);
+            apply: (@registers_match_clear Right M' _ s3' v10);
               [ have D2 := reg_domm_step step_s2 reg_domm2;
                 have D3 := reg_domm_nsuap G' reg_domm3;
                 rewrite /register_domm in D2 D3; by rewrite D2 D3

@@ -156,7 +156,6 @@ CHAIN=(
   S2T/TStackMatch.v
   S2T/TMatch.v
   S2T/TProlog.v
-  S2T/TReplumb.v
   S2T/TDiagram.v
   S2T/TLeaf.v
   S2T/TSim.v

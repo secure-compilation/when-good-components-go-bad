@@ -32,6 +32,9 @@ Import DoNotation.
 Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
+Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
+Import TraceWF(ndsu_mem_noM, jal_head_tret, mem_unchanged_jal).
+Import TraceBracket(jal_do_updates_result, jump_do_updates_result, nsu_silent_extract, mkfmap_const_val, check_belong_color, store_transfer, load_transfer, load_guard, switch_val_color, switch_val_iscode, switch_val_entry, switch_val_vtag, setm_reg_nonret, ndsu_nil_updts, const_transfer, bnz_transfer, mov_transfer, binop_transfer, switch_val_snd, jump_transfer, jal_transfer, setm_self).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentStrong2.
 
@@ -52,6 +55,7 @@ Module StepWeak (S: RecompositionContext).
 
   (* Chain off StepStrong2 so the whole recomposition shares ONE Defs instance. *)
   Include StepStrong2 S.
+  Import PCCM.
 
   (* s1 (= prog, L1) takes a silent step while RIGHT-matched: s2/c' determines s3, so s3
      stays put; only the weak (Left) equivalence with s1 and the common equivalence move. *)
@@ -391,127 +395,13 @@ Module StepWeak (S: RecompositionContext).
       + exact: wpcc2.
   Qed.
 
-  (* LOW-LEVEL, self-contained: a successful SILENT LRC step (ev = None, so the SERVICE branch is
-     excluded) yields a post-state whose mem/regs are [next_state_do_updates]'s and whose pc is the
-     supplied [pc'] tagged with the rule's output [trpc].  Opcode-agnostic — peels the do!-chain. *)
-  Lemma nsu_silent_extract :
-    forall (st : state) (kiv : option (tag_type lrc_tags Symbolic.M) -> ivec lrc_tags)
-           (updts : seq update) (pc' : mword mt) (s' : state),
-      @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit st kiv updts pc' = Some (s', None) ->
-      exists (op0 : opcode) (ov0 : ovec lrc_tags op0) (st0 : state),
-        next_state_do_updates st (tr ov0) updts = Some st0 /\
-        mem s' = mem st0 /\ regs s' = regs st0 /\
-        pc s' = pc'@(trpc ov0) /\ internal s' = internal st0.
-  Proof.
-    move=> st kiv updts pc' s'.
-    rewrite /next_state_updates_and_pc /next_state.
-    case: (evi st) => [evinp|] //=.
-    case: (LRC.transfer _ evinp) => [ov_ev|] //=.
-    case: (op _) ov_ev => [op0|] ov_ev //=.
-    case: ov_ev => ov0 ev.
-    case Edsu: (next_state_do_updates st (tr ov0) updts) => [st0|] //=.
-    move=> [= Hs Hev]. subst s'.
-    exists op0, ov0, st0. cbn. split; [exact: Edsu | by []].
-  Qed.
-
   (* ===== LOW-LEVEL, SELF-CONTAINED LRC step-machinery facts (no recomposition content). =====
      These are mechanical properties of [LRC.instr_rules]/[next_state_do_updates] and are the
      ones the policy allows to be [Admitted]; everything recomposition-specific below is proved. *)
 
-  (* The LRC instr-rule of a SILENT step ([ev = None]) outputs [OVec _ tpc ...], i.e. preserves the
-     pc-tag: every rule emits [OVec _ tpc] except the JUMP/JAL cross-component branches, which emit
-     an [ERet]/[ECall] event (so are excluded by [ev = None]). *)
-  Lemma op_silent_trpc :
-    forall (op : opcode) (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-           (ts : hseq (tag_type lrc_tags) (inputs op)) (tni : option (tag_type lrc_tags Symbolic.M))
-           (evinp : ev_inputs) (ov : ovec lrc_tags op) (ev : option event),
-      LRC.transfer (IVec (OP op) tpc ti ts tni) evinp = Some (ov, ev) ->
-      ev = None ->
-      trpc ov = tpc.
-  Proof.
-    move=> op tpc ti ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'.
-    move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H Hev; subst ev.
-    - (* NOP *)
-      rewrite (hseq0 ts) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      move: H => [= <-].
-      exact: erefl.
-    - (* CONST *)
-      rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      move: H => [= <-]; exact: erefl.
-    - (* MOV *)
-      rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq0 (hsbehead (hsbehead ts))) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      move: H => [= <-]; exact: erefl.
-    - (* BINOP *)
-      rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
-              (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      move: H => [= <-]; exact: erefl.
-    - (* LOAD *)
-      rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
-              (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H].
-      move: H. case: ifP => // _ H.
-      move: H. case E: (switch_val _ _) => [a c] /=.
-      move=> [= <-]; exact: erefl.
-    - (* STORE *)
-      rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
-              (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
-      move: H. case: ifP => // _ H.
-      move: H. case E: (switch_val _ _) => [a c] /=.
-      move=> [= <-]; exact: erefl.
-    - (* JUMP *)
-      rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
-      case: (obind_inv H) => u0 [_ {}H].
-      move: H. case: ifP => _ H.
-      + case: (obind_inv H) => u1 [_ {}H]. move: H => [= <-]; exact: erefl.
-      + case: (obind_inv H) => u1 [_ {}H]. case: (obind_inv H) => u2 [_ {}H].
-        case: (obind_inv H) => u3 [_ {}H]. by move: H => [=].
-    - (* BNZ *)
-      rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      move: H => [= <-]; exact: erefl.
-    - (* JAL *)
-      rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
-      case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-      move: H. case: ifP => _ H.
-      + move: H => [= <-]; exact: erefl.
-      + case: (obind_inv H) => u2 [_ {}H].
-        (* event branch: [get_tni_color]/[check_entry] force [tni]'s entry to exist, so the
-           event [ev = do! p <- get_proc_name tni; Some (ECall ..)] is [Some _], contradicting [ev=None]. *)
-        case: (obind_inv H) => u3 [Hgc {}H].
-        case: (obind_inv H) => u4 [Hce {}H].
-        move: H => [= _ Hev2].
-        move: Hgc Hce Hev2. case: tni => [td0|]; last by move=> Hgc'; discriminate Hgc'.
-        case: td0 => vtg ctg etg ictg.
-        case: etg => [[pp ll]|] /=.
-        * by move=> _ _ Hev2; discriminate Hev2.
-        * by move=> _ Hce' _; discriminate Hce'.
-    - (* JUMPEPC *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* ADDRULE *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* GETTAG *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* PUTTAG *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* HALT *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-  Qed.
-
 
 
   (* ===== Shared step-machinery tooling (PROVEN). ===== *)
-
-  Lemma updm_domm (T : ordType) (S : Type) (m m' : {fmap T -> S}) k v :
-    updm m k v = Some m' -> domm m' = domm m.
-  Proof.
-    rewrite /updm. case E: (getm m k) => [a|] //= [<-]. rewrite domm_set.
-    have Hk : k \in domm m by apply/dommP; exists a.
-    apply/eqP. by rewrite eqEfsubset fsubUset fsub1set Hk fsubsetxx fsubsetUr.
-  Qed.
 
   (* A single update never changes the register-file domain: reg writes/reads [updm] an existing key
      (domain fixed), memory updates leave the registers alone. *)
@@ -541,40 +431,6 @@ Module StepWeak (S: RecompositionContext).
       rewrite (IH _ _ _ _ H). exact: (ndsu1_regs_domm E1).
   Qed.
 
-  (* A single RegRead/RegWrite update never touches memory (a successful one targets registers). *)
-  Lemma ndsu1_mem_noM : forall (st st1 : state) (tk : tag_kind) (tag : tag_type lrc_tags tk) u,
-    (forall w v, u <> MemWrite w v) -> (forall w, u <> MemRead w) ->
-    next_state_do_update st tag u = Some st1 -> mem st1 = mem st.
-  Proof.
-    move=> st st1 tk tag u Hmw Hmr. case: tk tag => /= tag.
-    - case: u Hmw Hmr => //= [r x|r] _ _.
-      + by case: (updm (regs st) r x@tag) => [rs|] //= [<-].
-      + case: (regs st r) => [a|] //=. by case: (updm _ _ _) => [rs|] //= [<-].
-    - case: u Hmw Hmr => //= [w v|w] Hmw Hmr.
-      + by move: (Hmw w v).
-      + by move: (Hmr w).
-    - by [].
-  Qed.
-
-  (* A whole update chain free of MemWrite/MemRead leaves memory fixed (the 6 register-only opcodes
-     nop/const/mov/binop/jump/bnz). *)
-  Lemma ndsu_mem_noM : forall (tks : seq tag_kind) (tags : hseq (tag_type lrc_tags) tks)
-      (updts : seq update) (st st0 : state),
-    (forall w v, ~ List.In (MemWrite w v) updts) -> (forall w, ~ List.In (MemRead w) updts) ->
-    next_state_do_updates st tags updts = Some st0 -> mem st0 = mem st.
-  Proof.
-    elim => [|tk tks IH] tags updts st st0 Hmw Hmr /=.
-    - by move=> [<-].
-    - case: updts Hmw Hmr => [|u us] Hmw Hmr //=.
-      case E1: (next_state_do_update st (hshead tags) u) => [st1|] //= H.
-      rewrite (IH _ _ _ _ _ _ H).
-      + apply: (ndsu1_mem_noM _ _ E1).
-        * by move=> w v Heq; apply: (Hmw w v); rewrite Heq; apply: List.in_eq.
-        * by move=> w Heq; apply: (Hmr w); rewrite Heq; apply: List.in_eq.
-      + by move=> w v Hin; apply: (Hmw w v); rewrite /=; right; exact: Hin.
-      + by move=> w Hin; apply: (Hmr w); rewrite /=; right; exact: Hin.
-  Qed.
-
   (* One silent opcode square, factored to the two facts [preserves_weak_local] needs about memory and
      the pc-tag.  When the update list carries no MemWrite, [next_state_do_updates] leaves memory fixed,
      and every silent LRC instruction rule keeps the pc-tag ([trpc] = [tpc]); so the post-state's memory
@@ -599,32 +455,6 @@ Module StepWeak (S: RecompositionContext).
        move=> [= Hs Hev]; subst s';
        split; [ exact: (ndsu_mem_noM Hnmw Hnmr Edsu)
               | by rewrite /= (op_silent_trpc Htr Hev) ]).
-  Qed.
-
-  (* Every value in a constant-valued [mkfmap] is that value (used for alloc's fresh block). *)
-  Lemma mkfmap_const_val (T : ordType) (S : eqType) (v : S) :
-    forall (kvs : seq (T * S)) w d,
-      (forall p, p \in kvs -> p.2 = v) -> getm (mkfmap kvs) w = Some d -> d = v.
-  Proof.
-    elim => [|p kvs IH] w d Hall //=.
-    rewrite setmE. case: eqP => [_ [<-]|_ H].
-    - by rewrite -(Hall p) // in_cons eqxx.
-    - apply: (IH w) => // q Hq. apply: Hall. by rewrite in_cons Hq orbT.
-  Qed.
-
-  (* The syscall table holds exactly the allocator, so a fired syscall runs [alloc_fun]. *)
-  Lemma run_syscall_alloc : forall pc0 sc (s s' : state) ev,
-    Instance.table (NC:=NC) pc0 = Some sc ->
-    @run_syscall _ _ lrc_tags LRC.transfer unit sc s = Some (s', ev) ->
-    alloc_fun (NC:=NC) s = Some s'.
-  Proof.
-    move=> pc0 sc s s' ev Htbl Hrun.
-    have Hsem : Symbolic.sem sc = alloc_fun (NC := NC).
-    { move: Htbl. rewrite /Instance.table /Merged.table mkfmapE /=.
-      case: ifP => [_ [= <-] // | _]. by move=> [=]. }
-    move: Hrun. rewrite /run_syscall Hsem /= => H.
-    case: (obind_inv H) => i [_ {}H].
-    by case: (obind_inv H) => s0 [Hs0] [= <-].
   Qed.
 
   (* The allocator's effect: it preserves the register domain and the pc-tag, and EXTENDS memory with
@@ -743,219 +573,6 @@ Module StepWeak (S: RecompositionContext).
       + move=> Hr'; apply: (Huniq (inl r') v'); exact: (Hreg r' v' n Hr').
       + move=> [t' [Hw'' Ht']]; apply: (Huniq (inr w') v'); exists t';
           split; [exact: (Hmem w' v' t' n Hw'' Ht') | exact: Ht'].
-  Qed.
-
-  (* A register setm with a non-Ret tag introduces no Ret cap: every Ret cap in the result was already
-     in the original register file (at the same key). *)
-  Lemma setm_reg_nonret :
-    forall (rg : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)}) r x t,
-    (forall n, t <> Ret n) ->
-    forall r' v n, setm rg r (x @ t) r' = Some (v @ (Ret n)) -> rg r' = Some (v @ (Ret n)).
-  Proof.
-    move=> rg r x t Hnr r' v n. rewrite setmE. case: eqP => [Heq|Hne].
-    - move=> [= Hx Ht]. exfalso. exact: (Hnr n Ht).
-    - by [].
-  Qed.
-
-  (* An empty update list leaves the state unchanged. *)
-  Lemma ndsu_nil_updts : forall (tks : seq tag_kind) (tags : hseq (tag_type lrc_tags) tks) (st st0 : state),
-    next_state_do_updates st tags [::] = Some st0 -> st0 = st.
-  Proof. move=> [|tk tks] tags st st0 /=; [by move=> [<-] | by []]. Qed.
-
-  (* Output-tag shapes of the silent rules (cf. [store_transfer]/[load_transfer]). *)
-  Lemma const_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags CONST) ev,
-    LRC.transfer (IVec CONST tpc ti [hseq told] tni) evinp = Some (ov, ev) -> tr ov = [hseq Other].
-  Proof.
-    move=> tpc ti told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    by move: H => [= <-].
-  Qed.
-
-  Lemma bnz_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (t1 : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags BNZ) ev,
-    LRC.transfer (IVec BNZ tpc ti [hseq t1] tni) evinp = Some (ov, ev) -> tr ov = [hseq t1].
-  Proof.
-    move=> tpc ti t1 tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    by move: H => [= <-].
-  Qed.
-
-  Lemma mov_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (t1 told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags MOV) ev,
-    LRC.transfer (IVec MOV tpc ti [hseq t1; told] tni) evinp = Some (ov, ev) ->
-    tr ov = [hseq (moved_tag t1); t1].
-  Proof.
-    move=> tpc ti t1 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    by move: H => [= <-].
-  Qed.
-
-  Lemma binop_transfer : forall b (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (t1 t2 told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags (BINOP b)) ev,
-    LRC.transfer (IVec (BINOP b) tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) ->
-    tr ov = [hseq t1; t2; Other].
-  Proof.
-    move=> b tpc ti t1 t2 told tni evinp ov ev. rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
-    by move: H => [= <-].
-  Qed.
-
-  (* A passing [check_belong] forces the colours equal. *)
-  Lemma check_belong_color : forall c (td : tag_type lrc_tags Symbolic.M) u,
-    check_belong c (Some td) = Some u -> c = color td.
-  Proof.
-    move=> c td u. rewrite /check_belong /belong.
-    by case: td => vt ct et bt /=; case: ifP => // /eqP.
-  Qed.
-
-  (* The LRC STORE rule's output, read off its guards: the running colour matches the cell ([color
-     told = pc colour]), the cell is non-code, the pc-tag is kept, and the cell's new tag is [told]
-     with its value-tag switched (so same colour / is_code). *)
-  Lemma store_transfer : forall (tpc : tag_type lrc_tags P) (ti told : tag_type lrc_tags Symbolic.M)
-      (t1 t2 : tag_type lrc_tags R) (tni : option (tag_type lrc_tags Symbolic.M))
-      (evinp : ev_inputs) (ov : ovec lrc_tags STORE) (ev : option event),
-    LRC.transfer (IVec STORE tpc ti [hseq t1; t2; told] tni) evinp = Some (ov, ev) ->
-    ev = None /\ trpc ov = tpc /\
-    tr ov = [hseq t1; (moved_tag t2); (switch_val told t2).1] /\
-    color told = (match tpc with Level _ c => c end) /\ ~~ is_code told.
-  Proof.
-    move=> tpc ti told t1 t2 tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [Hg0 {}H].
-    case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H].
-    case: (obind_inv H) => u3 [Hg3 {}H].
-    have Hc0 : color ti = current'.
-    { case E0: (color ti == current'); first by apply/eqP. by rewrite E0 in Hg0. }
-    have Hcol : color told = current'.
-    { have Hc1 := check_belong_color Hg3. by rewrite -Hc1. }
-    case Hic: (is_code told).
-    - move: H; rewrite Hic /=; move=> Heq; discriminate Heq.
-    - move: H; rewrite Hic /= => Heq.
-      move: Heq; case E: (switch_val told t2) => [tdd vt] /=.
-      move=> [= <- <-] /=.
-      split; first by []. split; first by []. split; first by [].
-      split; last by []. exact: Hcol.
-  Qed.
-
-  (* The LRC LOAD rule's output, read off its guards (LRC.v:197): under the [belong||is_code] guard,
-     the loaded cell [ts] is re-tagged to [(switch_val ts ts'_0).1] (vtag switched to Invalidated/
-     Other, colour/is_code/entry KEPT), and the pc-tag is preserved.  Self-contained — no recomp. *)
-  Lemma load_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (tp td : tag_type lrc_tags R) (ts : tag_type lrc_tags Symbolic.M)
-      (tni : option (tag_type lrc_tags Symbolic.M))
-      (evinp : ev_inputs) (ov : ovec lrc_tags LOAD) (ev : option event),
-    LRC.transfer (IVec LOAD tpc ti [hseq tp; ts; td] tni) evinp = Some (ov, ev) ->
-    ev = None /\ trpc ov = tpc /\
-    tr ov = [hseq tp;
-             (switch_val ts (moved_tag (vtag ts))).1;
-             (switch_val ts (moved_tag (vtag ts))).2].
-  Proof.
-    move=> tpc ti tp td ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [_ {}H].
-    case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H].
-    move: H. case: ifP => // _ H.
-    move: H. case E: (switch_val ts (moved_tag (vtag ts))) => [ts' td'] /=.
-    move=> [= <- <-] /=.
-    split; first by []. split; first by []. by [].
-  Qed.
-
-  (* The LRC LOAD rule's guard [belong current (Some ts) || is_code ts] (current = pc-tag colour, via
-     the [current==current'] guard): the loaded cell is either CODE or BELONGS to the running
-     component.  This is what confines the LOAD re-tag to a cell invisible to [memory_match]. *)
-  Lemma load_guard : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (tp td : tag_type lrc_tags R) (ts : tag_type lrc_tags Symbolic.M)
-      (tni : option (tag_type lrc_tags Symbolic.M))
-      (evinp : ev_inputs) (ov : ovec lrc_tags LOAD) (ev : option event),
-    LRC.transfer (IVec LOAD tpc ti [hseq tp; ts; td] tni) evinp = Some (ov, ev) ->
-    is_code ts \/ color ts = (match tpc with Level _ c => c end).
-  Proof.
-    move=> tpc ti tp td ts tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. cbv zeta => H.
-    case: (obind_inv H) => u0 [Hcc {}H].
-    case: (obind_inv H) => u1 [_ {}H].
-    case: (obind_inv H) => u2 [_ {}H].
-    have Hcc' : (match ti with {| color := c |} => c end) = current'.
-    { case E: (match ti with {| color := c |} => c end == current'); first by apply/eqP.
-      by rewrite E in Hcc. }
-    move: H. case: ifP => // Hg _.
-    move: Hg => /orP [Hbel | Hic].
-    - case: ts Hbel => vts cts ets bts /= Hbel.
-      right. move/eqP: Hbel => <-. exact: Hcc'.
-    - by left.
-  Qed.
-
-  (* [switch_val] only changes the value-tag, keeping colour / is_code / entry; its [.2] is the old vtag. *)
-  Lemma switch_val_color : forall (m : tag_type lrc_tags Symbolic.M) v, color (switch_val m v).1 = color m.
-  Proof. by move=> [vt ct et bt] v. Qed.
-  Lemma switch_val_iscode : forall (m : tag_type lrc_tags Symbolic.M) v, is_code (switch_val m v).1 = is_code m.
-  Proof. by move=> [vt ct et bt] v. Qed.
-  Lemma switch_val_entry : forall (m : tag_type lrc_tags Symbolic.M) v, entry (switch_val m v).1 = entry m.
-  Proof. by move=> [vt ct et bt] v. Qed.
-  Lemma switch_val_vtag : forall (m : tag_type lrc_tags Symbolic.M) v, vtag (switch_val m v).1 = v.
-  Proof. by move=> [vt ct et bt] v. Qed.
-  Lemma switch_val_snd : forall (m : tag_type lrc_tags Symbolic.M) v, (switch_val m v).2 = vtag m.
-  Proof. by move=> [vt ct et bt] v. Qed.
-
-  (* A SILENT JUMP (ev = None) takes the intra-component branch, whose output IS its input (identity).
-     So [tr ov] is exactly the input hseq [HSeqCons rat l]. *)
-  Lemma jump_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (rat : tag_type lrc_tags R) (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R))
-      (tni : option (tag_type lrc_tags Symbolic.M)) (evinp : ev_inputs) (ov : ovec lrc_tags JUMP) (ev : option event),
-    LRC.transfer (IVec JUMP tpc ti (HSeqCons rat l) tni) evinp = Some (ov, ev) ->
-    ev = None ->
-    tr ov = HSeqCons rat l.
-  Proof.
-    move=> tpc ti rat l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
-    rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
-    move=> H Hev. case: (obind_inv H) => u0 [_ {}H].
-    move: H. case Hb: (belong cti tni).
-    - move=> H. case: (obind_inv H) => u1 [_ {}H]. by move: H => [= <- _].
-    - move=> H. case: (obind_inv H) => u1 [_ {}H]. case: (obind_inv H) => c' [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H]. move: H => [= _ Hc]. move: Hev. by rewrite -Hc.
-  Qed.
-
-  (* A SILENT JAL (ev = None) takes the intra-component branch: the [ra] slot becomes [InternalJump]
-     and the head ([tret], the MemRead cell tag) and the register clear are kept identical. *)
-  Lemma jal_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
-      (tret : tag_type lrc_tags Symbolic.M) (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R))
-      (tni : option (tag_type lrc_tags Symbolic.M)) (evinp : ev_inputs) (ov : ovec lrc_tags JAL) (ev : option event),
-    LRC.transfer (IVec JAL tpc ti (HSeqCons tret l) tni) evinp = Some (ov, ev) ->
-    ev = None ->
-    tr ov = HSeqCons tret (HSeqCons InternalJump (hsbehead l)).
-  Proof.
-    move=> tpc ti tret l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
-    rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
-    move=> H Hev. case: (obind_inv H) => u0 [_ {}H].
-    case: (obind_inv H) => ucb [_ {}H].
-    move: H. case Hb: (belong cti tni).
-    - move=> H. by move: H => [= <- _].
-    - move=> H. case: (obind_inv H) => u1 [_ {}H]. case: (obind_inv H) => c' [Hgtc {}H].
-      case: (obind_inv H) => u2 [Hce {}H]. move: H => [= _ Hc].
-      exfalso. move: Hgtc Hce Hc Hev {Hb}. case: tni => [cell|] //=.
-      case: cell => [vc cc [[p ll]|] bc] //=.
-      move=> _ _ Hc Hev. rewrite -Hc in Hev. discriminate Hev.
-  Qed.
-
-  (* A setm with a key's current binding is the identity (for the identity re-reads of binop/jump/bnz). *)
-  Lemma setm_self : forall (T : ordType) (S : eqType) (m : {fmap T -> S}) k v,
-    m k = Some v -> setm m k v = m.
-  Proof.
-    move=> T S m k v Hk. apply/eq_fmap => k'. rewrite setmE. case: eqP => [->|//]. by rewrite Hk.
   Qed.
 
   (* Uniform "Ret capability at location [p]" predicate ([inl r] register, [inr w] memory cell). *)
@@ -1490,192 +1107,6 @@ Module StepWeak (S: RecompositionContext).
   (* (check_belong_color / store_transfer / load_transfer / load_guard / switch_val_* moved up,
      before lrc_silent_cap.) *)
 
-  (* LOW-LEVEL step extraction for STORE (cf. [weak_opcode_facts]): evaluating the LRC STORE rule on a
-     successful step yields the confined write [setm (mem s1) w1 v].  The rule's guards force the new
-     and old cells to share the running colour ([check_belong current (Some td)] ⇒ [color td =
-     color_of s1]; [td' := switch_val td ts] keeps colour) and be non-code ([if is_code td then None]),
-     and it keeps the pc-tag ([OVec STORE tpc ...]).  Self-contained machine fact — no recomposition. *)
-  Lemma weak_store_facts : forall (s1 s1' : state)
-      (mem0 : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
-      (regs0 : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)})
-      (pc0 : mword mt) (tpc0 : tag_type lrc_tags P) (extra : unit)
-      (r1 r2 : Types.reg mt) (w1 w2 : mword mt)
-      (t1 t2 : tag_type lrc_tags R) (told ti0 : tag_type lrc_tags Symbolic.M) (oldv : mword mt),
-    s1 = {| mem := mem0; regs := regs0; pc := pc0 @ tpc0; internal := extra |} ->
-    mem0 w1 = Some (oldv @ told) ->
-    @next_state_updates mt ops lrc_tags LRC.transfer unit s1
-       (IVec STORE tpc0 ti0 [hseq t1; t2; told])
-       [:: RegRead r1; RegRead r2; MemWrite w1 w2] = Some (s1', None) ->
-    exists v old,
-      mem s1 w1 = Some old /\ mem s1' = setm (mem s1) w1 v /\
-      taga (pc s1') = taga (pc s1) /\
-      color (taga v) = color_of s1 /\ color (taga old) = color_of s1 /\
-      ~ is_code (taga v) /\ ~ is_code (taga old) /\
-      entry (taga v) = entry (taga old).
-  Proof.
-    move=> s1 s1' mem0 regs0 pc0 tpc0 extra r1 r2 w1 w2 t1 t2 told ti0 oldv Hs1 Hmw0 NEXT.
-    have Hmems1 : mem s1 = mem0 by rewrite Hs1.
-    have Htpcs1 : taga (pc s1) = tpc0 by rewrite Hs1.
-    have Hcols : color_of s1 = match tpc0 with Level _ c => c end
-      by rewrite color_of_pc_tag Htpcs1.
-    move: NEXT.
-    rewrite /next_state_updates /next_state_updates_and_pc /next_state.
-    case Hevi: (evi s1) => [i|] //=.
-    case Hpc': (mem s1 (vala (pc s1) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal;
-      ( case: (obind_inv Hgoal) => ov_ev [Htr Hk];
-        case: ov_ev Htr Hk => ov ev Htr Hk;
-        have [Hev [Htrpc [Htrov [Hcoltd Hncd]]]] := store_transfer Htr;
-        subst ev; move: Hk;
-        cbn -[updm setm regs mem pc internal];
-        rewrite Htrpc Htrov;
-        cbn -[updm setm regs mem pc internal];
-        move=> Hk0;
-        case: (obind_inv Hk0) => stf [Hndsu Hfin];
-        case: (obind_inv Hndsu) => sta [Hia Hr1];
-        case: (obind_inv Hr1) => stb [Hib Hr2];
-        case: (obind_inv Hr2) => stc [Hic Hr3];
-        move: Hr3 => [= Estf]; subst stf;
-        case: (obind_inv Hia) => av1 [_ {}Hia];
-        case: (obind_inv Hia) => rv1 [_ {}Hia]; move: Hia => [= Esta];
-        case: (obind_inv Hib) => av2 [_ {}Hib];
-        case: (obind_inv Hib) => rv2 [_ {}Hib]; move: Hib => [= Estb];
-        case: (obind_inv Hic) => mv1 [Hmv1 {}Hic]; move: Hic => [= Estc];
-        (have Estab : mem stb = mem s1 by rewrite -Estb -Esta; exact: erefl);
-        (have Hmc : mem stc = setm (mem s1) w1 (w2 @ (switch_val told t2).1)
-          by rewrite -Estc (updm_set Hmv1) Estab; exact: erefl);
-        move: Hfin => [= Hfins1]; subst s1';
-        exists (w2 @ (switch_val told t2).1), (oldv @ told);
-        split; [by (rewrite Hmems1; exact: Hmw0)|];
-        split; [by (rewrite /= Hmc)|];
-        split; [by (rewrite /= Htpcs1)|];
-        split; [by (rewrite /= switch_val_color Hcoltd Hcols)|];
-        split; [by (rewrite /= Hcoltd Hcols)|];
-        split; [by (rewrite /= switch_val_iscode; apply/negP)|];
-        split; [by (rewrite /=; apply/negP)|];
-        by (rewrite /= switch_val_entry) ).
-  Qed.
-
-  (* LOW-LEVEL step extraction for LOAD: the MemRead re-tags the loaded cell [w1] to
-     [(switch_val t2 _).1] KEEPING its value [w2] (so [mem s1' = setm (mem s1) w1 (w2 @ ...)]) and the
-     pc-tag is kept.  Mirrors [weak_store_facts]; the middle update is a MemRead (reads then re-tags),
-     the outer RegRead/RegWrite leave [mem] fixed.  Self-contained — no recomposition. *)
-  Lemma weak_load_facts : forall (s1 s1' : state)
-      (mem0 : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
-      (regs0 : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)})
-      (pc0 : mword mt) (tpc0 : tag_type lrc_tags P) (extra : unit)
-      (r1 r2 : Types.reg mt) (w1 w2 : mword mt)
-      (t1 td : tag_type lrc_tags R) (t2 ti0 : tag_type lrc_tags Symbolic.M),
-    s1 = {| mem := mem0; regs := regs0; pc := pc0 @ tpc0; internal := extra |} ->
-    mem0 w1 = Some (w2 @ t2) ->
-    @next_state_updates mt ops lrc_tags LRC.transfer unit s1
-       (IVec LOAD tpc0 ti0 [hseq t1; t2; td])
-       [:: RegRead r1; MemRead w1; RegWrite r2 w2] = Some (s1', None) ->
-    mem s1 w1 = Some (w2 @ t2) /\
-    mem s1' = setm (mem s1) w1
-                (w2 @ (switch_val t2 (moved_tag (vtag t2))).1) /\
-    taga (pc s1') = taga (pc s1) /\
-    (is_code t2 \/ color t2 = color_of s1).
-  Proof.
-    move=> s1 s1' mem0 regs0 pc0 tpc0 extra r1 r2 w1 w2 t1 td t2 ti0 Hs1 Hmw1 NEXT.
-    have Hmems1 : mem s1 = mem0 by rewrite Hs1.
-    have Htpcs1 : taga (pc s1) = tpc0 by rewrite Hs1.
-    move: NEXT.
-    rewrite /next_state_updates /next_state_updates_and_pc /next_state.
-    case Hevi: (evi s1) => [i|] //=.
-    case Hpc': (mem s1 (vala (pc s1) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal;
-      ( case: (obind_inv Hgoal) => ov_ev [Htr Hk];
-        case: ov_ev Htr Hk => ov ev Htr Hk;
-        have [Hev [Htrpc Htrov]] := load_transfer Htr;
-        have Hguard := load_guard Htr;
-        subst ev; move: Hk;
-        cbn -[updm setm regs mem pc internal];
-        rewrite Htrpc Htrov;
-        cbn -[updm setm regs mem pc internal];
-        move=> Hk0;
-        case: (obind_inv Hk0) => stf [Hndsu Hfin];
-        case: (obind_inv Hndsu) => sta [Hia Hr1];
-        case: (obind_inv Hr1) => stb [Hib Hr2];
-        case: (obind_inv Hr2) => stc [Hic Hr3];
-        move: Hr3 => [= Estf]; subst stf;
-        case: (obind_inv Hia) => av1 [_ {}Hia];
-        case: (obind_inv Hia) => rv1 [_ {}Hia]; move: Hia => [= Esta];
-        case: (obind_inv Hib) => av2 [Hav2 {}Hib];
-        case: (obind_inv Hib) => mv2 [Hmv2 {}Hib]; move: Hib => [= Estb];
-        case: (obind_inv Hic) => rv3 [_ {}Hic]; move: Hic => [= Estc];
-        (have Hsta : mem sta = mem s1 by rewrite -Esta; exact: erefl);
-        (have Hav2' : av2 = w2 @ t2 by move: Hav2; rewrite Hsta Hmems1 Hmw1; congruence);
-        (have Hstb : mem stb = setm (mem s1) w1
-            (w2 @ (switch_val t2 (moved_tag (vtag t2))).1)
-          by rewrite -Estb /= (updm_set Hmv2) Hsta Hav2'; exact: erefl);
-        move: Hfin => [= Hfins1]; subst s1';
-        split; [by (rewrite Hmems1; exact: Hmw1)|];
-        split; [by (rewrite /= -Estc /= Hstb)|];
-        split; [by (rewrite /= Htpcs1)|];
-        (have Hcols1 : color_of s1 = match tpc0 with Level _ c => c end by rewrite Hs1);
-        rewrite Hcols1; exact: Hguard ).
-  Qed.
-
-  (* [reg_clear_read] is a [map] of [RegRead]s, so it contains no MemWrite. *)
-  Lemma no_mw_reg_clear_read : forall (w v : mword mt), ~ List.In (MemWrite w v) reg_clear_read.
-  Proof.
-    rewrite /reg_clear_read => w v.
-    elim: reg_list => [|n l IH] /=; first by move=> [].
-    by move=> [E|H]; [discriminate | exact: IH H].
-  Qed.
-
-  (* [reg_clear_read] is a [map] of [RegRead]s, so it contains no MemRead either. *)
-  Lemma no_mr_reg_clear_read : forall (w : mword mt), ~ List.In (MemRead w) reg_clear_read.
-  Proof.
-    rewrite /reg_clear_read => w.
-    elim: reg_list => [|n l IH] /=; first by move=> [].
-    by move=> [E|H]; [discriminate | exact: IH H].
-  Qed.
-
-  (* The JAL transfer's FIRST output tag is the input head [tret] in BOTH branches (the silent
-     InternalJump branch outputs [tnext::InternalJump::..], the cross-component call branch outputs
-     [tnext::Ret level::..]; in both [tnext] = the matched input head = tret).  So the MemRead(pc+1)
-     in the JAL prologue re-tags the cell with its OWN tag ([mem_read_update_id]) ⇒ mem unchanged. *)
-  Lemma jal_head_tret : forall (tpc : tag_type lrc_tags P) (ti tret : tag_type lrc_tags Symbolic.M)
-      (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R))
-      (tni : option (tag_type lrc_tags Symbolic.M))
-      (evinp : ev_inputs) (ov : ovec lrc_tags JAL) (ev : option event),
-    LRC.transfer (IVec JAL tpc ti (HSeqCons tret l) tni) evinp = Some (ov, ev) ->
-    hshead (tr ov) = tret.
-  Proof.
-    move=> tpc ti tret l tni evinp ov ev.
-    rewrite /LRC.transfer /LRC.instr_rules_mp.
-    case: tpc => level current'. case: ti => [vti cti eti bti]. cbv zeta.
-    rewrite (hseq_eta l) (hseq_eta (hsbehead l)) /=.
-    move=> H. case: (obind_inv H) => u0 [_ {}H].
-    case: (obind_inv H) => ucb [_ {}H].
-    move: H. case Hb: (belong cti tni).
-    - by move=> [= <- _].
-    - move=> H. case: (obind_inv H) => u1 [_ {}H].
-      case: (obind_inv H) => c' [_ {}H].
-      case: (obind_inv H) => u2 [_ {}H].
-      by move: H => [= <- _].
-  Qed.
-  Arguments jal_head_tret {tpc ti tret l tni evinp ov ev} _.
-
-  (* A [next_state_do_updates] whose head update is an IDENTITY MemRead (its tag = the read cell's
-     own tag, so [mem_read_update_id] applies) followed by a MemWrite/MemRead-free tail leaves [mem]
-     unchanged.  The JAL prologue ([MemRead (pc+1)] with head output tag = tret = the cell's tag, by
-     [jal_head_tret]) is exactly this shape. *)
-  Lemma mem_unchanged_jal : forall (s s' : state) (w vw : mword mt)
-      (tw : tag_type lrc_tags Symbolic.M) (tks : seq tag_kind)
-      (tags : hseq (tag_type lrc_tags) (Symbolic.M :: tks)) (rest : seq update),
-    mem s w = Some (vw @ tw) -> hshead tags = tw ->
-    (forall w' v', ~ List.In (MemWrite w' v') rest) ->
-    (forall w', ~ List.In (MemRead w') rest) ->
-    next_state_do_updates s tags (MemRead w :: rest) = Some s' ->
-    mem s' = mem s.
-  Proof.
-    move=> s s' w vw tw tks tags rest Hmem Hhead Hnmw Hnmr Hndsu.
-    have Hid := mem_read_update_id Hmem. cbn [taga] in Hid.
-    move: Hndsu. rewrite (hseq_eta tags) Hhead ndsu_cons Hid /=. move=> Hndsu.
-    by rewrite (ndsu_mem_noM Hnmw Hnmr Hndsu).
-  Qed.
-
   (* A successful alloc step preserves [general_memory_correctness]: it EXTENDS [mem s] with a fresh
      block [mkseq] of cells coloured [c0] (the running component), non-code, value 0, entry None, all
      at addresses in [c0]'s prefix region (via [mask_range], from the allocator's end-in-prefix guard
@@ -1803,20 +1234,6 @@ Module StepWeak (S: RecompositionContext).
     by have [_ [Htag [Hext1 Hext2]]] := alloc_fun_effect Halloc.
   Qed.
 
-
-  (* No update in a non-store instruction's list is a MemWrite: the literal prefix is RegRead/RegWrite/
-     MemRead (peeled by discriminate), and the [reg_clear_read] tail (jump/jal) is all RegReads. *)
-  Ltac nomw :=
-    let w := fresh "w" in let v := fresh "v" in let Hin := fresh "Hin" in
-    move=> w v Hin; cbn in Hin;
-    repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-    by (case: Hin || exact: (no_mw_reg_clear_read w v Hin)).
-
-  Ltac nomr :=
-    let w := fresh "w" in let Hin := fresh "Hin" in
-    move=> w Hin; cbn in Hin;
-    repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
-    by (case: Hin || exact: (no_mr_reg_clear_read w Hin)).
 
   (* A silent LRC step preserves [general_memory_correctness].  Per opcode (via [inversion step_mp]):
      the 6 register-only opcodes (nop/const/mov/binop/jump/bnz) leave [mem] fixed ([nsu_silent_extract]

@@ -46,7 +46,6 @@ Require Import S2T.TMacros.
 Require Import S2T.TStackMatch.
 Require Import S2T.TMatch.
 Require Import S2T.TDrain.
-Require Import S2T.TReplumb.
 Require Import S2T.TLeaf.
 Require Import S2T.TProlog.
 Require Import S2T.TDiagram.
