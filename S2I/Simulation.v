@@ -1829,6 +1829,19 @@ Qed.
 (* register bookkeeping through concrete set-chains *)
 Ltac rget := rewrite /Register.get /Register.set /= !setmE /=.
 
+Ltac is_arith T :=
+  match T with
+  | context [Z.lt] => idtac | context [Z.le] => idtac | context [@eq Z] => idtac
+  | context [lt] => idtac | context [le] => idtac | context [@eq nat] => idtac
+  | context [leq] => idtac | context [Z.of_nat] => idtac
+  | context [@eq positive] => idtac | context [@eq N] => idtac
+  end.
+
+Ltac slia :=
+  repeat match goal with
+  | H : ?T |- _ => lazymatch type of T with Prop => tryif is_arith T then fail else clear H end
+  end; lia.
+
 (* The [Kstop] epilogue: pop the saved argument, pop the caller's frame pointer,
    and stack-return. Five silent steps; R_COM (the produced value) rides through
    untouched.  The scratch restore that used to sit between the two pops now
@@ -3725,7 +3738,7 @@ Proof.
   (* push R_RA *)
   have [wRA HwRA] : exists w,
       Memory.load tmem (C, fb, Z.of_nat (2 + size temps)) = Some w.
-  { apply: Hcap. move: Hbud => /=. lia. }
+  { apply: Hcap. move: Hbud => /=. slia. }
   have [tmemA HstA] :=
     Memory.store_after_load _ _ _ (Register.get R_RA tregs) HwRA.
   have PpushRA := exec_push_plus gps tmem tregs pcD R_RA _ _ _ _ tmemA
@@ -3744,7 +3757,7 @@ Proof.
   { exact: frame_cap_store Hcap HstA. }
   have [wAR HwAR] : exists w,
       Memory.load tmemA (C, fb, (Z.of_nat (2 + size temps) + 1)%Z) = Some w.
-  { apply: HcapA. move: Hbud => /=. lia. }
+  { apply: HcapA. move: Hbud => /=. slia. }
   have [tmemB HstB] :=
     Memory.store_after_load _ _ _ (Register.get R_ARG regs1) HwAR.
   have HSP1 : Register.get R_SP regs1
@@ -3921,7 +3934,7 @@ Proof.
                Pointer.inc (Pointer.inc (Pointer.inc (Pointer.inc
                  (Component.main, bE, 0%Z))))).
     { apply: step_alloc Hd3 HgSP3 _ _.
-      - lia.
+      - slia.
       - rewrite /=. exact: HallocE. }
     set regsG4 := Register.set R_SP (Ptr ptrE) regsG3 in F4.
     have Hd4 := code_at_tail Hd3.
@@ -3931,7 +3944,7 @@ Proof.
     { move=> o Ho. apply: memory_load_after_alloc_in HallocE _.
       rewrite Nat2Z.id. exact: Ho. }
     have [tmemE1 HstE1] := Memory.store_after_load _ _ _
-        (Register.get R_AUX1 regsG4) (HldE 0%Z (ltac:(lia))).
+        (Register.get R_AUX1 regsG4) (HldE 0%Z (ltac:(slia))).
     have HSPG4 : Register.get R_SP regsG4 = Ptr (Component.main, fbE, 0%Z)
       by rewrite /regsG4 EptrE /Register.get /Register.set setmE /=.
     have HONEG4 : Register.get R_ONE regsG4 = Int 1
@@ -3963,7 +3976,7 @@ Proof.
                  = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
         last by move=> EE; inversion EE.
-      apply: HldE. lia. }
+      apply: HldE. slia. }
     have [tmemE1b HstE1b] := Memory.store_after_load _ _ _
         (Register.get R_AUX1 regsG5b) HldE1.
     have HSPG5b : Register.get R_SP regsG5b
@@ -3981,10 +3994,10 @@ Proof.
     have HldE2ra : Memory.load tmemE1b (Component.main, fbE, (0 + 1 + 1)%Z)
                    = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1b);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
-        last by move=> EE; inversion EE; lia.
-      apply: HldE. lia. }
+        last by move=> EE; inversion EE; slia.
+      apply: HldE. slia. }
     have [tmemE2 HstE2] := Memory.store_after_load _ _ _
         (Register.get R_RA regsG5c) HldE2ra.
     have HSPG5 : Register.get R_SP regsG5c
@@ -4034,12 +4047,12 @@ Proof.
     have HldE2 : Memory.load tmemE2 (Component.main, fbE, (0 + 1 + 1 + 1)%Z)
                  = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE2);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1b);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
-        last by move=> EE; inversion EE; lia.
-      apply: HldE. lia. }
+        last by move=> EE; inversion EE; slia.
+      apply: HldE. slia. }
     have [tmemE3 HstE3] := Memory.store_after_load _ _ _
         (Register.get R_AUX2 regsM10) HldE2.
     have HSPM10 : Register.get R_SP regsM10
@@ -4261,16 +4274,16 @@ Proof.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE4);
         last by move=> EE; inversion EE; apply: HfbE1.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE3);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE2);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       exact: Memory.load_after_store_eq HstE1b. }
     have HldEF2 : Memory.load tmemE4 (Component.main, fbE, (0 + 1 + 1)%Z)
                   = Some (Register.get R_RA regsG5c).
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE4);
         last by move=> EE; inversion EE; apply: HfbE1.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE3);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       exact: Memory.load_after_store_eq HstE2. }
     have HldEF3 : Memory.load tmemE4
                     (Component.main, fbE, (0 + 1 + 1 + 1)%Z) = Some (Int 1).
@@ -4341,7 +4354,7 @@ Proof.
     { apply: LtrEF _ (HpCfb fbE) (HpCfb fbN) (HpCfl _).
       rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb' _ _) HstC).
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstB);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       exact: Memory.load_after_store_eq HstA. }
     have HltARG : Memory.load tmemF
                     (C, fb, (Z.of_nat (2 + size temps) + 1)%Z)
@@ -4353,7 +4366,7 @@ Proof.
       exact: Memory.load_after_store_eq HstB. }
     have Etransit' : transit
                      = Ptr (C, fb, Z.of_nat (2 + size temps + 2)).
-    { rewrite Etransit. congr Ptr. congr (_, _). lia. }
+    { rewrite Etransit. congr Ptr. congr (_, _). slia. }
     have HldTr : Memory.load tmemF (C, 1, 0%Z) = Some transit.
     { have HneCfp : forall bx, (C, 1) <> (Component.main, bx)
                                :> (Component.id * Block.id).
@@ -4482,7 +4495,7 @@ Proof.
     + exact: Hscrp.
     + by [].
     + exact: HcapN.
-    + rewrite /=. lia.
+    + rewrite /=. slia.
     + rewrite !inE !negb_or. apply/and3P. split.
       * apply/eqP. case=> E2. exact: (HnefbEN (esym E2)).
       * apply/eqP. case=> E1 _. by apply: HneCf; rewrite E1.
@@ -4531,10 +4544,10 @@ Proof.
       * exact: code_at_tail HcC.
       * exact: Hk.
       * exact: Hpriv.
-      * move=> i Hi. apply: LtrCfb (Htemps i Hi) _ _; lia.
+      * move=> i Hi. apply: LtrCfb (Htemps i Hi) _ _; slia.
       * exact: HljRA.
       * have -> : Z.of_nat (2 + size temps + 1)
-                = (Z.of_nat (2 + size temps) + 1)%Z by lia.
+                = (Z.of_nat (2 + size temps) + 1)%Z by slia.
         exact: HltARG.
       * exact: HARG.
       * move=> j Hj.
@@ -4545,7 +4558,7 @@ Proof.
         { eexists. exact: HltARG. }
         case: (Hcap j Hj) => w Hw. exists w.
         exact: LtrCfb Hw Hne1 Hne2.
-      * move: Hbud => /=. lia.
+      * move: Hbud => /=. slia.
       * by rewrite setmE eqxx Etransit'.
       * exact: Hprot.
       * rewrite inE negb_or. apply/andP. split.
@@ -4566,11 +4579,11 @@ Proof.
         have Hs1 : stack_match G (labelsP p) α tmemA scrs C fb prot stk
                      gps.
         { apply: stack_match_store Hstack HstA Hprot _.
-          move=> _. lia. }
+          move=> _. slia. }
         have Hs2 : stack_match G (labelsP p) α tmemB scrs C fb prot stk
                      gps.
         { apply: stack_match_store Hs1 HstB Hprot _.
-          move=> _. lia. }
+          move=> _. slia. }
         have Hs3 : stack_match G (labelsP p) α tmemC scrs C fb prot stk
                      gps.
         { apply: stack_match_store Hs2 HstC Hnp1 _.
@@ -4677,7 +4690,7 @@ Proof.
                Pointer.inc (Pointer.inc (Pointer.inc (Pointer.inc
                  (Cf, bE, 0%Z))))).
     { apply: step_alloc Hd3 HgSP3 _ _.
-      - lia.
+      - slia.
       - rewrite /=. exact: HallocE. }
     set regsG4 := Register.set R_SP (Ptr ptrE) regsG3 in F4.
     have Hd4 := code_at_tail Hd3.
@@ -4688,7 +4701,7 @@ Proof.
       rewrite Nat2Z.id. exact: Ho. }
     (* push R_AUX1 : slot 0 *)
     have [tmemE1 HstE1] := Memory.store_after_load _ _ _
-        (Register.get R_AUX1 regsG4) (HldE 0%Z (ltac:(lia))).
+        (Register.get R_AUX1 regsG4) (HldE 0%Z (ltac:(slia))).
     have HSPG4 : Register.get R_SP regsG4 = Ptr (Cf, fbE, 0%Z)
       by rewrite /regsG4 EptrE /Register.get /Register.set setmE /=.
     have HONEG4 : Register.get R_ONE regsG4 = Int 1
@@ -4716,7 +4729,7 @@ Proof.
     have HldE1 : Memory.load tmemE1 (Cf, fbE, (0 + 1)%Z) = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
         last by move=> EE; inversion EE.
-      apply: HldE. lia. }
+      apply: HldE. slia. }
     have [tmemE1b HstE1b] := Memory.store_after_load _ _ _
         (Register.get R_AUX1 regsG5b) HldE1.
     have HSPG5b : Register.get R_SP regsG5b = Ptr (Cf, fbE, (0 + 1)%Z)
@@ -4732,10 +4745,10 @@ Proof.
     (* push R_RA : slot 2 *)
     have HldE2ra : Memory.load tmemE1b (Cf, fbE, (0 + 1 + 1)%Z) = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1b);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
-        last by move=> EE; inversion EE; lia.
-      apply: HldE. lia. }
+        last by move=> EE; inversion EE; slia.
+      apply: HldE. slia. }
     have [tmemE2 HstE2] := Memory.store_after_load _ _ _
         (Register.get R_RA regsG5c) HldE2ra.
     have HSPG5 : Register.get R_SP regsG5c = Ptr (Cf, fbE, (0 + 1 + 1)%Z)
@@ -4839,7 +4852,7 @@ Proof.
     have HldEF1 : Memory.load tmemE2 (Cf, fbE, (0 + 1)%Z)
                   = Some (Register.get R_AUX1 regsG5b).
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE2);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       exact: Memory.load_after_store_eq HstE1b. }
     have HldEF2 : Memory.load tmemE2 (Cf, fbE, (0 + 1 + 1)%Z)
                   = Some (Register.get R_RA regsG5c).
@@ -4894,7 +4907,7 @@ Proof.
     { apply: LtrEF _ (HpCfb fbE) (HpCfb fbN).
       rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb' _ _) HstC).
       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstB);
-        last by move=> EE; inversion EE; lia.
+        last by move=> EE; inversion EE; slia.
       exact: Memory.load_after_store_eq HstA. }
     have HltARG : Memory.load tmemF
                     (C, fb, (Z.of_nat (2 + size temps) + 1)%Z)
@@ -4906,7 +4919,7 @@ Proof.
       exact: Memory.load_after_store_eq HstB. }
     have Etransit' : transit
                      = Ptr (C, fb, Z.of_nat (2 + size temps + 2)).
-    { rewrite Etransit. congr Ptr. congr (_, _). lia. }
+    { rewrite Etransit. congr Ptr. congr (_, _). slia. }
     have HldTr : Memory.load tmemF (C, 1, 0%Z) = Some transit.
     { have HneCfp : forall bx, (C, 1) <> (Cf, bx)
                                :> (Component.id * Block.id).
@@ -5013,7 +5026,7 @@ Proof.
     + exact: Hscrp.
     + by [].
     + exact: HcapN.
-    + rewrite /=. lia.
+    + rewrite /=. slia.
     + rewrite !inE !negb_or. apply/and3P. split.
       * apply/eqP. case=> E2. exact: (HnefbEN (esym E2)).
       * apply/eqP. case=> E1 _. by apply: HneCf; rewrite E1.
@@ -5057,10 +5070,10 @@ Proof.
       * exact: code_at_tail HcC.
       * exact: Hk.
       * exact: Hpriv.
-      * move=> i Hi. apply: LtrCfb (Htemps i Hi) _ _; lia.
+      * move=> i Hi. apply: LtrCfb (Htemps i Hi) _ _; slia.
       * exact: HljRA.
       * have -> : Z.of_nat (2 + size temps + 1)
-                = (Z.of_nat (2 + size temps) + 1)%Z by lia.
+                = (Z.of_nat (2 + size temps) + 1)%Z by slia.
         exact: HltARG.
       * exact: HARG.
       * move=> j Hj.
@@ -5071,7 +5084,7 @@ Proof.
         { eexists. exact: HltARG. }
         case: (Hcap j Hj) => w Hw. exists w.
         exact: LtrCfb Hw Hne1 Hne2.
-      * move: Hbud => /=. lia.
+      * move: Hbud => /=. slia.
       * by rewrite setmE eqxx Etransit'.
       * exact: Hprot.
       * rewrite inE negb_or. apply/andP. split.
@@ -5088,11 +5101,11 @@ Proof.
         have Hs1 : stack_match G (labelsP p) α tmemA scrs C fb prot stk
                      gps.
         { apply: stack_match_store Hstack HstA Hprot _.
-          move=> _. lia. }
+          move=> _. slia. }
         have Hs2 : stack_match G (labelsP p) α tmemB scrs C fb prot stk
                      gps.
         { apply: stack_match_store Hs1 HstB Hprot _.
-          move=> _. lia. }
+          move=> _. slia. }
         have Hs3 : stack_match G (labelsP p) α tmemC scrs C fb prot stk
                      gps.
         { apply: stack_match_store Hs2 HstC Hnp1 _.

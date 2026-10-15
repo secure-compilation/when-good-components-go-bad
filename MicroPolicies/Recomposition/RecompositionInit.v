@@ -2911,6 +2911,14 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite /reg_list !inE. cbn [fst]. btauto.
   Qed.
 
+  Lemma register_address_correctness_reg0 i (s : state) :
+    regs s = reg0 -> register_address_correctness i s.
+  Proof.
+    move=> Hs v r. rewrite Hs /reg0 !setmE.
+    repeat (case: ifP => /= _; [move=> [<-] //= |]).
+    by [].
+  Qed.
+
   (* encoding/layout (per policy): the initial PC = first code address
      (word_of_nat (size data)) points to the first encoded instruction
      whenever the code is non-empty. *)
@@ -3805,17 +3813,9 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         (* Use encode_code_nth_inv on both to get positions, then relate via offset *)
         exact: (entry_points_offset_init Hrel Hmem1 Hmem3 Hcode1 Hcode3 Hcolor1 Hcolor3 Hentry1 Hentry3).
       + (* register_address_correctness Left s1 *)
-        unfold register_address_correctness. intros v0 r Hr.
-        subst s1. simpl in Hr. unfold address_correctness.
-        move: Hr. rewrite /reg0 !setmE.
-        repeat (case: ifP => /= _; [move=> [<-] //= |]).
-        by [].
+        subst s1. apply: register_address_correctness_reg0; exact: erefl.
       + (* register_address_correctness Left s3 *)
-        unfold register_address_correctness. intros v0 r Hr.
-        subst s3. simpl in Hr. unfold address_correctness.
-        move: Hr. rewrite /reg0 !setmE.
-        repeat (case: ifP => /= _; [move=> [<-] //= |]).
-        by [].
+        subst s3. apply: register_address_correctness_reg0; exact: erefl.
       + (* memory_match Left [] s1 s3 *)
         unfold memory_match. intros w d Hnotcode Hrel.
         subst s1 s3. simpl in *.
@@ -4515,17 +4515,9 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         subst s2 s3. simpl in *.
         exact: (entry_points_offset_init' Hrel Hmem2 Hmem3 Hcode2 Hcode3 Hcolor2 Hcolor3 Hentry2 Hentry3).
       + (* register_address_correctness Right s2 *)
-        unfold register_address_correctness. intros v0 r Hr.
-        subst s2. simpl in Hr. unfold address_correctness.
-        move: Hr. rewrite /reg0 !setmE.
-        repeat (case: ifP => /= _; [move=> [<-] //= |]).
-        by [].
+        subst s2. apply: register_address_correctness_reg0; exact: erefl.
       + (* register_address_correctness Right s3 *)
-        unfold register_address_correctness. intros v0 r Hr.
-        subst s3. simpl in Hr. unfold address_correctness.
-        move: Hr. rewrite /reg0 !setmE.
-        repeat (case: ifP => /= _; [move=> [<-] //= |]).
-        by [].
+        subst s3. apply: register_address_correctness_reg0; exact: erefl.
       + (* memory_match Right [] s2 s3 *)
         unfold memory_match. intros w d Hnotcode Hrel.
         subst s2 s3. simpl in *.

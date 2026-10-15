@@ -3706,7 +3706,8 @@ Module StepStrong2 (S: RecompositionContext).
                    split; [exact HNPC' | exact HNPC3'].
                  + exact: (esym tag_pc1).
                  + exact: (esym tag_pc3).
-                 + pcc_close2 (PCCM.step_me_mp step_1) ST.
+                 + apply: (PCCM.pc_incr_pcc (PCCM.step_me_mp step_1));
+                   [ by [] | by congr swcast | by [] ].
                - rewrite /data_match.
                  have Hco' : color_of (@State mt lrc_tags _ (mem s1) (regs s1) ((swcast (@word_of_nat (imm_size mt) alloc_label)) @ (Level n c0)) tt) = c0 by reflexivity.
                  rewrite Hco' Hoff /=.
