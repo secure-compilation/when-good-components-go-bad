@@ -18,3 +18,12 @@ The main theorem is `RSC_DC_MD_CompilationChainMP` in file `RSC_DC_MD_Compilatio
       (CompCertExtensions.prefix In.fm beh
        \/ behavior_improves_blame_mp beh In.fm In.p).
 ```
+
+The theorem depends on the following hypotheses, appearing in module type `ChainMPInput`:
+- `p` the source partial program that is well-formed
+- `c` the low-level context. It must satisfy well-formedness 
+- `fm`: the trace produced by the execution
+- `p` is first compiled to `p_compiled`, an intermediate program, then to `lin p_compiled`, the micro-policy compiled program. (`lin` stands for "linearizer".)
+
+Besides the well-formedness conditions, there is one important hypothesis, `prefix_fits`, which requires the back-translated program to not overflow the limits of the machine.
+This is because the source and intermediate languages use unbounded integers, while our micro-policy uses bounded ones. We are currently considering making our source and intermediate languages use bounded integers, which would let us drop that hypothesis.

@@ -6,11 +6,13 @@ OUT="$ROOT/artifact"
 
 BUILD=0
 FORCE=0
+TAR=0
 for arg in "$@"; do
   case "$arg" in
     --build) BUILD=1 ;;
     --force) FORCE=1 ;;
-    *) echo "usage: $0 [--force] [--build]" >&2; exit 2 ;;
+    --tar) TAR=1 ;;
+    *) echo "usage: $0 [--force] [--tar] [--build]" >&2; exit 2 ;;
   esac
 done
 
@@ -224,6 +226,7 @@ write_coqproject() {
   local dest="$1"; local with_common="$2"; shift 2
   {
     echo '-arg "-w -parsing"'
+    echo '-R ../coq-utils CoqUtils'
     if [ "$with_common" -eq 1 ]; then
       echo '-R ../common/Common RobustImp.Common'
       echo '-R ../common/CompCert RobustImp.CompCert'
@@ -315,6 +318,18 @@ make_project compilation_chain 1 "${CHAIN[@]}"
 
 find "$OUT" -name '*.v' -print0 | xargs -0 bash -c "$(declare -f strip_comments); strip_comments \"\$@\"" _
 
+mkdir -p "$OUT/coq-utils"
+cp "$ROOT/vendor/coq-utils/hseq.v" "$ROOT/vendor/coq-utils/word.v" "$ROOT/vendor/coq-utils/LICENSE" "$OUT/coq-utils/"
+{
+  echo '-arg "-w -parsing,-redundant-canonical-projection,-notation-overridden,-projection-no-head-constant"'
+  echo '-R . CoqUtils'
+  echo
+  echo 'hseq.v'
+  echo 'word.v'
+} > "$OUT/coq-utils/_CoqProject"
+write_submakefile "$OUT/coq-utils"
+
+cp "$ROOT/README_artifact.md" "$OUT/README.md"
 cp "$ROOT/README_rsc_dc_md.md" "$OUT/rsc_dc_md/README.md"
 cp "$ROOT/README_rsc_dc_md_micropolicies.md" "$OUT/rsc_dc_md_micropolicies/README.md"
 cp "$ROOT/README_compilation_chain.md" "$OUT/compilation_chain/README.md"
@@ -324,19 +339,29 @@ PROJECTS = rsc_dc_md rsc_dc_md_micropolicies compilation_chain
 
 all: $(PROJECTS)
 
-common:
+coq-utils:
+	$(MAKE) -C coq-utils
+
+common: coq-utils
 	$(MAKE) -C common
 
 $(PROJECTS): common
 	$(MAKE) -C $@
 
 clean:
-	for d in common $(PROJECTS); do $(MAKE) -C $$d clean; done
+	for d in coq-utils common $(PROJECTS); do $(MAKE) -C $$d clean; done
 
-.PHONY: all clean common $(PROJECTS)
+.PHONY: all clean coq-utils common $(PROJECTS)
 EOF
 
 echo "artifact written to $OUT"
+
+if [ "$TAR" -eq 1 ]; then
+  rm -f "$ROOT/artifact.tar.gz"
+  (cd "$ROOT" && COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs \
+     --uid 0 --gid 0 --uname root --gname root -czf artifact.tar.gz artifact)
+  echo "archive written to $ROOT/artifact.tar.gz"
+fi
 
 if [ "$BUILD" -eq 1 ]; then
   make -C "$OUT" -j4
