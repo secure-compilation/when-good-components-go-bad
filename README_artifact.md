@@ -20,10 +20,11 @@ We recommend using OPAM and creating a new switch:
     $ opam switch create rsc-dc-md ocaml-base-compiler.5.4.1
     $ opam switch rsc-dc-md
     $ eval $(opam env)
-    $ opam repo add rocq-released https://rocq-prover.org/opam/released
-    $ opam install rocq-core.9.1.1 rocq-stdlib rocq-mathcomp-ssreflect \
-        rocq-mathcomp-fingroup rocq-mathcomp-algebra rocq-hierarchy-builder \
-        coq-mathcomp-zify coq-deriving
+    $ opam repo add rocq-released https://rocq-prover.github.io/opam/released
+    $ opam install rocq-core.9.1.1 rocq-stdlib.9.0.0 \
+        rocq-mathcomp-ssreflect.2.5.0 rocq-mathcomp-fingroup.2.5.0 \
+        rocq-mathcomp-algebra.2.5.0 rocq-hierarchy-builder.1.10.2 \
+        coq-mathcomp-zify.1.6.0+2.3+8.18 coq-deriving.0.2.3
 
 Then pin Extensional Structures to its 0.6.0 release:
 

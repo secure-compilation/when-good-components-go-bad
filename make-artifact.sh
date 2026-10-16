@@ -225,7 +225,7 @@ copy_files() {
 write_coqproject() {
   local dest="$1"; local with_common="$2"; shift 2
   {
-    echo '-arg "-w -parsing"'
+    echo '-arg "-w -all"'
     echo '-R ../coq-utils CoqUtils'
     if [ "$with_common" -eq 1 ]; then
       echo '-R ../common/Common RobustImp.Common'
@@ -321,7 +321,7 @@ find "$OUT" -name '*.v' -print0 | xargs -0 bash -c "$(declare -f strip_comments)
 mkdir -p "$OUT/coq-utils"
 cp "$ROOT/vendor/coq-utils/hseq.v" "$ROOT/vendor/coq-utils/word.v" "$ROOT/vendor/coq-utils/LICENSE" "$OUT/coq-utils/"
 {
-  echo '-arg "-w -parsing,-redundant-canonical-projection,-notation-overridden,-projection-no-head-constant"'
+  echo '-arg "-w -all"'
   echo '-R . CoqUtils'
   echo
   echo 'hseq.v'
