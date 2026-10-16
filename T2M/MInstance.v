@@ -275,6 +275,34 @@ Module Type T2M_K_Input.
   Parameter PI : Program.interface.
 End T2M_K_Input.
 
+(* ---- the finite-machine fit of the back-translation ---- *)
+(* the trace-dependent side conditions of the package: the compiled
+   back-translation exists, meets the label/immediate bounds, and its
+   links and runs fit the machine; plus the observed pair's coherence
+   with the instance maps *)
+Record bt_fit_pack (L P C : nat) (PBW : NMap {fmap Block.id -> nat + seq value})
+    (PIW : Program.interface) (a b : Intermediate.program) (t : Events.trace)
+    (ip' ic' : Intermediate.program) : Prop := {
+  bfp_cip  : compile_program (bt_P'c a b t) = Some ip';
+  bfp_cic  : compile_program (bt_Csc a b t) = Some ic';
+  bfp_lokp : BackTranslation.lin_ok_at L P C ip';
+  bfp_immp : MDefs.imm_fits ip';
+  bfp_lokc : BackTranslation.lin_ok_at L P C ic';
+  bfp_immc : MDefs.imm_fits ic';
+  bfp_lfp  : MDefs.link_fits L P C ip' ic';
+  bfp_lfa  : MDefs.link_fits L P C a ic';
+  bfp_rfp  : MDefs.run_fits (MDefs.cde ip' ic')
+               (Intermediate.program_link ip' ic') t;
+  bfp_rfa  : MDefs.run_fits (MDefs.cde a ic')
+               (Intermediate.program_link a ic') t;
+  bfp_msz  : memory_lengths (MDefs.PBw a b) = memory_lengths PBW;
+  bfp_piw  : MDefs.PIw a b = PIW
+}.
+
+Definition t2m_bt_fits (L P C : nat) (PBW : NMap {fmap Block.id -> nat + seq value})
+    (PIW : Program.interface) (a b : Intermediate.program) (t : Events.trace) : Prop :=
+  exists ip' ic', bt_fit_pack L P C PBW PIW a b t ip' ic'.
+
 Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
 
   Definition NC : nat := MDefs.NC.
@@ -475,32 +503,9 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
               (Hdsy0 m) Hdp' Hrf).
   Qed.
 
-  (* ---- the finite-machine fit of the back-translation ---- *)
-  (* the trace-dependent side conditions of the package: the compiled
-     back-translation exists, meets the label/immediate bounds, and its
-     links and runs fit the machine; plus the observed pair's coherence
-     with the instance maps *)
-  Record bt_fit_pack (a b : Intermediate.program) (t : Events.trace)
-      (ip' ic' : Intermediate.program) : Prop := {
-    bfp_cip  : compile_program (bt_P'c a b t) = Some ip';
-    bfp_cic  : compile_program (bt_Csc a b t) = Some ic';
-    bfp_lokp : BackTranslation.lin_ok_at I.L I.P I.C ip';
-    bfp_immp : MDefs.imm_fits ip';
-    bfp_lokc : BackTranslation.lin_ok_at I.L I.P I.C ic';
-    bfp_immc : MDefs.imm_fits ic';
-    bfp_lfp  : MDefs.link_fits I.L I.P I.C ip' ic';
-    bfp_lfa  : MDefs.link_fits I.L I.P I.C a ic';
-    bfp_rfp  : MDefs.run_fits (MDefs.cde ip' ic')
-                 (Intermediate.program_link ip' ic') t;
-    bfp_rfa  : MDefs.run_fits (MDefs.cde a ic')
-                 (Intermediate.program_link a ic') t;
-    bfp_msz  : memory_lengths (MDefs.PBw a b) = memory_lengths PBW;
-    bfp_piw  : MDefs.PIw a b = PIW
-  }.
-
   Definition bt_fits (a b : Intermediate.program)
       (t : Events.trace) : Prop :=
-    exists ip' ic', bt_fit_pack a b t ip' ic'.
+    t2m_bt_fits I.L I.P I.C PBW PIW a b t.
 
   (* ---- the back-translation package ---- *)
 

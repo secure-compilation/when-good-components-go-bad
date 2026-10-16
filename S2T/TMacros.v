@@ -15,12 +15,7 @@
     `tag_inv` clause directly — they chain macro lemmas.
 
     `push R_RA` is the archetype, because it is the one that MOVES a
-    capability. If the two halves fit here, they fit.
-
-    NB the [code_at] machinery is ported from the Stage-0b spike
-    (`S2I/SimT_Spike.v`), retargeted from `Transitional.step` onto `TS.step`
-    (which has no `st`). The spike is a measurement artefact and can be deleted
-    once this file supersedes it. *)
+    capability. If the two halves fit here, they fit. *)
 
 Require Import Common.Definitions.
 Require Import Common.Values.

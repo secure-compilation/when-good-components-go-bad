@@ -1,4 +1,4 @@
--arg "-w -parsing -exclude-dir _opam"
+-arg "-w -parsing -exclude-dir _opam -exclude-dir artifact"
 -R . RobustImp
 
 RSC_DC.v
@@ -64,12 +64,9 @@ S2I/Simulation.v
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
-Intermediate/Recombination.v
 
 RSC_DC_MD_Sigs.v
-RSC_DC_MD_Instance.v
 RSC_DC_MD_Target.v
-RSC_DC_MD.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
@@ -221,3 +218,5 @@ T2M/MStatic.v
 T2M/MStatic2.v
 T2M/MBwdSrc.v
 T2M/MInstance.v
+RSC_DC_MD_CompilationChain.v
+RSC_DC_MD_CompilationChainMP.v

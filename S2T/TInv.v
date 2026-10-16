@@ -14,13 +14,7 @@
     Splitting it this way is deliberate. T1's and T2's *content* — WHICH return
     address belongs in which slot — is a statement about the source stack and
     belongs with [stack_match]. What lives here is the part that must hold of
-    the machine state alone, and it is exactly what the Stage-0 harness checks
-    by execution ([S2T/T_Audit.v]):
-
-      [ti_regs]  ↔ harness [bad_regs] = []
-      [ti_addr]  ↔ harness [cap_not_ptr] = []   (an address tag sits on a Ptr)
-      [ti_uniq]  ↔ harness [uniq (mem_rets ++ reg_rets)]
-      [ti_lvl]   ↔ harness [all (fun k => k < level pct) (mem_rets)]
+    the machine state alone.
 
     ⚠ DESIGN CONSTRAINT (Stage 2 part 1, [S2T/TMem.v]): every memory
     clause is phrased over [TMem.vload] / [TMem.tload], never over raw

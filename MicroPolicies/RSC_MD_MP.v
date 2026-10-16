@@ -48,15 +48,12 @@ Require Import Coq.Logic.ClassicalEpsilon.
 Import DoNotation.
 Import Types.
 
-(* the blame-refined improvement (as in RSC_DC_MD.v) *)
 Definition behavior_improves_blame (b : program_behavior)
            (m : finpref_behavior) (p : Source.program) :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
              undef_in t (Source.prog_interface p).
 
 Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
-
-  (* ==================== derived static facts ==================== *)
 
   Lemma wf_p_compiled : Intermediate.well_formed_program X.p_compiled.
   Proof.
@@ -113,11 +110,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     move: Hdomm.
     by rewrite -(Intermediate.wfprog_defined_procedures wf_link_pc).
   Qed.
-
-  (* ==================== the diagonal recomposition instance ====================
-     (p' := p, c' := c): run-local machinery (colour-trace correspondence,
-     memory invariants, initial-state facts) for the maximum-prefix argument,
-     which only concerns the left run. *)
 
   Module SDiag <: RecompositionContext.
     Definition p  : program := K.lin X.p_compiled.
@@ -307,15 +299,12 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
 
   Module TDiag := RecTop SDiag LDiag.
 
-  (* ==================== the maximum prefix lemma ==================== *)
-
   Local Notation state := (@Symbolic.state mt LRC.lrc_tags unit).
   Local Notation Wprog := (program_link (K.lin X.p_compiled) (K.lin X.Ct)).
   Local Notation ipL := (prog_interface (K.lin X.p_compiled)).
   Local Notation icL := (prog_interface (K.lin X.Ct)).
   Local Open Scope word_scope.
 
-  (* a state halted on a decoded [Halt] takes no machine step *)
   Lemma halt_no_step_mp :
     forall (s s' : state) ev i tg,
       step_mp (NC := K.NC) s s' ev ->
@@ -329,7 +318,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     by rewrite Hm in PC.
   Qed.
 
-  (* functionality of the machine step *)
   Lemma step_mp_functional : forall (s s' s'' : state) ev ev',
     step_mp (NC := K.NC) s s' ev -> step_mp (NC := K.NC) s s'' ev' ->
     s' = s'' /\ ev = ev'.
@@ -340,7 +328,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     rewrite H1 in H2. by case: H2 => <- <-.
   Qed.
 
-  (* inverting a UB-restricted step *)
   Lemma rub_step_inv : forall (s : state) t (s' : state),
     Step TDiag.sem s t s' ->
     (TDiag.step2 tt s t s' /\ TDiag.allowed_UB s)
@@ -352,8 +339,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     - by right.
   Qed.
 
-  (* event steps leave the memory untouched: JUMP touches only registers,
-     JAL's MemRead re-tag is the identity, syscalls never emit *)
   Lemma event_step_mem : forall (s s' : state) e,
     step_mp (NC := K.NC) s s' (Some e) -> mem s' = mem s.
   Proof.
@@ -376,8 +361,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
-    -
-      unfold mvec in NEXT.
+    - unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
         TraceWF.nsuap_event_inv NEXT.
       rewrite Hmem.
@@ -388,12 +372,10 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
             (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
-    -
-      unfold mvec, pc' in NEXT.
+    - unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
-    -
-      unfold mvec, pc' in NEXT.
+    - unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
         TraceWF.nsuap_event_inv NEXT.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -408,11 +390,9 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
             (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
-    -
-      have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
+    - have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* an event step's target colour is the colour of an existing memory cell *)
   Lemma event_step_valid : forall (s s' : state) e,
     step_mp (NC := K.NC) s s' (Some e) ->
     TDiag.color_in_memory (mem s) ->
@@ -439,8 +419,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
-    -
-      unfold mvec in NEXT.
+    - unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := TDiag.event_nextcomp_and_some Htr.
       move: Htni. rewrite ST /=.
@@ -449,12 +428,10 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       have Hcell : mem s w = Some ni by rewrite ST.
       case: (Hcim _ _ Hcell) => HIn; apply/orP; [left | right];
         exact/Extra.In_in.
-    -
-      unfold mvec, pc' in NEXT.
+    - unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (TDiag.transfer_event_jumpjal Htr) => E; discriminate.
-    -
-      unfold mvec, pc' in NEXT.
+    - unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := TDiag.event_nextcomp_and_some Htr.
       move: Htni. rewrite ST /=.
@@ -463,11 +440,9 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       have Hcell : mem s (swcast imm) = Some ni by rewrite ST.
       case: (Hcim _ _ Hcell) => HIn; apply/orP; [left | right];
         exact/Extra.In_in.
-    -
-      have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
+    - have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* the run-local invariant of the machine run *)
   Definition Jinv (s : state) : Prop :=
     TDiag.general_memory_correctness (mem s)
     /\ ((TDiag.color_of s \in domm ipL) || (TDiag.color_of s \in domm icL)).
@@ -486,7 +461,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       + by rewrite (TDiag.PCCM.silent_step_color_preserved Hstep).
   Qed.
 
-  (* the initial state: main's colour, and correct memory *)
   Lemma initial_color :
     TDiag.color_of (Merged.initial_state (code TDiag.prog)
                       (prog_buffers TDiag.prog) (prog_interface TDiag.prog))
@@ -517,7 +491,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
         apply/orP; [left | right]; by rewrite K.lin_interface.
   Qed.
 
-  (* splitting the machine run at the first program-side divergence *)
   Lemma star_rub_split : forall (s0 : state) t (s' : state),
     Star (mp_sem K.NC Wprog) s0 t s' ->
     Jinv s0 ->
@@ -541,8 +514,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       case: Hraw => ev [Hmp Hev].
       have HJ2 : Jinv s2 := step_mp_J Hmp HJ.
       case Hic: (TDiag.color_of s1 \in domm icL).
-      +
-        have HstepR : Step TDiag.sem s1 t1 s2.
+      + have HstepR : Step TDiag.sem s1 t1 s2.
         { apply: step_UB_allowed; last exact: Hic.
           move: Hstep. by rewrite /=. }
         case: (IH HJ2) => [[HstarR HJ'] | [ta [tb [sx [F1 F2 [F3 F4] F5 F6]]]]].
@@ -555,14 +527,12 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
           -- by split.
           -- exact: F5.
           -- by rewrite Ht F6 Eapp_assoc.
-      +
-        have Hip : TDiag.color_of s1 \in domm ipL.
+      + have Hip : TDiag.color_of s1 \in domm ipL.
         { case: HJ => _ /orP [|] //. by rewrite Hic. }
         case: (classic (exists (s2' : state) ev',
                           step_me (NC := K.NC) s1 s2' ev'))
           => [[s2' [ev' Hme]] | Hnome].
-        *
-          have Hmp' := TDiag.PCCM.step_me_mp Hme.
+        * have Hmp' := TDiag.PCCM.step_me_mp Hme.
           have [E1 E2] := step_mp_functional Hmp' Hmp.
           subst s2' ev'.
           have HstepR : Step TDiag.sem s1 t1 s2.
@@ -581,8 +551,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
              ++ by split.
              ++ exact: F5.
              ++ by rewrite Ht F6 Eapp_assoc.
-        *
-          right. exists E0, tw, s1.
+        * right. exists E0, tw, s1.
           split.
           -- exact: star_refl.
           -- exact: HJ.
@@ -604,8 +573,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
           -- by [].
   Qed.
 
-  (* THE maximum prefix lemma: the machine run replays in the UB-restricting
-     semantics, in full or up to a blamable program-side divergence *)
   Lemma maximum_prefix :
     does_prefix TDiag.sem X.fm
     \/ exists t', [/\ does_prefix TDiag.sem (FGoes_wrong t'),
@@ -628,8 +595,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       { by rewrite (TDiag.star_color_last Hst) initial_color. }
       move: Hip. by rewrite K.lin_interface. }
     case: X.fm Hdp Hnw => [t|t|t] Hdp Hnw //.
-    -
-      inversion Hdp as [| |s s' t0 Hini Hstar Hfin| |]; subst.
+    - inversion Hdp as [| |s s' t0 Hini Hstar Hfin| |]; subst.
       move: Hini. rewrite /= /prog_initial => ?; subst s.
       case: (star_rub_split Hstar initial_J)
         => [[HstarR HJ'] | [ta [tb [sx [F1 F2 [F3 F4] F5 F6]]]]].
@@ -637,8 +603,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
         * left. apply/DPE.
           eapply does_FTerminates;
             [reflexivity | exact: HstarR | exact: HfinR].
-        *
-          right. exists t.
+        * right. exists t.
           have Hpci : TDiag.pc_color_inv s' :=
             TDiag.reachable_pc_color (erefl _) HstarR.
           destruct s' as [m0 r0 [pcv tpc0] ex0].
@@ -680,8 +645,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
             [reflexivity | exact: F1 | exact: F3 | exact: F4].
         * by exists tb; rewrite F6.
         * exact: (Hundef _ _ F1 F5).
-    -
-      inversion Hdp as [s s' t0 Hini Hstar| | | |Hnoinit]; subst; last first.
+    - inversion Hdp as [s s' t0 Hini Hstar| | | |Hnoinit]; subst; last first.
       + by have := Hnoinit _ (erefl _).
       + move: Hini. rewrite /= /prog_initial => ?; subst s.
         case: (star_rub_split Hstar initial_J)
@@ -696,8 +660,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
           -- by exists tb; rewrite F6.
           -- exact: (Hundef _ _ F1 F5).
   Qed.
-
-  (* ==================== the recomposition quadruple ==================== *)
 
   Lemma rub_transport : forall Y,
     does_prefix TDiag.sem Y ->
@@ -745,8 +707,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
   Definition mp_pack := constructive_indefinite_description _ bt_input.
   Definition M0 : finpref_behavior := proj1_sig mp_pack.
 
-  (* the extracted prefix's trace is a prefix of the observed one, so it
-     fits the machine by [X.prefix_fits] *)
   Lemma M0_fits : K.bt_fits X.p_compiled X.Ct (finpref_trace M0).
   Proof.
     apply: X.prefix_fits.
@@ -761,8 +721,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
         K.H_bt wf_p_compiled X.well_formed_Ct X.p_ok X.Ct_ok linkability_pc
                X.closedness HA HB M0_fits
     end.
-
-  (* ---- derived facts about the back-translated sides ---- *)
 
   Lemma wf_ip' : Intermediate.well_formed_program (bt_ip' BT).
   Proof.
@@ -791,8 +749,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     by rewrite (Compiler.compilation_preserves_interface _ _
                   (bt_compile_Cs BT)) (bt_Cs_iface BT).
   Qed.
-
-  (* ---- the recomposition context with the back-translated sides ---- *)
 
   Module SRec <: RecompositionContext.
     Definition p  : program := K.lin X.p_compiled.
@@ -1020,8 +976,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
 
   Module TRec := RecTop SRec LRec.
 
-  (* ==================== the assembly ==================== *)
-
   Lemma linkable_p_ic' :
     linkable (Intermediate.prog_interface X.p_compiled)
              (Intermediate.prog_interface (bt_ic' BT)).
@@ -1056,8 +1010,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
              iface_P'_p (bt_P'_wf BT) X.well_formed_p).
   Qed.
 
-  (* ---- small prefix algebra ---- *)
-
   Lemma trace_prefix_trans : forall (a b c : trace),
     trace_prefix a b -> trace_prefix b c -> trace_prefix a c.
   Proof.
@@ -1090,7 +1042,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     case: Hb' => ->. by exists t2.
   Qed.
 
-  (* lifting one improvement layer to a prefix or a shorter Goes_wrong *)
   Lemma improves_to_prefix : forall (L : semantics) beh mfin,
     program_behaves L beh ->
     (CompCertExtensions.prefix mfin beh
@@ -1107,8 +1058,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       by [].
   Qed.
 
-  (* ==================== THE theorem ==================== *)
-
+  (* Main theorem *)
   Theorem RSC_DC_MD_MP :
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface X.Ct /\
@@ -1126,8 +1076,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
         /\ (CompCertExtensions.prefix X.fm beh1
             \/ behavior_improves_blame beh1 X.fm X.p).
     { case: Hcases => [[Em Hfull] | [t' [Em H1 H2 H3]]].
-      -
-        have Hsem'' : does_prefix TRec.sem'' X.fm.
+      - have Hsem'' : does_prefix TRec.sem'' X.fm.
         { apply: TRec.recomposition_blame.
           - exact: Hfull.
           - rewrite -Em. exact: (bt_run BT). }
@@ -1141,8 +1090,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
         case: (improves_to_prefix Hbeh1 Himp1)
           => [[beh2 [Hb2 Hp2]] | [t3 [Eb3 _ Ht3]]].
         + exists beh2. split; [exact: Hb2 | by left].
-        +
-          subst beh1.
+        + subst beh1.
           have Hsrc : does_prefix (S.CS.sem (Source.program_link
                         (bt_P' BT) (bt_Cs BT))) X.fm.
           { rewrite -Em. exact: (bt_src_run BT). }
@@ -1155,8 +1103,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
             right. exists t3.
             split; first by [].
             split; [exact: Ht3 | exact: Hundef].
-      -
-        have Hundef_mp : undef_in t' (prog_interface (K.lin X.p_compiled)).
+      - have Hundef_mp : undef_in t' (prog_interface (K.lin X.p_compiled)).
         { move: H3. by rewrite /undef_in K.lin_interface. }
         have Hsem'' : does_prefix TRec.sem'' (FGoes_wrong t').
         { apply: TRec.recomposition_blame'.
@@ -1188,8 +1135,7 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
                  linkable_p_Cs closed_p_Cs Hbeh1 (bt_P'_wf BT)
                  iface_P'_p (bt_src_closed BT) Hsrc I HK)
           => [Hpm | Hundef].
-        +
-          have Ht't3 : trace_prefix t' t3.
+        + have Ht't3 : trace_prefix t' t3.
           { exact: (behavior_prefix_gw Hpm). }
           have Et3 : t3 = t' := trace_prefix_antisym Ht3t' Ht't3.
           subst t3.
@@ -1213,7 +1159,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     exact: Hor.
   Qed.
 
-  (* Assumption-closure gate: only [K.*]/[X.*] axioms and classical principles. *)
   Print Assumptions RSC_DC_MD_MP.
 
 End RSC_MP.

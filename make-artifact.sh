@@ -142,6 +142,9 @@ RSC_DC_MD_MP=(
 
 CHAIN=(
   ConcreteExample.v
+  RSC_DC_MD_CompilationChainMP.v
+  MicroPolicies/Recomposition/RSC_ME_MP.v
+  MicroPolicies/Recomposition/RSC_ME_MP_Faithful.v
   "${FRONT_BASE[@]}"
   Source/Blame.v
   Source/Definability.v
@@ -257,13 +260,64 @@ make_project() {
   write_submakefile "$dest"
 }
 
+strip_comments() {
+  perl - "$@" <<'PERL'
+use strict; use warnings;
+local $/;
+for my $f (@ARGV) {
+  open my $h, '<', $f or die "$f: $!"; my $s = <$h>; close $h;
+  my $out = ''; my $depth = 0; my $instr = 0; my $n = length $s;
+  for (my $i = 0; $i < $n; $i++) {
+    my $ch = substr($s, $i, 1);
+    my $two = substr($s, $i, 2);
+    if ($depth == 0) {
+      if ($instr) {
+        $out .= $ch;
+        if ($ch eq '"') {
+          if (substr($s, $i + 1, 1) eq '"') { $out .= '"'; $i++; } else { $instr = 0; }
+        }
+        next;
+      }
+      if ($ch eq '"') { $instr = 1; $out .= $ch; next; }
+      if ($two eq '(*') { $depth = 1; $i++; next; }
+      $out .= $ch;
+    } else {
+      if ($two eq '(*') { $depth++; $i++; next; }
+      if ($two eq '*)') { $depth--; $i++; next; }
+      if ($ch eq '"') {
+        my $j = $i + 1;
+        while ($j < $n) {
+          if (substr($s, $j, 1) eq '"') {
+            if (substr($s, $j + 1, 1) eq '"') { $j += 2; next; }
+            last;
+          }
+          $j++;
+        }
+        $i = $j;
+        next;
+      }
+    }
+  }
+  die "$f: unterminated comment\n" if $depth;
+  $out =~ s/[ \t]+$//mg;
+  $out =~ s/\n{3,}/\n\n/g;
+  $out =~ s/\A\n+//;
+  open my $o, '>', $f or die "$f: $!"; print $o $out; close $o;
+}
+PERL
+}
+
 mkdir -p "$OUT"
 make_project common 0 "${COMMON[@]}"
 make_project rsc_dc_md 1 "${RSC_DC_MD[@]}"
 make_project rsc_dc_md_micropolicies 1 "${RSC_DC_MD_MP[@]}"
 make_project compilation_chain 1 "${CHAIN[@]}"
 
-cp "$ROOT/LICENSE" "$OUT/LICENSE"
+find "$OUT" -name '*.v' -print0 | xargs -0 bash -c "$(declare -f strip_comments); strip_comments \"\$@\"" _
+
+cp "$ROOT/README_rsc_dc_md.md" "$OUT/rsc_dc_md/README.md"
+cp "$ROOT/README_rsc_dc_md_micropolicies.md" "$OUT/rsc_dc_md_micropolicies/README.md"
+cp "$ROOT/README_compilation_chain.md" "$OUT/compilation_chain/README.md"
 
 cat > "$OUT/Makefile" <<'EOF'
 PROJECTS = rsc_dc_md rsc_dc_md_micropolicies compilation_chain
