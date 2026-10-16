@@ -3291,6 +3291,114 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + rewrite /prog' /program_link /=. exact: (ltn_trans memory_size' alloc_label_lt_w).
   Qed.
 
+  Lemma gmc_initial (pb1 pb2 : NMap {fmap Block.id -> nat + seq value}) (cde : @Merged.code mt) :
+    (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
+    (forall i t, List.In (i, t) cde -> In (color t) (domm ip) \/ In (color t) (domm ic)) ->
+    (forall n r l t, nth_error cde n = Some (@MrBnz mt r l, t) ->
+       exists m, findopt (fun p : @Merged.instr mt * mem_tag =>
+                            match p.1 with MrLabel l0 => l == l0 | _ => false end) cde = Some m) ->
+    (forall n l t, nth_error cde n = Some (@MrJal mt l, t) -> l <> alloc_label ->
+       exists m, findopt (fun p : @Merged.instr mt * mem_tag =>
+                            match p.1 with MrLabel l0 => l == l0 | _ => false end) cde = Some m) ->
+    (exists t, nth_error cde (size cde - 1) = Some (@MrHalt mt, t)) ->
+    size (initial_memory (mt := mt) (unionm pb1 pb2)) + size cde < alloc_label ->
+    size (linearize_bufs (unionm pb1 pb2)) + size cde < alloc_label ->
+    domm (initial_memory (mt := mt) (unionm pb1 pb2))
+      = domm (initial_memory (mt := mt) (prog_buffers prog)) ->
+    domm pb1 = domm ip ->
+    domm pb2 = domm ic ->
+    general_memory_correctness
+      (unionm (encode_code cde (size (initial_memory (mt := mt) (unionm pb1 pb2))))
+              (initial_memory (mt := mt) (unionm pb1 pb2))).
+  Proof.
+    move=> Hwf Hccol Hbnz Hjal Hhalt Hsz Hlin Hdom Hd1 Hd2.
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+    - move=> c0 w v. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ] /=.
+      + move=> [<-] _ Hnot_code. exfalso. apply: Hnot_code. exact: (encode_code_is_code Hwf Henc).
+      + move=> Hinit _ _. right. by rewrite -Hdom mem_domm Hinit.
+    - move=> c0 w v Hbound. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ] /=.
+      + move=> [<-] Hprefix. exfalso.
+        rewrite (encode_code_prefix Hsz Henc) in Hprefix.
+        exact: (code_prefix_neq_data_prefix Hbound Hprefix).
+      + move=> Hinit Hprefix. exfalso.
+        have Hpref0 : andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
+        { apply: (initial_memory_prefix_zero _ Hinit).
+          exact: (leq_ltn_trans (leq_addr _ _) Hlin). }
+        rewrite Hpref0 in Hprefix.
+        exact: (code_prefix_neq_data_prefix Hbound Hprefix).
+    - move=> w v. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ] /=.
+      + move=> [<-] Hcode. apply/eqP. exact: (encode_code_prefix Hsz Henc).
+      + move=> Hinit Hcode. exfalso.
+        have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate.
+    - rewrite /alloc_empty unionmE alloc_label_not_in_encode_code /=.
+      + rewrite alloc_label_not_in_initial_memory //.
+        exact: (leq_ltn_trans (leq_addr _ _) Hlin).
+      + exact: Hsz.
+    - move=> w v. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ].
+      + move=> [<-] Hcode.
+        case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
+        destruct i => //=.
+        * have [v' [Hv' Hcode']] := encode_code_bnz_target Hwf Hbnz Hsz Henc Hdec.
+          exists v'. split; [| exact Hcode'].
+          rewrite unionmE Hv' //.
+        * have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target Hwf Hjal Hsz Henc Hdec.
+          -- left. exists v'. split; [| exact Hcode'].
+             rewrite unionmE Hv' //.
+          -- right. exact Halloc.
+      + move=> Hinit Hcode. exfalso.
+        have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate.
+    - move=> w v. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ].
+      + move=> [<-] Hcode.
+        have [Hhalt' | [v' [Hv' Hcode']]] :=
+          encode_code_end_condition Hwf Hhalt Henc Hcode (ltn_trans Hsz alloc_label_lt_w).
+        * left. by rewrite Hhalt'.
+        * right. exists v'. split; [| exact Hcode'].
+          rewrite unionmE Hv' //.
+      + move=> Hinit Hcode. exfalso.
+        have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate.
+    - move=> w d. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ] /=.
+      + move=> [<-]. exact: (encode_code_color Hwf Hccol Henc).
+      + move=> Hinit. have := initial_memory_color Hinit. by rewrite Hd1 Hd2.
+    - move=> w d e. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ] /=.
+      + move=> [<-] Hentry. exact: (encode_code_is_code Hwf Henc).
+      + move=> Hinit Hentry. eapply initial_memory_no_entry in Hinit. congruence.
+    - move=> w v. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory (unionm pb1 pb2))) w) => [v_code | ] /=.
+      + move=> [<-] Hcode. exact: (encode_code_vtag_other Hwf Henc).
+      + move=> Hinit Hcode. exfalso.
+        have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate.
+  Qed.
+
+  Lemma cap_initial ws (cde : @Merged.code mt) pb pi :
+    (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
+    capability_correctness [] ws (initial_state cde pb pi).
+  Proof.
+    move=> Hwf v n p1.
+    case: p1 => //=.
+    - intros r Hr. exfalso.
+      simpl in Hr. move: Hr.
+      rewrite /reg0. rewrite !setmE.
+      repeat (case: ifP => /=); try congruence.
+      intros. now simpl in Hr.
+    - intros w Hw. exfalso.
+      destruct Hw as [t [Hmem Hvtag]].
+      simpl in Hmem.
+      move: Hmem. rewrite unionmE.
+      case Henc: (encode_code cde (size (initial_memory pb)) w) => [v_code | ] /=.
+      + move=> [Heq].
+        eapply (encode_code_vtag_not_ret Hwf). subst. eauto. subst. eauto.
+      + move=> Hinit.
+        eapply initial_memory_vtag_other in Hinit. inv Hinit.
+        congruence.
+  Qed.
+
   Lemma match_initial_states:
   forall s1, Smallstep.initial_state sem s1 ->
   forall s2, Smallstep.initial_state sem' s2 ->
@@ -3303,8 +3411,8 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exists s3. exists [].
     split; try (simpl; unfold initial_state3; done).
     remember (prog_main p) as main.
-    destruct main; [eapply match_states_left | eapply match_states_right].
-    - eapply common_equiv_def; eauto.
+    have Hce : common_equiv [] s1 s2 s3.
+    { eapply common_equiv_def; eauto.
       (* try (eapply common_equiv_def || econstructor); simpl. *)
       + unfold initial_state in init1. simpl in init1. destruct s1. inv init1. simpl. done.
       + unfold initial_state in init2. simpl in init2. destruct s2. inv init2. simpl. done.
@@ -3313,392 +3421,18 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + inv init1. exact: register_domm_reg0.
       + inv init2. exact: register_domm_reg0.
       + inv init3. exact: register_domm_reg0.
-      + unfold general_memory_correctness.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-        * unfold memory_prefix_condition. intros c w v.                                                                                                                                                       
-          inv init1. simpl.                                                                                                                                                                                   
-          rewrite unionmE.                                                                                                                                                                                    
-          case Henc: (encode_code (code prog)                                                                                                                                                                 
-                        (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.                                                                                                                                   
-          -- (* w in encode_code: value is code, contradicts not is_code *)                                                                                                                                    
-            move=> [<-] _ Hnot_code. right.                                                                                                                                                                     
-            exfalso. apply Hnot_code.                                                                                                                                                                         
-            eapply encode_code_is_code_prog in Henc; eauto.
-          -- (* w only in initial_memory *)
-            move=> Hinit _ _.
-            right. by rewrite mem_domm Hinit.
-
-        * unfold memory_prefix_condition'. simpl.
-          { intros c0 w v Hbound Hmem Hprefix.
-            subst s1. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-].
-              exfalso.
-              have Hcode_prefix := encode_code_prefix memory_size Henc.
-              rewrite Hcode_prefix in Hprefix.
-              exact (code_prefix_neq_data_prefix Hbound Hprefix).
-            - move=> Hinit.
-              exfalso.
-              have Hpref0: andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
-              { intros.
-                eapply initial_memory_prefix_zero; eauto.
-                eapply lin_size_wo_code. }
-              rewrite Hpref0 in Hprefix.
-              eapply (code_prefix_neq_data_prefix Hbound) in Hprefix. auto.
-          }
-        * { unfold code_prefix_condition. intros w v.
-            subst s1. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode.
-              apply/eqP.
-              exact (encode_code_prefix memory_size Henc).
-            - (* w in initial_memory *)
-              move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold alloc_empty. simpl.
-          subst s1. simpl.
-          rewrite unionmE.
-          rewrite alloc_label_not_in_encode_code /=.
-          -- rewrite alloc_label_not_in_initial_memory //=.
-             by apply (leq_ltn_trans (leq_addr _ _) A.memory_size_lin).
-          -- by apply memory_size.
-        * { unfold BNZ_correctness. intros w v.
-            subst s1.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
-              destruct i => //=.
-              + have [v' [Hv' Hcode']] := encode_code_bnz_target code_tags_wf_prog bnz_resolved_prog memory_size Henc Hdec.
-                exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-              + have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target code_tags_wf_prog jal_resolved_prog memory_size Henc Hdec.
-                * left. exists v'. split; [| exact Hcode'].
-                  rewrite unionmE Hv' //.
-                * right. exact Halloc.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold end_condition.
-          { intros w v.
-            subst s1.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              have [Hhalt | [v' [Hv' Hcode']]] := encode_code_end_condition code_tags_wf_prog code_last_halt_prog Henc Hcode (ltn_trans memory_size alloc_label_lt_w).
-              + left. by rewrite Hhalt.
-              + right. exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold color_in_memory. simpl.
-          { intros w d.
-            subst s1. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-].
-              eapply encode_code_color_prog; eauto.
-            - move=> Hinit.
-              eapply initial_memory_color in Hinit; eauto.
-              rewrite domm_buffers_p domm_buffers_c in Hinit.
-              eauto. }
-        * { unfold entry_is_code. intros w d e.
-            subst s1. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-] Hentry.
-              exact (encode_code_is_code_prog Henc).
-            - move=> Hinit Hentry.
-              eapply initial_memory_no_entry in Hinit. congruence. }
-        * { unfold code_vtag_other. intros w v.
-            subst s1. simpl. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. exact (encode_code_vtag_other code_tags_wf_prog Henc).
-            - move=> Hinit Hcode. exfalso.
-              have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate. }
-      + unfold general_memory_correctness.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-        * unfold memory_prefix_condition. intros c0 w v.
-          inv init2. simpl.
-          rewrite unionmE.
-          case Henc: (encode_code (code prog')
-                        (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-          -- move=> [<-] _ Hnot_code. right.
-             exfalso. apply Hnot_code.
-             eapply encode_code_is_code_prog' in Henc; eauto.
-          -- move=> Hinit Hcolor Hnotcode.
-             right.
-             by rewrite -align_data_domm_12_u mem_domm Hinit.
-        * unfold memory_prefix_condition'. simpl.
-          { intros c0 w v Hbound Hmem Hprefix.
-            subst s2. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-].
-              exfalso.
-              have Hcode_prefix := encode_code_prefix memory_size' Henc.
-              rewrite Hcode_prefix in Hprefix.
-              exact (code_prefix_neq_data_prefix Hbound Hprefix).
-            - move=> Hinit.
-              exfalso.
-              have Hpref0: andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
-              { intros.
-                eapply initial_memory_prefix_zero; eauto.
-                eapply lin_size_wo_code'. }
-              rewrite Hpref0 in Hprefix.
-              eapply (code_prefix_neq_data_prefix Hbound) in Hprefix. auto. }
-        * { unfold code_prefix_condition. intros w v.
-            subst s2. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. apply/eqP.
-              exact (encode_code_prefix memory_size' Henc).
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold alloc_empty. simpl.
-          subst s2. simpl.
-          rewrite unionmE.
-          rewrite alloc_label_not_in_encode_code /=.
-          -- rewrite alloc_label_not_in_initial_memory //=.
-             by apply (leq_ltn_trans (leq_addr _ _) A.memory_size_lin').
-          -- by apply memory_size'.
-        * { unfold BNZ_correctness. intros w v.
-            subst s2.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
-              destruct i => //=.
-              + have [v' [Hv' Hcode']] := encode_code_bnz_target code_tags_wf_prog' bnz_resolved_prog' memory_size' Henc Hdec.
-                exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-              + have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target code_tags_wf_prog' jal_resolved_prog' memory_size' Henc Hdec.
-                * left. exists v'. split; [| exact Hcode'].
-                  rewrite unionmE Hv' //.
-                * right. exact Halloc.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold end_condition. intros w v.
-            subst s2.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              have [Hhalt | [v' [Hv' Hcode']]] := encode_code_end_condition code_tags_wf_prog' code_last_halt_prog' Henc Hcode (ltn_trans memory_size' alloc_label_lt_w).
-              + left. by rewrite Hhalt.
-              + right. exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold color_in_memory. simpl. intros w d.
-            subst s2. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-].
-              eapply encode_code_color_prog'; eauto.
-            - move=> Hinit.
-              eapply initial_memory_color in Hinit; eauto.
-              rewrite domm_buffers_p' domm_buffers_c' in Hinit.
-              eauto. }
-        * { unfold entry_is_code. intros w d e.
-            subst s2. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-] Hentry.
-              exact (encode_code_is_code_prog' Henc).
-            - move=> Hinit Hentry.
-              eapply initial_memory_no_entry in Hinit. congruence. }
-        * { unfold code_vtag_other. intros w v.
-            subst s2. simpl. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. exact (encode_code_vtag_other code_tags_wf_prog' Henc).
-            - move=> Hinit Hcode. exfalso.
-              have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate. }
-      + (* general_memory_correctness (mem s3) *)
-        unfold general_memory_correctness.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-        * unfold memory_prefix_condition. intros c0 w v.
-          inv init3. simpl.
-          rewrite unionmE.
-          case Henc: (encode_code (code prog'')
-                        (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-          -- move=> [<-] _ Hnot_code.
-             exfalso. apply Hnot_code.
-             eapply encode_code_is_code_prog'' in Henc; eauto.
-          -- move=> Hinit Hcolor Hnotcode.
-             right.
-             by rewrite align_data_domm_left_u mem_domm Hinit.
-        * unfold memory_prefix_condition'. simpl.
-          { intros c0 w v Hbound Hmem Hprefix.
-            subst s3. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-].
-              exfalso.
-              have Hcode_prefix := encode_code_prefix memory_size'' Henc.
-              rewrite Hcode_prefix in Hprefix.
-              exact (code_prefix_neq_data_prefix Hbound Hprefix).
-            - move=> Hinit.
-              exfalso.
-              have Hpref0: andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
-              { intros.
-                eapply initial_memory_prefix_zero; eauto.
-                eapply lin_size_wo_code''. }
-              rewrite Hpref0 in Hprefix.
-              eapply (code_prefix_neq_data_prefix Hbound) in Hprefix. auto. }
-        * { unfold code_prefix_condition. intros w v.
-            subst s3. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. apply/eqP.
-              exact (encode_code_prefix memory_size'' Henc).
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold alloc_empty. simpl.
-          subst s3. simpl.
-          rewrite unionmE.
-          rewrite alloc_label_not_in_encode_code /=.
-          -- rewrite alloc_label_not_in_initial_memory //=.
-             by apply (leq_ltn_trans (leq_addr _ _) A.memory_size_lin'').
-          -- by apply memory_size''.
-        * { unfold BNZ_correctness. intros w v.
-            subst s3.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
-              destruct i => //=.
-              + have [v' [Hv' Hcode']] := encode_code_bnz_target code_tags_wf_prog'' bnz_resolved_prog'' memory_size'' Henc Hdec.
-                exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-              + have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target code_tags_wf_prog'' jal_resolved_prog'' memory_size'' Henc Hdec.
-                ** left. exists v'. split; [| exact Hcode'].
-                   rewrite unionmE Hv' //.
-                ** right. exact Halloc.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold end_condition. intros w v.
-            subst s3.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              have [Hhalt | [v' [Hv' Hcode']]] := encode_code_end_condition code_tags_wf_prog'' code_last_halt_prog'' Henc Hcode (ltn_trans memory_size'' alloc_label_lt_w).
-              + left. by rewrite Hhalt.
-              + right. exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold color_in_memory. simpl. intros w d.
-            subst s3. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-].
-              eapply encode_code_color_prog''; eauto.
-            - move=> Hinit.
-              eapply initial_memory_color in Hinit; eauto.
-              rewrite domm_buffers_p domm_buffers_c' in Hinit.
-              eauto. }
-        * { unfold entry_is_code. intros w d e.
-            subst s3. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-] Hentry.
-              exact (encode_code_is_code_prog'' Henc).
-            - move=> Hinit Hentry.
-              eapply initial_memory_no_entry in Hinit. congruence. }
-        * { unfold code_vtag_other. intros w v.
-            subst s3. simpl. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. exact (encode_code_vtag_other code_tags_wf_prog'' Henc).
-            - move=> Hinit Hcode. exfalso.
-              have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate. }
-      + unfold capability_correctness.
-        move=> v n p1.
-        case: p1 => //=.
-        * intros r Hr. exfalso.
-          inv init1. simpl in Hr. move: Hr.
-          rewrite /reg0. rewrite !setmE.
-          repeat (case: ifP => /=); try congruence.
-          intros. now simpl in Hr.
-        * intros w Hw. exfalso.
-          { destruct Hw as [t [Hmem Hvtag]].
-            subst s1. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [Heq].
-              eapply (encode_code_vtag_not_ret code_tags_wf_prog). subst. eauto. subst. eauto.
-            - move=> Hinit.
-              eapply initial_memory_vtag_other in Hinit. inv Hinit.
-              congruence. }
-      + unfold capability_correctness.
-        move=> v n p1.
-        case: p1 => //=.
-        * intros r Hr. exfalso.
-          inv init2. simpl in Hr. move: Hr.
-          rewrite /reg0. rewrite !setmE.
-          repeat (case: ifP => /=); try congruence.
-          intros. now simpl in Hr.
-        * intros w Hw. exfalso.
-          { destruct Hw as [t [Hmem Hvtag]].
-            subst s2. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [Heq].
-              eapply (encode_code_vtag_not_ret code_tags_wf_prog'). subst. eauto. subst. eauto.
-            - move=> Hinit.
-              eapply initial_memory_vtag_other in Hinit. inv Hinit.
-              congruence. }
-      + unfold capability_correctness.
-        move=> v n p1.
-        case: p1 => //=.
-        * intros r Hr. exfalso.
-          inv init3. simpl in Hr. move: Hr.
-          rewrite /reg0. rewrite !setmE.
-          repeat (case: ifP => /=); try congruence.
-          intros. now simpl in Hr.
-        * intros w Hw. exfalso.
-          { destruct Hw as [t [Hmem Hvtag]].
-            subst s3. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [Heq].
-              eapply (encode_code_vtag_not_ret code_tags_wf_prog''). subst. eauto. subst. eauto.
-            - move=> Hinit.
-              eapply initial_memory_vtag_other in Hinit. inv Hinit.
-              congruence. }
+      + subst s1. exact: (gmc_initial code_tags_wf_prog code_color_prog bnz_resolved_prog
+          jal_resolved_prog code_last_halt_prog memory_size A.memory_size_lin erefl
+          domm_buffers_p domm_buffers_c).
+      + subst s2. exact: (gmc_initial code_tags_wf_prog' code_color_prog' bnz_resolved_prog'
+          jal_resolved_prog' code_last_halt_prog' memory_size' A.memory_size_lin'
+          align_data_domm_12_u domm_buffers_p' domm_buffers_c').
+      + subst s3. exact: (gmc_initial code_tags_wf_prog'' code_color_prog'' bnz_resolved_prog''
+          jal_resolved_prog'' code_last_halt_prog'' memory_size'' A.memory_size_lin''
+          (esym align_data_domm_left_u) domm_buffers_p domm_buffers_c').
+      + subst s1. apply: cap_initial. exact: code_tags_wf_prog.
+      + subst s2. apply: cap_initial. exact: code_tags_wf_prog'.
+      + subst s3. apply: cap_initial. exact: code_tags_wf_prog''.
       + unfold combined_codes.
         { intros w v t off c Hrel Hoff Hcode Hcolor. split.
           - intros Hmem1.
@@ -3746,84 +3480,37 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
             + move=> Hinit.
               exfalso. have Hnc := initial_memory_not_code Hinit.
               rewrite Hnc in Hcode. discriminate. }
-      + (* running comp = Component.main is valid: p has a main procedure (Heqmain ⇒ main ∈ ip). *)
-        by apply/orP; left; apply (wfprog_main_existence Hwfp); symmetry; exact Heqmain.
+      + apply/orP. destruct main.
+        * left. apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain.
+        * right. have Hpm := cprog_main_existence Hprog_is_closed.
+          simpl in Hpm. rewrite -Heqmain /= in Hpm.
+          apply (wfprog_main_existence Hwfc). exact Hpm.
       + exact: (proj1 (initial_pc_code_color init1 init2)).
-      + exact: (proj2 (initial_pc_code_color init1 init2)).
-    - constructor; eauto.
-      + destruct find_rank_main_prog'' as [start'' Hfr''].
-        destruct find_rank_main_prog as [start Hfr].
-        have [Hfind Hstart_lt] := find_rank_Some_find Hfr.
-        have [Hfind'' Hstart_lt''] := find_rank_Some_find Hfr''.
-        have Hfind_lt : seq.find (fun '(_, tag) => color tag == Component.main) (code prog) < size (code prog)
-          by rewrite Hfind.
-        have [v Hv] := initial_pc_pos Hfind_lt (ltn_trans memory_size alloc_label_lt_w)
-                         code_tags_wf_prog.
-        eapply same_pc_normal.
-        * rewrite init1. exact Hv.
-        * subst s1. simpl.
-          unfold get_offset, offset1.
-          rewrite mkfmapfpE.
-          have Hmain: Component.main \in domm ip.
-          { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
-          rewrite Hmain /=.
-          unfold p0.
-          rewrite Hfr'' Hfr /=. eauto.
-        * subst s1 s3. simpl.
-          rewrite Hfind Hfind''.
-          have Hd1 : size (domm (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c'))))
-                   = size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))
-            by apply size_domm_fmap.
-          have Hd2 : size (domm (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c))))
-                   = size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c)))
-            by apply size_domm_fmap.
-          rewrite Hd1 Hd2 (addnC start'') (addnC start) /word_of_nat int_diffE.
-          exact (as_word_shiftD _ _ _).
-      + (* color_of s1 = color_of s3 *)
-        subst s1 s3. simpl. reflexivity.
-      + (* side_of (color_of s1) = Left *)
-        subst s1. simpl. unfold side_of.
-        have Hmain: Component.main \in domm ip.
-        { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
-        by rewrite Hmain.
-      + (* memory_address_correctness Left s1 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
+      + exact: (proj2 (initial_pc_code_color init1 init2)). }
+    have HmacL1 : memory_address_correctness Left s1.
+    { unfold memory_address_correctness. intros v0 w Hrel Hmem.
         subst s1. simpl in Hmem. unfold address_correctness.
         move: Hmem. rewrite unionmE.
         case Henc: (encode_code (code prog)
           (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
         * move=> [<-]. rewrite (encode_code_vtag_other_prog Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* memory_address_correctness Left s3 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
+        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I. }
+    have HmacL3 : memory_address_correctness Left s3.
+    { unfold memory_address_correctness. intros v0 w Hrel Hmem.
         subst s3. simpl in Hmem. unfold address_correctness.
         move: Hmem. rewrite unionmE.
         case Henc: (encode_code (code prog'')
           (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
         * move=> [<-]. rewrite (encode_code_vtag_other_prog'' Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* entry_points_offset Left (mem s1) (mem s3) *)
-        unfold entry_points_offset. intros c w w' d d' proc l l'.
+        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I. }
+    have HepoL : entry_points_offset Left (mem s1) (mem s3).
+    { unfold entry_points_offset. intros c w w' d d' proc l l'.
         intros Hrel Hmem1 Hmem3 Hcode1 Hcode3 Hcolor1 Hcolor3 Hentry1 Hentry3.
         subst s1 s3. simpl in *.
-        (* d and d' are code entries with matching entry points for component c ∈ domm ip *)
-        (* Both come from encode_code (code prog) / encode_code (code prog'') *)
-        (* Since Left-relevant code comes from shared code p, the entries are at *)
-        (* offset-related positions: w' = addw w (as_word (offset1 c)) *)
-        (* Use encode_code_nth_inv on both to get positions, then relate via offset *)
-        exact: (entry_points_offset_init Hrel Hmem1 Hmem3 Hcode1 Hcode3 Hcolor1 Hcolor3 Hentry1 Hentry3).
-      + (* register_address_correctness Left s1 *)
-        subst s1. apply: register_address_correctness_reg0; exact: erefl.
-      + (* register_address_correctness Left s3 *)
-        subst s3. apply: register_address_correctness_reg0; exact: erefl.
-      + (* memory_match Left [] s1 s3 *)
-        unfold memory_match. intros w d Hnotcode Hrel.
+        exact: (entry_points_offset_init Hrel Hmem1 Hmem3 Hcode1 Hcode3 Hcolor1 Hcolor3 Hentry1 Hentry3). }
+    have HmmL : memory_match Left [] s1 s3.
+    { unfold memory_match. intros w d Hnotcode Hrel.
         subst s1 s3. simpl in *.
-        (* For Left-relevant non-code data: data matches between s1 and s3 *)
-        (* Non-code data comes from initial_memory. *)
-        (* For Left components (domm ip), prog and prog'' share prog_buffers p, *)
-        (* so initial_memory values for Left components are identical. *)
-        (* The data_match' for identical values with vtag = Other is trivial. *)
         split.
         * { intros Hmem3.
             move: Hmem3. rewrite unionmE.
@@ -3866,57 +3553,30 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       first by [exact A.memory_size_lin | exact A.memory_size_lin' | exact A.memory_size_lin''].
                     exact: (init_data_left_13 Hrel Hinit). }
                   rewrite Henc_none /=.
-                  exact: (init_data_left_13 Hrel Hinit). } }
-      + (* registers_match Left [] s1 s3 *)
-        unfold registers_match. intros w d.
-        subst s1 s3. simpl. split.
-        * intros Hd. exists d. split; [| exact Hd].
-          unfold data_match. destruct d as [vv tt]. simpl.
-          split; [reflexivity |].
-          destruct tt; simpl; try reflexivity;
-            move: Hd; rewrite /reg0 !setmE;
-            repeat (case: ifP => /= _; [move=> [] _ //= |]);
-            by [].
-        * intros Hd. exists d. split; [| exact Hd].
-          unfold data_match. destruct d as [vv tt]. simpl.
-          split; [reflexivity |].
-          destruct tt; simpl; try reflexivity;
-            move: Hd; rewrite /reg0 !setmE;
-            repeat (case: ifP => /= _; [move=> [] _ //= |]);
-            by [].
-    - (* weak_equiv Right [] s2 s3 *)
-      constructor.
-      + (* color_of s2 = color_of s3 *)
-        subst s2 s3. simpl. reflexivity.
-      + (* side_of (color_of s2) = other_side Right = Left *)
-        subst s2. simpl. unfold side_of.
-        have Hmain: Component.main \in domm ip.
-        { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
-        by rewrite Hmain.
-      + (* memory_address_correctness Right s2 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
+                  exact: (init_data_left_13 Hrel Hinit). } } }
+    have HmacR2 : memory_address_correctness Right s2.
+    { unfold memory_address_correctness. intros v0 w Hrel Hmem.
         subst s2. simpl in Hmem. unfold address_correctness.
         move: Hmem. rewrite unionmE.
         case Henc: (encode_code (code prog')
           (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
         * move=> [<-]. rewrite (encode_code_vtag_other_prog' Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* memory_address_correctness Right s3 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
+        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I. }
+    have HmacR3 : memory_address_correctness Right s3.
+    { unfold memory_address_correctness. intros v0 w Hrel Hmem.
         subst s3. simpl in Hmem. unfold address_correctness.
         move: Hmem. rewrite unionmE.
         case Henc: (encode_code (code prog'')
           (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
         * move=> [<-]. rewrite (encode_code_vtag_other_prog'' Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* entry_points_offset Right (mem s2) (mem s3) *)
-        (* entry_points_offset Right (mem s2) (mem s3) — same structure as Left *)
-        unfold entry_points_offset. intros c w w' d d' proc l l'.
+        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I. }
+    have HepoR : entry_points_offset Right (mem s2) (mem s3).
+    { unfold entry_points_offset. intros c w w' d d' proc l l'.
         intros Hrel Hmem2 Hmem3 Hcode2 Hcode3 Hcolor2 Hcolor3 Hentry2 Hentry3.
         subst s2 s3. simpl in *.
-        exact: (entry_points_offset_init' Hrel Hmem2 Hmem3 Hcode2 Hcode3 Hcolor2 Hcolor3 Hentry2 Hentry3).
-      + (* memory_match Right [] s2 s3 *)
-        unfold memory_match. intros w d Hnotcode Hrel.
+        exact: (entry_points_offset_init' Hrel Hmem2 Hmem3 Hcode2 Hcode3 Hcolor2 Hcolor3 Hentry2 Hentry3). }
+    have HmmR : memory_match Right [] s2 s3.
+    { unfold memory_match. intros w d Hnotcode Hrel.
         subst s2 s3. simpl in *.
         split.
         * { intros Hmem3.
@@ -3960,450 +3620,84 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       first by [exact A.memory_size_lin | exact A.memory_size_lin' | exact A.memory_size_lin''].
                     exact: (init_data_right_23 Hrel Hinit). }
                   rewrite Henc_none /=.
-                  exact: (init_data_right_23 Hrel Hinit). } }
-    - (* common_equiv for match_states_right — same initial states, same proof *)
-      eapply common_equiv_def; eauto.  (* was 'try done': done hangs evaluating big memory goals *)
-      + unfold initial_state in init1. simpl in init1. destruct s1. inv init1. simpl. done.
-      + unfold initial_state in init2. simpl in init2. destruct s2. inv init2. simpl. done.
-      + unfold initial_state in init3. simpl in init3. destruct s3. inv init3. simpl. done.
-      + rewrite init3. simpl. econstructor.
-      + inv init1. exact: register_domm_reg0.
-      + inv init2. exact: register_domm_reg0.
-      + inv init3. exact: register_domm_reg0.
-      + (* general_memory_correctness s1 — same as Left case *)
-        unfold general_memory_correctness.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-        * unfold memory_prefix_condition. intros c w v.
-          inv init1. simpl.
-          rewrite unionmE.
-          case Henc: (encode_code (code prog)
-                        (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-          -- move=> [<-] _ Hnot_code. right.
-             exfalso. apply Hnot_code.
-             eapply encode_code_is_code_prog in Henc; eauto.
-          -- move=> Hinit _ _.
-             right. by rewrite mem_domm Hinit.
-        * unfold memory_prefix_condition'. simpl.
-          { intros c0 w v Hbound Hmem Hprefix.
-            subst s1. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-].
-              exfalso.
-              have Hcode_prefix := encode_code_prefix memory_size Henc.
-              rewrite Hcode_prefix in Hprefix.
-              exact (code_prefix_neq_data_prefix Hbound Hprefix).
-            - move=> Hinit.
-              exfalso.
-              have Hpref0: andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
-              { intros.
-                eapply initial_memory_prefix_zero; eauto.
-                eapply lin_size_wo_code. }
-              rewrite Hpref0 in Hprefix.
-              eapply (code_prefix_neq_data_prefix Hbound) in Hprefix. auto. }
-        * { unfold code_prefix_condition. intros w v.
-            subst s1. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. apply/eqP.
-              exact (encode_code_prefix memory_size Henc).
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold alloc_empty. simpl.
-          subst s1. simpl.
-          rewrite unionmE.
-          rewrite alloc_label_not_in_encode_code /=.
-          -- rewrite alloc_label_not_in_initial_memory //=.
-             by apply (leq_ltn_trans (leq_addr _ _) A.memory_size_lin).
-          -- by apply memory_size.
-        * { unfold BNZ_correctness. intros w v.
-            subst s1.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
-              destruct i => //=.
-              + have [v' [Hv' Hcode']] := encode_code_bnz_target code_tags_wf_prog bnz_resolved_prog memory_size Henc Hdec.
-                exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-              + have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target code_tags_wf_prog jal_resolved_prog memory_size Henc Hdec.
-                * left. exists v'. split; [| exact Hcode'].
-                  rewrite unionmE Hv' //.
-                * right. exact Halloc.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold end_condition. intros w v.
-            subst s1.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              have [Hhalt | [v' [Hv' Hcode']]] := encode_code_end_condition code_tags_wf_prog code_last_halt_prog Henc Hcode (ltn_trans memory_size alloc_label_lt_w).
-              + left. by rewrite Hhalt.
-              + right. exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold color_in_memory. simpl. intros w d.
-            subst s1. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-].
-              eapply encode_code_color_prog; eauto.
-            - move=> Hinit.
-              eapply initial_memory_color in Hinit; eauto.
-              rewrite domm_buffers_p domm_buffers_c in Hinit.
-              eauto. }
-        * { unfold entry_is_code. intros w d e.
-            subst s1. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-] Hentry.
-              exact (encode_code_is_code_prog Henc).
-            - move=> Hinit Hentry.
-              eapply initial_memory_no_entry in Hinit. congruence. }
-        * { unfold code_vtag_other. intros w v.
-            subst s1. simpl. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. exact (encode_code_vtag_other code_tags_wf_prog Henc).
-            - move=> Hinit Hcode. exfalso.
-              have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate. }
-      + (* general_memory_correctness s2 — same as Left case *)
-        unfold general_memory_correctness.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-        * unfold memory_prefix_condition. intros c0 w v.
-          inv init2. simpl.
-          rewrite unionmE.
-          case Henc: (encode_code (code prog')
-                        (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-          -- move=> [<-] _ Hnot_code. right.
-             exfalso. apply Hnot_code.
-             eapply encode_code_is_code_prog' in Henc; eauto.
-          -- move=> Hinit Hcolor Hnotcode.
-             right.
-             by rewrite -align_data_domm_12_u mem_domm Hinit.
-        * unfold memory_prefix_condition'. simpl.
-          { intros c0 w v Hbound Hmem Hprefix.
-            subst s2. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-].
-              exfalso.
-              have Hcode_prefix := encode_code_prefix memory_size' Henc.
-              rewrite Hcode_prefix in Hprefix.
-              exact (code_prefix_neq_data_prefix Hbound Hprefix).
-            - move=> Hinit.
-              exfalso.
-              have Hpref0: andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
-              { intros.
-                eapply initial_memory_prefix_zero; eauto.
-                eapply lin_size_wo_code'. }
-              rewrite Hpref0 in Hprefix.
-              eapply (code_prefix_neq_data_prefix Hbound) in Hprefix. auto. }
-        * { unfold code_prefix_condition. intros w v.
-            subst s2. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. apply/eqP.
-              exact (encode_code_prefix memory_size' Henc).
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold alloc_empty. simpl.
-          subst s2. simpl.
-          rewrite unionmE.
-          rewrite alloc_label_not_in_encode_code /=.
-          -- rewrite alloc_label_not_in_initial_memory //=.
-             by apply (leq_ltn_trans (leq_addr _ _) A.memory_size_lin').
-          -- by apply memory_size'.
-        * { unfold BNZ_correctness. intros w v.
-            subst s2.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
-              destruct i => //=.
-              + have [v' [Hv' Hcode']] := encode_code_bnz_target code_tags_wf_prog' bnz_resolved_prog' memory_size' Henc Hdec.
-                exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-              + have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target code_tags_wf_prog' jal_resolved_prog' memory_size' Henc Hdec.
-                * left. exists v'. split; [| exact Hcode'].
-                  rewrite unionmE Hv' //.
-                * right. exact Halloc.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold end_condition. intros w v.
-            subst s2.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              have [Hhalt | [v' [Hv' Hcode']]] := encode_code_end_condition code_tags_wf_prog' code_last_halt_prog' Henc Hcode (ltn_trans memory_size' alloc_label_lt_w).
-              + left. by rewrite Hhalt.
-              + right. exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold color_in_memory. simpl. intros w d.
-            subst s2. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-].
-              eapply encode_code_color_prog'; eauto.
-            - move=> Hinit.
-              eapply initial_memory_color in Hinit; eauto.
-              rewrite domm_buffers_p' domm_buffers_c' in Hinit.
-              eauto. }
-        * { unfold entry_is_code. intros w d e.
-            subst s2. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-] Hentry.
-              exact (encode_code_is_code_prog' Henc).
-            - move=> Hinit Hentry.
-              eapply initial_memory_no_entry in Hinit. congruence. }
-        * { unfold code_vtag_other. intros w v.
-            subst s2. simpl. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. exact (encode_code_vtag_other code_tags_wf_prog' Henc).
-            - move=> Hinit Hcode. exfalso.
-              have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate. }
-      + (* general_memory_correctness s3 — same as Left case *)
-        unfold general_memory_correctness.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-        * unfold memory_prefix_condition. intros c0 w v.
-          inv init3. simpl.
-          rewrite unionmE.
-          case Henc: (encode_code (code prog'')
-                        (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-          -- move=> [<-] _ Hnot_code.
-             exfalso. apply Hnot_code.
-             eapply encode_code_is_code_prog'' in Henc; eauto.
-          -- move=> Hinit Hcolor Hnotcode.
-             right.
-             by rewrite align_data_domm_left_u mem_domm Hinit.
-        * unfold memory_prefix_condition'. simpl.
-          { intros c0 w v Hbound Hmem Hprefix.
-            subst s3. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-].
-              exfalso.
-              have Hcode_prefix := encode_code_prefix memory_size'' Henc.
-              rewrite Hcode_prefix in Hprefix.
-              exact (code_prefix_neq_data_prefix Hbound Hprefix).
-            - move=> Hinit.
-              exfalso.
-              have Hpref0: andw w (mask (NC := NC)) = @component_memory_prefix mt NC (ssrint.Posz 0).
-              { intros.
-                eapply initial_memory_prefix_zero; eauto.
-                eapply lin_size_wo_code''. }
-              rewrite Hpref0 in Hprefix.
-              eapply (code_prefix_neq_data_prefix Hbound) in Hprefix. auto. }
-        * { unfold code_prefix_condition. intros w v.
-            subst s3. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. apply/eqP.
-              exact (encode_code_prefix memory_size'' Henc).
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * unfold alloc_empty. simpl.
-          subst s3. simpl.
-          rewrite unionmE.
-          rewrite alloc_label_not_in_encode_code /=.
-          -- rewrite alloc_label_not_in_initial_memory //=.
-             by apply (leq_ltn_trans (leq_addr _ _) A.memory_size_lin'').
-          -- by apply memory_size''.
-        * { unfold BNZ_correctness. intros w v.
-            subst s3.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              case Hdec: (decode_instr (vala v_code)) => [i | ] //=.
-              destruct i => //=.
-              + have [v' [Hv' Hcode']] := encode_code_bnz_target code_tags_wf_prog'' bnz_resolved_prog'' memory_size'' Henc Hdec.
-                exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-              + have [[v' [Hv' Hcode']] | Halloc] := encode_code_jal_target code_tags_wf_prog'' jal_resolved_prog'' memory_size'' Henc Hdec.
-                ** left. exists v'. split; [| exact Hcode'].
-                   rewrite unionmE Hv' //.
-                ** right. exact Halloc.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold end_condition. intros w v.
-            subst s3.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ].
-            - move=> [<-] Hcode.
-              have [Hhalt | [v' [Hv' Hcode']]] := encode_code_end_condition code_tags_wf_prog'' code_last_halt_prog'' Henc Hcode (ltn_trans memory_size'' alloc_label_lt_w).
-              + left. by rewrite Hhalt.
-              + right. exists v'. split; [| exact Hcode'].
-                rewrite unionmE Hv' //.
-            - move=> Hinit Hcode.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-        * { unfold color_in_memory. simpl. intros w d.
-            subst s3. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-].
-              eapply encode_code_color_prog''; eauto.
-            - move=> Hinit.
-              eapply initial_memory_color in Hinit; eauto.
-              rewrite domm_buffers_p domm_buffers_c' in Hinit.
-              eauto. }
-        * { unfold entry_is_code. intros w d e.
-            subst s3. simpl.
-            rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-] Hentry.
-              exact (encode_code_is_code_prog'' Henc).
-            - move=> Hinit Hentry.
-              eapply initial_memory_no_entry in Hinit. congruence. }
-        * { unfold code_vtag_other. intros w v.
-            subst s3. simpl. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [<-] Hcode. exact (encode_code_vtag_other code_tags_wf_prog'' Henc).
-            - move=> Hinit Hcode. exfalso.
-              have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcode. discriminate. }
-      + (* capability_correctness s1 — same as Left case *)
-        unfold capability_correctness.
-        move=> v n p1.
-        case: p1 => //=.
-        * intros r Hr. exfalso.
-          inv init1. simpl in Hr. move: Hr.
-          rewrite /reg0. rewrite !setmE.
-          repeat (case: ifP => /=); try congruence.
-          intros. now simpl in Hr.
-        * intros w Hw. exfalso.
-          { destruct Hw as [t [Hmem Hvtag]].
-            subst s1. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-                          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [Heq].
-              eapply (encode_code_vtag_not_ret code_tags_wf_prog). subst. eauto. subst. eauto.
-            - move=> Hinit.
-              eapply initial_memory_vtag_other in Hinit. inv Hinit.
-              congruence. }
-      + (* capability_correctness s2 *)
-        unfold capability_correctness.
-        move=> v n p1.
-        case: p1 => //=.
-        * intros r Hr. exfalso.
-          inv init2. simpl in Hr. move: Hr.
-          rewrite /reg0. rewrite !setmE.
-          repeat (case: ifP => /=); try congruence.
-          intros. now simpl in Hr.
-        * intros w Hw. exfalso.
-          { destruct Hw as [t [Hmem Hvtag]].
-            subst s2. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-                          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [Heq].
-              eapply (encode_code_vtag_not_ret code_tags_wf_prog'). subst. eauto. subst. eauto.
-            - move=> Hinit.
-              eapply initial_memory_vtag_other in Hinit. inv Hinit.
-              congruence. }
-      + (* capability_correctness s3 *)
-        unfold capability_correctness.
-        move=> v n p1.
-        case: p1 => //=.
-        * intros r Hr. exfalso.
-          inv init3. simpl in Hr. move: Hr.
-          rewrite /reg0. rewrite !setmE.
-          repeat (case: ifP => /=); try congruence.
-          intros. now simpl in Hr.
-        * intros w Hw. exfalso.
-          { destruct Hw as [t [Hmem Hvtag]].
-            subst s3. simpl in Hmem.
-            move: Hmem. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-                          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [Heq].
-              eapply (encode_code_vtag_not_ret code_tags_wf_prog''). subst. eauto. subst. eauto.
-            - move=> Hinit.
-              eapply initial_memory_vtag_other in Hinit. inv Hinit.
-              congruence. }
-      + unfold combined_codes.
-        { intros w v t off c Hrel Hoff Hcode Hcolor. split.
-          - intros Hmem1.
-            subst s1 s3. simpl in *.
-            move: Hmem1. rewrite unionmE.
-            case Henc1: (encode_code (code prog)
-                           (size (initial_memory (prog_buffers prog))) w) => [v1 | ] /=.
-            + move=> [] ?; subst.
-              exact: (combined_codes_forward Hrel Hoff Hcode Henc1).
-            + move=> Hinit.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate.
-          - intros Hmem3.
-            subst s1 s3. simpl in *.
-            move: Hmem3. rewrite unionmE.
-            case Henc3: (encode_code (code prog'')
-                           (size (initial_memory (prog_buffers prog''))) (addw w (as_word off))) => [v3 | ] /=.
-            + move=> [] ?; subst.
-              exact: (combined_codes_backward Hrel Hoff Hcode Henc3).
-            + move=> Hinit.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-      + unfold combined_codes.
-        { intros w v t off c Hrel Hoff Hcode Hcolor. split.
-          - intros Hmem2.
-            subst s2 s3. simpl in *.
-            move: Hmem2. rewrite unionmE.
-            case Henc2: (encode_code (code prog')
-                           (size (initial_memory (prog_buffers prog'))) w) => [v2 | ] /=.
-            + move=> [] ?; subst.
-              exact: (combined_codes_forward' Hrel Hoff Hcode Henc2).
-            + move=> Hinit.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate.
-          - intros Hmem3.
-            subst s2 s3. simpl in *.
-            move: Hmem3. rewrite unionmE.
-            case Henc3: (encode_code (code prog'')
-                           (size (initial_memory (prog_buffers prog''))) (addw w (as_word off))) => [v3 | ] /=.
-            + move=> [] ?; subst.
-              exact: (combined_codes_backward' Hrel Hoff Hcode Henc3).
-            + move=> Hinit.
-              exfalso. have Hnc := initial_memory_not_code Hinit.
-              rewrite Hnc in Hcode. discriminate. }
-      + (* running comp = Component.main valid: p has no main (Heqmain) ⇒ c does ⇒ main ∈ ic. *)
-        apply/orP; right.
-        have Hpm := cprog_main_existence Hprog_is_closed.
-        simpl in Hpm. rewrite -Heqmain /= in Hpm.
-        apply (wfprog_main_existence Hwfc). exact Hpm.
-      + exact: (proj1 (initial_pc_code_color init1 init2)) || exact: (proj2 (initial_pc_code_color init1 init2)).
-      + exact: (proj1 (initial_pc_code_color init1 init2)) || exact: (proj2 (initial_pc_code_color init1 init2)).
+                  exact: (init_data_right_23 Hrel Hinit). } } }
+    destruct main; [eapply match_states_left | eapply match_states_right].
+    - exact: Hce.
+    - constructor.
+      + destruct find_rank_main_prog'' as [start'' Hfr''].
+        destruct find_rank_main_prog as [start Hfr].
+        have [Hfind Hstart_lt] := find_rank_Some_find Hfr.
+        have [Hfind'' Hstart_lt''] := find_rank_Some_find Hfr''.
+        have Hfind_lt : seq.find (fun '(_, tag) => color tag == Component.main) (code prog) < size (code prog)
+          by rewrite Hfind.
+        have [v Hv] := initial_pc_pos Hfind_lt (ltn_trans memory_size alloc_label_lt_w)
+                         code_tags_wf_prog.
+        eapply same_pc_normal.
+        * rewrite init1. exact Hv.
+        * subst s1. simpl.
+          unfold get_offset, offset1.
+          rewrite mkfmapfpE.
+          have Hmain: Component.main \in domm ip.
+          { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
+          rewrite Hmain /=.
+          unfold p0.
+          rewrite Hfr'' Hfr /=. eauto.
+        * subst s1 s3. simpl.
+          rewrite Hfind Hfind''.
+          have Hd1 : size (domm (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c'))))
+                   = size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))
+            by apply size_domm_fmap.
+          have Hd2 : size (domm (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c))))
+                   = size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c)))
+            by apply size_domm_fmap.
+          rewrite Hd1 Hd2 (addnC start'') (addnC start) /word_of_nat int_diffE.
+          exact (as_word_shiftD _ _ _).
+      + (* color_of s1 = color_of s3 *)
+        subst s1 s3. simpl. reflexivity.
+      + (* side_of (color_of s1) = Left *)
+        subst s1. simpl. unfold side_of.
+        have Hmain: Component.main \in domm ip.
+        { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
+        by rewrite Hmain.
+      + exact: HmacL1.
+      + exact: HmacL3.
+      + exact: HepoL.
+      + (* register_address_correctness Left s1 *)
+        subst s1. apply: register_address_correctness_reg0; exact: erefl.
+      + (* register_address_correctness Left s3 *)
+        subst s3. apply: register_address_correctness_reg0; exact: erefl.
+      + exact: HmmL.
+      + (* registers_match Left [] s1 s3 *)
+        unfold registers_match. intros w d.
+        subst s1 s3. simpl. split.
+        * intros Hd. exists d. split; [| exact Hd].
+          unfold data_match. destruct d as [vv tt]. simpl.
+          split; [reflexivity |].
+          destruct tt; simpl; try reflexivity;
+            move: Hd; rewrite /reg0 !setmE;
+            repeat (case: ifP => /= _; [move=> [] _ //= |]);
+            by [].
+        * intros Hd. exists d. split; [| exact Hd].
+          unfold data_match. destruct d as [vv tt]. simpl.
+          split; [reflexivity |].
+          destruct tt; simpl; try reflexivity;
+            move: Hd; rewrite /reg0 !setmE;
+            repeat (case: ifP => /= _; [move=> [] _ //= |]);
+            by [].
+    - (* weak_equiv Right [] s2 s3 *)
+      constructor.
+      + (* color_of s2 = color_of s3 *)
+        subst s2 s3. simpl. reflexivity.
+      + (* side_of (color_of s2) = other_side Right = Left *)
+        subst s2. simpl. unfold side_of.
+        have Hmain: Component.main \in domm ip.
+        { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
+        by rewrite Hmain.
+      + exact: HmacR2.
+      + exact: HmacR3.
+      + exact: HepoR.
+      + exact: HmmR.
+    - exact: Hce.
     - (* weak_equiv Left for match_states_right *)
       constructor.
       + subst s1 s3. simpl. reflexivity.
@@ -4415,71 +3709,12 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           pose proof wfprog_main_existence Hwfp.
           rewrite -Heqmain in H. apply H in Hmain. congruence.
         * done.
-      + (* memory_address_correctness Left s1 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
-        subst s1. simpl in Hmem. unfold address_correctness.
-        move: Hmem. rewrite unionmE.
-        case Henc: (encode_code (code prog)
-          (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-        * move=> [<-]. rewrite (encode_code_vtag_other_prog Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* memory_address_correctness Left s3 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
-        subst s3. simpl in Hmem. unfold address_correctness.
-        move: Hmem. rewrite unionmE.
-        case Henc: (encode_code (code prog'')
-          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-        * move=> [<-]. rewrite (encode_code_vtag_other_prog'' Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* entry_points_offset Left (mem s1) (mem s3) *)
-        unfold entry_points_offset. intros c w w' d d' proc l l'.
-        intros Hrel Hmem1 Hmem3 Hcode1 Hcode3 Hcolor1 Hcolor3 Hentry1 Hentry3.
-        subst s1 s3. simpl in *.
-        exact: (entry_points_offset_init Hrel Hmem1 Hmem3 Hcode1 Hcode3 Hcolor1 Hcolor3 Hentry1 Hentry3).
-      + (* memory_match Left [] s1 s3 *)
-        unfold memory_match. intros w d Hnotcode Hrel.
-        subst s1 s3. simpl in *.
-        split.
-        * { intros Hmem3. move: Hmem3. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-              (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [] ?; subst v_code. exfalso.
-              apply Hnotcode. exact (encode_code_is_code_prog'' Henc).
-            - move=> Hinit.
-              { exists d. split.
-                - unfold data_match'. destruct d as [vv tt]. simpl.
-                  split; [reflexivity |]. split; [reflexivity |].
-                  have Hvtag := initial_memory_vtag_other Hinit.
-                  rewrite Hvtag. reflexivity.
-                - rewrite unionmE.
-                  have Henc_none: encode_code (code p ++ code c)
-                                    (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c)))) w = None.
-                  { eapply encode_code_initial_memory_disjoint;
-      first by [exact A.memory_size_lin | exact A.memory_size_lin' | exact A.memory_size_lin''].
-                    exact: (init_data_left_31 Hrel Hinit). }
-                  rewrite Henc_none /=.
-                  exact: (init_data_left_31 Hrel Hinit). } }
-        * { intros Hmem1. move: Hmem1. rewrite unionmE.
-            case Henc: (encode_code (code prog)
-              (size (initial_memory (prog_buffers prog))) w) => [v_code | ] /=.
-            - move=> [] ?; subst v_code. exfalso.
-              apply Hnotcode. exact (encode_code_is_code_prog Henc).
-            - move=> Hinit.
-              { exists d. split.
-                - unfold data_match'. destruct d as [vv tt]. simpl.
-                  split; [reflexivity |]. split; [reflexivity |].
-                  have Hvtag := initial_memory_vtag_other Hinit.
-                  rewrite Hvtag. reflexivity.
-                - rewrite unionmE.
-                  have Henc_none: encode_code (code p ++ code c')
-                    (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))) w = None.
-                  { eapply encode_code_initial_memory_disjoint;
-      first by [exact A.memory_size_lin | exact A.memory_size_lin' | exact A.memory_size_lin''].
-                    exact: (init_data_left_13 Hrel Hinit). }
-                  rewrite Henc_none /=.
-                  exact: (init_data_left_13 Hrel Hinit). } }
+      + exact: HmacL1.
+      + exact: HmacL3.
+      + exact: HepoL.
+      + exact: HmmL.
     - (* strong_equiv Right for match_states_right *)
-      constructor; eauto.
+      constructor.
       + have Hmain_ic : Component.main \in domm ic.
         { have Hpm := cprog_main_existence Hprog_is_closed.
           simpl in Hpm. rewrite -Heqmain /= in Hpm.
@@ -4493,73 +3728,14 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           pose proof wfprog_main_existence Hwfp.
           rewrite -Heqmain in H. apply H in Hmain. congruence.
         * done.
-      + (* memory_address_correctness Right s2 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
-        subst s2. simpl in Hmem. unfold address_correctness.
-        move: Hmem. rewrite unionmE.
-        case Henc: (encode_code (code prog')
-          (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-        * move=> [<-]. rewrite (encode_code_vtag_other_prog' Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* memory_address_correctness Right s3 *)
-        unfold memory_address_correctness. intros v0 w Hrel Hmem.
-        subst s3. simpl in Hmem. unfold address_correctness.
-        move: Hmem. rewrite unionmE.
-        case Henc: (encode_code (code prog'')
-          (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-        * move=> [<-]. rewrite (encode_code_vtag_other_prog'' Henc). exact I.
-        * move=> Hinit. rewrite (initial_memory_vtag_other Hinit). exact I.
-      + (* entry_points_offset Right (mem s2) (mem s3) *)
-        unfold entry_points_offset. intros c w w' d d' proc l l'.
-        intros Hrel Hmem2 Hmem3 Hcode2 Hcode3 Hcolor2 Hcolor3 Hentry2 Hentry3.
-        subst s2 s3. simpl in *.
-        exact: (entry_points_offset_init' Hrel Hmem2 Hmem3 Hcode2 Hcode3 Hcolor2 Hcolor3 Hentry2 Hentry3).
+      + exact: HmacR2.
+      + exact: HmacR3.
+      + exact: HepoR.
       + (* register_address_correctness Right s2 *)
         subst s2. apply: register_address_correctness_reg0; exact: erefl.
       + (* register_address_correctness Right s3 *)
         subst s3. apply: register_address_correctness_reg0; exact: erefl.
-      + (* memory_match Right [] s2 s3 *)
-        unfold memory_match. intros w d Hnotcode Hrel.
-        subst s2 s3. simpl in *.
-        split.
-        * { intros Hmem3. move: Hmem3. rewrite unionmE.
-            case Henc: (encode_code (code prog'')
-              (size (initial_memory (prog_buffers prog''))) w) => [v_code | ] /=.
-            - move=> [] ?; subst v_code. exfalso.
-              apply Hnotcode. exact (encode_code_is_code_prog'' Henc).
-            - move=> Hinit.
-              { exists d. split.
-                - unfold data_match'. destruct d as [vv tt]. simpl.
-                  split; [reflexivity |]. split; [reflexivity |].
-                  have Hvtag := initial_memory_vtag_other Hinit.
-                  rewrite Hvtag. reflexivity.
-                - rewrite unionmE.
-                  have Henc_none: encode_code (code p' ++ code c')
-                    (size (initial_memory (mt := mt) (unionm (prog_buffers p') (prog_buffers c')))) w = None.
-                  { eapply encode_code_initial_memory_disjoint;
-      first by [exact A.memory_size_lin | exact A.memory_size_lin' | exact A.memory_size_lin''].
-                    exact: (init_data_right_32 Hrel Hinit). }
-                  rewrite Henc_none /=.
-                  exact: (init_data_right_32 Hrel Hinit). } }
-        * { intros Hmem2. move: Hmem2. rewrite unionmE.
-            case Henc: (encode_code (code prog')
-              (size (initial_memory (prog_buffers prog'))) w) => [v_code | ] /=.
-            - move=> [] ?; subst v_code. exfalso.
-              apply Hnotcode. exact (encode_code_is_code_prog' Henc).
-            - move=> Hinit.
-              { exists d. split.
-                - unfold data_match'. destruct d as [vv tt]. simpl.
-                  split; [reflexivity |]. split; [reflexivity |].
-                  have Hvtag := initial_memory_vtag_other Hinit.
-                  rewrite Hvtag. reflexivity.
-                - rewrite unionmE.
-                  have Henc_none: encode_code (code p ++ code c')
-                    (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))) w = None.
-                  { eapply encode_code_initial_memory_disjoint;
-      first by [exact A.memory_size_lin | exact A.memory_size_lin' | exact A.memory_size_lin''].
-                    exact: (init_data_right_23 Hrel Hinit). }
-                  rewrite Henc_none /=.
-                  exact: (init_data_right_23 Hrel Hinit). } }
+      + exact: HmmR.
       + (* registers_match Right [] s2 s3 *)
         unfold registers_match. intros w d.
         subst s2 s3. simpl. split.

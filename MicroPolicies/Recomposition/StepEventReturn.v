@@ -512,6 +512,47 @@ Module StepEventReturn (S: RecompositionContext).
             by rewrite /word_of_nat. }
           rewrite Hpres3 //. by move=> Hwst; move/dommPn: Hwd; rewrite Hwst.
   Qed.
+
+  Lemma return_pop_post :
+    forall (st : state) (r0 : reg mt) cell4 v3 v3' n a1 a2 C M',
+      r0 <> as_word (ssrint.Posz 1) ->
+      register_domm (regs st) ->
+      regs st (as_word (ssrint.Posz 4)) = Some cell4 ->
+      regs st r0 = Some (Types.Atom v3' (Ret n)) ->
+      capability_correctness ((a1, a2, Types.Atom v3 (Ret n), C) :: M') WS_S3 st ->
+      exists rs,
+        next_state_do_updates st
+          ((Invalidated :: Invalidated :: Other :: reg_invalidate_hseq)%hseq
+           : hseq (tag_type lrc_tags) (R :: R :: R :: nseq 10 R))
+          (RegRead (as_word (ssrint.Posz 4)) :: RegRead r0 :: reg_clear_read)
+        = Some {| mem := mem st; regs := rs; pc := pc st; internal := internal st |}
+        /\ (forall pcn, register_address_correctness Left
+                          {| mem := mem st; regs := rs; pc := pcn; internal := internal st |})
+        /\ (forall pcn, capability_correctness M' WS_S3
+                          {| mem := mem st; regs := rs; pc := pcn; internal := internal st |})
+        /\ (forall w d, rs w = Some d ->
+              (w = as_word (ssrint.Posz 1) /\ Types.taga d = Other) \/
+              (w <> as_word (ssrint.Posz 1) /\ Types.taga d = Invalidated)).
+  Proof.
+    move=> st r0 cell4 v3 v3' n a1 a2 C M' Hr0ne1 Hdomm Hr4 Hr0 Hcap.
+    have [rs [Hdu [_ Htagclass]]] := return_do_updates_props Hr0ne1 Hdomm Hr4 Hr0.
+    exists rs. split; first exact: Hdu.
+    split.
+    { move=> pcn rv rr Hrr; rewrite /address_correctness.
+      case: (Htagclass rr rv Hrr) => [[_ ->] | [_ ->]]; exact: I. }
+    split; last exact: Htagclass.
+    move=> pcn kv kn kp kprem; destruct kp as [kr | kw].
+    - case: (Htagclass kr _ kprem) => [[_ Ht] | [_ Ht]]; discriminate Ht.
+    - have [kis_in kunicity] := Hcap kv kn (inr kw) kprem.
+      split.
+      + move: kis_in; rewrite /in_stack => -[ksv1 [ksv2 [kcol [kHhead | kis_in2]]]].
+        * exfalso; inversion kHhead; subst; eapply (kunicity (inl _)); exact Hr0.
+        * by exists ksv1, ksv2, kcol.
+      + move=> kp' kv'; destruct kp' as [kr' | kw'].
+        * move=> Hr'.
+          case: (Htagclass kr' _ Hr') => [[_ Ht] | [_ Ht]]; discriminate Ht.
+        * move=> Hmem'; exact: (kunicity (inr kw') kv' Hmem').
+  Qed.
   (* Keep [next_state_do_update] transparent for the downstream case-1 setup, which relies on
      [simpl] reducing the do_update chain (e.g. [subst s0] at the per-case branch).  In the
      [assert (G': ...)] below the do_updates chain is left unfolded by the setup, then folded
@@ -991,8 +1032,8 @@ Module StepEventReturn (S: RecompositionContext).
            the register part of capability_correctness by plain [discriminate]. *)
         have Hr0ne1 : r0 <> as_word (ssrint.Posz 1).
         { move=> E; move: vt_eq10; rewrite E vt_eq9; discriminate. }
-        have [rs [Hdu [_Hr1 Htagclass]]] :=
-          return_do_updates_props Hr0ne1 reg_domm3 vt_eq11 vt_eq10.
+        have [rs [Hdu [Hrac [Hcap Htagclass]]]] :=
+          return_pop_post Hr0ne1 reg_domm3 vt_eq11 vt_eq10 capa_cor3.
         exists {| mem := mem s3; regs := rs;
                   pc := (w0 + as_word off0)%w@(build_tpc n2 comp');
                   internal := internal s3 |}.
@@ -1009,25 +1050,9 @@ Module StepEventReturn (S: RecompositionContext).
           - by rewrite Hdu /=. }
         split; first by reflexivity.
         split.
-        { (* register_address_correctness Left s3' : every tag is Other/Invalidated *)
-          move=> rv rr Hrr; rewrite /address_correctness.
-          case: (Htagclass rr rv Hrr) => [[_ ->] | [_ ->]]; exact: I. }
+        { exact: Hrac. }
         split.
-        { (* capability_correctness M' WS_S3 s3' *)
-          move=> kv kn kp kprem; destruct kp as [kr | kw].
-          - (* register premise vacuous: cleared regs are Other/Invalidated, never Ret *)
-            case: (Htagclass kr _ kprem) => [[_ Ht] | [_ Ht]]; discriminate Ht.
-          - (* memory premise: [mem s3' = mem s3], reuse capa_cor3 *)
-            have [kis_in kunicity] := capa_cor3 kv kn (inr kw) kprem.
-            split.
-            + (* drop the popped head frame, which now lives in register r0 (vt_eq10) *)
-              move: kis_in; rewrite /in_stack => -[ksv1 [ksv2 [kcol [kHhead | kis_in2]]]].
-              * exfalso; inversion kHhead; subst; eapply (kunicity (inl _)); exact vt_eq10.
-              * by exists ksv1, ksv2, kcol.
-            + move=> kp' kv'; destruct kp' as [kr' | kw'].
-              * move=> Hr'.
-                case: (Htagclass kr' _ Hr') => [[_ Ht] | [_ Ht]]; discriminate Ht.
-              * move=> Hmem'; exact: (kunicity (inr kw') kv' Hmem'). }
+        { exact: Hcap. }
         exact Htagclass. }
 
       destruct G' as [s3' [G' [Htag3 [Hregaddr3 [Hcapa3 Htagexport]]]]].
@@ -1390,8 +1415,8 @@ Module StepEventReturn (S: RecompositionContext).
            the register part of capability_correctness by plain [discriminate]. *)
         have Hr0ne1 : r0 <> as_word (ssrint.Posz 1).
         { move=> E; move: vt_eq10; rewrite E vt_eq9 Ht9; discriminate. }
-        have [rs [Hdu [_Hr1 Htagclass]]] :=
-          return_do_updates_props Hr0ne1 reg_domm3 vt_eq11 vt_eq10.
+        have [rs [Hdu [Hrac [Hcap Htagclass]]]] :=
+          return_pop_post Hr0ne1 reg_domm3 vt_eq11 vt_eq10 capa_cor3.
         exists {| mem := mem s3; regs := rs;
                   pc := (v15 + as_word off0)%w@(build_tpc n comp');
                   internal := internal s3 |}.
@@ -1408,25 +1433,9 @@ Module StepEventReturn (S: RecompositionContext).
           - by rewrite Hdu /=. }
         split; first by reflexivity.
         split.
-        { (* register_address_correctness Left s3' : every tag is Other/Invalidated *)
-          move=> rv rr Hrr; rewrite /address_correctness.
-          case: (Htagclass rr rv Hrr) => [[_ ->] | [_ ->]]; exact: I. }
+        { exact: Hrac. }
         split.
-        { (* capability_correctness M' WS_S3 s3' *)
-          move=> kv kn kp kprem; destruct kp as [kr | kw].
-          - (* register premise vacuous: cleared regs are Other/Invalidated, never Ret *)
-            case: (Htagclass kr _ kprem) => [[_ Ht] | [_ Ht]]; discriminate Ht.
-          - (* memory premise: [mem s3' = mem s3], reuse capa_cor3 *)
-            have [kis_in kunicity] := capa_cor3 kv kn (inr kw) kprem.
-            split.
-            + (* drop the popped head frame, which now lives in register r0 (vt_eq10) *)
-              move: kis_in; rewrite /in_stack => -[ksv1 [ksv2 [kcol [kHhead | kis_in2]]]].
-              * exfalso; inversion kHhead; subst; eapply (kunicity (inl _)); exact vt_eq10.
-              * by exists ksv1, ksv2, kcol.
-            + move=> kp' kv'; destruct kp' as [kr' | kw'].
-              * move=> Hr'.
-                case: (Htagclass kr' _ Hr') => [[_ Ht] | [_ Ht]]; discriminate Ht.
-              * move=> Hmem'; exact: (kunicity (inr kw') kv' Hmem'). }
+        { exact: Hcap. }
         exact Htagclass. }
 
       destruct G' as [s3' [G' [Htag3 [Hregaddr3 [Hcapa3 Htagexport]]]]].
@@ -1800,8 +1809,8 @@ Module StepEventReturn (S: RecompositionContext).
            the register part of capability_correctness by plain [discriminate]. *)
         have Hrne1 : r <> as_word (ssrint.Posz 1).
         { move=> E; move: vt_eq10; rewrite E vt_eq9 Ht9; discriminate. }
-        have [rs [Hdu [_Hr1 Htagclass]]] :=
-          return_do_updates_props Hrne1 reg_domm3 vt_eq11 vt_eq10.
+        have [rs [Hdu [Hrac [Hcap Htagclass]]]] :=
+          return_pop_post Hrne1 reg_domm3 vt_eq11 vt_eq10 capa_cor3.
         exists {| mem := mem s3; regs := rs;
                   pc := v16@(build_tpc n comp');
                   internal := internal s3 |}.
@@ -1818,25 +1827,9 @@ Module StepEventReturn (S: RecompositionContext).
           - by rewrite Hdu /=. }
         split; first by reflexivity.
         split.
-        { (* register_address_correctness Left s3' : every tag is Other/Invalidated *)
-          move=> rv rr Hrr; rewrite /address_correctness.
-          case: (Htagclass rr rv Hrr) => [[_ ->] | [_ ->]]; exact: I. }
+        { exact: Hrac. }
         split.
-        { (* capability_correctness M' WS_S3 s3' *)
-          move=> kv kn kp kprem; destruct kp as [kr | kw].
-          - (* register premise vacuous: cleared regs are Other/Invalidated, never Ret *)
-            case: (Htagclass kr _ kprem) => [[_ Ht] | [_ Ht]]; discriminate Ht.
-          - (* memory premise: [mem s3' = mem s3], reuse capa_cor3 *)
-            have [kis_in kunicity] := capa_cor3 kv kn (inr kw) kprem.
-            split.
-            + (* drop the popped head frame, which now lives in register r (vt_eq10) *)
-              move: kis_in; rewrite /in_stack => -[ksv1 [ksv2 [kcol [kHhead | kis_in2]]]].
-              * exfalso; inversion kHhead; subst; eapply (kunicity (inl _)); exact vt_eq10.
-              * by exists ksv1, ksv2, kcol.
-            + move=> kp' kv'; destruct kp' as [kr' | kw'].
-              * move=> Hr'.
-                case: (Htagclass kr' _ Hr') => [[_ Ht] | [_ Ht]]; discriminate Ht.
-              * move=> Hmem'; exact: (kunicity (inr kw') kv' Hmem'). }
+        { exact: Hcap. }
         exact Htagclass. }
 
       destruct G' as [s3' [G' [Htag3 [Hregaddr3 [Hcapa3 Htagexport]]]]].
@@ -2195,8 +2188,8 @@ Module StepEventReturn (S: RecompositionContext).
            the register part of capability_correctness by plain [discriminate]. *)
         have Hrne1 : r <> as_word (ssrint.Posz 1).
         { move=> E; move: vt_eq10; rewrite E vt_eq9 Ht9; discriminate. }
-        have [rs [Hdu [_Hr1 Htagclass]]] :=
-          return_do_updates_props Hrne1 reg_domm3 vt_eq11 vt_eq10.
+        have [rs [Hdu [Hrac [Hcap Htagclass]]]] :=
+          return_pop_post Hrne1 reg_domm3 vt_eq11 vt_eq10 capa_cor3.
         exists {| mem := mem s3; regs := rs;
                   pc := v16@(build_tpc n comp');
                   internal := internal s3 |}.
@@ -2213,25 +2206,9 @@ Module StepEventReturn (S: RecompositionContext).
           - by rewrite Hdu /=. }
         split; first by reflexivity.
         split.
-        { (* register_address_correctness Left s3' : every tag is Other/Invalidated *)
-          move=> rv rr Hrr; rewrite /address_correctness.
-          case: (Htagclass rr rv Hrr) => [[_ ->] | [_ ->]]; exact: I. }
+        { exact: Hrac. }
         split.
-        { (* capability_correctness M' WS_S3 s3' *)
-          move=> kv kn kp kprem; destruct kp as [kr | kw].
-          - (* register premise vacuous: cleared regs are Other/Invalidated, never Ret *)
-            case: (Htagclass kr _ kprem) => [[_ Ht] | [_ Ht]]; discriminate Ht.
-          - (* memory premise: [mem s3' = mem s3], reuse capa_cor3 *)
-            have [kis_in kunicity] := capa_cor3 kv kn (inr kw) kprem.
-            split.
-            + (* drop the popped head frame, which now lives in register r (vt_eq10) *)
-              move: kis_in; rewrite /in_stack => -[ksv1 [ksv2 [kcol [kHhead | kis_in2]]]].
-              * exfalso; inversion kHhead; subst; eapply (kunicity (inl _)); exact vt_eq10.
-              * by exists ksv1, ksv2, kcol.
-            + move=> kp' kv'; destruct kp' as [kr' | kw'].
-              * move=> Hr'.
-                case: (Htagclass kr' _ Hr') => [[_ Ht] | [_ Ht]]; discriminate Ht.
-              * move=> Hmem'; exact: (kunicity (inr kw') kv' Hmem'). }
+        { exact: Hcap. }
         exact Htagclass. }
 
       destruct G' as [s3' [G' [Htag3 [Hregaddr3 [Hcapa3 Htagexport]]]]].
