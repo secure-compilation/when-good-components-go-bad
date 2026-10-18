@@ -344,6 +344,17 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite /evi Ha'. by eexists.
   Qed.
 
+  Lemma nsuap_evi_reflect : forall i M (s s3 : state) iv updts pc' res,
+    registers_match i M s s3 ->
+    @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s3 iv updts pc' = Some res ->
+    exists ei, evi s = Some ei.
+  Proof.
+    move=> i M s s3 iv updts pc' res Hrm NEXT3.
+    apply: (rb_evi_reflect Hrm).
+    move: NEXT3; rewrite /next_state_updates_and_pc /next_state /evi.
+    by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ].
+  Qed.
+
   (* strong_equiv field accessors (s' side) for the jump/call-target corners. *)
   Lemma strong_reg_addr2 : forall i m s s',
     strong_equiv i m s s' -> register_address_correctness i s'.
@@ -1145,6 +1156,46 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
 
   (* ===== the big lemma ===== *)
+  Lemma seq_step_pre : forall (i : side) (s s3 s3' : state) op (tpc3 : tag_type lrc_tags P)
+      (ts : hseq (tag_type lrc_tags) (inputs op)) (updts : seq update) i3 (ti3 : tag_type lrc_tags M),
+    combined_codes i s s3 -> same_pc i s s3 -> color_of s = color_of s3 ->
+    side_of (color_of s) = i -> (color_of s \in domm ip) || (color_of s \in domm ic) ->
+    pc_color_inv s3 -> is_relevant_comp i (color_of s) ->
+    mem s3 (vala (pc s3)) = Some (i3 @ ti3) -> is_code ti3 ->
+    (exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s)) ->
+    match tpc3 with Level _ c => c end = color_of s ->
+    @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s3
+      (IVec (OP op) tpc3 ti3 ts) updts (addw (vala (pc s3)) onew) = Some (s3', None) ->
+    exists vd td v3s t3s v',
+      mem s (vala (pc s)) = Some (vd @ td) /\ decode_match i (mem s) (mem s3) vd i3 /\
+      td = ti3 /\ color td = color_of s /\
+      mem s3 (addw (vala (pc s3)) onew) = Some (v3s @ t3s) /\ is_code t3s /\
+      color t3s = color_of s /\ mem s (addw (vala (pc s)) onew) = Some (v' @ t3s).
+  Proof.
+    move=> i s s3 s3' op tpc3 ts updts i3 ti3 Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3
+           [d3s [Hd3s Hcode3s]] Htpc3 NEXT3.
+    have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
+    move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+    have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
+    have [_ Hbel] := merged_silent_next_pc_belong NEXT3.
+    move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
+    have Hcolc : color t3s = color_of s.
+    { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
+    have Hpcnorm : exists v0 offr, (mem s (vala (pc s)) = Some v0 /\ is_code (taga v0))
+          /\ get_offset i (color_of s) = Some offr
+          /\ vala (pc s3) = addw (vala (pc s)) (as_word offr).
+    { case: (same_pc_cases Hsp) => [H|[_ [_ Hn]]]; [exact H | by rewrite Hn in Hd3]. }
+    have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm.
+    have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
+    { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
+    have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
+      by rewrite <- Hshift.
+    have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
+    exists vd, td, v3s, t3s, v'.
+    split; [exact Hd | split; [exact Hdec | split; [exact Htag | split; [exact Hcd |
+      split; [exact Hd3s | split; [exact Hcode3s | split; [exact Hcolc | exact Hmems']]]]]]].
+  Qed.
+
   Lemma stepf_reflect : forall (i : side) M s sweak s3 s3' ev,
     combined_codes i s s3 -> strong_equiv i M s s3 -> pc_color_inv s3 -> pc_color_inv s ->
     general_memory_correctness (mem s) -> general_memory_correctness (mem s3) ->
@@ -1200,30 +1251,9 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
            |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
            |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
            |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-      - (* nop: silent transfer cannot emit event *)
-        rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* const *)
-        rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* mov *)
-        rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* binop *)
-        rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* load *)
-        rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* store *)
-        rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
-        have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
-        by case: (transfer_event_jumpjal Htr) => E; discriminate.
+      all: try (rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3;
+                have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3);
+                by case: (transfer_event_jumpjal Htr) => E; discriminate).
       - (* JUMP — cross-component return *)
         have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
         have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
@@ -1258,10 +1288,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         (* reflect reg_clear_list with the [Ret n'] tag *)
         have Hclears' : reg_clear_list_aux reg_list (regs s) (Ret n') = Some l
           by rewrite -Hheadret.
-        have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-        { move: NEXT3; rewrite /next_state_updates_and_pc /next_state /evi.
-          by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-        have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+        have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
         have Hiscode : is_code td by rewrite Htag.
         have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
         (* CROSS-COMPONENT RETURN colour bridge: the running register [r] and the merged register [r]
@@ -1405,10 +1432,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         (* drop the word-equation intermediates: a later [done]/[//] trying [assumption] against
            them would CONVERT concrete 2^32 word terms and hang. *)
         clear Hshift Hra3cell' Hpcoff Hoffr Hpcell0.
-        have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-        { move: NEXT; rewrite /next_state_updates_and_pc /next_state /evi.
-          by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-        have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+        have [ei Hevi] := nsuap_evi_reflect Hrm NEXT.
         have Hiscode : is_code td by rewrite Htag.
         have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
         (* CROSS-COMPONENT CALL: the strong call target [mem s (swcast imm')] = [Some dd] has the SAME
@@ -1502,36 +1526,19 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     - (* Nop *)
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
-      have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
-      move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+      have Hnext3 : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
+      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
+        by move: Hhalt; cbn [vala]; rewrite INST3. }
+      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
+      have [vd [td [v3s [t3s [v' [Hd [Hdec [Htag [Hcd [Hd3s [Hcode3s [Hcolc Hmems']]]]]]]]]]]] :=
+        seq_step_pre Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3 Hnext3 Htpc3 NEXT3.
       have Hdecs : decode_instr vd = Some (Nop _).
       { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm imm' dd dd' Hj Hj2 Hmd Hmd' Hicd Htagd Hreld].
         - rewrite Heq; exact INST3.
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
-      have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      have [d3s [Hd3s Hcode3s]] :
-          exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
-      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
-        by move: Hhalt; cbn [vala]; rewrite INST3. }
-      move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
-      have Htpc3 : match tpc3 with Level _ c => c end = color_of s.
-      { by rewrite Hcoleq ST3 /=. }
-      have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
-      have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
-      have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
-      { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
-      have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
-        by rewrite <- Hshift.
-      have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
-      clear Hshift Hd3s' Hpcoff Hoffr Hpcell0.
       (* builder: s mirrors the Nop step *)
-      have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-      { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
-        by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-      have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+      have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s
         by rewrite color_ofE.
@@ -1552,37 +1559,21 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     - (* Const *)
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
-      have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
-      move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+      have Hnext3 : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
+      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
+        by move: Hhalt; cbn [vala]; rewrite INST3. }
+      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
+      have [vd [td [v3s [t3s [v' [Hd [Hdec [Htag [Hcd [Hd3s [Hcode3s [Hcolc Hmems']]]]]]]]]]]] :=
+        seq_step_pre Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3 Hnext3 Htpc3 NEXT3.
       have Hdecs : decode_instr vd = Some (Const n3 r3).
       { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm imm' dd dd' Hj Hj2 Hmd Hmd' Hicd Htagd Hreld].
         - rewrite Heq; exact INST3.
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
-      have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      have [d3s [Hd3s Hcode3s]] :
-          exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
-      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
-        by move: Hhalt; cbn [vala]; rewrite INST3. }
-      move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
-      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
-      have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
-      have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
-      have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
-      { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
-      have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
-        by rewrite <- Hshift.
-      have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
-      clear Hshift Hd3s' Hpcoff Hoffr Hpcell0.
       have OLD3' : regs s3 r3 = Some (old3 @ told3) by rewrite ST3 /=.
       have [old' Hold] := reg_reflect Hrm OLD3'.
       cbn [taga] in Hold.
-      have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-      { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
-        by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-      have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+      have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s) (setm (regs s) r3 ((swcast n3) @ Other))
@@ -1604,38 +1595,22 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     - (* Mov *)
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
-      have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
-      move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+      have Hnext3 : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
+      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
+        by move: Hhalt; cbn [vala]; rewrite INST3. }
+      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
+      have [vd [td [v3s [t3s [v' [Hd [Hdec [Htag [Hcd [Hd3s [Hcode3s [Hcolc Hmems']]]]]]]]]]]] :=
+        seq_step_pre Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3 Hnext3 Htpc3 NEXT3.
       have Hdecs : decode_instr vd = Some (Mov r1 r2).
       { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm imm' dd dd' Hj Hj2 Hmd Hmd' Hicd Htagd Hreld].
         - rewrite Heq; exact INST3.
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
-      have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      have [d3s [Hd3s Hcode3s]] :
-          exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
-      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
-        by move: Hhalt; cbn [vala]; rewrite INST3. }
-      move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
-      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
-      have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
-      have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
-      have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
-      { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
-      have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
-        by rewrite <- Hshift.
-      have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
-      clear Hshift Hd3s' Hpcoff Hoffr Hpcell0.
       have R1W3' : regs s3 r1 = Some (w1 @ t1) by rewrite ST3 /=.
       have OLD3' : regs s3 r2 = Some (old3 @ told3) by rewrite ST3 /=.
       have [w1' Hr1] := reg_reflect Hrm R1W3'. cbn [taga] in Hr1.
       have [old' Hr2] := reg_reflect Hrm OLD3'. cbn [taga] in Hr2.
-      have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-      { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
-        by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-      have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+      have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s)
@@ -1660,30 +1635,17 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     - (* Binop *)
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
-      have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
-      move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+      have Hnext3 : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
+      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
+        by move: Hhalt; cbn [vala]; rewrite INST3. }
+      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
+      have [vd [td [v3s [t3s [v' [Hd [Hdec [Htag [Hcd [Hd3s [Hcode3s [Hcolc Hmems']]]]]]]]]]]] :=
+        seq_step_pre Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3 Hnext3 Htpc3 NEXT3.
       have Hdecs : decode_instr vd = Some (Binop op r1 r2 r3).
       { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm imm' dd dd' Hj Hj2 Hmd Hmd' Hicd Htagd Hreld].
         - rewrite Heq; exact INST3.
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
-      have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      have [d3s [Hd3s Hcode3s]] :
-          exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
-      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
-        by move: Hhalt; cbn [vala]; rewrite INST3. }
-      move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
-      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
-      have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
-      have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
-      have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
-      { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
-      have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
-        by rewrite <- Hshift.
-      have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
-      clear Hshift Hd3s' Hpcoff Hoffr Hpcell0.
       have R1W3' : regs s3 r1 = Some (w1 @ t1) by rewrite ST3 /=.
       have R2W3' : regs s3 r2 = Some (w2 @ t2) by rewrite ST3 /=.
       have OLD3' : regs s3 r3 = Some (old3 @ told3) by rewrite ST3 /=.
@@ -1691,10 +1653,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
       have [w2' Hr2] := reg_reflect Hrm R2W3'. cbn [taga] in Hr2.
       have [old' Hr3] := reg_reflect Hrm OLD3'. cbn [taga] in Hr3.
       have [Hot1 Hot2] := nsu_binop_is_other NEXT3.
-      have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-      { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
-        by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-      have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+      have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit (mem s)
@@ -1746,30 +1705,17 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     - (* Load *)
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
-      have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
-      move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+      have Hnext3 : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
+      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
+        by move: Hhalt; cbn [vala]; rewrite INST3. }
+      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
+      have [vd [td [v3s [t3s [v' [Hd [Hdec [Htag [Hcd [Hd3s [Hcode3s [Hcolc Hmems']]]]]]]]]]]] :=
+        seq_step_pre Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3 Hnext3 Htpc3 NEXT3.
       have Hdecs : decode_instr vd = Some (Load r1 r2).
       { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm imm' dd dd' Hj Hj2 Hmd Hmd' Hicd Htagd Hreld].
         - rewrite Heq; exact INST3.
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
-      have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      have [d3s [Hd3s Hcode3s]] :
-          exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
-      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
-        by move: Hhalt; cbn [vala]; rewrite INST3. }
-      move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
-      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
-      have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
-      have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
-      have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
-      { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
-      have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
-        by rewrite <- Hshift.
-      have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
-      clear Hshift Hd3s' Hpcoff Hoffr Hpcell0.
       have Honew : (vala (pc s3) + 1)%w = addw (vala (pc s3)) onew by [].
       (* Establish evi s3 succeeds and the transfer gates *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
@@ -1893,30 +1839,17 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
     - (* Store *)
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
-      have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
-      move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
+      have Hnext3 : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
+      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
+        by move: Hhalt; cbn [vala]; rewrite INST3. }
+      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
+      have [vd [td [v3s [t3s [v' [Hd [Hdec [Htag [Hcd [Hd3s [Hcode3s [Hcolc Hmems']]]]]]]]]]]] :=
+        seq_step_pre Hcc Hsp Hcoleq Hside Hval Hpci Hrel Hd3 Hcode3 Hnext3 Htpc3 NEXT3.
       have Hdecs : decode_instr vd = Some (Store r1 r2).
       { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm imm' dd dd' Hj Hj2 Hmd Hmd' Hicd Htagd Hreld].
         - rewrite Heq; exact INST3.
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
-      have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      have [d3s [Hd3s Hcode3s]] :
-          exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
-      { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
-        by move: Hhalt; cbn [vala]; rewrite INST3. }
-      move: Hd3s Hcode3s; case: d3s => v3s t3s; cbn [vala taga] => Hd3s Hcode3s.
-      have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
-      have Hcolc : color t3s = color_of s.
-      { move: Hbel; rewrite Hd3s Htpc3 => /belong_some_eq H. by rewrite H. }
-      have [v0x [offr [Hpcell0 [Hoffr Hpcoff]]]] := Hpcnorm _ Hd3.
-      have Hshift : addw (vala (pc s3)) onew = addw (addw (vala (pc s)) onew) (as_word offr).
-      { rewrite -> Hpcoff. exact (addw_rotate (vala (pc s)) (as_word offr) onew). }
-      have Hd3s' : mem s3 (addw (addw (vala (pc s)) onew) (as_word offr)) = Some (v3s @ t3s)
-        by rewrite <- Hshift.
-      have [v' Hmems'] := succ_code_reflect Hcc Hrel Hoffr Hcode3s Hcolc Hd3s'.
-      clear Hshift Hd3s' Hpcoff Hoffr Hpcell0.
       have R1W3' : regs s3 r1 = Some (w1 @ t1) by rewrite ST3 /=.
       have R2W3' : regs s3 r2 = Some (w2 @ t2) by rewrite ST3 /=.
       have OLD3' : mem s3 w1 = Some (old3 @ told3) by rewrite ST3 /=.
@@ -1940,10 +1873,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         have [d' [Hdm Hr]] := proj1 (Hmm w1 (old3 @ told3) (negP Hnc) Hrl) OLD3'.
         move: Hdm Hr; case: d' => vo' to'; rewrite /data_match' /= => -[] -> _ Hr.
         by exists vo'; rewrite Hr. }
-      have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-      { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
-        by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-      have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+      have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       exists (@State mt lrc_tags unit
@@ -2034,10 +1964,7 @@ Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
         := rb_target_belong Hcc Hrel Hoffr Hdj' Hdjc Hbeldj.
       clear Hweq Hdj' Hpcoff Hoffr Hpcell0 Hdjimp.
       (* evi reflects *)
-      have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
-      { move: NEXT3; rewrite /next_state_updates_and_pc /next_state /evi.
-        by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
-      have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
+      have [ei Hevi] := nsuap_evi_reflect Hrm NEXT3.
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite color_ofE.
       have Hcdpc : color td = match pct s with Level _ c => c end by rewrite Hcd Hpccol.

@@ -745,6 +745,18 @@ Module StepEventReturn (S: RecompositionContext).
                  [subst; (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]);
          inversion tgw_in) ].
 
+  Ltac regs_noret H rd :=
+    exfalso; repeat rewrite setmE in H; repeat unfold_match' H;
+    match type of H with _ ?r = _ =>
+      (have: r \in ra :: (map (word_of_nat) reg_list) by now rewrite -in_fset -rd mem_domm H);
+      simpl; move/Extra.In_in; unfold word_of_nat;
+      repeat (case=> [?|];
+              [subst;
+               (match goal with H' : false = (as_word ?a == as_word ?a) |- _ =>
+                  rewrite eq_refl in H'; inversion H'; done end) |]);
+      case
+    end.
+
   Lemma step_event_return:
   forall s1 comp z comp' s1', Step sem s1 ((ERet comp z comp') :: nil) s1' ->
   forall s2 s2',   Step sem' s2 ((ERet comp z comp') :: nil) s2' ->
@@ -1095,52 +1107,20 @@ Module StepEventReturn (S: RecompositionContext).
           -- split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s2 *)
           -- split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s3 *)
           -- intros v' n rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             (* move: r_in; rewrite -Extra.In_in in_fset Extra.In_in => r_in. *)
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm1. }
            pose proof (capa_cor1 v' n (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead; subst n v' sv1 sv2 col. eapply (unicity (inl _)). exact RW0. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             (* assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by admit. *)
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm1. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
         -- intros v' n rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm2. }
            pose proof (capa_cor2 v' n (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead; subst n v' sv1 sv2 col. eapply (unicity (inl _)). exact RW. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq'.
-             (* assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-(rewrite <- reg_domm2; rewrite mem_domm; rewrite rweq'; trivial). *)
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm2. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- exact: Hcapa3. (* capability s3' -- proven in augmented assert *)
           -- (* combined_codes Left -- proven toolkit *)
@@ -1488,50 +1468,22 @@ Module StepEventReturn (S: RecompositionContext).
           -- split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s2 *)
           -- have ->: mem s3' = mem s3 by rewrite Hmem3 eq_s3 /=. split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s3 *)
           -- intros v' nA rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm1. }
            pose proof (capa_cor1 v' nA (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead. subst nA v'.
              eapply (unicity (inl r0)). exact RW0. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm1. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- intros v' nA rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm2. }
            pose proof (capa_cor2 v' nA (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead. subst nA.
              eapply (unicity (inl r)). rewrite ST /=. exact RW. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm2. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- exact: Hcapa3. (* capability s3' -- proven in augmented assert *)
           -- eapply combined_codes_mem_cong; last exact: code_left. all: by rewrite ?Hmem3 ?eq_s3. (* combined_codes Left *)
@@ -1869,14 +1821,7 @@ Module StepEventReturn (S: RecompositionContext).
           -- split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s2 *)
           -- have ->: mem s3' = mem s3 by rewrite Hmem3 eq_s3 /=. split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s3 *)
           -- intros v' nA rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm1. }
            pose proof (capa_cor1 v' nA (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead.
@@ -1884,37 +1829,16 @@ Module StepEventReturn (S: RecompositionContext).
              move: Hx => [= _ Hnn]. subst nA.
              eapply (unicity (inl r0)). rewrite ST0 /=. exact RW0. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm1. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- intros v' nA rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm2. }
            pose proof (capa_cor2 v' nA (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead. subst nA.
              eapply (unicity (inl r)). exact RW. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm2. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- exact: Hcapa3. (* capability s3' -- proven in augmented assert *)
           -- eapply combined_codes_mem_cong; last exact: code_left. all: by rewrite ?Hmem3 ?eq_s3. (* combined_codes Left *)
@@ -2248,14 +2172,7 @@ Module StepEventReturn (S: RecompositionContext).
           -- split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s2 *)
           -- have ->: mem s3' = mem s3 by rewrite Hmem3 eq_s3 /=. split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]; trivial. (* gmc s3 *)
           -- intros v' nA rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm1. }
            pose proof (capa_cor1 v' nA (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead.
@@ -2263,37 +2180,16 @@ Module StepEventReturn (S: RecompositionContext).
              move: Hx => [= _ Hnn]. subst nA.
              eapply (unicity (inl r0)). rewrite ST0 /=. exact RW0. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm1 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm1. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- intros v' nA rw rweq. simpl in *. destruct rw as [r' | w'].
-           { exfalso. repeat rewrite setmE in rweq. repeat unfold_match' rweq.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in. }
+           { regs_noret rweq reg_domm2. }
            pose proof (capa_cor2 v' nA (inr w') rweq) as [is_in unicity]. simpl in unicity. split.
            { unfold in_stack in *. destruct is_in as [sv1 [sv2 [col [Hhead|is_in]]]]; [|eauto].
              exfalso. inversion Hhead. subst nA.
              eapply (unicity (inl r)). exact RW. }
            intros rw v''. destruct rw as [r' | w'']; simpl.
-           { intro rweq'. exfalso. repeat rewrite setmE in rweq'. repeat unfold_match' rweq'.
-             assert (r'_in : r' \in ra :: (map (word_of_nat) reg_list)) by
-               now rewrite -in_fset -reg_domm2 mem_domm rweq'.
-             simpl in r'_in. setoid_rewrite (Extra.In_in) in r'_in. unfold word_of_nat in r'_in.
-             repeat (destruct r'_in as [|r'_in];
-                     [subst;
-                      (match goal with H : false = (as_word ?a == as_word ?a) |- _ => rewrite eq_refl in H; inversion H; done end) |]).
-             inversion r'_in.  }
+           { intro rweq'. regs_noret rweq' reg_domm2. }
            intros [t' [v''eq t'eq]]. eapply (unicity (inr _)); eauto.
           -- exact: Hcapa3. (* capability s3' -- proven in augmented assert *)
           -- eapply combined_codes_mem_cong; last exact: code_left. all: by rewrite ?Hmem3 ?eq_s3. (* combined_codes Left *)

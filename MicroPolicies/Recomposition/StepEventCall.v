@@ -109,7 +109,7 @@ Module StepEventCall (S: RecompositionContext).
      [pc] to decode to a [Jal].  Proven by the all-opcode characterisation peel. *)
   Lemma call_step_inv : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp',
     step_me (NC := NC) s s' (Some (ECall comp proc z comp')) ->
-    exists ip imm cell rac a1,
+    exists ip imm cell rac a1 n st',
       Symbolic.mem s (vala (Symbolic.pc s)) = Some ip /\
       decode_instr (vala ip) = Some (Jal imm) /\
       Symbolic.mem s (swcast imm) = Some cell /\
@@ -124,7 +124,16 @@ Module StepEventCall (S: RecompositionContext).
       color (taga rac) = comp /\
       taga a1 = Other /\
       check_entry comp (Some (taga cell)) = Some tt /\
-      z = convert (int_of_word (vala a1)).
+      z = convert (int_of_word (vala a1)) /\
+      taga (Symbolic.pc s) = Level n (color_of s) /\
+      next_state_do_updates s
+        ((taga rac :: Ret n :: Other :: reg_invalidate_hseq)%hseq
+         : hseq (tag_type lrc_tags) (M :: R :: nseq (size reg_list) R))
+        (MemRead (vala (Symbolic.pc s) + 1)%w
+         :: RegWrite (as_word (ssrint.Posz 4)) (vala (Symbolic.pc s) + 1)%w :: reg_clear_read)
+        = Some st' /\
+      s' = {| mem := mem st'; regs := regs st'; pc := (swcast imm)$(build_tpc n.+1 comp');
+              internal := internal st' |}.
   Proof.
     intros s s' comp proc z comp' H.
     apply stepP in H.
@@ -197,7 +206,7 @@ Module StepEventCall (S: RecompositionContext).
     all: injection H as ? Hev; apply obind_inv in Hev as [? [Hgpn Hev]];
          injection Hev as ? ? ? ?; subst.
     all: repeat match goal with u : unit |- _ => destruct u end.
-    all: subst G; do 5 eexists; repeat split;
+    all: subst G; do 7 eexists; repeat split;
            [> cbn -[decode_instr getm swcast] in |- *; exact Hf
             | cbn -[decode_instr getm swcast] in |- *; exact DEC
             | cbn -[decode_instr getm swcast] in |- *; exact Ejt
@@ -217,7 +226,8 @@ Module StepEventCall (S: RecompositionContext).
             | cbn [Types.taga]; assumption
             | match goal with He : evi _ = Some _, Hr : _ (as_word (ssrint.Posz 1)) = Some _ |- _ =>
                 move: He; rewrite /evi => He; mcbn He; rewrite Hr in He; mcbn He;
-                case: He => <-; reflexivity end ].
+                case: He => <-; reflexivity end
+            | match goal with H : next_state_do_updates _ _ _ = Some _ |- _ => exact H end ].
   Qed.
 
   (* [step_mp] (LRC.transfer, NO is_code gate) analogue of [call_step_inv].  Used for the UB cases
@@ -227,14 +237,27 @@ Module StepEventCall (S: RecompositionContext).
      simply never fires for LRC); only [LRC.transfer] is added to the transfer-unfold. *)
   Lemma call_step_inv_mp : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp',
     step_mp (NC := NC) s s' (Some (ECall comp proc z comp')) ->
-    exists ip imm cell,
+    exists ip imm cell rac a1 n st',
       Symbolic.mem s (vala (Symbolic.pc s)) = Some ip /\
       decode_instr (vala ip) = Some (Jal imm) /\
       Symbolic.mem s (swcast imm) = Some cell /\
       get_proc_name (Some (taga cell)) = Some proc /\
       get_tni_color (Some (taga cell)) = Some comp' /\
       belong comp (Some (taga cell)) = false /\
-      (let 'i$ti := ip in match ti with {| color := c |} => c end) = comp.
+      (let 'i$ti := ip in match ti with {| color := c |} => c end) = comp /\
+      Symbolic.mem s (vala (Symbolic.pc s) + 1)%w = Some rac /\
+      Symbolic.regs s (as_word (ssrint.Posz 1)) = Some a1 /\
+      color (taga rac) = comp /\
+      z = convert (int_of_word (vala a1)) /\
+      taga (Symbolic.pc s) = Level n (color_of s) /\
+      next_state_do_updates s
+        ((taga rac :: Ret n :: Other :: reg_invalidate_hseq)%hseq
+         : hseq (tag_type lrc_tags) (M :: R :: nseq (size reg_list) R))
+        (MemRead (vala (Symbolic.pc s) + 1)%w
+         :: RegWrite (as_word (ssrint.Posz 4)) (vala (Symbolic.pc s) + 1)%w :: reg_clear_read)
+        = Some st' /\
+      s' = {| mem := mem st'; regs := regs st'; pc := (swcast imm)$(build_tpc n.+1 comp');
+              internal := internal st' |}.
   Proof.
     intros s s' comp proc z comp' H.
     apply stepP in H.
@@ -285,14 +308,28 @@ Module StepEventCall (S: RecompositionContext).
     all: try (exfalso; congruence).
     all: injection H as ? Hev; apply obind_inv in Hev as [? [Hgpn Hev]];
          injection Hev as ? ? ? ?; subst.
-    all: subst G; do 3 eexists; repeat split;
+    all: subst G; do 7 eexists; repeat split;
            [> cbn -[decode_instr getm swcast] in |- *; exact Hf
             | cbn -[decode_instr getm swcast] in |- *; exact DEC
             | cbn -[decode_instr getm swcast] in |- *; exact Ejt
             | cbn -[decode_instr getm swcast get_proc_name] in |- *; exact Hgpn
             | cbn -[decode_instr getm swcast get_tni_color] in |- *; assumption
             | cbn -[decode_instr getm swcast belong] in |- *; assumption
-            | cbn -[decode_instr getm swcast] in |- *; reflexivity ].
+            | cbn -[decode_instr getm swcast] in |- *; reflexivity
+            | cbn [Symbolic.mem Symbolic.pc Types.vala];
+              match goal with H : _ (addw _ _) = Some _ |- _ => exact H end
+            | cbn [Symbolic.regs];
+              match goal with H : _ (as_word (ssrint.Posz 1)) = Some _ |- _ => exact H end
+            | first
+                [ match goal with Hb : belong _ (Some (Types.taga ?x)) = true |- _ =>
+                    move: Hb; case: (Types.taga x) => ? ? ? ? /eqP ->; reflexivity end
+                | match goal with Hb : check_belong _ (Some (Types.taga ?x)) = Some _ |- _ =>
+                    move: Hb; rewrite /check_belong /belong; case: (Types.taga x) => ? cx ? ? /=;
+                    case: eqP => [-> _ | //]; reflexivity end ]
+            | match goal with He : evi _ = Some _, Hr : _ (as_word (ssrint.Posz 1)) = Some _ |- _ =>
+                move: He; rewrite /evi => He; mcbn He; rewrite Hr in He; mcbn He;
+                case: He => <-; reflexivity end
+            | match goal with H : next_state_do_updates _ _ _ = Some _ |- _ => exact H end ].
   Qed.
 
   (* TODO(jt): [call_step_inv] above is the PROVEN (Qed, ~7s) fast characterisation core that
@@ -744,15 +781,92 @@ Module StepEventCall (S: RecompositionContext).
           exists t'; split; [ by move: Hmw'; rewrite ?Hmem | exact: Hvt' ].
   Qed.
 
+  Lemma rd_ex (r : {fmap reg mt -> atom (mword mt) value_tag}) :
+    register_domm r -> forall n, n \in reg_list -> r (as_word (ssrint.Posz n)) <> None.
+  Proof.
+    move=> rd n Hn. have Hin : as_word (ssrint.Posz n) \in domm r.
+    { rewrite rd in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
+      by rewrite /word_of_nat. }
+    by move/dommP: Hin => [v ->].
+  Qed.
+
+  Lemma rd_r4 (r : {fmap reg mt -> atom (mword mt) value_tag}) :
+    register_domm r -> r (as_word (ssrint.Posz 4)) <> None.
+  Proof.
+    move=> rd. have Hin : as_word (ssrint.Posz 4) \in domm r.
+    { rewrite rd in_fset in_cons; apply/orP; left; apply/eqP; reflexivity. }
+    by move/dommP: Hin => [v ->].
+  Qed.
+
   Lemma call_step_z : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp' a1,
     step_me (NC := NC) s s' (Some (ECall comp proc z comp')) ->
     Symbolic.regs s (as_word (ssrint.Posz 1)) = Some a1 ->
     z = convert (int_of_word (vala a1)).
   Proof.
     move=> s s' comp proc z comp' a1 H Ha1.
-    have [ip [imm [cell [rac [a1' [_ [_ [_ [_ [_ [_ [_ [_ [Ha1' [_ [_ [_ [_ [_ Hz]]]]]]]]]]]]]]]]]]] :=
-      call_step_inv H.
+    have [ip [imm [cell [rac [a1' [n [st' H']]]]]]] := call_step_inv H.
+    have [_ [_ [_ [_ [_ [_ [_ [_ [Ha1' [_ [_ [_ [_ [_ [Hz _]]]]]]]]]]]]]]] := H'.
     rewrite Hz. congr (convert (int_of_word (vala _))). congruence.
+  Qed.
+
+  Lemma call_step_post : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp',
+    step_me (NC := NC) s s' (Some (ECall comp proc z comp')) ->
+    exists ip imm rac n st',
+      Symbolic.mem s (vala (Symbolic.pc s)) = Some ip /\
+      decode_instr (vala ip) = Some (Jal imm) /\
+      Symbolic.mem s (vala (Symbolic.pc s) + 1)%w = Some rac /\
+      taga (Symbolic.pc s) = Level n (color_of s) /\
+      next_state_do_updates s
+        ((taga rac :: Ret n :: Other :: reg_invalidate_hseq)%hseq
+         : hseq (tag_type lrc_tags) (M :: R :: nseq (size reg_list) R))
+        (MemRead (vala (Symbolic.pc s) + 1)%w
+         :: RegWrite (as_word (ssrint.Posz 4)) (vala (Symbolic.pc s) + 1)%w :: reg_clear_read)
+        = Some st' /\
+      s' = {| mem := mem st'; regs := regs st'; pc := (swcast imm)$(build_tpc n.+1 comp');
+              internal := internal st' |}.
+  Proof.
+    move=> s s' comp proc z comp' H.
+    have [ip [imm [cell [rac [a1 [n [st' H']]]]]]] := call_step_inv H.
+    have [Hpc [Hdec [_ [_ [_ [_ [_ [Hrac [_ [_ [_ [_ [_ [_ [_ [Hn [Hdu Hs]]]]]]]]]]]]]]]]] := H'.
+    exists ip, imm, rac, n, st'.
+    split; [exact Hpc | split; [exact Hdec | split; [exact Hrac | split; [exact Hn | split; [exact Hdu | exact Hs]]]]].
+  Qed.
+
+  Lemma call_step_post_mp : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp',
+    step_mp (NC := NC) s s' (Some (ECall comp proc z comp')) ->
+    exists ip imm rac n st',
+      Symbolic.mem s (vala (Symbolic.pc s)) = Some ip /\
+      decode_instr (vala ip) = Some (Jal imm) /\
+      Symbolic.mem s (vala (Symbolic.pc s) + 1)%w = Some rac /\
+      taga (Symbolic.pc s) = Level n (color_of s) /\
+      next_state_do_updates s
+        ((taga rac :: Ret n :: Other :: reg_invalidate_hseq)%hseq
+         : hseq (tag_type lrc_tags) (M :: R :: nseq (size reg_list) R))
+        (MemRead (vala (Symbolic.pc s) + 1)%w
+         :: RegWrite (as_word (ssrint.Posz 4)) (vala (Symbolic.pc s) + 1)%w :: reg_clear_read)
+        = Some st' /\
+      s' = {| mem := mem st'; regs := regs st'; pc := (swcast imm)$(build_tpc n.+1 comp');
+              internal := internal st' |}.
+  Proof.
+    move=> s s' comp proc z comp' H.
+    have [ip [imm [cell [rac [a1 [n [st' H']]]]]]] := call_step_inv_mp H.
+    have [Hpc [Hdec [_ [_ [_ [_ [_ [Hrac [_ [_ [_ [Hn [Hdu Hs]]]]]]]]]]]]] := H'.
+    exists ip, imm, rac, n, st'.
+    split; [exact Hpc | split; [exact Hdec | split; [exact Hrac | split; [exact Hn | split; [exact Hdu | exact Hs]]]]].
+  Qed.
+
+  Lemma call_step_z_mp : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp' a1,
+    step_mp (NC := NC) s s' (Some (ECall comp proc z comp')) ->
+    Symbolic.regs s (as_word (ssrint.Posz 1)) = Some a1 ->
+    z = convert (int_of_word (vala a1)) /\
+    forall rac, Symbolic.mem s (vala (Symbolic.pc s) + 1)%w = Some rac -> color (taga rac) = comp.
+  Proof.
+    move=> s s' comp proc z comp' a1 H Ha1.
+    have [ip [imm [cell [rac [a1' [n [st' H']]]]]]] := call_step_inv_mp H.
+    have [_ [_ [_ [_ [_ [_ [_ [Hrac [Ha1' [Hcol [Hz _]]]]]]]]]]] := H'.
+    split.
+    - rewrite Hz. congr (convert (int_of_word (vala _))). congruence.
+    - move=> rac' Hrac'. have E : rac' = rac by congruence. by rewrite E.
   Qed.
 
   Lemma jal_cross_step3 :
@@ -895,12 +1009,12 @@ Module StepEventCall (S: RecompositionContext).
     intros s1 comp proc z comp' s1' sme1 s2 s2' step_s2 s3 M0 common weak strong.
     simpl in step_s2.
     pose proof (call_step_inv step_s2) as Hs2.
-    destruct Hs2 as (ip2 & imm2 & cell2 & Jracv2 & Ja1_2 & Hpc2 & Hdec2 & Hcell2 & Hpn2 & Htc2 & Hbel2 & Hcur2
+    destruct Hs2 as (ip2 & imm2 & cell2 & Jracv2 & Ja1_2 & Jn2 & Jst2 & Hpc2 & Hdec2 & Hcell2 & Hpn2 & Htc2 & Hbel2 & Hcur2
          & Jrac2 & Jr1_2 & Jic_2 & Jcol_2 & Jcolra_2 & Joth_2 & Jce_2 & _).
     subst comp.
     cbn [step2] in sme1.
     pose proof (call_step_inv_mp sme1) as Hs1.
-    destruct Hs1 as (ip1 & imm1 & cell1 & Hpc1 & Hdec1 & Hcell1 & Hpn1 & Htc1 & Hbel1 & Hcur1).
+    destruct Hs1 as (ip1 & imm1 & cell1 & Jracm1 & Ja1m1 & Jnm1 & Jstm1 & Hpc1 & Hdec1 & Hcell1 & Hpn1 & Htc1 & Hbel1 & Hcur1 & _).
         cbn [step1] in step_s2.
         inversion step_s2; subst s2; simpl in Hpc2.
         all: rewrite Hpc2 in PC.
@@ -1017,123 +1131,72 @@ Module StepEventCall (S: RecompositionContext).
           have [a3 Ha3] : exists a3, regs3 (as_word (ssrint.Posz 1)) = Some a3.
           { move: Hl3; rewrite /reg_clear_list /reg_list reg_clear_list_aux_cons;
             case: (regs3 (as_word (ssrint.Posz 1))) => [a3|] //= _; by exists a3. }
-          have Hex3 : forall n, n \in reg_list -> regs3 (as_word (ssrint.Posz n)) <> None.
-          { move=> n Hn. have Hin : as_word (ssrint.Posz n) \in domm regs3.
-            { rewrite rd3 in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
-              by rewrite /word_of_nat. }
-            by move/dommP: Hin => [v ->]. }
+          have Hex3 : forall n, n \in reg_list -> regs3 (as_word (ssrint.Posz n)) <> None :=
+            rd_ex rd3.
           have [rs3 [Hdu3 [Hr4_3 [Hr1_3 Hinv3]]]] :=
             cross_do_updates_props
               (st := {| mem := mem3; regs := regs3; pc := pc3v$(Level cn cc); internal := int3 |})
               (w := (pc3v + 1)%w) tret cn Hcell3 Ha3 Hreg4 Hex3.
           rewrite Hdu3 /=.
           (* --- now characterise s1' the same way, by reducing NEXT --- *)
-          have COMM : forall (t : tag_type lrc_tags M) (d : Component.id),
-              (match t with {| color := cx |} => d == cx end) = (d == color t)
-            by move=> t d; case: t.
-          have Hcolor'' : (match ti0 with {| color := cx |} => cx end) = cc by exact Hcolor.
-          have [a0 Ha0] : exists a0, reg (as_word (ssrint.Posz 0)) = Some a0.
-          { move: CLEAR; rewrite /reg_clear_list /reg_list reg_clear_list_aux_cons Ha1 obindE
-              reg_clear_list_aux_cons;
-            case: (reg (as_word (ssrint.Posz 0))) => [a0|] //= _; by exists a0. }
-          have [t0s [rests Els]] : exists t0 rest, l = HSeqCons t0 (HSeqCons (taga a1) rest).
-          { move: CLEAR; rewrite /reg_clear_list /reg_list reg_clear_list_aux_cons Ha1 obindE
-              reg_clear_list_aux_cons Ha0 obindE;
-            case: (reg_clear_list_aux [:: 2; 3; 5; 6; 7; 16; 17; 18; 19] reg (taga a0))
-              => [rest|] //= [= <-]; by do 2 eexists. }
           have Hoth2 : taga a1 = Other.
           { have E := etrans (esym Jr1_2) Ha1. case: E => <-. exact Joth_2. }
           have Hce2 : check_entry cc (Some (taga cell2)) = Some tt by rewrite -Hcc; exact Jce_2.
           have HmemS2 : mem0 (pc0 + 1)%w = Some vret$tret by exact RA.
           have Hreg4S2 : reg (as_word (ssrint.Posz 4)) <> None.
           { by rewrite (_ : reg (as_word (ssrint.Posz 4)) = Some (old$told)); [|exact: OLD]. }
-          have Hex2 : forall n, n \in reg_list -> reg (as_word (ssrint.Posz n)) <> None.
-          { move=> n Hn. have Hin : as_word (ssrint.Posz n) \in domm reg.
-            { rewrite rd2 in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
-              by rewrite /word_of_nat. }
-            by move/dommP: Hin => [v ->]. }
+          have Hex2 : forall n, n \in reg_list -> reg (as_word (ssrint.Posz n)) <> None :=
+            rd_ex rd2.
           have [rs2 [Hdu2 [Hr4_2 [Hr1_2 Hinv2]]]] :=
             cross_do_updates_props
               (st := {| mem := mem0; regs := reg; pc := pc0$(Level cn cc); internal := extra |})
               (w := (pc0 + 1)%w) tret cn HmemS2 Ha1 Hreg4S2 Hex2.
-          move: NEXT.
-          rewrite /next_state_updates_and_pc Hcelli /next_state. cbn [op].
-          unfold evi, transfer, instr_rules, LRC.instr_rules.
-          cbn -[obind belong is_other get_tni_color get_proc_name check_belong check_entry
-                reg_invalidate_hseq next_state_do_updates getm setm build_tpc rcom_value
-                reg_clear_read hsbehead hshead].
-          rewrite Ha1 !obindE. cbn beta. rewrite Hic !obindE. cbn beta.
-          rewrite Hcolor'' (_ : eqn cc cc = true); last by apply/eqnP. cbn beta iota.
-          rewrite obindE Els. cbn beta iota.
-          rewrite (_ : check_belong cc (Some tret) = Some tt);
-            last by rewrite /check_belong /belong COMM Hcolor_ra eqxx.
-          cbn beta iota. rewrite obindE.
-          rewrite (_ : belong cc (Some (taga cell2)) = false); last by rewrite -Hcc; exact Hbel2.
-          cbn beta iota.
-          rewrite (_ : is_other (taga a1) = Some tt); last by rewrite /is_other Hoth2.
-          cbn beta iota. rewrite obindE. rewrite Htc2 obindE.
-          rewrite (_ : check_entry cc (Some (taga cell2)) = Some tt); last by exact Hce2.
-          cbn beta iota. rewrite Hpn2.
-          rewrite !obindE. cbn beta iota. cbn [tr trpc].
-          rewrite Hdu2 obindE. cbn [snd mem regs internal pc].
-          move=> Hprem. injection Hprem as Hs2eq Hev2c Hev2z. rewrite -Hs2eq.
+          have Hev2c : cc = (let '_${| color := c |} := ip2 in c) by rewrite Hcc.
+          have Hev2z : convert (int_of_word (vala a1)) = z.
+          { symmetry. exact: (call_step_z step_s2 Ha1). }
+          have Hs2eq : {| mem := setm mem0 (pc0 + 1)%w vret$tret; regs := rs2;
+                          pc := pc'$(build_tpc cn.+1 comp'); internal := extra |} = s2'.
+          { have [ipP [immP [racP [nP [stP [HpcP [HdecP [HracP [HnP [HduP HsP]]]]]]]]]] :=
+              call_step_post step_s2.
+            have Erac : racP = vret$tret by have E := etrans (esym HracP) RA; case: E.
+            have Ecn : nP = cn by move: HnP => /= [->].
+            have Eip : ipP = i$ti0 by have E := etrans (esym HpcP) Hpc2; case: E.
+            have Eimm : immP = imm by rewrite Eip in HdecP; have E := etrans (esym HdecP) INST; case: E.
+            subst racP nP ipP immP.
+            rewrite HsP. have E := etrans (esym HduP) Hdu2. case: E => ->. reflexivity. }
+          rewrite -Hs2eq.
           (* both s1' and s3' are now explicit cross-updated states. *)
           (* --- reduce s2' from the raw step --- *)
-          apply stepP in sme1.
+          have [ipP [immP [racP [nP [stP [HpcP [HdecP [HracP [HnP [HduP HsP]]]]]]]]]] :=
+            call_step_post_mp sme1.
           destruct s1 as [mem2 regs2 [pc2v pc2t] int2].
           destruct ip1 as [vip1 tip1].
-          have Hdec1' : decode_instr vip1 = Some (Jal imm1) by exact: Hdec1.
-          move: sme1. rewrite /stepf.
-          cbn -[obind decode_instr next_state_updates next_state_updates_and_pc
-                as_word word_of_nat setm getm].
-          rewrite Hpc1.
-          cbn -[obind decode_instr next_state_updates next_state_updates_and_pc
-                as_word word_of_nat setm getm].
-          rewrite Hdec1' obindE.
-          cbn -[obind next_state_updates next_state_updates_and_pc
-                as_word word_of_nat setm getm].
-          move=> Hsf2.
-          apply obind_inv in Hsf2 as [oldtold [Hold2 Hsf2]].
-          destruct oldtold as [oldv2 told2].
-          apply obind_inv in Hsf2 as [ret [Hret Hsf2]].
-          apply obind_inv in Hsf2 as [l0 [Hl0 Hsf2]].
-          (* Hsf2 = the NEXT-form for s2. *)
-          have Hex1 : forall n, n \in reg_list -> regs2 (as_word (ssrint.Posz n)) <> None.
-          { move=> n Hn. have Hin : as_word (ssrint.Posz n) \in domm regs2.
-            { rewrite rd1 in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
-              by rewrite /word_of_nat. }
-            by move/dommP: Hin => [v ->]. }
+          have Hex1 : forall n, n \in reg_list -> regs2 (as_word (ssrint.Posz n)) <> None :=
+            rd_ex rd1.
           have [a2 Ha2] : exists a, regs2 (as_word (ssrint.Posz 1)) = Some a.
           { case E: (regs2 (as_word (ssrint.Posz 1))) => [a|];
               [by exists a | by exfalso; apply: (Hex1 1%N)]. }
-          have Hreg4S1 : regs2 (as_word (ssrint.Posz 4)) <> None by rewrite Hold2.
+          have [Hev1z' Hcolret1] := call_step_z_mp sme1 Ha2.
+          have Hev1z : convert (int_of_word (vala a2)) = z by symmetry; exact Hev1z'.
+          have Hreg4S1 : regs2 (as_word (ssrint.Posz 4)) <> None := rd_r4 rd1.
+          set ret := racP.
+          have Hret : mem2 (pc2v + 1)%w = Some ret by exact: HracP.
           have [rs1 [Hdu1 [Hr4_1 [Hr1_1 Hinv1]]]] :=
             cross_do_updates_props
               (st := {| mem := mem2; regs := regs2; pc := pc2v$pc2t; internal := int2 |})
               (w := (pc2v + 1)%w) (taga ret) cn Hret Ha2 Hreg4S1 Hex1.
-          move: Hsf2.
-          rewrite /next_state_updates_and_pc Hcell1 /next_state. cbn [op].
-          unfold evi, transfer, LRC.transfer, instr_rules, LRC.instr_rules, LRC.instr_rules_mp.
-          cbn -[obind belong is_other is_data get_tni_color get_proc_name check_belong check_entry
-                reg_invalidate_hseq next_state_do_updates getm setm build_tpc rcom_value
-                reg_clear_read hsbehead hshead].
-          rewrite Ha2 !obindE. cbn beta.
+          have Hcb1 : check_belong cc (Some (taga ret)) = Some tt.
+          { have Ec := Hcolret1 ret HracP. rewrite Hcc in Ec.
+            move: Ec; rewrite /check_belong /belong; case: (taga ret) => ? ? ? ? /= ->; by rewrite eqxx. }
           have Hpc1t : pc2t = Level cn cc by exact: tag_pc1.
-          have Hcol1 : match tip1 with {| color := c |} => c end = cc by rewrite Hev2c.
-          have Hbel1' : belong cc (Some (taga cell1)) = false by rewrite -Hcol1 Hcur1; exact: Hbel1.
-          (* step_mp (LRC) has NO is_code gate: the first [do!] is the level check [cc == cc]. *)
-          rewrite Hpc1t. cbn beta iota. rewrite Hcol1. cbn beta iota.
-          rewrite (_ : eqn cc cc = true); last by apply/eqnP. cbn beta iota. rewrite obindE.
-          clear Hl0. case: l0 => l0a l0rest. case: l0rest => trcom l0next. cbn beta iota.
-          case Hcb1 : (check_belong cc (Some (taga ret))) => [[]|]; last by [].
-          cbn beta iota. rewrite obindE Hbel1'. cbn beta iota.
-          case Hoth1 : (is_data trcom) => [[]|]; last by [].
-          cbn beta iota. rewrite obindE Htc1 obindE.
-          case Hce1 : (check_entry cc (Some (taga cell1))) => [[]|]; last by [].
-          cbn beta iota. rewrite obindE Hpn1. rewrite !obindE. cbn beta iota. cbn [tr trpc].
-          move: Hdu1; rewrite /reg_clear_read /reg_list Hpc1t; cbn [map]; move=> Hdu1.
-          rewrite Hdu1 obindE. cbn [snd mem regs internal pc].
-          move=> Hpr2. injection Hpr2 as Hs1eq Hev1c Hev1z. rewrite -Hs1eq.
+          have Ecn : nP = cn by move: HnP; rewrite /= Hpc1t /= => -[->].
+          have Eip : ipP = vip1$tip1 by have E := etrans (esym HpcP) Hpc1; case: E.
+          have Eimm : immP = imm1 by rewrite Eip in HdecP; have E := etrans (esym HdecP) Hdec1; case: E.
+          subst ipP immP nP.
+          have Hs1eq : {| mem := setm mem2 (pc2v + 1)%w (vala ret)$(taga ret); regs := rs1;
+                          pc := (swcast imm1)$(build_tpc cn.+1 comp'); internal := int2 |} = s1'.
+          { rewrite HsP. have E := etrans (esym HduP) Hdu1. case: E => ->. reflexivity. }
+          rewrite -Hs1eq.
           (* all three states s1'/s2'/s3' are now explicit; collapse the [setm]s via [setmI]. *)
           have ETA : forall (S : Type) (a : atom (mword mt) S), (vala a)$(taga a) = a
             by move=> S; case.
@@ -1491,7 +1554,7 @@ Module StepEventCall (S: RecompositionContext).
     simpl in step_s2.
     pose proof (call_step_inv step_s2) as Hs2.
     destruct Hs2 as
-      (ip2 & imm2 & cell2 & Jracv2 & Ja1_2 & Hpc2 & Hdec2 & Hcell2 & Hpn2 & Htc2 & Hbel2 & Hcur2
+      (ip2 & imm2 & cell2 & Jracv2 & Ja1_2 & Jn2 & Jst2 & Hpc2 & Hdec2 & Hcell2 & Hpn2 & Htc2 & Hbel2 & Hcur2
          & Jrac2 & Jr1_2 & Jic_2 & Jcol_2 & Jcolra_2 & Joth_2 & Jce_2 & _).
     (* [step_s1] is the 2-ctor UB-restricted Step; [inversion] substitutes the concrete trace
        index (so the underlying [step1] reduces to [step_me]). *)
@@ -1517,7 +1580,7 @@ Module StepEventCall (S: RecompositionContext).
     - (* [sme1 : step1 tt s1 (ECall..::nil) s1' = step_me s1 s1' (Some (ECall ..))] *)
       pose proof (call_step_inv sme1) as Hs1.
       destruct Hs1 as
-        (ip1 & imm1 & cell1 & Jracv1 & Ja1_1 & Hpc1 & Hdec1 & Hcell1 & Hpn1 & Htc1 & Hbel1 & Hcur1
+        (ip1 & imm1 & cell1 & Jracv1 & Ja1_1 & Jn1 & Jst1 & Hpc1 & Hdec1 & Hcell1 & Hpn1 & Htc1 & Hbel1 & Hcur1
          & Jrac1 & Jr1_1 & Jic_1 & Jcol_1 & Jcolra_1 & Joth_1 & Jce_1 & _).
       destruct match_st as [ ? ? ? ? common strong weak | ? ? ? ? common weak strong ].
       + (* match_left: s1 strongly related to s3 — build s3's JAL step and preserve. *)
@@ -1637,11 +1700,8 @@ Module StepEventCall (S: RecompositionContext).
           have [a3 Ha3] : exists a3, regs3 (as_word (ssrint.Posz 1)) = Some a3.
           { move: Hl3; rewrite /reg_clear_list /reg_list reg_clear_list_aux_cons;
             case: (regs3 (as_word (ssrint.Posz 1))) => [a3|] //= _; by exists a3. }
-          have Hex3 : forall n, n \in reg_list -> regs3 (as_word (ssrint.Posz n)) <> None.
-          { move=> n Hn. have Hin : as_word (ssrint.Posz n) \in domm regs3.
-            { rewrite rd3 in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
-              by rewrite /word_of_nat. }
-            by move/dommP: Hin => [v ->]. }
+          have Hex3 : forall n, n \in reg_list -> regs3 (as_word (ssrint.Posz n)) <> None :=
+            rd_ex rd3.
           have [rs3 [Hdu3 [Hr4_3 [Hr1_3 Hinv3]]]] :=
             cross_do_updates_props
               (st := {| mem := mem3; regs := regs3; pc := pc3v$(Level cn cc); internal := int3 |})
@@ -1650,113 +1710,67 @@ Module StepEventCall (S: RecompositionContext).
           (* s3' is now the explicit cross-updated state; rs3 reads: r4=(pc3v+1)@Ret cn,
              r1=(vala a3)@Other (Hr4_3/Hr1_3), the rest @Invalidated (Hinv3). *)
           (* --- now characterise s1' the same way, by reducing NEXT --- *)
-          have COMM : forall (t : tag_type lrc_tags M) (d : Component.id),
-              (match t with {| color := cx |} => d == cx end) = (d == color t)
-            by move=> t d; case: t.
-          have Hcolor'' : (match ti0 with {| color := cx |} => cx end) = cc by exact Hcolor.
-          have [a0 Ha0] : exists a0, reg (as_word (ssrint.Posz 0)) = Some a0.
-          { move: CLEAR; rewrite /reg_clear_list /reg_list reg_clear_list_aux_cons Ha1 obindE
-              reg_clear_list_aux_cons;
-            case: (reg (as_word (ssrint.Posz 0))) => [a0|] //= _; by exists a0. }
-          have [t0s [rests Els]] : exists t0 rest, l = HSeqCons t0 (HSeqCons (taga a1) rest).
-          { move: CLEAR; rewrite /reg_clear_list /reg_list reg_clear_list_aux_cons Ha1 obindE
-              reg_clear_list_aux_cons Ha0 obindE;
-            case: (reg_clear_list_aux [:: 2; 3; 5; 6; 7; 16; 17; 18; 19] reg (taga a0))
-              => [rest|] //= [= <-]; by do 2 eexists. }
           have Hoth1 : taga a1 = Other.
           { have E := etrans (esym Jr1_1) Ha1. case: E => <-. exact Joth_1. }
           have Hce1 : check_entry cc (Some (taga cell1)) = Some tt by rewrite -Hcc; exact Jce_1.
           have HmemS1 : mem0 (pc0 + 1)%w = Some vret$tret by exact RA.
           have Hreg4S1 : reg (as_word (ssrint.Posz 4)) <> None.
           { by rewrite (_ : reg (as_word (ssrint.Posz 4)) = Some (old$told)); [|exact: OLD]. }
-          have Hex1 : forall n, n \in reg_list -> reg (as_word (ssrint.Posz n)) <> None.
-          { move=> n Hn. have Hin : as_word (ssrint.Posz n) \in domm reg.
-            { rewrite rd1 in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
-              by rewrite /word_of_nat. }
-            by move/dommP: Hin => [v ->]. }
+          have Hex1 : forall n, n \in reg_list -> reg (as_word (ssrint.Posz n)) <> None :=
+            rd_ex rd1.
           have [rs1 [Hdu1 [Hr4_1 [Hr1_1 Hinv1]]]] :=
             cross_do_updates_props
               (st := {| mem := mem0; regs := reg; pc := pc0$(Level cn cc); internal := extra |})
               (w := (pc0 + 1)%w) tret cn HmemS1 Ha1 Hreg4S1 Hex1.
-          move: NEXT.
-          rewrite /next_state_updates_and_pc Hcelli /next_state. cbn [op].
-          unfold evi, transfer, instr_rules, LRC.instr_rules.
-          cbn -[obind belong is_other get_tni_color get_proc_name check_belong check_entry
-                reg_invalidate_hseq next_state_do_updates getm setm build_tpc rcom_value
-                reg_clear_read hsbehead hshead].
-          rewrite Ha1 !obindE. cbn beta. rewrite Hic !obindE. cbn beta.
-          rewrite Hcolor'' (_ : eqn cc cc = true); last by apply/eqnP. cbn beta iota.
-          rewrite obindE Els. cbn beta iota.
-          rewrite (_ : check_belong cc (Some tret) = Some tt);
-            last by rewrite /check_belong /belong COMM Hcolor_ra eqxx.
-          cbn beta iota. rewrite obindE.
-          rewrite (_ : belong cc (Some (taga cell1)) = false); last by rewrite -Hcc; exact Hbel1.
-          cbn beta iota.
-          rewrite (_ : is_other (taga a1) = Some tt); last by rewrite /is_other Hoth1.
-          cbn beta iota. rewrite obindE. rewrite Htc1 obindE.
-          rewrite (_ : check_entry cc (Some (taga cell1)) = Some tt); last by exact Hce1.
-          cbn beta iota. rewrite Hpn1.
-          rewrite !obindE. cbn beta iota. cbn [tr trpc].
-          rewrite Hdu1 obindE. cbn [snd mem regs internal pc].
-          move=> Hprem. injection Hprem as Hs1eq Hev1c Hev1z. rewrite -Hs1eq.
+          have Hev1c : cc = (let '_${| color := c |} := ip2 in c) by rewrite Hcc.
+          have Hev1z : convert (int_of_word (vala a1)) = z.
+          { symmetry. exact: (call_step_z sme1 Ha1). }
+          have Hs1eq : {| mem := setm mem0 (pc0 + 1)%w vret$tret; regs := rs1;
+                          pc := pc'$(build_tpc cn.+1 comp'); internal := extra |} = s1'.
+          { have [ipP [immP [racP [nP [stP [HpcP [HdecP [HracP [HnP [HduP HsP]]]]]]]]]] :=
+              call_step_post sme1.
+            have Erac : racP = vret$tret by have E := etrans (esym HracP) RA; case: E.
+            have Ecn : nP = cn by move: HnP => /= [->].
+            have Eip : ipP = i$ti0 by have E := etrans (esym HpcP) Hpc1; case: E.
+            have Eimm : immP = imm by rewrite Eip in HdecP; have E := etrans (esym HdecP) INST; case: E.
+            subst racP nP ipP immP.
+            rewrite HsP. have E := etrans (esym HduP) Hdu1. case: E => ->. reflexivity. }
+          rewrite -Hs1eq.
           (* both s1' and s3' are now explicit cross-updated states. *)
           (* --- reduce s2' from the raw step --- *)
-          apply stepP in step_s2.
+          have [ipP [immP [racP [nP [stP [HpcP [HdecP [HracP [HnP [HduP HsP]]]]]]]]]] :=
+            call_step_post step_s2.
           destruct s2 as [mem2 regs2 [pc2v pc2t] int2].
           destruct ip2 as [vip2 tip2].
-          have Hdec2' : decode_instr vip2 = Some (Jal imm2) by exact: Hdec2.
-          move: step_s2. rewrite /stepf.
-          cbn -[obind decode_instr next_state_updates next_state_updates_and_pc
-                as_word word_of_nat setm getm].
-          rewrite Hpc2.
-          cbn -[obind decode_instr next_state_updates next_state_updates_and_pc
-                as_word word_of_nat setm getm].
-          rewrite Hdec2' obindE.
-          cbn -[obind next_state_updates next_state_updates_and_pc
-                as_word word_of_nat setm getm].
-          move=> Hsf2.
-          apply obind_inv in Hsf2 as [oldtold [Hold2 Hsf2]].
-          destruct oldtold as [oldv2 told2].
-          apply obind_inv in Hsf2 as [ret [Hret Hsf2]].
-          apply obind_inv in Hsf2 as [l0 [Hl0 Hsf2]].
-          (* Hsf2 = the NEXT-form for s2. *)
-          have Hex2 : forall n, n \in reg_list -> regs2 (as_word (ssrint.Posz n)) <> None.
-          { move=> n Hn. have Hin : as_word (ssrint.Posz n) \in domm regs2.
-            { rewrite rd2 in_fset in_cons; apply/orP; right; apply/mapP; exists n => //;
-              by rewrite /word_of_nat. }
-            by move/dommP: Hin => [v ->]. }
+          have Hex2 : forall n, n \in reg_list -> regs2 (as_word (ssrint.Posz n)) <> None :=
+            rd_ex rd2.
           have [a2 Ha2] : exists a, regs2 (as_word (ssrint.Posz 1)) = Some a.
           { case E: (regs2 (as_word (ssrint.Posz 1))) => [a|];
               [by exists a | by exfalso; apply: (Hex2 1%N)]. }
-          have Hreg4S2 : regs2 (as_word (ssrint.Posz 4)) <> None by rewrite Hold2.
+          have Hev2 : convert (int_of_word (vala a2)) = z.
+          { symmetry. exact: (call_step_z step_s2 Ha2). }
+          have Hreg4S2 : regs2 (as_word (ssrint.Posz 4)) <> None := rd_r4 rd2.
+          set ret := racP.
+          have Hret : mem2 (pc2v + 1)%w = Some ret by exact: HracP.
           have [rs2 [Hdu2 [Hr4_2 [Hr1_2 Hinv2]]]] :=
             cross_do_updates_props
               (st := {| mem := mem2; regs := regs2; pc := pc2v$pc2t; internal := int2 |})
               (w := (pc2v + 1)%w) (taga ret) cn Hret Ha2 Hreg4S2 Hex2.
-          move: Hsf2.
-          rewrite /next_state_updates_and_pc Hcell2 /next_state. cbn [op].
-          unfold evi, transfer, instr_rules, LRC.instr_rules.
-          cbn -[obind belong is_other get_tni_color get_proc_name check_belong check_entry
-                reg_invalidate_hseq next_state_do_updates getm setm build_tpc rcom_value
-                reg_clear_read hsbehead hshead].
-          rewrite Ha2 !obindE. cbn beta.
+          have Hcb2 : check_belong cc (Some (taga ret)) = Some tt.
+          { have Er : Jracv2 = ret by have E := etrans (esym Jrac2) HracP; case: E.
+            rewrite /check_belong /belong -Er.
+            move: Jcolra_2; rewrite Hcc; case: (taga Jracv2) => ? ? ? ? /= ->; by rewrite eqxx. }
           have Hpc2t : pc2t = Level cn cc by exact: tag_pc2.
-          have Hcol2 : match tip2 with {| color := c |} => c end = cc by exact: Hcc.
-          have Hbel2' : belong cc (Some (taga cell2)) = false by rewrite -Hcol2; exact: Hbel2.
-          rewrite Hpc2t. cbn beta iota. rewrite Hcol2.
-          case Hcode2 : (is_code tip2); last by [].
-          cbn beta iota. rewrite obindE.
-          rewrite (_ : eqn cc cc = true); last by apply/eqnP. cbn beta iota. rewrite obindE.
-          clear Hl0. case: l0 => l0a l0rest. case: l0rest => trcom l0next. cbn beta iota.
-          case Hcb2 : (check_belong cc (Some (taga ret))) => [[]|]; last by [].
-          cbn beta iota. rewrite obindE Hbel2'. cbn beta iota.
-          case Hoth2 : (is_other trcom) => [[]|]; last by [].
-          cbn beta iota. rewrite obindE Htc2 obindE.
-          case Hce2 : (check_entry cc (Some (taga cell2))) => [[]|]; last by [].
-          cbn beta iota. rewrite obindE Hpn2. rewrite !obindE. cbn beta iota. cbn [tr trpc].
-          move: Hdu2; rewrite /reg_clear_read /reg_list Hpc2t; cbn [map]; move=> Hdu2.
-          rewrite Hdu2 obindE. cbn [snd mem regs internal pc].
-          move=> Hpr2. injection Hpr2 as Hs2eq Hev2. rewrite -Hs2eq.
+          have Hcode2 : is_code tip2 = true by exact: Jic_2.
+          have Hdec2' : decode_instr vip2 = Some (Jal imm2) by exact: Hdec2.
+          have Ecn : nP = cn by move: HnP; rewrite /= Hpc2t /= => -[->].
+          have Eip : ipP = vip2$tip2 by have E := etrans (esym HpcP) Hpc2; case: E.
+          have Eimm : immP = imm2 by rewrite Eip in HdecP; have E := etrans (esym HdecP) Hdec2; case: E.
+          subst ipP immP nP.
+          have Hs2eq : {| mem := setm mem2 (pc2v + 1)%w (vala ret)$(taga ret); regs := rs2;
+                          pc := (swcast imm2)$(build_tpc cn.+1 comp'); internal := int2 |} = s2'.
+          { rewrite HsP. have E := etrans (esym HduP) Hdu2. case: E => ->. reflexivity. }
+          rewrite -Hs2eq.
           (* all three states s1'/s2'/s3' are now explicit cross-updated states.
              The cross-call's MemRead writes the return cell back UNCHANGED, so the memories are
              identical to the originals: collapse the [setm]s via [setmI]. *)
