@@ -757,6 +757,220 @@ Module StepEventReturn (S: RecompositionContext).
       case
     end.
 
+  Lemma return_step_inv : forall (s s' : Symbolic.state lrc_tags unit) comp z comp',
+    step_me (NC := NC) s s' (Some (ERet comp z comp')) ->
+    exists ip r w n rac a1 cell st',
+      Symbolic.mem s (vala (Symbolic.pc s)) = Some ip /\
+      decode_instr (vala ip) = Some (Jump r) /\
+      Symbolic.regs s r = Some (w @ (Ret n)) /\
+      Symbolic.regs s (as_word (ssrint.Posz 4)) = Some rac /\
+      Symbolic.regs s (as_word (ssrint.Posz 1)) = Some a1 /\
+      Symbolic.mem s w = Some cell /\
+      is_code (taga ip) = true /\
+      color (taga ip) = comp /\
+      taga (Symbolic.pc s) = Level n.+1 comp /\
+      color (taga cell) = comp' /\
+      belong comp (Some (taga cell)) = false /\
+      taga a1 = Other /\
+      z = convert (int_of_word (vala a1)) /\
+      next_state_do_updates s
+        ((Invalidated :: Invalidated :: Other :: reg_invalidate_hseq)%hseq
+         : hseq (tag_type lrc_tags) (R :: R :: R :: nseq 10 R))
+        (RegRead (as_word (ssrint.Posz 4)) :: RegRead r :: reg_clear_read) = Some st' /\
+      s' = {| mem := mem st'; regs := regs st'; pc := w @ (Level n comp'); internal := internal st' |}.
+  Proof.
+    intros s s' comp z comp' H.
+    apply Exec.stepP in H.
+    (* Abbreviate the goal to a single token [G] so the ~30 [destruct]/[case]s in the peel each
+       carry [G] (not the conclusion) as their match return-type — without this a 3-conjunct goal
+       blows the peel from ~8s to a 45-min timeout. *)
+    match goal with |- ?Goal => set (G := Goal) end.
+    destruct s as [smem sreg [spc stpc] sextra].
+    destruct stpc as [slvl scol].
+    cbn -[next_state_updates_and_pc next_state_updates as_word word_of_nat obind oapp
+          andw setm unionm mkfmap getm decode_instr] in H.
+    destruct (smem spc) as [[i ti]|] eqn:Hf; rewrite Hf in H;
+      cbn -[next_state_updates_and_pc next_state_updates as_word word_of_nat obind oapp
+            andw setm unionm mkfmap getm decode_instr] in H;
+      try discriminate H.
+    apply obind_inv in H as [instr [DEC H]].
+    destruct instr.
+    all: unfold next_state_updates, next_state_updates_and_pc, next_state in H.
+    all: cbv zeta in H; mcbn H.
+    all: try unfold run_syscall in H.
+    (* peel 1: strip the [evi]/[transfer]/register-read [do!]s, leaving [H] as the small
+       [match op IVEC with ...] continuation (the [transfer] equation moves to a side hyp). *)
+    all: repeat (lazymatch type of H with
+           | obind _ (transfer _ _) = _ => fail
+           | _ => first
+               [ apply obind_inv in H as [? [? H]]
+               | match goal with w : (_ * _)%type |- _ => destruct w end
+               | match goal with a : atom _ _ |- _ =>
+                   match type of H with context[a] => destruct a end end
+               ]; mcbn H
+           end).
+    (* discharge the syscall branch (event is [None]) and any immediately-contradictory
+       opcode branch before the (relatively pricey) [case]s. *)
+    all: try (exfalso; congruence).
+    (* [H] now stops at [obind _ (transfer IVEC _)]: [transfer]'s result is NOT yet extracted,
+       so the dependent type [vovec (op IVEC)] has no free witness to block [case].  Guard on
+       [DEC] so the [case] skips the syscall branch ([case]ing [smem] there forces [Symbolic.sem]). *)
+    all: try (match type of H with context[if ?c then _ else _] =>
+                let e := fresh in destruct c eqn:e end; mcbn H).
+    all: try (match goal with _ : decode_instr _ = Some _ |- _ =>
+                move: H; case Ejt: (smem _) => [[niv nit]|]; move=> H; mcbn H end).
+    (* peel 2: strip the [transfer]/[next_state_do_updates] [do!]s down to the event.  For JAL
+       this leaves [H : Some (st', o0) = Some (s', Some (ECall ...))] (event [o0] = the JAL-cross
+       event) plus the side hyp [transfer ... = Some (ov, o0)] still to be characterised. *)
+    (* op is concrete now, so unfolding [transfer]/[instr_rules] is safe; [mcbn] keeps the
+       12-register OVec frozen.  Peel EVERY [do!]-hyp (not just [H]): the [instr_rules] equation
+       is a side hyp whose event must resolve too. *)
+    all: unfold transfer, instr_rules, LRC.instr_rules, check_belong, check_entry in H.
+    all: cbv zeta in H; mcbn H.
+    all: repeat (first
+           [ match goal with HH : (do! _ <- _; _) = Some _ |- _ =>
+               apply obind_inv in HH as [? [? HH]]; mcbn HH end
+           | match goal with HH : context[let '{| trpc := _; tr := _ |} := _ in _] |- _ =>
+               progress mcbn HH end
+           | match goal with HH : Some _ = Some (?a, ?b) |- _ =>
+               is_var a; is_var b; injection HH as ? ?; subst end
+           | match goal with HH : Some _ = Some ?w |- _ => is_var w; injection HH as ?; subst end
+           | match goal with w : (_ * _)%type |- _ => destruct w end
+           | match goal with HH : context[match ?c with true => _ | false => _ end] |- _ =>
+               let e := fresh "Eif" in revert HH; destruct c eqn:e; intro HH; mcbn HH end
+           | match goal with HH : context[let (_, _) := ?x in _] |- _ => destruct x; mcbn HH end ]).
+    all: mcbn H.
+    (* All 8 silent opcodes are refuted here (their event is [None] <> [ECall]); exactly ONE goal
+       survives — the genuine JAL cross-component call, with [H : Some (jal_state, do! p <-
+       get_proc_name; Some (ECall current p z c')) = Some (s', Some (ECall comp proc z comp'))]. *)
+    all: try (exfalso; congruence).
+    all: try (injection H as ? Hev; apply obind_inv in Hev as [? [_ Hev]]; discriminate Hev).
+    all: try (match goal with E : belong _ None = false |- _ => discriminate E end).
+    all: repeat match goal with u : unit |- _ => destruct u end.
+    match goal with Hr : check_ret _ _ = Some _ |- _ => move: Hr end.
+    match goal with Hw : _ r = Some _ |- _ => move: Hw end.
+    case: taga => // n' Hw; rewrite /check_ret; case: eqP => // Hlvl _.
+    subst slvl.
+    injection H as Hs' Hc Hz Hc'. subst comp comp' z s'.
+    subst G.
+    exists (i$ {| vtag := vtag; color := color; entry := entry; is_code := is_code |}).
+    exists r. eexists. exists n'.
+    do 4 eexists.
+    split; [cbn [Symbolic.mem Symbolic.pc Types.vala]; exact Hf|].
+    split; [exact DEC|].
+    split; [cbn [Symbolic.regs]; exact Hw|].
+    split; [cbn [Symbolic.regs]; match goal with H' : _ (as_word (ssrint.Posz 4)) = Some _ |- _ => exact H' end|].
+    split; [cbn [Symbolic.regs]; match goal with H' : _ (as_word (ssrint.Posz 1)) = Some _ |- _ => exact H' end|].
+    split; [cbn [Symbolic.mem]; exact Ejt|].
+    split; [exact Eif1|].
+    split; [reflexivity|].
+    split; [cbn [Types.taga Symbolic.pc]; move/eqnP: Eif0 => ->; reflexivity|].
+    split; [move: H7; case: nit {Ejt Eif} => ? ? ? ? /= [<-]; reflexivity|].
+    split; [cbn [Types.taga]; exact Eif|].
+    split; [match goal with Hio : is_other ?t = Some _ |- _ => move: Hio; case: t => // end|].
+    split; [match goal with He : evi _ = Some _, Hr : _ (as_word (ssrint.Posz 1)) = Some _ |- _ =>
+              move: He; rewrite /evi => He; mcbn He; rewrite Hr in He; mcbn He;
+              case: He => <-; reflexivity end|].
+    split; [match goal with H' : next_state_do_updates _ _ _ = Some _ |- _ => exact H' end|].
+    reflexivity.
+  Qed.
+
+  Lemma return_step_inv_mp : forall (s s' : Symbolic.state lrc_tags unit) comp z comp',
+    step_mp (NC := NC) s s' (Some (ERet comp z comp')) ->
+    exists ip r w n rac a1 cell st',
+      Symbolic.mem s (vala (Symbolic.pc s)) = Some ip /\
+      decode_instr (vala ip) = Some (Jump r) /\
+      Symbolic.regs s r = Some (w @ (Ret n)) /\
+      Symbolic.regs s (as_word (ssrint.Posz 4)) = Some rac /\
+      Symbolic.regs s (as_word (ssrint.Posz 1)) = Some a1 /\
+      Symbolic.mem s w = Some cell /\
+      color (taga ip) = comp /\
+      taga (Symbolic.pc s) = Level n.+1 comp /\
+      color (taga cell) = comp' /\
+      belong comp (Some (taga cell)) = false /\
+      z = convert (int_of_word (vala a1)) /\
+      next_state_do_updates s
+        ((Invalidated :: Invalidated :: Other :: reg_invalidate_hseq)%hseq
+         : hseq (tag_type lrc_tags) (R :: R :: R :: nseq 10 R))
+        (RegRead (as_word (ssrint.Posz 4)) :: RegRead r :: reg_clear_read) = Some st' /\
+      s' = {| mem := mem st'; regs := regs st'; pc := w @ (Level n comp'); internal := internal st' |}.
+  Proof.
+    intros s s' comp z comp' H.
+    apply Exec.stepP in H.
+    match goal with |- ?Goal => set (G := Goal) end.
+    destruct s as [smem sreg [spc stpc] sextra].
+    destruct stpc as [slvl scol].
+    cbn -[next_state_updates_and_pc next_state_updates as_word word_of_nat obind oapp
+          andw setm unionm mkfmap getm decode_instr] in H.
+    destruct (smem spc) as [[i ti]|] eqn:Hf; rewrite Hf in H;
+      cbn -[next_state_updates_and_pc next_state_updates as_word word_of_nat obind oapp
+            andw setm unionm mkfmap getm decode_instr] in H;
+      try discriminate H.
+    apply obind_inv in H as [instr [DEC H]].
+    destruct instr.
+    all: unfold next_state_updates, next_state_updates_and_pc, next_state in H.
+    all: cbv zeta in H; mcbn H.
+    all: try unfold run_syscall in H.
+    all: repeat (lazymatch type of H with
+           | obind _ (transfer _ _) = _ => fail
+           | obind _ (LRC.transfer _ _) = _ => fail
+           | _ => first
+               [ apply obind_inv in H as [? [? H]]
+               | match goal with w : (_ * _)%type |- _ => destruct w end
+               | match goal with a : atom _ _ |- _ =>
+                   match type of H with context[a] => destruct a end end
+               ]; mcbn H
+           end).
+    all: try (exfalso; congruence).
+    all: try (match type of H with context[if ?c then _ else _] =>
+                let e := fresh in destruct c eqn:e end; mcbn H).
+    all: try (match goal with _ : decode_instr _ = Some _ |- _ =>
+                move: H; case Ejt: (smem _) => [[niv nit]|]; move=> H; mcbn H end).
+    all: unfold transfer, LRC.transfer, instr_rules, LRC.instr_rules, LRC.instr_rules_mp in H.
+    all: cbv zeta in H; mcbn H.
+    all: repeat (first
+           [ match goal with HH : (do! _ <- _; _) = Some _ |- _ =>
+               apply obind_inv in HH as [? [? HH]]; mcbn HH end
+           | match goal with HH : context[let '{| trpc := _; tr := _ |} := _ in _] |- _ =>
+               progress mcbn HH end
+           | match goal with HH : Some _ = Some (?a, ?b) |- _ =>
+               is_var a; is_var b; injection HH as ? ?; subst end
+           | match goal with HH : Some _ = Some ?w |- _ => is_var w; injection HH as ?; subst end
+           | match goal with w : (_ * _)%type |- _ => destruct w end
+           | match goal with HH : context[match ?c with true => _ | false => _ end] |- _ =>
+               let e := fresh "Eif" in revert HH; destruct c eqn:e; intro HH; mcbn HH end
+           | match goal with HH : context[let (_, _) := ?x in _] |- _ => destruct x; mcbn HH end ]).
+    all: mcbn H.
+    all: try (exfalso; congruence).
+    all: try (injection H as ? Hev; apply obind_inv in Hev as [? [_ Hev]]; discriminate Hev).
+    all: try (match goal with E : belong _ None = false |- _ => discriminate E end).
+    all: repeat match goal with u : unit |- _ => destruct u end.
+    match goal with Hr : check_ret _ _ = Some _ |- _ => move: Hr end.
+    match goal with Hw : _ r = Some _ |- _ => move: Hw end.
+    case: taga => // n' Hw; rewrite /check_ret; case: eqP => // Hlvl _.
+    subst slvl.
+    injection H as Hs' Hc Hz Hc'. subst comp comp' z s'.
+    subst G.
+    exists (i$ {| vtag := vtag; color := color; entry := entry; is_code := is_code |}).
+    exists r. eexists. exists n'.
+    do 4 eexists.
+    split; [cbn [Symbolic.mem Symbolic.pc Types.vala]; exact Hf|].
+    split; [exact DEC|].
+    split; [cbn [Symbolic.regs]; exact Hw|].
+    split; [cbn [Symbolic.regs]; match goal with H' : _ (as_word (ssrint.Posz 4)) = Some _ |- _ => exact H' end|].
+    split; [cbn [Symbolic.regs]; match goal with H' : _ (as_word (ssrint.Posz 1)) = Some _ |- _ => exact H' end|].
+    split; [cbn [Symbolic.mem]; exact Ejt|].
+    split; [reflexivity|].
+    split; [cbn [Types.taga Symbolic.pc]; move/eqnP: Eif0 => ->; reflexivity|].
+    split; [move: H7; case: nit {Ejt Eif} => ? ? ? ? /= [<-]; reflexivity|].
+    split; [cbn [Types.taga]; exact Eif|].
+    split; [match goal with He : evi _ = Some _, Hr : _ (as_word (ssrint.Posz 1)) = Some _ |- _ =>
+              move: He; rewrite /evi => He; mcbn He; rewrite Hr in He; mcbn He;
+              case: He => <-; reflexivity end|].
+    split; [match goal with H' : next_state_do_updates _ _ _ = Some _ |- _ => exact H' end|].
+    reflexivity.
+  Qed.
+
   Lemma step_event_return:
   forall s1 comp z comp' s1', Step sem s1 ((ERet comp z comp') :: nil) s1' ->
   forall s2 s2',   Step sem' s2 ((ERet comp z comp') :: nil) s2' ->
