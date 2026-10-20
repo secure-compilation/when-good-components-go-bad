@@ -1,10 +1,3 @@
-(* The static memory correspondence: the me machine's initial data
-   segment (buffers laid flat at [nat_addr] addresses) matches the
-   Intermediate machine's preallocated buffers.  Provides the fetch
-   ([initial_memory_getm]) and load-correspondence lemmas, with value
-   relation [val_rel] (Int ↦ encoded int, static Ptr ↦ flat address,
-   Undef ↦ anything). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -33,8 +26,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* the me-side encoding of an initial buffer value (static pointers
-   concretized at their flat base address) *)
 Definition me_encode_val (pb : NMap {fmap Block.id -> nat + seq value})
     (v : value) : mword mt :=
   match v with
@@ -49,15 +40,12 @@ Definition me_encode_val (pb : NMap {fmap Block.id -> nat + seq value})
   | Undef => word.as_word (ssrint.Posz 0)
   end.
 
-(* the value relation of the simulation (static part): Undef is free *)
 Definition val_rel (pb : NMap {fmap Block.id -> nat + seq value})
     (v : value) (w : mword mt) : Prop :=
   match v with
   | Undef => True
   | _ => w = me_encode_val pb v
   end.
-
-(* ==================== the pointwise data-segment fetch ==================== *)
 
 Lemma initial_memory_getm (pb : NMap {fmap Block.id -> nat + seq value})
     (c b o : nat) (pairv : value * mem_tag) :
@@ -95,16 +83,6 @@ apply: mapk_Some_inv.
 - by rewrite mapmE Hget.
 Qed.
 
-(* ==================== the initial-load correspondence ==================== *)
-
-(* ==================== glue to the I-machine's initial memory ==================== *)
-
-(* ==================== through procedure-block reservation ==================== *)
-
-(* ==================== registers ==================== *)
-
-(* decidable equality of small word literals (word arithmetic is Opaque;
-   the bounds are decided at concrete exponents) *)
 Lemma won_eqE (k : nat) (i j : nat) :
   i < 2 ^ k -> j < 2 ^ k ->
   (@word_of_nat k i == word_of_nat j) = (i == j).
@@ -118,15 +96,12 @@ apply/idP/idP.
   by rewrite eqxx.
 Qed.
 
-(* registers are indexed by [reg_field_size]-words (5 bits) *)
 Lemma small_lt_reg (i : nat) : i < 32 -> i < 2 ^ reg_field_size mt.
 Proof.
 move=> Hi.
 by rewrite reg_field_size_mt.
 Qed.
 
-(* the me machine's initial register file is defined (and Other-tagged) at
-   every Intermediate register's image *)
 Lemma reg0_get (r : register) :
   exists w : mword mt,
     getm (reg0 (mt := mt))
@@ -137,8 +112,6 @@ by case: r; rewrite /reg0 mkfmapE /=
    !(won_eqE (small_lt_reg _) (small_lt_reg _)) //=; eexists.
 Qed.
 
-(* the register relation (static part): pointwise related values,
-   plain Other value tags *)
 Definition regs_rel (pb : NMap {fmap Block.id -> nat + seq value})
     (iregs : Intermediate.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) : Prop :=
@@ -149,11 +122,6 @@ Definition regs_rel (pb : NMap {fmap Block.id -> nat + seq value})
           val_rel pb (Intermediate.Register.get r iregs) (vala a)
         & taga a = Other].
 
-(* ==================== through the code/data union ==================== *)
-
-(* the me machine's full initial memory is [unionm (encode_code cde pc0) mem0]
-   with pc0 = size mem0: data addresses lie strictly below pc0, so the union
-   falls through to the data segment *)
 Lemma me_init_data_fetch (cde : @Merged.code mt)
     (pb : NMap {fmap Block.id -> nat + seq value}) (k : nat * nat * nat)
     (a : matom) :
@@ -185,7 +153,6 @@ case Ecode: (encode_code cde (size (initial_memory (mt := mt) pb))
 - exact: Ha.
 Qed.
 
-(* any address at or above the data segment's size is unmapped there *)
 Lemma initial_memory_above (pb : NMap {fmap Block.id -> nat + seq value})
     (n : nat) :
   size (linearize_bufs pb) <= n ->

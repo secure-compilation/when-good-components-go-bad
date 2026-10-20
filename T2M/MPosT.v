@@ -1,8 +1,3 @@
-(** * The T-keyed position layer: re-keys [MPos.v]'s fetch chain by
-    [tpos c cseg q] (component base + expanded size of the first [q] T cells)
-    down to the encoded memory (the T pc is a (component, array-offset) pair),
-    plus the label-resolution bridges keyed the same way. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
@@ -35,12 +30,7 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ================================================================== *)
-(* 1. The T-keyed flat position.                                      *)
-(* ================================================================== *)
 
-(* flat position (within one side's [compiler_gen]) of the [q]-th T cell
-   of component [c], whose array is [cseg] *)
 Definition tpos (PI : Program.interface) (pr : Intermediate.program)
     (c : Component.id)
     (cseg : seq (Transitional.instr * mem_tag)) (q : nat) : nat :=
@@ -64,9 +54,6 @@ rewrite /tseg_size in He Hle *.
 by lia.
 Qed.
 
-(* ================================================================== *)
-(* 2. Per-side: T cell ↦ merged cells, through gen and code.          *)
-(* ================================================================== *)
 
 Section TKeyed.
 
@@ -126,9 +113,6 @@ Qed.
 
 End TKeyed.
 
-(* ================================================================== *)
-(* 3. Across the link, down to the encoded me memory.                 *)
-(* ================================================================== *)
 
 Section TLinked.
 
@@ -175,9 +159,6 @@ have Hn := compiler_code_tnth L P C PB Hc Hq Hk.
 by rewrite /codeW nth_error_cat2.
 Qed.
 
-(* the me-machine fetch, LEFT side: at address pc0 + tpos + k the encoded
-   memory holds the k-th expansion cell's tag, and decodes to its
-   instruction with labels resolved by [code_label_pos codeW pc0] *)
 Lemma link_tfetch_l (c : Component.id) cseg q x k
     (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
   pc0 + size codeW < 2 ^ word_size mt ->
@@ -241,12 +222,6 @@ Qed.
 
 End TLinked.
 
-(* ================================================================== *)
-(* 4. Label resolution keyed by the T-array position of the defining  *)
-(*    [TrLabel] cell.  Mirrors MPos's Link{Body,Entry} sections but   *)
-(*    takes the T-side fact ("the label cell sits at array offset q") *)
-(*    instead of Intermediate procedure coordinates.                  *)
-(* ================================================================== *)
 
 Section TLabelBridges.
 
@@ -281,8 +256,6 @@ Let codeW := compiler_code L P C PB PI pra ++ compiler_code L P C PB PI prb.
 Let Hdisj' : fdisjoint (domm (Intermediate.prog_procedures prb))
                        (domm (Intermediate.prog_procedures pra)).
 Proof. by rewrite fdisjointC. Qed.
-
-(* ---- BODY label defined on the LEFT ---- *)
 
 Section TBodyLeft.
 
@@ -342,8 +315,6 @@ Lemma tlink_label_pos_body_l (pc0 default : nat) :
 Proof. by rewrite /code_label_pos tlink_body_findopt_l. Qed.
 
 End TBodyLeft.
-
-(* ---- BODY label defined on the RIGHT ---- *)
 
 Section TBodyRight.
 
@@ -407,8 +378,6 @@ Proof. by rewrite /code_label_pos tlink_body_findopt_r. Qed.
 
 End TBodyRight.
 
-(* ---- ENTRY label defined on the LEFT ---- *)
-
 Section TEntryLeft.
 
 Variables (c : Component.id) (p : Procedure.id).
@@ -459,8 +428,6 @@ Lemma tlink_label_pos_entry_l (pc0 default : nat) :
 Proof. by rewrite /code_label_pos tlink_entry_findopt_l. Qed.
 
 End TEntryLeft.
-
-(* ---- ENTRY label defined on the RIGHT ---- *)
 
 Section TEntryRight.
 
@@ -518,13 +485,7 @@ End TEntryRight.
 
 End TLabelBridges.
 
-(* ================================================================== *)
-(* 5. Word arithmetic for Bnz/Jal targets.  [mt] is opaque, so the    *)
-(*    immediate-width bounds are carried as premises, discharged at    *)
-(*    instantiation from [link_fits].                                  *)
-(* ================================================================== *)
 
-(* a small immediate survives the unsigned imm->word cast *)
 Lemma swcast_word_of_nat_small (x : nat) :
   x < 2 ^ imm_size mt ->
   @swcast _ (word_size mt) (@word_of_nat (imm_size mt) x)

@@ -1,16 +1,3 @@
-(* ============================================================================
-   PaddingWf.v — [pad_align] PRESERVES [well_formed_program] and [closed_program].
-
-   Piece (a) of the does_prefix wiring: to APPLY [RecPadded.recomposition_blame] to the padded
-   programs we must supply a [RecompositionContext] for them, whose content is exactly that
-   [pad_align] preserves [well_formed_program] / [closed_program] (the ~13 context axioms; the
-   ~37 RecInit hypotheses are standing module-level axioms, not preconditions).
-
-   [well_formed_program] has 7 fields; 4 are trivial under padding (interface/buffers/main are
-   UNCHANGED by [pad_align] — [pad_align_interface]/[pad_align_buffers]/[pad_align_main]); the
-   real content is [get_procedures], [find_procedure] (= [exported_procedures_existence]) and
-   [unique_entry_points], all built here from the cell-level preservation lemmas in [Padding.v].
-   ============================================================================ *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -46,9 +33,6 @@ Section PaddingWf.
 Local Notation mcell := ((@Merged.instr mt) * mem_tag)%type.
 Local Notation mcode := (@Merged.code mt).
 
-(* ===== cell-SUBSET direction: every ORIGINAL cell survives padding (blocks keep their cells). ===== *)
-
-(* the left output of [align_blocks] keeps every cell of [flatten bs]. *)
 Lemma align_blocks_orig_in_l (bs bs' : seq mcode) x :
   List.In x (flatten bs) -> List.In x (align_blocks bs bs').1.
 Proof.
@@ -60,14 +44,12 @@ Proof.
     by have := IH bs'; rewrite E /= => /(_ Hrest).
 Qed.
 
-(* hence every original cell is a cell of the padded (left) code. *)
 Lemma pad_code_orig_in (cde cde' : mcode) x :
   List.In x cde -> List.In x (pad_code cde cde').1.
 Proof.
   rewrite /pad_code -{1}(proc_split_flatten cde). exact: align_blocks_orig_in_l.
 Qed.
 
-(* same at the program level (unfold [code (pad_align ...).1] to [pad_code ...] by conversion). *)
 Lemma pad_align_orig_in (q q' : program) x :
   List.In x (code q) -> List.In x (code (pad_align q q').1).
 Proof.
@@ -75,7 +57,6 @@ Proof.
   exact: (pad_code_orig_in (code q') H).
 Qed.
 
-(* RIGHT-output mirrors. *)
 Lemma align_blocks_orig_in_r (bs bs' : seq mcode) x :
   List.In x (flatten bs') -> List.In x (align_blocks bs bs').2.
 Proof.
@@ -100,7 +81,6 @@ Proof.
   exact: (pad_code_orig_in2 (code q) H).
 Qed.
 
-(* bridge between Coq's [List.In] (used by the cell lemmas) and ssreflect's [\in] (used by [fset]). *)
 Lemma In_inP {T : eqType} {x : T} {s : seq T} : reflect (List.In x s) (x \in s).
 Proof.
   elim: s => [|y s IH] /=; first by rewrite in_nil; right; case.
@@ -109,7 +89,6 @@ Proof.
   - by case=> [->|/IH H]; [left; rewrite eqxx | right].
 Qed.
 
-(* [List.In] commutes with [seq.map] (cells are not an eqType, so we stay in [List.In] for them). *)
 Lemma in_map_seq (T1 T2 : Type) (f : T1 -> T2) (l : seq T1) (x : T1) :
   List.In x l -> List.In (f x) (map f l).
 Proof. elim: l => [|a l IH] //=. by case=> [->|/IH H]; [left | right]. Qed.
@@ -123,7 +102,6 @@ Proof.
   - by exists x; split; [right |].
 Qed.
 
-(* a cell's colour is in its program's [get_procedures]. *)
 Lemma color_in_get_procedures (q : program) i t :
   List.In (i, t) (code q) -> color t \in get_procedures q.
 Proof.
@@ -131,13 +109,11 @@ Proof.
   exact: (in_map_seq (fun '(_, tag) => color tag) Hin).
 Qed.
 
-(* ===== [get_procedures] preservation: padding adds no new component colours, and keeps every
-   original colour (original cells survive). ===== *)
 Lemma get_procedures_pad (q q' : program) :
   get_procedures (pad_align q q').1 = get_procedures q.
 Proof.
   apply/eqP; rewrite eqEfsubset; apply/andP; split; apply/fsubsetP => x.
-  - (* padded ⊆ original — via [pad_code_color] with the original colour-set as the domain *)
+  -
     rewrite {1}/get_procedures in_fset => Hx.
     have Hin0 := elimT In_inP Hx.
     have [[i t] [Hin Hxeq]] := in_map_seq_inv Hin0.
@@ -146,7 +122,7 @@ Proof.
     apply: (pad_code_color (Dom := get_procedures q)).
     + exact: color_in_get_procedures.
     + exact: Hin.
-  - (* original ⊆ padded — original cells survive padding *)
+  -
     rewrite {1}/get_procedures in_fset => Hx.
     have Hin0 := elimT In_inP Hx.
     have [[i t] [Hin Hxeq]] := in_map_seq_inv Hin0.
@@ -155,7 +131,6 @@ Proof.
     exact: (pad_align_orig_in q' Hin).
 Qed.
 
-(* ===== [find_procedure] preservation (backward): an original procedure stays defined. ===== *)
 Lemma find_procedure_pad (q q' : program) comp proc :
   find_procedure q comp proc -> find_procedure (pad_align q q').1 comp proc.
 Proof.
@@ -164,7 +139,6 @@ Proof.
   exact: (pad_align_orig_in q' Hin).
 Qed.
 
-(* ===== [has_required_local_buffers] preservation: buffers are unchanged by padding. ===== *)
 Lemma has_required_local_buffers_pad (q q' : program) C :
   has_required_local_buffers q C -> has_required_local_buffers (pad_align q q').1 C.
 Proof.
@@ -172,10 +146,6 @@ Proof.
   by have [-> _] := pad_align_buffers q q'.
 Qed.
 
-(* ===== [well_formed_program] preservation.  6 of the 7 fields follow from the preservation lemmas
-   above + the unchanged interface/buffers/main; the 7th, [unique_entry_points] (positional), is
-   supplied as a parameter (it is preserved — NOPs carry [entry = None] so only the original entry
-   cells, kept in order, ever match — but its proof is a separate positional argument). ===== *)
 Lemma well_formed_pad (q q' : program) :
   well_formed_program q ->
   unique_entry_points (code (pad_align q q').1) ->
@@ -197,7 +167,6 @@ Proof.
   - rewrite Hi Hm. exact: (wfprog_main_existence Hwf).
 Qed.
 
-(* RIGHT-output preservation mirrors. *)
 Lemma get_procedures_pad2 (q q' : program) :
   get_procedures (pad_align q q').2 = get_procedures q'.
 Proof.
@@ -229,7 +198,6 @@ Proof.
   by have [_ ->] := pad_align_buffers q q'.
 Qed.
 
-(* mirror of [well_formed_pad] for the RIGHT output. *)
 Lemma well_formed_pad2 (q q' : program) :
   well_formed_program q' ->
   unique_entry_points (code (pad_align q q').2) ->
@@ -251,7 +219,6 @@ Proof.
   - rewrite Hi Hm. exact: (wfprog_main_existence Hwf).
 Qed.
 
-(* ===== [closed_program] preservation for a padded LINK (interface closedness + main). ===== *)
 Lemma closed_program_pad_link (bp bp' bc bc' : program) :
   closed_program (program_link bp bc) ->
   closed_program (program_link (pad_align bp bp').1 (pad_align bc bc').1).
@@ -261,7 +228,6 @@ Proof.
   - move: Hmain; rewrite /program_link /= => H; exact: H.
 Qed.
 
-(* RIGHT-output mirror. *)
 Lemma closed_program_pad_link2 (bp bp' bc bc' : program) :
   closed_program (program_link bp' bc') ->
   closed_program (program_link (pad_align bp bp').2 (pad_align bc bc').2).

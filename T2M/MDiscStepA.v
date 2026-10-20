@@ -1,6 +1,3 @@
-(** * T2M — [disc_inv]-preservation lemmas for the Nop, Label and
-    Const cases of [TS.step]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.

@@ -33,9 +33,6 @@ Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
-(* Require Import MicroPolicies.Recomposition.StepSilentStrong. *)
-(* Require Import MicroPolicies.Recomposition.StepEventReturn. *)
-(* Require Import MicroPolicies.Recomposition.StepEventCall. *)
 
 Module RInitTest (S: RecompositionContext).
 
@@ -43,17 +40,11 @@ Module RInitTest (S: RecompositionContext).
   Module Pres := Preservation S.
   Include Pres.
 
-  (* Module Strong := StepStrong S. *)
-  (* Import Strong. *)
-  (*** Diagrams ***)
 
-  (* Bridge: x \in domm m -> In x (domm m). Uses Extra.In_in. *)
   Lemma mem_In_domm: forall {T: ordType} {S: Type} (m: {fmap T -> S}) x,
     x \in domm m -> In x (domm m).
   Proof. intros. apply Extra.In_in. exact H. Qed.
 
-  (* Tmp.mapk preserves values: if mapk f m k' = Some v, then
-     exists k such that f k = k' and m k = Some v *)
   Lemma foldl_unionm_In: forall {T : ordType} {S : Type} (ms : seq {fmap T -> S}) k v,
     foldl unionm emptym ms k = Some v ->
     exists mi, List.In mi ms /\ mi k = Some v.
@@ -63,13 +54,13 @@ Module RInitTest (S: RecompositionContext).
     - intros k0 v0. rewrite foldl_rcons.
       rewrite unionmE.
       case Hacc: (foldl unionm emptym m0 k0) => [v' |].
-      + (* accumulator has a value — it came from ms *)
+      +
         move=> [<-].
         destruct (IH _ _ Hacc) as [mi [Hmi Hmi_k]].
         exists mi. split; [| exact Hmi_k].
         rewrite -cats1.
         apply List.in_or_app. left. exact Hmi.
-      + (* accumulator is None — value comes from m0 *)
+      +
         move=> Hm0. simpl in Hm0.
         eexists; split; [| eassumption].
         rewrite -cats1.
@@ -106,9 +97,6 @@ Module RInitTest (S: RecompositionContext).
   Proof.
     intros T0 S0 m k v Hin.
     destruct m as [s Hs]. simpl in *.
-    (* s is a sorted list of (T0 * S0) pairs, Hin : List.In (k, v) s *)
-    (* getm_def scans left-to-right: if k == p.1 then Some p.2 else recurse *)
-    (* Since s is sorted with unique keys, (k, v) in s means getm_def finds it *)
     induction s as [| [k0 v0] rest IH].
     - contradiction.
     - simpl. simpl in Hin. destruct Hin as [Heq | Hin].
@@ -116,23 +104,18 @@ Module RInitTest (S: RecompositionContext).
         rewrite /getm. simpl. rewrite eqxx. reflexivity.
       + rewrite /getm. simpl.
         case Hkeq: (k == k0).
-        * (* k = k0 but (k, v) is in rest — contradicts sorted/unique *)
+        *
           move/eqP : Hkeq => Hkeq. subst k0.
           exfalso.
           have Hpath := Hs.
-          (* path.sorted Ord.lt (k :: unzip1 rest) — since unzip1 ((k,v0)::rest) = k :: unzip1 rest *)
           simpl in Hpath.
-          (* Hpath should be: path Ord.lt k (unzip1 rest) *)
-          (* From (k, v) ∈ rest, k ∈ unzip1 rest *)
           have Hkin: List.In k (unzip1 rest).
           { clear -Hin. induction rest as [| [k1 v1] rest' IH].
             - contradiction.
             - simpl in *. destruct Hin as [[= -> ->] | Hin].
               + left. reflexivity.
               + right. exact (IH Hin). }
-          (* Convert to \in *)
           apply Extra.In_in in Hkin.
-          (* Hs gives path Ord.lt k (unzip1 rest) *)
           simpl in Hs.
           have := path.order_path_min (@Ord.lt_trans T0) Hs.
           move=> /allP /(_ _ Hkin).
@@ -149,21 +132,14 @@ Module RInitTest (S: RecompositionContext).
     intros T0 T0' S0 f m k' v.
     unfold Tmp.mapk.
     intros H. apply foldl_unionm_In in H as [mi [Hmi Hmi_k']].
-    (* Hmi : List.In mi (unzip2 (mapim (fun k x => mkfmap [:: (f k, x)]) m)) *)
-    (* Hmi_k' : mi k' = Some v *)
     set mm := mapim (fun k x => mkfmap [:: (f k, x)]) m in Hmi.
     destruct (In_unzip2_exists Hmi) as [k0 Hpair].
     apply In_fmap_getm in Hpair.
-    (* move/getmP : Hpair => Hpair. *)
-    (* Hpair : mm k0 = Some mi *)
     rewrite /mm mapimE in Hpair.
     destruct (m k0) as [x0 |] eqn:Hmk0; simpl in Hpair; [| discriminate].
     injection Hpair => Hmi_eq.
-    (* mi = mkfmap [:: (f k0, x0)] *)
     rewrite -Hmi_eq /= in Hmi_k'.
     rewrite setmE in Hmi_k'.
-    (* rewrite -Hmi_eq mkfmapE /= in Hmi_k'. *)
-    (* Hmi_k' : (if k' == f k0 then Some x0 else None) = Some v *)
     case: ifP Hmi_k' => [/eqP Hfk | //].
     move=> [<-].
     exists k0. split.
@@ -171,12 +147,10 @@ Module RInitTest (S: RecompositionContext).
     - exact Hmk0.
   Qed.
 
-  (* Converse: if m k = Some v and f is injective, then mapk f m (f k) = Some v *)
   Lemma mapk_Some_inv: forall {T T' : ordType} {S : Type} (f : T -> T') (m : {fmap T -> S}) k v,
     injective f -> m k = Some v -> Tmp.mapk f m (f k) = Some v.
   Proof. Admitted.
 
-  (* All entries in linearize_buf have tag def_mem_tag c false *)
   Lemma linearize_buf_tag: forall pb c b n vt,
     nth_error (linearize_buf pb c b) n = Some vt ->
     snd vt = def_mem_tag c false.
@@ -204,20 +178,17 @@ Module RInitTest (S: RecompositionContext).
       + exact (IH n v).
   Qed.
 
-  (* All values in linearize_bufs have tag def_mem_tag c false for some c *)
   Lemma linearize_bufs_tag: forall pb k val_tag,
     linearize_bufs pb k = Some val_tag ->
     exists c, snd val_tag = def_mem_tag c false.
   Proof.
     intros pb k val_tag.
     unfold linearize_bufs.
-    (* Chain: mapk -> uncurrym -> mapm -> mapim -> fmap_of_seq -> linearize_buf *)
     intros H. apply mapk_Some in H.
     destruct H as [k0 [? Hk0]].
     move: Hk0. rewrite uncurrymE mapmE.
     destruct k0 as [k1 k2].
     simpl.
-    (* Need to destruct the nested lookups *)
     destruct (mapim (fun c map =>
       mapim (fun b _ => fmap_of_seq (linearize_buf pb c b)) map) pb k1)
       as [inner_map |] eqn:Hinner; simpl; [| try discriminate].
@@ -251,7 +222,6 @@ Module RInitTest (S: RecompositionContext).
       rewrite Hpb. simpl. congruence.
   Qed.
 
-  (* All initial_memory values have tag (def_mem_tag c false) for some c *)
   Lemma initial_memory_tag: forall pb w v,
     @initial_memory mt pb w = Some v ->
     exists c, taga v = def_mem_tag c false.
@@ -291,8 +261,6 @@ Module RInitTest (S: RecompositionContext).
       + exact (IH n v).
   Qed.
 
-  (* Stronger version: the n-th output entry corresponds to the n-th input entry *)
-  (* The foldr counter: after processing n entries from the right, acc.2 = n *)
   Lemma encode_code_foldr_counter: forall cde lp offset,
     (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x lp (offset - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).2
@@ -320,8 +288,6 @@ Module RInitTest (S: RecompositionContext).
         split; [reflexivity |]. split.
         * unfold encode_instr_atom. simpl. reflexivity.
         * unfold encode_instr_atom, encode_instr. simpl.
-          (* pos = offset - 1 - acc.2 = offset - 1 - size cde' (by foldr_counter) *)
-          (* conclusion wants: offset - 1 - (size (i0,t0 :: cde') - 1 - 0) = offset - 1 - size cde' *)
           rewrite subn0. simpl size.
           replace ((size cde').+1 - 1) with (size cde').
           2: { rewrite subn1 //=. }
@@ -330,9 +296,6 @@ Module RInitTest (S: RecompositionContext).
       + simpl in Hnth.
         destruct (IH lp offset n' v Hnth) as [i' [t' [Hin' [Htag' Hval']]]].
         exists i', t'. split; [exact Hin' |]. split; [exact Htag' |].
-        (* Hval' has: offset - 1 - (size cde' - 1 - n') *)
-        (* need: offset - 1 - (size (i0,t0 :: cde') - 1 - n'.+1) *)
-        (* size (i0,t0 :: cde') - 1 - n'.+1 = (size cde').+1 - 1 - n'.+1 = size cde' - 1 - n' *)
         simpl size.
         replace (offset - 1 - ((size cde').+1 - 1 - n'.+1)) with (offset - 1 - (size cde' - 1 - n')).
         exact Hval'.
@@ -366,7 +329,6 @@ Module RInitTest (S: RecompositionContext).
   Admitted.
 
 
-  (* The foldr output has size = size of input *)
   Lemma encode_code_foldr_size: forall cde lp offset,
     size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x lp (offset - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).1
@@ -377,7 +339,6 @@ Module RInitTest (S: RecompositionContext).
     - simpl. f_equal. exact (IH lp offset).
   Qed.
 
-  (* Converse: encode_code lookup at word_of_nat (n + pc0) gives the n-th atom *)
   Lemma encode_code_nth_inv: forall cde pc0 w v,
     encode_code cde pc0 w = Some v ->
     exists n, w = word_of_nat (n + pc0) /\
@@ -407,7 +368,6 @@ Module RInitTest (S: RecompositionContext).
       + exact Hfmap.
   Qed.
 
-  (* Every atom in the foldr output has a tag from some input entry *)
   Lemma encode_code_foldr_tag: forall cde lp offset n v,
     nth_error (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x lp (offset - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).1 n = Some v ->
@@ -416,16 +376,15 @@ Module RInitTest (S: RecompositionContext).
     intros cde. induction cde as [| [i0 t0] cde' IH]; intros lp offset n v Hnth.
     - simpl in Hnth. destruct n; discriminate.
     - simpl in Hnth.
-      (* output = encode_instr_atom (i0,t0) lp (...) :: (foldr ... cde').1 *)
       set acc := (foldr _ _ cde') in Hnth.
       destruct n as [| n'].
-      + (* n = 0: v is the head, from (i0, t0) *)
+      +
         simpl in Hnth. injection Hnth => <-.
         exists i0, t0. split.
         * left. reflexivity.
-        * (* taga (encode_instr_atom (i0,t0) lp _) = t0 *)
+        *
           unfold encode_instr_atom. simpl. reflexivity.
-      + (* n > 0: v is in the tail, which comes from foldr on cde' *)
+      +
         simpl in Hnth.
         destruct (IH lp offset n' v Hnth) as [i' [t' [Hin' Htag']]].
         exists i', t'. split.
@@ -433,9 +392,6 @@ Module RInitTest (S: RecompositionContext).
         * exact Htag'.
   Qed.
 
-  (* All atoms produced by encode_code have their tag from the input code entries.
-     encode_instr_atom x lp pos = (encode_instr (fst x) lp pos) @ (snd x),
-     so taga = snd x where x ∈ (cde ++ [:: (MrHalt, MTag Other Component.main None true)]) *)
   Lemma encode_code_tag: forall cde pc0 w v,
     encode_code cde pc0 w = Some v ->
     exists i t,
@@ -460,7 +416,6 @@ Module RInitTest (S: RecompositionContext).
     eapply Hwf. eauto.
   Qed.
 
-  (* For any program code that satisfies code_tags_wf, encode_code produces is_code = true *)
   Lemma encode_code_is_code: forall cde pc w v,
     (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
     encode_code cde pc w = Some v ->
@@ -472,15 +427,10 @@ Module RInitTest (S: RecompositionContext).
   Qed.
 
 
-  (* For addresses below alloc_label, the high bits (mask) are 0 *)
   Lemma small_addr_mask_zero: forall x,
       x < alloc_label ->
       andw (@word_of_nat (word_size mt) x) (@mask mt NC) = 0%w.
   Proof.
-    (* mask = shlw (as_word (2^word_size - 1)) (word_size - NC).
-       word_of_nat x = as_word (Posz x).
-       andw extracts high bits. For x < alloc_label = 2^14 < 2^(word_size - NC),
-       the high bits are 0. *)
     admit.
   Admitted.
 
@@ -531,7 +481,6 @@ Module RInitTest (S: RecompositionContext).
   Qed.
 
 
-  (* The color of a linearize_bufs entry is a key of pb *)
   Lemma linearize_bufs_color: forall pb k val_tag,
     linearize_bufs pb k = Some val_tag ->
     exists c, snd val_tag = def_mem_tag c false /\ c \in domm pb.
@@ -543,7 +492,6 @@ Module RInitTest (S: RecompositionContext).
     move: Hk0. rewrite uncurrymE mapmE.
     destruct k0 as [k1 k2].
     simpl.
-    (* Need to destruct the nested lookups *)
     destruct (mapim (fun c map =>
       mapim (fun b _ => fmap_of_seq (linearize_buf pb c b)) map) pb k1)
       as [inner_map |] eqn:Hinner; simpl; [| try discriminate].
@@ -584,29 +532,6 @@ Module RInitTest (S: RecompositionContext).
       andw w (mask (NC := NC)) = component_memory_prefix (NC := NC) (ssrint.Posz 0).
   Admitted.
     
-  (* Lemma initial_memory_prefix: forall pb w v, *)
-  (*     initial_memory (mt := mt) pb w = Some v -> *)
-  (*     andw w (@mask mt NC) = *)
-  (*       @component_memory_prefix mt NC (ssrint.Posz (1 + color (taga v))). *)
-  (* Proof. *)
-  (*   intros pb w v Hmem. *)
-  (*   unfold initial_memory in Hmem. *)
-  (*   apply mapk_Some in Hmem. destruct Hmem as [k [Hw Hmem]]. *)
-  (*   rewrite mapmE in Hmem. *)
-  (*   destruct (linearize_bufs pb k) as [val_tag |] eqn:Hbufs; simpl in Hmem; [| discriminate]. *)
-  (*   injection Hmem => <-. simpl. *)
-  (*   (* Hw : f k = w, where f maps (c,b,o) triples to word addresses *) *)
-  (*   (* taga = snd val_tag = def_mem_tag c false, so color = c *) *)
-  (*   have [c0 [Htag Hdom]] := linearize_bufs_color Hbufs. *)
-  (*   rewrite Htag. simpl. *)
-  (*   destruct k as [p o]. *)
-  (*   destruct p as [c b]. *)
-  (*   simpl in *. *)
-  (*   (* Goal: andw w mask = component_memory_prefix (Posz (1 + c0)) *) *)
-  (*   (* w = as_word (concretize (k, Z.of_nat ...)) *) *)
-  (*   (* Need: the address computation puts c0's data in c0's prefix region *) *)
-  (*   admit. *)
-  (* Admitted. *)
   Lemma findopt_bound: forall {A} (pred : A -> bool) (l : seq A) m,
       findopt pred l = Some m -> m < size l.
   Proof.
@@ -615,16 +540,15 @@ Module RInitTest (S: RecompositionContext).
     - simpl in Hfind. discriminate.
     - simpl in Hfind.
       destruct (foldr _ None rest) as [n |] eqn:Hrest.
-      + (* rest returned Some n *)
+      +
         inv Hfind.
         specialize (IH n Logic.eq_refl).
-        (* m = n + 1 *)
         simpl. rewrite ltnS. rewrite addn1.
         eauto.
-      + (* rest returned None *)
+      +
         destruct (pred0 x) eqn:Hpred.
-        * injection Hfind => <-. (* m = 0 *)
-          simpl. done. (* 0 < size (x :: rest) *)
+        * injection Hfind => <-.
+          simpl. done.
         * discriminate.
   Qed.
   
@@ -642,7 +566,6 @@ Module RInitTest (S: RecompositionContext).
   Hypothesis alloc_label_lt_imm: alloc_label < 2 ^ (imm_size mt).
   Hypothesis alloc_label_lt_w: alloc_label < 2 ^ (word_size mt).
 
-  (* find_rank succeeds for Component.main in each program's code *)
   Hypothesis find_rank_main_prog: exists start,
     find_rank (fun '(_,tag) => color tag == Component.main) (code prog) = Some start.
   Hypothesis find_rank_main_prog': exists start,
@@ -689,8 +612,6 @@ Module RInitTest (S: RecompositionContext).
       { rewrite encode_code_foldr_size. exact Hm_bound. }
       destruct (nth_error_Some_ex Hm_bound2) as [v' Hv'].
       have Henc_m := encode_code_nth Hv'.
-      (* Case split: k <= m (forward jump) or m < k (backward, wraps to 0) *)
-      (* rewrite Hfind in Hn. *)
       have Hk_bound: k < size cde := Hlt.
       have HX: pc0 + size cde - 1 - (size cde - 1 - k) = k + pc0.
       { rewrite subnBA.
@@ -706,7 +627,7 @@ Module RInitTest (S: RecompositionContext).
       have Hoff: pc0 + m - (k + pc0) = m - k.
       { rewrite (addnC k pc0). rewrite subnDl. reflexivity. }
       case: (leqP k m) => [Hkm | Hmk].
-      + (* k <= m: forward jump — target is at position m *)
+      +
         exists v'. split.
         * suffices Heq: (w + swcast n0)%w = word_of_nat (m + pc0) by rewrite Heq.
           rewrite Hw -Hn HX Hoff.
@@ -737,12 +658,10 @@ Module RInitTest (S: RecompositionContext).
              exact (leq_ltn_trans H8 (leq_ltn_trans Hcde_alloc alloc_label_lt_w)).
         * destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]].
           rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1.
-      + (* m < k: backward jump — m - k = 0, target is w itself *)
+      +
         have Hmk0: m - k = 0 by apply/eqP; rewrite subn_eq0; exact (ltnW Hmk).
         exists v. split.
         * rewrite Hw -Hn HX Hoff Hmk0.
-          (* (word_of_nat (k + pc0) + swcast (word_of_nat 0))%w = word_of_nat (k + pc0) *)
-          (* swcast 0 = 0, x + 0 = x *)
           replace (swcast (@word_of_nat (imm_size mt) 0)) with (@zerow (word_size mt)).
           2: { rewrite /word_of_nat /zerow /swcast.
                apply val_inj. simpl. done. }
@@ -775,7 +694,6 @@ Module RInitTest (S: RecompositionContext).
       with Some m => pc0 + m | None => if l0 == alloc_label then l0 else default end).
     destruct (findopt (fun p : Merged.instr * mem_tag => match p.1 with MrLabel l1 => l == l1 | _ => false end) cde)
       as [m |] eqn:Hfind.
-    (* rewrite Hfind in Hn. *)
     - left.
       have Hm_bound: m < size cde.
       { eapply findopt_bound; eauto. }
@@ -794,14 +712,10 @@ Module RInitTest (S: RecompositionContext).
                    | None => if l == alloc_label then l else default
                    end) (g - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).1.
       { rewrite encode_code_foldr_size. exact Hm_bound. }
-      (* change (m < length (foldr _ ([::], 0) cde').1) in Hm_bound2. *)
       destruct (nth_error_Some_ex Hm_bound2) as [v' Hv'].
-      (* encode_code at word_of_nat (m + pc0) = Some v' *)
       have Henc_m := encode_code_nth Hv'.
-      (* n0 = word_of_nat (pc0 + m), swcast n0 = word_of_nat (pc0 + m) at word_size *)
       exists v'. split.
       + rewrite -Hn.
-        (* swcast (word_of_nat (pc0 + m)) = word_of_nat (m + pc0) *)
         rewrite addnC in Henc_m.
         replace (swcast (word_of_nat (pc0 + m))) with (@word_of_nat (word_size mt) (pc0 + m)); eauto.
         unfold swcast. simpl. unfold word_of_nat.
@@ -813,104 +727,23 @@ Module RInitTest (S: RecompositionContext).
         have H1: pc0 + m <= pc0 + size cde by rewrite leq_add2l.
         have H2 := leq_ltn_trans H1 Hsize.
         exact (ltn_trans H2 alloc_label_lt_imm).
-      + (* is_code (taga v') *)
+      +
         destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]].
         rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1.
-    - (* findopt didn't find the label *)
+    -
       simpl in Hn.
       destruct (l == alloc_label) eqn:Halloc.
-      + (* l = alloc_label *)
+      +
         right.
         move/eqP : Halloc => Halloc. subst l.
         eauto.
-      + (* l != alloc_label: fallback to default = pos *)
+      +
         exfalso.
         have Hneq: l <> alloc_label by move/eqP: Halloc.
         have [m' Hfind'] := code_jal_labels_resolved Hnth_cde Hneq.
         rewrite Hfind' in Hfind. discriminate.
   Qed.
   
-  (* Lemma encode_code_end_condition: forall cde pc0 w v, *)
-  (*   (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) -> *)
-  (*   encode_code cde pc0 w = Some v -> *)
-  (*   is_code (taga v) -> *)
-  (*   (decode_instr (vala v) = Some (Halt _)) \/ *)
-  (*   (exists v', encode_code cde pc0 (w + 1)%w = Some v' *)
-  (*          /\ is_code (taga v') = true). *)
-  (* Proof. *)
-  (*   intros cde pc0 w v Hwf Henc Hcode. *)
-  (*   destruct (encode_code_nth_inv Henc) as [n [Hw [Hlt Hnth]]]. *)
-  (*   set cde' := cde ++ [:: (@MrHalt mt, MTag Other Component.main None true)] in Hlt, Hnth. *)
-  (*   (* n < size cde', and nth_error (foldr ...) n = Some v *) *)
-  (*   (* Case: is n the last entry (n = size cde' - 1) or not? *) *)
-  (*   destruct (Nat.eq_dec n (size cde' - 1)) as [Hlast | Hnotlast]. *)
-  (*   - (* n is the last entry: it's the appended Halt *) *)
-  (*     left. *)
-  (*     (* v is the n-th entry where n = size cde' - 1 = last position. *)
-  (*        The last entry in cde' = cde ++ [halt] is (MrHalt, MTag ...). *)
-  (*        encode_instr_atom (MrHalt, _) lp pos = (encode_instr_mp (Halt mt)) @ _. *)
-  (*        decode_instr (encode_instr_mp (Halt mt)) = Some (Halt mt) by encodeK. *) *)
-  (*     destruct (encode_code_foldr_nth Hnth) as [i [t [Hnth_cde [Htag Hval]]]]. *)
-  (*     (* Hnth_cde : nth_error cde' n = Some (i, t), with n = size cde' - 1 *) *)
-  (*     (* The last entry of cde' is (MrHalt, ...) *) *)
-  (*     have Hlast_entry: nth_error cde' (size cde' - 1) = Some (@MrHalt mt, MTag Other Component.main None true). *)
-  (*     { subst cde'. *)
-  (*       rewrite size_cat /= addnK. *)
-  (*       rewrite nth_error_app2; [| done]. *)
-  (*       rewrite Nat.sub_diag /=. reflexivity. } *)
-  (*     rewrite Hlast in Hnth_cde. rewrite Hlast_entry in Hnth_cde. *)
-  (*     inversion Hnth_cde as [[Hi Ht]]. subst i. *)
-  (*     (* i = MrHalt, so instr_merged_to_mp MrHalt lp pos = Halt mt *) *)
-  (*     rewrite Hval. rewrite encodeK. done. *)
-  (*   - (* n is not the last: n+1 < size cde', so successor exists *) *)
-  (*     right. *)
-  (*     assert (Hlt' : n + 1 < size cde'). *)
-  (*     { rewrite addn1 ltn_neqAle Hlt andbT. *)
-  (*       apply /eqP => Heq. apply Hnotlast. *)
-  (*       rewrite -Heq. rewrite subn1 succnK. reflexivity. } *)
-  (*     (* nth_error (foldr ...) (n+1) = Some v' for some v' *) *)
-  (*     set (f := (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) => *)
-  (*              (encode_instr_atom x *)
-  (*                 (fun l default : nat => *)
-  (*                  match *)
-  (*                    findopt *)
-  (*                      (fun p : Merged.instr * mem_tag => *)
-  (*                       match p.1 with *)
-  (*                       | MrLabel l0 => l == l0 *)
-  (*                       | _ => false *)
-  (*                       end) cde' *)
-  (*                  with *)
-  (*                  | Some m => pc0 + m *)
-  (*                  | None => if l == alloc_label then l else default *)
-  (*                  end) (pc0 + size cde' - 1 - acc.2) :: acc.1, acc.2.+1))). *)
-  (*     assert (Hnth' : exists v', nth_error (foldr f ([::], 0) cde').1 (n+1) = Some v'). *)
-  (*     { apply nth_error_Some_ex. *)
-  (*       change (n + 1 < size (foldr f ([::], 0) cde').1). *)
-  (*       rewrite /f encode_code_foldr_size. exact Hlt'. } *)
-  (*     destruct Hnth' as [v' Hv']. *)
-  (*     exists v'. split. *)
-  (*     + (* encode_code cde pc0 (w + 1) = Some v' *) *)
-  (*       rewrite Hw. *)
-  (*       (* word_of_nat (n + pc0) + 1 = word_of_nat ((n+1) + pc0) *) *)
-  (*       replace ((word_of_nat (n + pc0) + 1)%w) with (@word_of_nat (word_size mt) (n + 1 + pc0)). *)
-  (*       2: { (* word_of_nat (n + pc0) + 1 = word_of_nat (n + 1 + pc0) *) *)
-  (*         rewrite /word_of_nat. *)
-  (*         apply val_inj. *)
-  (*         rewrite /addw /onew. simpl. *)
-  (*         (* congr fintype.Ordinal. *) *)
-  (*         (* rewrite val_as_word. *) *)
-  (*         rewrite !intdiv.modz_nat !ssrint.absz_nat. *)
-  (*         rewrite div.modnDmr div.modnDml. *)
-  (*         rewrite addnAC. *)
-  (*         apply fintype.ord_inj. simpl. *)
-  (*         rewrite !div.modn_mod. *)
-  (*         rewrite -div.modnDm. done. } *)
-  (*       apply (encode_code_nth (pc0 := pc0)). *)
-  (*       rewrite /f in Hv'. exact Hv'. *)
-  (*     + (* is_code (taga v') = true *) *)
-  (*       destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]]. *)
-  (*       rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1. *)
-  (* Qed. *)
   
   Lemma encode_code_color: forall cde pc0 w v,
     (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
@@ -924,7 +757,6 @@ Module RInitTest (S: RecompositionContext).
     - exact (Hcolor i t Hin).
   Qed.
 
-  (* The color of initial_memory values comes from the prog_buffers domain *)
   Lemma initial_memory_color_gen: forall pb w v,
     initial_memory (mt := mt) pb w = Some v ->
     color (taga v) \in domm pb.
@@ -970,8 +802,6 @@ Module RInitTest (S: RecompositionContext).
     rewrite Htag. exact (code_tags_wf_all Hwf Hin).2.
   Qed.
 
-  (* code_tags_wf_prog/prog'/prog'' and convenience wrappers defined after Hypotheses below *)
-
   Lemma encode_code_vtag_not_ret: forall cde pc0 w v,
     (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
     encode_code cde pc0 w = Some v ->
@@ -988,8 +818,6 @@ Module RInitTest (S: RecompositionContext).
     by rewrite Htag.
   Qed.
 
-  (* All code tags in the programs have is_code = true and vtag = Other.
-     This holds for code produced by the compilation pipeline (def_mem_tag c true). *)
   Hypothesis code_tags_wf_p : forall i t, List.In (i, t) (code p) -> is_code t = true /\ vtag t = Other.
   Hypothesis code_tags_wf_c : forall i t, List.In (i, t) (code c) -> is_code t = true /\ vtag t = Other.
   Hypothesis code_tags_wf_p' : forall i t, List.In (i, t) (code p') -> is_code t = true /\ vtag t = Other.
@@ -1130,90 +958,59 @@ Module RInitTest (S: RecompositionContext).
     intros w v t off Hrel Hoff Hcode Henc.
     set pc0 := size (@initial_memory mt (prog_buffers prog)).
     set pc0'' := size (@initial_memory mt (prog_buffers prog'')).
-    (* Step 1: get position k *)
     destruct (encode_code_nth_inv Henc) as [k [Hw [Hlt Hnth]]].
-    (* Step 2: get the instruction and tag at position k *)
     destruct (encode_code_foldr_nth Hnth) as [i [t' [Hnth_cde [Htag Hval]]]].
-    (* Step 3: k < size (code p) since color t ∈ domm ip *)
-    (* code prog = code p ++ code c. Entry k has color t ∈ domm ip. *)
-    (* Entries from code c have color ∈ domm ic (disjoint from domm ip). *)
-    (* So entry k must be from code p, hence k < size (code p). *)
     have Hk_in_p: k < size (code p).
-    { (* code p is shadowed by Merged.code. Use prog instead. *)
-      (* code prog = code p ++ code c, so size (code p) <= size (code prog) *)
-      (* Hlt : k < size (code prog). If k >= size (code p), entry is from code c. *)
+    {
 
     { case Hk_p: (k < size (code p)); [auto |].
       exfalso.
       move/negbT: Hk_p. rewrite -leqNgt => Hk_ge_p.
-      (* Hk_ge_p : size (code p) <= k *)
-      (* Entry at position k in code prog = code p ++ code c is from code c *)
       have Hnth_c: nth_error (code c) (k - size (code p)) = Some (i, t').
       { have: nth_error (code prog) k = Some (i, t').
         auto.
         simpl. rewrite nth_error_app2; [done | apply/leP; exact Hk_ge_p]. }
-      (* color t' ∈ domm ic *)
       have Hic: color t' \in domm ic.
       { eapply code_color_c. apply nth_error_In in Hnth_c. exact Hnth_c. }
-      (* But color t = color t' ∈ domm ip (Hrel), contradiction by disjointness *)
       simpl in Htag. rewrite -Htag in Hic.
       pose proof Hmergeable_ifaces as [[G H] ?].
       have := fdisjointP H _ Hrel.
       by rewrite Hic. } }
-    (* Step 4: same entry at position k in code prog'' *)
     have Hnth_prog'': nth_error (code prog'') k = Some (i, t').
-    { (* code prog'' = code p ++ code c'. k < size (code p). *)
+    {
       simpl. rewrite nth_error_app1; [| apply/ltP; exact Hk_in_p].
       have: nth_error (code prog) k = Some (i, t').
       { eauto. }
       simpl. rewrite nth_error_app1; [done | apply/ltP; exact Hk_in_p]. }
-    (* Step 5: get the foldr entry at position k for prog'' *)
     have Hk_lt'': k < size (code prog'').
     { simpl. rewrite size_cat. eapply (ltn_addr _ _). }
     have Hk_lt2: k < size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x (fun l default => match findopt (fun p0 => match p0.1 with MrLabel l0 => l == l0 | _ => false end) (code prog'') with Some m => pc0'' + m | None => if l == alloc_label then l else default end) (pc0'' + size (code prog'') - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) (code prog'')).1.
-    { (* change (k < size (foldr _ ([::], 0) (code prog'')).1). *)
+    {
       rewrite encode_code_foldr_size. exact Hk_lt''. }
     destruct (nth_error_Some_ex Hk_lt2) as [v'' Hv''].
     have Henc'' := encode_code_nth Hv''.
-    (* Henc'' : encode_code (code prog'') pc0'' (word_of_nat (k + pc0'')) = Some v'' *)
-    (* Step 6: show v'' has the same tag t *)
     destruct (encode_code_foldr_nth Hv'') as [i'' [t'' [Hnth_cde2 [Htag'' Hval'']]]].
     rewrite Hnth_prog'' in Hnth_cde2. injection Hnth_cde2 => Ht'' Hi''.
     subst i'' t''.
-    (* Step 7: show w + as_word off = word_of_nat (k + pc0'') *)
     have Haddr: (w + as_word off)%w = word_of_nat (k + pc0'').
     { rewrite Hw.
 
       
-      (* word_of_nat (k + pc0) + as_word off = word_of_nat (k + pc0'') *)
-      (* off = encode_int (p0 prog'' (color t) - p0 prog (color t)) *)
-      (* p0 prog (color t) = start + pc0, p0 prog'' (color t) = start + pc0'' *)
-      (* (same start since main is in shared code p prefix) *)
-      (* So off = encode_int (pc0'' - pc0), and word_of_nat_offset gives the result *)
-      (* Step 1: unfold off from Hoff *)
       unfold offset1 in Hoff. rewrite mkfmapfpE in Hoff.
       rewrite Hrel /= in Hoff.
       unfold p0 in Hoff.
-      (* Hoff should now have find_rank for prog and prog'' *)
       destruct (find_rank (fun '(_, tag) => color tag == color t) (code prog)) as [start |] eqn:Hfr;
         [| simpl in Hoff].
       destruct (find_rank (fun '(_, tag) => color tag == color t) (code prog'')) as [start'' |] eqn:Hfr'';
         [| simpl in Hoff; discriminate].
       simpl in Hoff. injection Hoff => Hoff_eq.
-      (* Hoff_eq : off = encode_int (Z.of_nat (start'' + pc0'') - Z.of_nat (start + pc0)) *)
 
-      (* Step 2: show start = start'' (same position in shared code p prefix) *)
       have Hstart_eq: start = start''.
-      { (* find_rank for (color t) in code prog = code p ++ code c
-     and code prog'' = code p ++ code c'.
-     color t ∈ domm ip, so first match is in code p (shared prefix).
-     find_rank scans left-to-right, finds same position. *)
+      {
         admit. }
       subst start''.
 
-      (* Step 3: word arithmetic *)
-      (* off = encode_int (Z.of_nat (start + pc0'') - Z.of_nat (start + pc0)) *)
       have Hpc_eq: pc0'' = pc0.
       { rewrite /pc0'' /pc0. congr size. congr initial_memory. congr unionm.
         now rewrite prog_buffers_c_c'. }
@@ -1225,17 +1022,16 @@ Module RInitTest (S: RecompositionContext).
       2: { reflexivity. }
       now rewrite addw0.
       admit. }
-    (* Step 8: construct v' and decode_match *)
     exists (vala v'').
     split.
-    - (* decode_match: case on instruction type *)
+    -
       destruct i; try (
         apply decode_match_no_JAL;
         [ rewrite Hval /instr_merged_to_mp /encode_instr_mp; move=> imm; rewrite encodeK; discriminate
         | rewrite Hval'' /instr_merged_to_mp /encode_instr_mp; move=> imm; rewrite encodeK; discriminate
         | rewrite Hval Hval''; reflexivity ]);
-        admit. (* MrJal and MrBnz cases *)
-    - (* mem prog'' (w + as_word off) = Some (vala v'')@t *)
+        admit.
+    -
       rewrite Haddr. simpl.
       rewrite unionmE Henc'' /=.
       simpl in Htag. rewrite Htag. destruct v''. subst. simpl. eauto.

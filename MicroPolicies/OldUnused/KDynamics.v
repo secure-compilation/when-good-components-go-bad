@@ -1,12 +1,3 @@
-(* Task #14: the dynamic bridge — [H_bwd]/[bt_run] from the LinSim forward
-   simulation and determinism flip, modulo the residual interface
-   assumptions (the SINV instance, the undischarged oracles, and the
-   finite-machine fit bounds).
-
-   This file wires LinSim's [bwd_improves]/[fwd_does_prefix] (stated over
-   the [Wlin] program) to the [me_sem] of the linked linearized sides that
-   the KInstance surface speaks about. *)
-
 Require Import Common.Definitions.
 Require Import Common.Memory.
 Require Import Common.CompCertExtensions.
@@ -53,10 +44,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ==================== semantics congruence ==================== *)
-
-(* [me_sem] only reads the code/buffers/interface fields; in particular
-   the main flag is irrelevant *)
 Lemma me_sem_fields (NC : nat) (W1 W2 : program) :
   code W1 = code W2 ->
   prog_buffers W1 = prog_buffers W2 ->
@@ -67,7 +54,6 @@ move=> H1 H2 H3.
 by rewrite /me_sem /prog_initial H1 H2 H3.
 Qed.
 
-(* the linked linearized sides are [Wlin] up to the main flag *)
 Lemma me_sem_link_Wlin (NC L P C : nat) (a b : Intermediate.program) :
   me_sem NC (program_link (lin_side L P C a) (lin_side L P C b))
   = me_sem NC (Wlin L P C a b).
@@ -75,9 +61,6 @@ Proof.
 by apply: me_sem_fields.
 Qed.
 
-(* ==================== entrypoint existence ==================== *)
-
-(* seq membership to List.In *)
 Lemma mem_seq_In (T : eqType) (l : seq T) (x : T) :
   x \in l -> List.In x l.
 Proof.
@@ -87,7 +70,6 @@ rewrite in_cons => /orP[/eqP -> | /IH H].
 - by right.
 Qed.
 
-(* a present key has a defined association *)
 Lemma In_getm_def_isSome (A : Type) (l : seq (nat * A)) (k : nat) (v : A) :
   List.In (k, v) l -> exists v', getm_def l k = Some v'.
 Proof.
@@ -97,7 +79,6 @@ elim: l => [|[k' v'] l IH] //= [Heq | HIn].
   exact: IH HIn.
 Qed.
 
-(* the linked main's entrypoint exists (discharges [Hentry]) *)
 Lemma entrypoints_main_exist (p : Intermediate.program)
     (mp : NMap Machine.code) :
   Intermediate.prog_main p = true ->
@@ -123,7 +104,6 @@ rewrite mapmE mkfmapfE Hin /= HC /=.
 rewrite /Intermediate.reserve_component_blocks; cbv zeta.
 rewrite Er /=.
 rewrite mkfmapE.
-(* the (main, block) pair survives the export filter *)
 have HmainIn : List.In Procedure.main (unzip1 (elementsm mp)).
 { apply: mem_seq_In.
   by rewrite unzip1_elementsm_domm. }
@@ -153,7 +133,6 @@ have Hzip : List.nth_error (zip (unzip1 (elementsm mp)) bs) j
 { exact: nth_error_zip Hj Hbj. }
 have HzIn := List.nth_error_In _ _ Hzip.
 set bj := (ComponentMemory.next_block _ + j) in HzIn *.
-(* the filter keeps the main procedure *)
 have [Ci ECi] : exists Ci,
     getm (Intermediate.prog_interface p) Component.main = Some Ci.
 { by apply/dommP. }
@@ -198,10 +177,6 @@ have [bM HgM] := In_getm_def_isSome HpIn.
 by exists bM; rewrite HgM.
 Qed.
 
-(* ==================== the statics discharge ==================== *)
-
-(* the label-scheme statics of a linked compiled pair follow from wf,
-   linkability, compiledness, and the lin_ok bounds *)
 Lemma lin_statics_intro (L P C : nat) (a b : Intermediate.program)
     (sa sb : Source.program) :
   Intermediate.well_formed_program a ->
@@ -246,15 +221,10 @@ constructor.
 - move=> cid Cprocs0 l0 HC0. exact: (compiled_Huniq Hcb l0 HC0).
 Qed.
 
-(* ==================== the H_bwd assembly ==================== *)
-
 Section HBwdAssembly.
 
 Variables L P C NC : nat.
 
-(* THE remaining dynamic assumption: the residual bundle, per compiled
-   linked pair (the SINV instance, its spec, statics, fits, and the
-   undischarged oracles) *)
 Hypothesis Hres : forall a b : Intermediate.program,
   Intermediate.well_formed_program a ->
   Intermediate.well_formed_program b ->
@@ -267,8 +237,6 @@ Hypothesis Hres : forall a b : Intermediate.program,
               /\ compile_program sb = Some b) ->
   exists SINV, sim_residual L P C a b NC SINV.
 
-(* [H_bwd], from the simulation: the me machine's prefixes are reflected
-   in the Intermediate behaviour, up to going-wrong improvement *)
 Theorem H_bwd_from_sim :
   forall (a b : Intermediate.program) (m : finpref_behavior),
   Intermediate.well_formed_program a ->
@@ -350,7 +318,7 @@ have Honext : forall cid Cprocs P0 Pcode o i,
 have Hoenc := encode_is_code (L := L) (P := P) (C := C) Hwfa Hwfb.
 rewrite (me_sem_link_Wlin NC L P C a b) in Hdp.
 case: Hside => [HmainA | HmainB].
-- (* main on the left *)
+-
   have HmainL : Component.main
       \in domm (Intermediate.prog_procedures a).
   { by rewrite -(Intermediate.wfprog_defined_procedures Hwfa). }
@@ -362,7 +330,7 @@ case: Hside => [HmainA | HmainB].
     exact: (compiled_proc_nonempty Hcompa HmainP HPc). }
   exact: (bwd_improves_res Hressab Hwf Hcl Hmain HmainP Hp0 Hep Hmain0
             Hptr Honext Hoenc Hdp).
-- (* main on the right *)
+-
   have HnotA : Component.main
       \notin domm (Intermediate.prog_interface a).
   { case: Hlink => _ Hdisj.
@@ -381,7 +349,6 @@ case: Hside => [HmainA | HmainB].
             Hep Hmain0 Hptr Honext Hoenc Hdp).
 Qed.
 
-(* the forward transfer, in the same interface: the engine for [bt_run] *)
 Theorem bt_run_from_sim :
   forall (a b : Intermediate.program) (m : finpref_behavior),
   Intermediate.well_formed_program a ->
@@ -461,7 +428,7 @@ have Honext : forall cid Cprocs P0 Pcode o i,
 have Hoenc := encode_is_code (L := L) (P := P) (C := C) Hwfa Hwfb.
 rewrite (me_sem_link_Wlin NC L P C a b).
 case: Hside => [HmainA | HmainB].
-- (* main on the left *)
+-
   have HmainL : Component.main
       \in domm (Intermediate.prog_procedures a).
   { by rewrite -(Intermediate.wfprog_defined_procedures Hwfa). }
@@ -473,7 +440,7 @@ case: Hside => [HmainA | HmainB].
     exact: (compiled_proc_nonempty Hcompa HmainP HPc). }
   exact: (fwd_does_prefix_res Hressab Hwf Hcl Hmain HmainP Hp0 Hep
             Hmain0 Hptr Honext Hoenc Hnw Hdp).
-- (* main on the right *)
+-
   have HnotA : Component.main
       \notin domm (Intermediate.prog_interface a).
   { case: Hlink => _ Hdisj.
@@ -494,9 +461,6 @@ Qed.
 
 End HBwdAssembly.
 
-(* ==================== sr_ra discharge for compiled sides ============== *)
-
-(* the S2I shape predicate implies the simulation's [ra_free_instr] *)
 Lemma ra_free_b_instr (i : Machine.instr) :
   ra_free_b i = true -> ra_free_instr i.
 Proof.
@@ -510,8 +474,6 @@ case: i => //=.
 - by move=> r l; case: r.
 Qed.
 
-(* [sr_ra]'s statement holds for any program pair with compiled sources
-   (feeds the residual-bundle construction) *)
 Lemma compiled_side_ra_free (a b : Intermediate.program)
     (sa sb : Source.program) :
   compile_program sa = Some a ->
@@ -531,7 +493,6 @@ case: (Hside cid) => Es; rewrite Es in Hget.
 - exact: (compiled_ra_free Hcb Hget HgetP Hnth).
 Qed.
 
-(* the [sr_ra] slot of the residual bundle, for compiled sides *)
 Lemma sr_ra_inst (a b : Intermediate.program)
     (sa sb : Source.program) :
   compile_program sa = Some a ->
@@ -547,13 +508,6 @@ apply: (compiled_side_ra_free Hca Hcb).
 exact: side_of_cases.
 Qed.
 
-(* ==================== the residual-bundle packaging ================== *)
-
-(* [sim_residual] holds AT THE CERTIFIED INSTANCE, given: compiledness,
-   wf/closedness, the label statics, the fits, the window-shape facts,
-   the pop clause, and the remaining run-oracles.  [sr_spec]/[sr_init]/
-   [sr_ra] are PROVEN; everything else passes through. *)
-(* the linked program's procedures route to one compiled side *)
 Lemma linked_code_shape (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -597,9 +551,6 @@ case Ea: (Intermediate.prog_procedures a cid) => [CprocsA|] /=.
   exact: (compiled_jal_target Hcb Hgb Hg1 Hg2 Hn1 Hn2).
 Qed.
 
-(* ==================== static oracle discharges ==================== *)
-
-(* flat positions of real instructions live inside the linearized code *)
 Lemma flat_pos_lt_lin_code (L P C : nat) (pr : Intermediate.program)
     (c : Component.id) (Cprocs : NMap Machine.code) (p : Procedure.id)
     (Pcode : Machine.code) (o : nat) (i : Machine.instr) :
@@ -641,7 +592,6 @@ case E0: (List.nth_error
     by lia.
 Qed.
 
-(* the side-aware flat position sits inside the combined code *)
 Lemma side_flat_pos_lt (L P C : nat) (a b : Intermediate.program)
     (c : Component.id) (Cprocs : NMap Machine.code) (p : Procedure.id)
     (Pcode : Machine.code) (o : nat) (i : Machine.instr) :
@@ -670,8 +620,6 @@ case Ea: (Intermediate.prog_procedures a c) => [CprocsA|] /=.
   by lia.
 Qed.
 
-(* the jal-label oracle: static, from the label search semantics + the
-   immediate-size fit *)
 Lemma sr_jal_lab_inst (L P C : nat) (a b : Intermediate.program)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -747,7 +695,6 @@ split.
   by lia.
 Qed.
 
-(* positions advance the flat offset monotonically *)
 Lemma nth_error_lt (A : Type) (s : list A) (n : nat) :
   n < size s -> exists x, List.nth_error s n = Some x.
 Proof.
@@ -779,7 +726,6 @@ elim: o' i' => [|o' IH] i' Hnth Ho.
     by lia.
 Qed.
 
-(* the sided lookup agrees with the linked one *)
 Lemma side_get (a b : Intermediate.program) (cid : Component.id)
     (Cprocs : NMap Machine.code) :
   Intermediate.prog_procedures (side_of a b cid) cid = Some Cprocs ->
@@ -796,8 +742,6 @@ case Ea: (Intermediate.prog_procedures a cid) => [CA|] /=.
   by [].
 Qed.
 
-(* the bnz-label oracle: static, from the label search + forwardness +
-   the immediate-size fit *)
 Lemma sr_bnz_lab_inst (L P C : nat) (a b : Intermediate.program)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -869,7 +813,7 @@ have Hproci : forall cid,
   case E: (Intermediate.prog_procedures _ cid) Hin0 => [Cprocs0|] //.
   move=> _. by exists Cprocs0. }
 split.
-- (* offset nonnegative: run the search lemma on the running code *)
+-
   have [Cp [Q0 [Qc [j0 [[Hside HgetP Hnth _ _] [Hilp Hblk Hjnth]]]]]]
     := lm_fetch Hin (lm_pc Hm) Hex.
   have Hrun : running_code a b ipc Qc by exists Cp, j0, Q0.
@@ -882,7 +826,7 @@ split.
     := find_label_in_procedure_nth Hmain Hin Hrun HF.
   split.
   + exact: Hlbl.
-  + (* forwardness, per compiled side *)
+  +
     have Hfwd : Z.to_nat (Pointer.offset ipc)
                 < Z.to_nat (Pointer.offset tpc).
     { move: Hside. rewrite /side_of.
@@ -903,7 +847,6 @@ split.
     by lia.
 Qed.
 
-(* the call oracle: static, from the interface and the entry layout *)
 Lemma sr_call_inst (L P C : nat) (a b : Intermediate.program)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -1017,7 +960,6 @@ eexists. split.
   split=> //. by exists i0.
 Qed.
 
-(* label targets carry an ILabel; the stub has none *)
 Lemma stub_no_label_at (a b : Intermediate.program) (pc' : Pointer.t)
     (Pcode : Machine.code) (l : label) :
   running_code a b pc' Pcode ->
@@ -1110,8 +1052,6 @@ have [Ecomp [Pcode [Hrun Hofft Hlbl]]]
 exact: (stub_no_label_at Hrun Hlbl).
 Qed.
 
-(* cross-component calls never enter the stub: entry targets are
-   exported, and stub-literal procedures never are *)
 Lemma stub_noentry_inst (a b : Intermediate.program) :
   (exists pa, Source.well_formed_program pa
               /\ compile_program pa = Some a) ->
@@ -1180,8 +1120,6 @@ case Ea: (Intermediate.prog_procedures a C') => [CA|] /=.
   exact: (compiled_stub_not_exported Hwfb Hcb Hgb HgetP' HgetCIb Hexp).
 Qed.
 
-(* the naked-jal oracle: compiled jals sit in windows; the stub's only
-   runs at the bottom (the stub-bottom reach invariant) *)
 Lemma sr_jal_dead_inst (L P C : nat) (a b : Intermediate.program)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -1239,7 +1177,6 @@ move=> [pa Hca] [pb Hcb] Hwf Hnl1 Hnl2 Hne
 have HgetP : getm Cprocs P0 = Some Pcode.
 { apply: BufferLayout.In_fmap_getm.
   exact: (List.nth_error_In _ _ Hjnth). }
-(* the fetched instruction sits at the running position of Pcode *)
 have Hdomm := wf_procs_iface Hwf.
 have Hin := Hdomm _ (lm_pc_domm Hm).
 have [Cp [Q0 [Qc [j0 [[Hside HgetP0 Hnth0 _ _] [Hilp0 Hblk0 Hjnth0]]]]]]
@@ -1252,7 +1189,6 @@ subst j0.
 have EQ : (Q0, Qc) = (P0, Pcode).
 { move: Hjnth0. rewrite Hjnth. by move=> [-> ->]. }
 case: EQ => E1 E2. subst Q0 Qc.
-(* per-component origin, by side *)
 have [plm [nb [Hbound Hper]]] : exists plm nb,
     (forall P' l', getm plm P' = Some l' -> l' < nb)
     /\ forall Pq cd, getm Cprocs Pq = Some cd ->
@@ -1277,10 +1213,10 @@ have [plm [nb [Hbound Hper]]] : exists plm nb,
     exists plm, nb. by split. }
 case: (Hper _ _ HgetP)
   => [[e0 [s0 [s1 [pl [Hcpc _ _]]]]] | [lab [Ecd _]]].
-- (* a real compiled procedure: its jal sites are dead *)
+-
   have := compile_proc_shape_facts Hcpc Hnth0.
   by move=> /=.
-- (* the stub: it only runs at the bottom *)
+-
   exfalso.
   have Hstub : stub_pc a b ipc.
   { exists Cprocs, j, P0, lab.
@@ -1290,9 +1226,6 @@ case: (Hper _ _ HgetP)
   exact: (Hgps (H1 Hstub)).
 Qed.
 
-(* [Hclass] discharge: the joint dead/sp/ph classification of every
-   position of a compiled linked program — [ireach_iinv]'s static
-   premise, via the [cls_check] compile walk *)
 Lemma cls_class_inst (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -1371,9 +1304,6 @@ have Hcond := clso_cond Hok Hnth.
 exact: (cls_condP Hcond).
 Qed.
 
-(* [Hjaltgt] discharge: a jal's label is a [P_labels] value (below the
-   per-procedure compile-start counter), and every position of such a
-   label in compiled code is the live prologue entry *)
 Lemma jal_target_live_inst (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -1424,7 +1354,6 @@ have Hproci : forall cid,
 have [Ecomp [Ptcode0 [Hrun Hofft Hlbl]]]
   := find_label_in_component_nth Hmain Hproci Hin HF.
 case: Hrun => [Cprocs0 [j0 [P00 [HA HB HC0]]]].
-(* identify the found bundle with the given one *)
 have Ecp : Cprocs0 = Cprocs'.
 { move: HA. rewrite Hilp'. by move=> [->]. }
 subst Cprocs0.
@@ -1434,7 +1363,6 @@ subst j0.
 have EQ : (P00, Ptcode0) = (P0', Pcode').
 { move: HC0. rewrite Hjnth'. by move=> [-> ->]. }
 case: EQ => E1 E2. subst P00 Ptcode0.
-(* the source bundle sits in the same component map *)
 have [CprocsS [jS [P0S [PcS [HilpS HblkS HjnthS HoffS HnthS]]]]]
   := executing_bundle Hwf Hex.
 have EcpS : CprocsS = Cprocs'.
@@ -1446,7 +1374,6 @@ have HgetS : getm Cprocs' P0S = Some PcS.
 have HgetT : getm Cprocs' P0' = Some Pcode'.
 { apply: BufferLayout.In_fmap_getm.
   exact: (List.nth_error_In _ _ Hjnth'). }
-(* per-component origin *)
 have [plm [nb [Hbound Hper]]] : exists plm nb,
     (forall P' l', getm plm P' = Some l' -> l' < nb)
     /\ forall Pq cd, getm Cprocs' Pq = Some cd ->
@@ -1469,7 +1396,6 @@ have [plm [nb [Hbound Hper]]] : exists plm nb,
   - move=> Hgb.
     have [plm [nb [Hb Hp]]] := compiled_comp_origin Hcb Hgb.
     exists plm, nb. by split. }
-(* the jal operand is a plm value, hence below nb *)
 have Hlnb : l < nb.
 { have HinS : List.In (IJal l) PcS.
   { exact: (List.nth_error_In _ _ HnthS). }
@@ -1482,8 +1408,6 @@ have Hlnb : l < nb.
     move=> [E|[E|[E|[]]]] //; case: E => El.
     subst l.
     exact: (Hbound _ _ Hglab). }
-(* the target procedure: compiled body (label-low live) or the
-   label-free stub *)
 case: (Hper _ _ HgetT)
   => [[e0 [s0 [s1 [pl [Hcpc _ Hnbs]]]]] | [lab [Ecd _]]].
 - have Hlt : l < nlab s0 (Pointer.component pc') by lia.
@@ -1494,9 +1418,6 @@ case: (Hper _ _ HgetT)
     case: n.
 Qed.
 
-(* [Hbnztgt] discharge: a taken branch lands on a live label, or stays
-   in the same window with the same scan values (the entry wrapper's
-   flag dispatch) — [compile_proc_bnztgt] lifted to the linked program *)
 Lemma bnz_target_inst (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -1548,7 +1469,6 @@ have Hproci : forall cid,
     in Hin0.
   case E: (Intermediate.prog_procedures _ cid) Hin0 => [Cprocs0|] //.
   move=> _. by exists Cprocs0. }
-(* the source fetch, identified with the given bundle *)
 have [CprocsS [jS [P0S [PcS [HilpS HblkS HjnthS HoffS HnthS]]]]]
   := executing_bundle Hwf Hex.
 have EcpS : CprocsS = Cprocs.
@@ -1559,7 +1479,6 @@ subst jS.
 have EQS : (P0S, PcS) = (P0, Pcode).
 { move: HjnthS. rewrite Hjnth. by move=> [-> ->]. }
 case: EQS => E1 E2. subst P0S PcS.
-(* the found label, in the same bundle *)
 have [Hcm Hbk]
   := Intermediate.GlobalEnv.find_label_in_procedure_guarantees
        _ _ _ _ HF.
@@ -1575,7 +1494,6 @@ subst j1.
 have EQ1 : (P01, Pcode1) = (P0, Pcode).
 { move: HC1. rewrite Hjnth. by move=> [-> ->]. }
 case: EQ1 => F1 F2. subst P01 Pcode1.
-(* per-component origin *)
 have HgetP : getm Cprocs P0 = Some Pcode.
 { apply: BufferLayout.In_fmap_getm.
   exact: (List.nth_error_In _ _ Hjnth). }
@@ -1612,10 +1530,6 @@ case: (Hper _ _ HgetP)
     case: n.
 Qed.
 
-(* [Hone] discharge: at the compiled ±SP binop sites R_ONE holds
-   [Int 1] (the R_ONE run invariant [ireach_r1] + the arming checker),
-   and the operator is Add/Minus (the classifier), so the pointer
-   arithmetic computes *)
 Lemma sr_one_inst (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -1667,9 +1581,6 @@ case: Hop => Eop; subst op => /=.
 - by have -> : (o + (-1))%Z = (o - 1)%Z by lia.
 Qed.
 
-(* [Hreload] discharge: at a post-call reload site the constant track
-   holds the scratch pointer (the checker) and R_SP holds the track
-   (the run invariant [ireach_rsp]) *)
 Lemma sr_reload_inst (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -1734,14 +1645,8 @@ have := H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff' Etr.
 by move=> /= ->.
 Qed.
 
-(* the concrete per-component scratch cell of the compiled layout *)
 Definition scr_def (C0 : Component.id) : Pointer.t := (C0, 1, 0%Z).
 
-(* Packaging: [ireach_iinv] with its three static premises discharged
-   ([cls_class_inst], [jal_target_live_inst], [bnz_target_inst]).  The
-   run invariant now holds along every run given ONLY the six run-model
-   ties (SP-offset location, scratch reload, pop ties, store/alloc
-   separation) — the documented dynamic residue. *)
 Lemma iinv_runs_inst (a b : Intermediate.program) :
   (exists pa, compile_program pa = Some a) ->
   (exists pb, compile_program pb = Some b) ->
@@ -1857,10 +1762,6 @@ exact: (ireach_iinv Hwf HC Hone Hreload HJ HB Hjumptie Hreturntie
           Hstoresep Hallocsep Hreach).
 Qed.
 
-(* [sr_ra_undef] discharge: the I-side run invariant [iinv] (LinReach)
-   carries [R_RA = Undef] as its first conjunct along every reachable
-   state; its preservation premise is exactly [ireach_iinv]'s closure
-   (statics via [Hclass], run-model ties for the rest). *)
 Lemma sr_ra_undef_inst (L P C : nat) (a b : Intermediate.program)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -2030,9 +1931,6 @@ Theorem sim_residual_inst (L P C NC : nat)
                    then LRC.InternalJump
                    else LRC.Ret (cross_frames (Pointer.component tpc)
                                    gps'))) ->
-  (* the binop tag oracle (TRUE of compiled runs; dischargeable by a
-     tag-discipline positional invariant): binop operand registers are
-     Other-tagged on the me side *)
   (forall bmap gps imem iregs ipc ms Cprocs P0 Pcode op r1 r2 r3,
     ireach a b (gps, imem, iregs, ipc) ->
     lin_match L P C a b (sinv_inst L P C a b) bmap gps imem iregs ipc
@@ -2336,19 +2234,12 @@ constructor => //.
 - exact: (sr_ra_inst Hca Hcb).
 Qed.
 
-(* the existential form consumed by [SimResidualSig] *)
 Corollary sim_residual_exists_inst (L P C NC : nat)
     (a b : Intermediate.program) :
   sim_residual L P C a b NC (sinv_inst L P C a b) ->
   exists SINV, sim_residual L P C a b NC SINV.
 Proof. move=> R. by exists (sinv_inst L P C a b). Qed.
 
-(* ===================================================================== *)
-(* Module packaging: [KDynamicsSig]'s [H_bwd] becomes a THEOREM.  The
-   dynamic surface of the linearizer-correctness campaign shrinks to
-   [sim_residual_exists] (the SINV instance, its spec, the fits and the
-   run-oracles, per compiled linked pair), next to the untouched
-   back-translation pair [bt_fits]/[H_bt]. *)
 
 Require Import MicroPolicies.Recomposition.RSCSigs.
 Require Import MicroPolicies.KInstance.
@@ -2368,8 +2259,6 @@ Module Type SimResidualSig (B : LinBoundsSig).
                 /\ compile_program sb = Some b) ->
     exists SINV, sim_residual B.L B.P B.C a b S.NC SINV.
 
-  (* the back-translation half of the dynamic surface, carried through
-     verbatim (task #14 does not touch it) *)
   Parameter bt_fits :
     Intermediate.program -> Intermediate.program -> Events.trace -> Prop.
 
@@ -2419,9 +2308,6 @@ Module KDynamicsFromSim (B : LinBoundsSig) (D : SimResidualSig B)
   Definition H_bt := D.H_bt.
 End KDynamicsFromSim.
 
-(* the fully assembled [MPCompilerSig] instance over the residual surface:
-   statics proven (KStatics), [H_bwd] proven (above), assumptions =
-   [sim_residual_exists] + [bt_fits]/[H_bt] *)
 Module KConcreteFromSim (B : LinBoundsSig) (D : SimResidualSig B)
   <: MPCompilerSig.
   Module KD := KDynamicsFromSim B D.

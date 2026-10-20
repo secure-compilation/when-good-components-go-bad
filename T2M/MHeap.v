@@ -1,7 +1,3 @@
-(** * T2M heap occupancy toolkit: [heap_used] bookkeeping under T
-    stores/allocs (sumn over the fmap assoc list); feeds MStar's
-    heap occupancy invariant. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -27,9 +23,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ================================================================== *)
-(* 1. [list_upd] preserves length.                                    *)
-(* ================================================================== *)
 
 Lemma list_upd_size (T : Type) (blk : list T) (o : nat) (v : T)
     (blk' : list T) :
@@ -41,9 +34,6 @@ elim: blk o blk' => [|x blk IH] [|o] blk' //=.
   by rewrite (IH _ _ E).
 Qed.
 
-(* ================================================================== *)
-(* 2. [sumn] over the assoc list under [setm_def].                    *)
-(* ================================================================== *)
 
 Section SumSetm.
 
@@ -51,7 +41,6 @@ Variable T : ordType.
 Variable S : Type.
 Variable f : S -> nat.
 
-(* below a strict lower bound of a sorted key list, lookup fails *)
 Lemma getm_def_below (s : seq (T * S)) (k b : T) :
   path Ord.lt b (unzip1 s) ->
   Ord.lt k b ->
@@ -98,7 +87,6 @@ case: (Ord.ltgtP k p.1) => [Hlt|Hgt|Heq] //=.
   by rewrite Hf.
 Qed.
 
-(* the fmap-level lifts *)
 Lemma sumn_fmval_setm_present (m : {fmap T -> S}) (k : T) (v v0 : S) :
   m k = Some v0 ->
   f v = f v0 ->
@@ -120,9 +108,6 @@ Qed.
 
 End SumSetm.
 
-(* ================================================================== *)
-(* 3. [heap_used] under T stores and allocs.                          *)
-(* ================================================================== *)
 
 Lemma heap_used_store_b (cm : Transitional.Memory.mem)
     (b : Block.id) (i : Z) (v : Transitional.tvalue * mem_tag)
@@ -139,7 +124,6 @@ apply: (sumn_fmval_setm_present (f := fun blk => (size blk).+1) Hb).
 by rewrite (list_upd_size Hu).
 Qed.
 
-(* a fresh block adds exactly its footprint *)
 Lemma heap_used_fresh (cm : Transitional.Memory.mem)
     (b : Block.id) (chunk : list (Transitional.tvalue * mem_tag)) :
   Transitional.Memory.content cm b = None ->

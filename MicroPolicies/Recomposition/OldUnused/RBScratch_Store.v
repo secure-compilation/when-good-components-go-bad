@@ -1,5 +1,3 @@
-(* SCRATCH (not in _CoqProject): develop stepf_reflect against RecBackward.vo.
-   Admits allowed here; port the finished proof into RecBackward.v. *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -51,8 +49,6 @@ Module RBScratch_Store (S : RecompositionContext).
     color_of s0 = match taga (pc s0) with Level _ c => c end.
   Proof. by move=> [m r [v tp] e]. Qed.
 
-  (* [evi] succeeds on the strong side whenever it succeeds on the merged side (same [rcom] register
-     domain via [reg_reflect]). *)
   Lemma rb_evi_reflect : forall i M s s3,
     registers_match i M s s3 -> (exists a3, regs s3 rcom = Some a3) -> exists ei, evi s = Some ei.
   Proof.
@@ -61,9 +57,6 @@ Module RBScratch_Store (S : RecompositionContext).
     rewrite /evi Ha'. by eexists.
   Qed.
 
-  (* From a successful merged STORE transfer, peel the gates: the address operand is [Other],
-     the stored-into cell is not code, and it belongs to the running component (so [color ti =
-     color td]). *)
   Lemma rb_is_other_eq : forall t : value_tag, is_other t = Some tt -> t = Other.
   Proof. by case. Qed.
 
@@ -75,13 +68,10 @@ Module RBScratch_Store (S : RecompositionContext).
     move=> tpc ti t1 t2 told tni [rc] r.
     cbn [Merged.transfer Merged.instr_rules] => H.
     apply obind_inv in H; destruct H as [out [Hir _]].
-    (* peel gate1: is_code ti *)
     apply obind_inv in Hir; destruct Hir as [u1 [_ Hir]].
-    (* peel gate2: STORE ⟹ if is_code told then None else Some tt *)
     apply obind_inv in Hir; destruct Hir as [u2 [Hg2 Hir]].
     have Hicfalse : is_code told = false.
     { by move: Hg2; case: (is_code told). }
-    (* peel LRC.instr_rules *)
     apply obind_inv in Hir; destruct Hir as [lout [Hlrc _]].
     move: Hlrc; clear r out u1 u2 Hg2; rewrite /LRC.instr_rules.
     move: lout Hicfalse; case: ti => vti cti eti icti; case: tpc => lpc cpc => lout Hicfalse;
@@ -89,9 +79,7 @@ Module RBScratch_Store (S : RecompositionContext).
     case: (cti == cpc) => //=.
     move=> Hg.
     apply obind_inv in Hg; destruct Hg as [v1 [Ho1 Hg]].
-    (* check_belong current tni *)
     apply obind_inv in Hg; destruct Hg as [v2 [_ Hg]].
-    (* check_belong current (Some told) ⟹ belong cti (Some told) *)
     apply obind_inv in Hg; destruct Hg as [v3 [Hbel _]].
     move: Hbel Hicfalse; rewrite /check_belong /belong.
     case: told => vtd ctd etd ictd /=.
@@ -100,7 +88,6 @@ Module RBScratch_Store (S : RecompositionContext).
     by move: Ho1; case: t1 => //=.
   Qed.
 
-  (* From a successful merged [next_state_updates] (STORE form), extract the same gate facts. *)
   Lemma nsu_store_gates : forall (s : @Symbolic.state mt lrc_tags unit) tpc ti
       (t1 t2 : tag_type lrc_tags R) (told : tag_type lrc_tags M) updts pc' res,
     @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -133,7 +120,7 @@ Module RBScratch_Store (S : RecompositionContext).
     suff [s' [ev' Hf]] : exists s' ev', step_eval_me (NC := NC) s = Some (s', ev').
     { exists s', ev'. by apply/Exec.stepP. }
     case: ev Hstep => [e|] Hstep.
-    { (* ev = Some e: cross-component Jump/Jal *) admit. }
+    {  admit. }
     inversion Hstep
       as [mem3 reg3 pc3 tpc3 i3 ti3 extra3 ST3 PC3 INST3 mv3 NEXT3
          |mem3 reg3 pc3 tpc3 i3 ti3 n3 r3 old3 told3 extra3 ST3 PC3 INST3 OLD3 mv3 NEXT3
@@ -145,7 +132,7 @@ Module RBScratch_Store (S : RecompositionContext).
          |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
          |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
          |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-    - (* Nop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -169,7 +156,6 @@ Module RBScratch_Store (S : RecompositionContext).
       have [v' Hmems] := succ_code_reflect Hcc Hrel Hcode3s Hcolc Hd3s.
       have Hmems' : mem s (vala (pc s) + 1)%w = Some (v' @ t3s)
         by rewrite Hpcaddr.
-      (* builder: s mirrors the Nop step *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -191,7 +177,7 @@ Module RBScratch_Store (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         by rewrite Hcd Hpccol Hcolc eqxx /=.
-    - (* Const *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -238,7 +224,7 @@ Module RBScratch_Store (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hold /=.
         by [].
-    - (* Mov *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -289,9 +275,9 @@ Module RBScratch_Store (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hr1 /= setmE.
         by case: (r2 =P r1) => Hr21 /=; rewrite ?Hr2 //=.
-    - (* Binop *) admit.
-    - (* Load *) admit.
-    - (* Store *)
+    -  admit.
+    -  admit.
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -316,17 +302,13 @@ Module RBScratch_Store (S : RecompositionContext).
       have R1W3' : regs s3 r1 = Some (w1 @ t1) by rewrite ST3 /=.
       have R2W3' : regs s3 r2 = Some (w2 @ t2) by rewrite ST3 /=.
       have OLD3' : mem s3 w1 = Some (old3 @ told3) by rewrite ST3 /=.
-      (* gate facts from the merged step success *)
       have [Hot1 [Hictold3 Hbelold3]] := nsu_store_gates NEXT3.
       have Ht1 : t1 = Other := rb_is_other_eq Hot1.
-      (* address register: [t1 = Other] forces the strong-side address value to coincide with [w1] *)
       have Hr1 : regs s r1 = Some (w1 @ Other).
       { have [d' [Hdm Hr]] := proj1 (Hrm r1 (w1 @ t1)) R1W3'.
         move: Hdm Hr; case: d' => va' ta'; rewrite Ht1 /= => -[] -> Hv Hr.
         by rewrite Hr Hv. }
-      (* value register reflects with the same tag *)
       have [w2' Hr2] := reg_reflect Hrm R2W3'. cbn [taga] in Hr2.
-      (* target memory cell: non-code, relevant colour ⟹ reflects with the SAME mem-tag [told3] *)
       have Hcoltold3 : color told3 = color_of s.
       { rewrite -Hbelold3. by rewrite (Hpci (i3 @ ti3) Hd3) Hcoleq. }
       have [old' Hold] : exists old', mem s w1 = Some (old' @ told3).
@@ -367,7 +349,7 @@ Module RBScratch_Store (S : RecompositionContext).
         rewrite /updm Hr1 /=.
         rewrite setmE.
         case: (r2 =P r1) => [Hr21|Hr21] /=.
-        { (* r2 = r1: the freshly re-tagged r1 value is w1; and w2' = w1 since r1 = r2 *)
+        {
           have Hww : w1 = w2' /\ t1 = t2.
           { move: Hr2; rewrite Hr21 Hr1 Ht1 => -[] -> ->. by split. }
           case: Hww => Hww _; rewrite -Hww /=.
@@ -375,10 +357,10 @@ Module RBScratch_Store (S : RecompositionContext).
           by rewrite -Hr21. }
         rewrite Hr2 /=.
         by rewrite Hold /=.
-    - (* Jump *) admit.
-    - (* Bnz *) admit.
-    - (* Jal *) admit.
-    - (* Syscall *) admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
   Admitted.
 
 End RBScratch_Store.

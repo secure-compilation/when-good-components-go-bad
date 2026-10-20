@@ -1,7 +1,3 @@
-(* ===== SYSCALL (allocator) bullet of the forward single-step padding simulation, split into its
-   own file.  Proves the standalone allocator-case lemma [pad_step_fwd_sys] which PaddingFwd.v's
-   [pad_step_fwd] dispatches to.  The allocator allocates in the component-prefix (data) region,
-   which the padding pass leaves untouched, so the two runs allocate identically. ===== *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -71,22 +67,13 @@ Hypothesis bnz_labels_resolved : forall n r l t,
 
 Variable NC : nat.
 
-(* WELL-FORMEDNESS of [NC] (compartment count): the syscall/code region fits below the per-component
-   offset field, so the allocator's prefix region lies strictly above all code addresses.  This is the
-   same bound [mask_alloc_label]/[andw_mask_low] need; true for the concrete machine (word_size=32,
-   alloc_label=2^14, NC<18). *)
 Hypothesis alloc_label_lt_NC : alloc_label < 2 ^ (word_size mt - NC).
 
-(* WELL-FORMEDNESS of [q] (colours-bounded): every code cell carries a valid component colour
-   ([< 2^NC]).  This is the padding analogue of the [colors_bounded] axiom that [recomposition_blame]
-   already relies on; it bounds the allocator's running component [current_c] (read off the running
-   code cell at the return address). *)
 Hypothesis code_colors_bounded : forall w a,
   encode_code (code q) pc0 w = Some a -> 1 + color (taga a) < 2 ^ NC.
 
 Local Notation st := (@Symbolic.state mt lrc_tags unit).
 
-(* re-expose the q/q'-parametrized definitions proved in PaddingSim *)
 Local Notation match_pad  := (@PaddingSim.match_pad q q').
 Local Notation pad_valid  := (@PaddingSim.pad_valid q q').
 Local Notation phia       := (@PaddingSim.phia q q').
@@ -96,8 +83,6 @@ Local Notation memwk      := (@PaddingSim.memwk q q').
 Local Notation memwk_bwd  := (@PaddingSim.memwk_bwd q q').
 Local Notation wregs      := (@PaddingSim.wregs q q').
 
-(* re-expose the q/q'-parametrized helper lemmas — [q]/[q'] are implicit (inferred from args), so
-   only the well-formedness hypotheses are pre-applied; the lemma-own args stay implicit. *)
 Local Notation code_cell_q      := (PaddingSim.code_cell_q Hcount Hbound Hbound').
 Local Notation phia_addr_code   := (PaddingSim.phia_addr_code Hcount Hbound Hbound').
 Local Notation pc_succ_corr     := (PaddingSim.pc_succ_corr Hcount Hbound Hbound' fallthrough_aligned).
@@ -112,8 +97,6 @@ Local Notation nonterm_succ_lt  := (PaddingSim.nonterm_succ_lt code_last_term).
 
 Local Opaque PaddingSim.rel_v.
 
-(* ---- generic finite-map / allocated-block helpers (copied from PreservationLemmas, which is not
-   in this file's import cone) ---- *)
 Lemma unionm_get {T : ordType} {S : Type} (m1 m2 : {fmap T -> S}) k v :
   unionm m1 m2 k = Some v -> m1 k = Some v \/ (m1 k = None /\ m2 k = Some v).
 Proof. rewrite unionmE; case: (m1 k) => [a|] /= H; [left|right]; [exact H | split; [reflexivity|exact H]]. Qed.
@@ -134,9 +117,6 @@ Proof. by []. Qed.
 Lemma is_otherE : is_other Other = Some tt.
 Proof. by []. Qed.
 
-(* the [last] of a prefix-filtered domain (default = the prefix) is itself prefix-matching. *)
-(* the [last] of a prefix-filtered domain (default = the prefix) is itself prefix-matching.  Proved
-   with [mask]/[component_memory_prefix] still TRANSPARENT (the base case unfolds them). *)
 Lemma andw_last_component_prefix (C : Component.id) (m : {fmap mword mt -> atom (mword mt) mem_tag}) :
   andw (List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz C)) (domm m))
           (@component_memory_prefix mt NC (ssrint.Posz C))) (@mask mt NC)
@@ -164,8 +144,6 @@ Qed.
 
 Local Opaque LRC.mask LRC.component_memory_prefix.
 
-(* the syscall entry address [word_of_nat alloc_label] is a φ fixed point: it lies strictly above
-   the (unpadded) code image, where φ is the identity. *)
 Lemma phia_alloc_fixed : phia (word_of_nat alloc_label) = word_of_nat alloc_label.
 Proof.
   rewrite /PaddingSim.phia val_word_of_nat; last exact: alloc_label_lt_word.
@@ -175,8 +153,6 @@ Proof.
   by [].
 Qed.
 
-(* a cell at an address [w] at or above [alloc_label] is never code (the code image of [q] lives in
-   [pc0, pc0+size (code q)) ⊂ [0, alloc_label)). *)
 Lemma high_not_code_l (s1 s2 : st) (w : mword mt) (a : matom) :
   match_pad s1 s2 -> alloc_label <= (val w : nat) ->
   Symbolic.mem s1 w = Some a -> is_code (taga a) = false.
@@ -205,8 +181,6 @@ Proof.
   move: Hge; rewrite Hvw. move: Hnlt Hbound'; lia.
 Qed.
 
-(* a prefix-filtered address lies at/above [alloc_label] (its high [NC] bits are a nonzero
-   component prefix, so it cannot be a small/code address). *)
 Lemma NC_le_word : NC <= word_size mt.
 Proof.
   have Hpos : 0 < alloc_label by rewrite /alloc_label expn_gt0.
@@ -228,9 +202,6 @@ Proof.
   exact: (component_memory_prefix_succ_not_zero C NC_le_word HCb Hz0).
 Qed.
 
-(* the allocator's prefix-filtered domain (where it allocates) is identical across the two runs:
-   the padding pass only shifts code (small addresses, excluded by the prefix filter), and the
-   non-code/data cells have identical keys ([memwk]/[memwk_bwd]). *)
 Lemma padc_filter_domm_eq (s1 s2 : st) (C : Component.id) :
   1 + C < 2 ^ NC -> match_pad s1 s2 ->
   List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + C)))
@@ -258,8 +229,6 @@ Proof.
       have [a0 [Hd' _]] := Hmwkb w d Hd Hnc. by exists a0.
 Qed.
 
-(* every cell of the freshly-allocated block carries the constant atom [0 @ def_mem_tag c false]
-   and sits at a prefix-matching (hence high, >= alloc_label) address. *)
 Lemma alloc_bloc_props (c : Component.id) (len : nat) (max_addr : mword mt) :
    1 + c < 2 ^ NC ->
    andw max_addr (@mask mt NC) = @component_memory_prefix mt NC (ssrint.Posz (1 + c)) ->
@@ -291,14 +260,12 @@ Lemma pad_step_fwd_sys :
   exists s2', step_me (NC := NC) s2 s2' ev /\ match_pad s1' s2'.
 Proof.
   move=> mem0 reg pcw tpc0 extra sc s2 s1' ev Hm Hvalid PC GETCALL CALL.
-  (* identify the singleton syscall: [pcw = word_of_nat alloc_label], [sem sc = alloc_fun]. *)
   have Hsem : Symbolic.sem sc = alloc_fun (NC := NC).
   { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=.
     case: ifP => [_ [= <-] //|_]. by move=> [=]. }
   have Hent : Symbolic.entry_tag sc = tt by case: (Symbolic.entry_tag sc).
   have Hpcw : pcw = word_of_nat alloc_label.
   { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=. by case: ifP => [/eqP|]. }
-  (* peel [run_syscall]: the SERVICE transfer always succeeds, so [alloc_fun s1 = Some s1'] and [ev = None]. *)
   have [Halloc1 Hev] : alloc_fun (NC := NC) (@Symbolic.State mt lrc_tags unit mem0 reg (pcw @ tpc0) extra) = Some s1'
                        /\ ev = None.
   { move: CALL; rewrite /run_syscall Hsem Hent /=.
@@ -306,9 +273,7 @@ Proof.
     rewrite /Merged.transfer /=.
     case Halloc: (alloc_fun (NC := NC) _) => [s|] //=. by move=> [= <- <-]. }
   subst ev.
-  (* current component colour of the running pc. *)
   destruct tpc0 as [level ctpc].
-  (* peel [alloc_fun s1] into its constituent reads, checks and the resulting [s1']. *)
   Local Transparent alloc_fun.
   move: Halloc1; rewrite {1}/alloc_fun /= => H1.
   case: (obind_inv H1) => ra_val [Hra1 {}H1].
@@ -327,14 +292,11 @@ Proof.
   Local Opaque alloc_fun.
   have Hmp := Hm.
   move: Hm => [Hpcv0 [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hmwk Hmwkb]]]]]]]]].
-  (* tag facts on the reads *)
   have Hraj : taga ra_val = InternalJump := is_jump_invE Hjmp1.
   have Hothz : taga sz1 = Other := is_other_invE Hoth1.
   move: Hretc1 => /andP [Hretcode /eqP Hretcol].
-  (* the running colour [ctpc] is a valid component (the return cell is running code). *)
   have Hretenc : encode_code (code q) pc0 (vala ra_val) = Some reta1 := Hc1 _ _ Hreta1 Hretcode.
   have HctpcB : 1 + ctpc < 2 ^ NC by rewrite -Hretcol; exact: (code_colors_bounded Hretenc).
-  (* s2-side reads, related by φ / wregs. *)
   have Hra1' : Symbolic.regs (@Symbolic.State mt lrc_tags unit mem0 reg
                  (pcw @ (Level level ctpc)) extra) ra = Some ((vala ra_val) @ (taga ra_val))
     by rewrite /= Hra1 atom_etaE.
@@ -347,14 +309,12 @@ Proof.
                  (pcw @ (Level level ctpc)) extra) syscall_arg1 = Some ((vala sz1) @ Other)
     by rewrite /= Hsz1 -Hothz atom_etaE.
   have Hsz2 : Symbolic.regs s2 syscall_arg1 = Some ((vala sz1) @ Other) := reg_otherE Hreg Hsz1' erefl.
-  (* the allocator picks the SAME max_addr on both runs (same prefix-filtered data domain). *)
   have Hmaddr :
     List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + ctpc))) (domm mem0))
               (@component_memory_prefix mt NC (ssrint.Posz (1 + ctpc)))
     = List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + ctpc))) (domm (Symbolic.mem s2)))
               (@component_memory_prefix mt NC (ssrint.Posz (1 + ctpc))).
   { by rewrite (padc_filter_domm_eq HctpcB Hmp). }
-  (* alloc-ready s2 facts. *)
   have Hpct2 : taga (Symbolic.pc s2) = Level level ctpc by rewrite Hpct.
   have Hra2j : Symbolic.regs s2 ra = Some (vra2 @ InternalJump) by rewrite Hra2 Hraj.
   have Hretm2 : Symbolic.mem s2 vra2 = Some reta2 by rewrite Hra2val.
@@ -362,15 +322,12 @@ Proof.
     by rewrite Hretat Hretcode Hretcol eqxx.
   have Hszval : word.int_of_word (vala ((vala sz1) @ Other)) = word.int_of_word (vala sz1)
     by rewrite vala_at.
-  (* s2 has no cell at the syscall entry address (else memwk_bwd contradicts [mem0 pcw = None]). *)
   have Hpcwv : (val pcw : nat) = alloc_label by rewrite Hpcw (val_word_of_nat alloc_label_lt_word).
   have Hmem2none : Symbolic.mem s2 pcw = None.
   { case E: (Symbolic.mem s2 pcw) => [a|] //. exfalso.
     have Hge : alloc_label <= (val pcw : nat) by rewrite Hpcwv.
     have Hnc := high_not_code_r Hmp Hge E.
     have [a0 [Ha0 _]] := Hmwkb pcw a E Hnc. by rewrite Ha0 in PC. }
-  (* construct the s2 allocator run = the same allocation. *)
-  (* [syscall_ret] is present in both register files (the s1 alloc wrote it). *)
   have [retv1 Hretv1] : exists rv, reg syscall_ret = Some rv.
   { case E: (reg syscall_ret) => [rv|]; first by exists rv.
     move: Hregs1'; rewrite /updm E /= => H; discriminate H. }
@@ -387,7 +344,6 @@ Proof.
     rewrite -Hmaddr Hpf1 Haddr1 obindE.
     rewrite /updm Hret2' obindE. by eexists. }
   Local Opaque alloc_fun.
-  (* event-input present on both runs (needed for [run_syscall] to fire). *)
   have [i1 Hevi1] : exists i, Symbolic.evi (@Symbolic.State mt lrc_tags unit mem0 reg
                      (pcw @ (Level level ctpc)) extra) = Some i.
   { move: CALL; rewrite /run_syscall; case E: (Symbolic.evi _) => [i|] //= _; by exists i. }
@@ -399,7 +355,6 @@ Proof.
   { rewrite /Symbolic.evi Hrc2 /=. by eexists. }
   have Hpc2val : vala (Symbolic.pc s2) = pcw.
   { rewrite Hpcv0 /= Hpcw. exact: phia_alloc_fixed. }
-  (* s2 fires the same syscall, reaching s2'. *)
   have Hrun2 : @Symbolic.run_syscall mt ops lrc_tags Merged.transfer unit sc s2 = Some (s2', None).
   { rewrite /run_syscall Hsem Hent Hevi2 /= /Merged.transfer /=. by rewrite Halloc2. }
   exists s2'. split.
@@ -408,7 +363,7 @@ Proof.
     + rewrite /Symbolic.pcv Hpc2val. exact: Hmem2none.
     + rewrite /Symbolic.pcv Hpc2val. exact: GETCALL.
     + exact: Hrun2.
-  - (* match_pad s1' s2' *)
+  -
     Local Transparent alloc_fun.
     move: Halloc2; rewrite {1}/alloc_fun Hpct2 Hra2j obindE is_jumpE obindE vala_at Hretm2 obindE
       Hck2 obindE Hsz2 obindE is_otherE obindE vala_at Hlen1 obindE Hlenchk1 obindE
@@ -416,7 +371,6 @@ Proof.
     Local Opaque alloc_fun.
     have Hregs1eq : regs1' = setm reg syscall_ret (addr1 @ Other).
     { move: Hregs1'; rewrite /updm Hretv1 => -[= H]; by rewrite -H. }
-    (* the shared allocated block: every cell is the constant atom at a high address. *)
     have HlenB : len1 + 1 <= 2 ^ (word_size mt - NC).
     { move: Hlenchk1; case: ifP => // Hb _; exact: Hb. }
     have Hstart := andw_last_component_prefix (1 + ctpc) mem0.
@@ -428,7 +382,6 @@ Proof.
     split; first by [].
     split; first by [].
     split; first by rewrite /=; exact: (wregs_setm_other Hreg).
-    (* mem conjuncts *)
     split.
     { move=> w a; rewrite /= => Hw Hic. case: (unionm_get Hw) => [Hm0|[_ Hbl]].
       - exact: (Hc1 _ _ Hm0 Hic).
@@ -477,11 +430,6 @@ Proof.
 Qed.
 
 
-(* ===== Backward reflection helpers (mirrors of the [PaddingFinal] backward helpers, re-derived
-   here so [pad_nostep_syscall] can live in this allocator-helper section). ===== *)
-
-(* [rel_v] on a genuine code-pointer tag ([Ret]/[InternalJump]) is the address relabel φ (stated via
-   the per-constructor [rel_v_*] lemmas, since [rel_v] is [Local Opaque] in this section). *)
 Lemma rel_v_addr (t : value_tag) (v : mword mt) :
   is_address t -> t <> Invalidated -> rel_v t v = phia v.
 Proof.
@@ -492,8 +440,6 @@ Proof.
   - by case: (Hni erefl).
 Qed.
 
-(* code-pointer register reflection: an [is_address]-tagged register holds [w'] on the q run and its
-   φ-image on the padded run. *)
 Lemma reg_reflect_bwd_cptr (s1 s2 : st) (r : reg mt) (w : mword mt) (t : value_tag) :
   match_pad s1 s2 -> Symbolic.regs s2 r = Some (w @ t) -> is_address t -> t <> Invalidated ->
   exists w', Symbolic.regs s1 r = Some (w' @ t) /\ w = phia w'.
@@ -511,7 +457,6 @@ Proof.
   congr Some. by rewrite -(atom_etaE a) Hta.
 Qed.
 
-(* value-preserving register reflection for [Other]-tagged registers (same value both runs). *)
 Lemma reg_reflect_bwd_other (s1 s2 : st) (r : reg mt) (w : mword mt) :
   match_pad s1 s2 -> Symbolic.regs s2 r = Some (w @ Other) ->
   Symbolic.regs s1 r = Some (w @ Other).
@@ -528,7 +473,6 @@ Proof.
   congr Some. by rewrite -(atom_etaE a) Hta Hvw.
 Qed.
 
-(* generic register reflection (tag preserved). *)
 Lemma reg_reflect_bwd (s1 s2 : st) (r : reg mt) (w2 : mword mt) (t : value_tag) :
   match_pad s1 s2 -> Symbolic.regs s2 r = Some (w2 @ t) ->
   exists w1, Symbolic.regs s1 r = Some (w1 @ t).
@@ -541,8 +485,6 @@ Proof.
   by exists (vala a); rewrite -Ht; congr Some; exact: (esym (atom_etaE a)).
 Qed.
 
-(* backward target-CELL correspondence: a cell the q run holds at [w] ([addr_ok]) matches in tag the
-   cell the padded run holds at [phia w]. *)
 Lemma jump_target_corr_bwd (s1 s2 : st) (w : mword mt) (celltgt2 : matom) :
   match_pad s1 s2 -> addr_ok (Symbolic.mem s1) w -> Symbolic.mem s2 (phia w) = Some celltgt2 ->
   exists celltgt1, Symbolic.mem s1 w = Some celltgt1 /\ taga celltgt1 = taga celltgt2.
@@ -572,8 +514,6 @@ Proof.
     + have [a0 [Ha0 _]] := Hnc2 _ _ Hm2 Hcc. by rewrite Ha0 in Hmw.
 Qed.
 
-(* [φ] hits the alloc syscall address only at the alloc address itself: a genuine code/data address
-   ([< pc0 + |code q|]) maps strictly below [alloc_label], so cannot equal [word_of_nat alloc_label]. *)
 Lemma phia_inj_alloc (w : mword mt) :
   phia w = word_of_nat alloc_label -> w = word_of_nat alloc_label.
 Proof.
@@ -599,9 +539,6 @@ Proof.
       have := phi_lt_padc Hcount Hk. move: Hbound' Heq; lia.
 Qed.
 
-(* ===== Backward SYSCALL (allocator) reconstruction: if the padded run [s2] fires the alloc syscall,
-   the q run [s1] (which sits at the same φ-fixed alloc address) can fire it too — existence only,
-   which is all [Rf_nostep] needs.  Mirror of [pad_step_fwd_sys]'s existence half. ===== *)
 Lemma pad_nostep_syscall (s1 s2 : st)
    (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
    (pcw2 : mword mt) (tpc2 : tag_type lrc_tags Symbolic.P) (extra2 : unit)
@@ -625,10 +562,8 @@ Proof.
     case Hevi: (Symbolic.evi _) => [i|] //=.
     rewrite /Merged.transfer /=.
     case Halloc: (alloc_fun (NC := NC) _) => [s|] //=. by move=> [= <- <-]. }
-  (* running component colour. *)
   have Htpc2 : taga (Symbolic.pc s2) = tpc2 by rewrite Hs2.
   destruct tpc2 as [level ctpc].
-  (* peel the [s2] allocator run into its reads/checks. *)
   Local Transparent alloc_fun.
   move: Halloc2; rewrite {1}/alloc_fun Htpc2 => H2.
   case: (obind_inv H2) => ra_val2 [Hra2 {}H2].
@@ -644,59 +579,48 @@ Proof.
   case: (obind_inv H2) => addr2 [Haddr2 {}H2].
   case: (obind_inv H2) => regs2' [Hregs2' {}H2].
   Local Opaque alloc_fun.
-  (* tags from the checks. *)
   have Hraj : taga ra_val2 = InternalJump := is_jump_invE Hjmp2.
   have Hothz : taga sz2 = Other := is_other_invE Hoth2.
   move: Hretc2 => /andP [Hretcode /eqP Hretcol].
-  (* reflect the return-address register (code pointer) to [s1]. *)
   have Hra2a : Symbolic.regs s2 ra = Some ((vala ra_val2) @ InternalJump)
     by rewrite Hra2 -Hraj atom_etaE.
   have [rav1 [Hra1 Hrav]] := reg_reflect_bwd_cptr Hmp Hra2a isT (fun H => ltac:(discriminate H)).
-  (* reflect the return cell. *)
   have Hok : addr_ok (Symbolic.mem s1) rav1.
   { have [Hav _] := Hvalid. apply: (Hav _ _ _ Hra1). by []. }
   have Hm2tgt : Symbolic.mem s2 (phia rav1) = Some reta2 by rewrite -Hrav.
   have [reta1 [Hretm1 Hretat]] := jump_target_corr_bwd Hmp Hok Hm2tgt.
   have Hcode1 : is_code (taga reta1) by rewrite Hretat.
   have Hcol1 : color (taga reta1) = ctpc by rewrite Hretat.
-  (* running colour bound (the return cell is running [q]-code). *)
   have [_ [_ [_ [_ [Hc1 _]]]]] := Hmp.
   have Hretenc : encode_code (code q) pc0 rav1 = Some reta1 := Hc1 _ _ Hretm1 Hcode1.
   have HctpcB : 1 + ctpc < 2 ^ NC by rewrite -Hcol1; exact: (code_colors_bounded Hretenc).
-  (* reflect the size register. *)
   have Hsz2a : Symbolic.regs s2 syscall_arg1 = Some ((vala sz2) @ Other)
     by rewrite Hsz2 -Hothz atom_etaE.
   have Hsz1 : Symbolic.regs s1 syscall_arg1 = Some ((vala sz2) @ Other)
     := reg_reflect_bwd_other Hmp Hsz2a.
-  (* the [syscall_ret] register is present in both files. *)
   have [rv2 Hret2] : exists rv, reg2 syscall_ret = Some rv.
   { case E: (reg2 syscall_ret) => [rv|]; first by exists rv.
     move: Hregs2'; rewrite /updm Hs2 /= E /= => Hd; discriminate Hd. }
   have Hret2' : Symbolic.regs s2 syscall_ret = Some rv2 by rewrite Hs2.
   rewrite -(atom_etaE rv2) in Hret2'.
   have [rv1 Hret1] := reg_reflect_bwd Hmp Hret2'.
-  (* the prefix-filtered data domain — hence [max_addr] — is the same on both runs. *)
   have Hmaddr :
     List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + ctpc))) (domm (Symbolic.mem s1)))
               (@component_memory_prefix mt NC (ssrint.Posz (1 + ctpc)))
     = List.last (List.filter (fun mw => andw mw (@mask mt NC) == @component_memory_prefix mt NC (ssrint.Posz (1 + ctpc))) (domm (Symbolic.mem s2)))
               (@component_memory_prefix mt NC (ssrint.Posz (1 + ctpc))).
   { by rewrite (padc_filter_domm_eq HctpcB Hmp). }
-  (* [s1] sits at the same alloc syscall address. *)
   have [Hpcv0 _] := Hmp.
   have Hpc1alloc : vala (Symbolic.pc s1) = pcw2.
   { rewrite Hpcw. apply: phia_inj_alloc. rewrite -Hpcv0 Hs2 /=. exact: Hpcw. }
-  (* tag of [s1]'s pc cell read by the allocator (= [s2]'s, via [Hpct]). *)
   have [_ [Hpct _]] := Hmp.
   have Htpc1 : taga (Symbolic.pc s1) = Level level ctpc by rewrite -Hpct Hs2.
-  (* [s1] has no cell at the syscall entry address. *)
   have Hmem1none : Symbolic.mem s1 pcw2 = None.
   { case E: (Symbolic.mem s1 pcw2) => [a|] //. exfalso.
     have Hge : alloc_label <= (val pcw2 : nat) by rewrite Hpcw (val_word_of_nat alloc_label_lt_word).
     have Hnc := high_not_code_l Hmp Hge E.
     have [_ [_ [_ [_ [_ [_ [_ [_ [Hmwk _]]]]]]]]] := Hmp.
     have [v2 [Hs2w _]] := Hmwk pcw2 a E Hnc. by rewrite Hs2 /= PC in Hs2w. }
-  (* construct the [s1] allocator run. *)
   Local Transparent alloc_fun.
   have [s1' Halloc1] : exists s1', alloc_fun (NC := NC) s1 = Some s1'.
   { rewrite {1}/alloc_fun Htpc1 Hra1 obindE is_jumpE obindE.
@@ -708,7 +632,6 @@ Proof.
     rewrite Hmaddr Hpf2 Haddr2 obindE.
     rewrite /updm Hret1 obindE. by eexists. }
   Local Opaque alloc_fun.
-  (* [s1] fires the syscall (an event input is present: [rcom] is in the register file). *)
   have [iev Hevi2] : exists i, Symbolic.evi s2 = Some i.
   { move: CALL; rewrite Hs2 /run_syscall; case E: (Symbolic.evi _) => [i|] //= _; by exists i. }
   have [a1 Ha1] : exists a, Symbolic.regs s2 rcom = Some a.

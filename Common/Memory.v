@@ -60,13 +60,7 @@ Module Type AbstractComponentMemory.
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
 
-  (* ------------------------------------------------------------------ *)
-  (* Extensions for the S2I forward-simulation proof (block injection).  *)
 
-  (* Every memory reachable from the exported constructors keeps its
-     allocated block ids below the internal allocation cursor; [wf] is that
-     residual invariant, exported abstractly so that freshness of [alloc]
-     becomes usable from outside the module. *)
   Parameter wf : t -> Prop.
 
   Axiom wf_prealloc: forall bufs, wf (prealloc bufs).
@@ -81,8 +75,6 @@ Module Type AbstractComponentMemory.
   Axiom alloc_fresh:
     forall m m' n b, wf m -> alloc m n = (m', b) -> b \notin domm m.
 
-  (* The allocation cursor is monotone: every EXISTING block id strictly
-     precedes a freshly allocated one (the stack-chain descent's measure). *)
   Axiom alloc_gt:
     forall m m' n b b', wf m -> alloc m n = (m', b) -> b' \in domm m -> b' < b.
 
@@ -117,9 +109,6 @@ Module Type AbstractComponentMemory.
   Axiom domm_reserve_block:
     forall m m' b, reserve_block m = (m', b) -> domm m' = domm m.
 
-  (* The allocation cursor, exposed: consecutive reservations/allocations
-     return the successive cursor values (hence DISTINCT block ids — the fact
-     the compiled-code anchors need). *)
   Parameter next_block : t -> Block.id.
 
   Axiom reserve_block_next:
@@ -284,16 +273,12 @@ Module ComponentMemory : AbstractComponentMemory.
     move=> bufs m <-. by rewrite /domm /prealloc /= domm_map.
   Qed.
 
-  (* Provable only for cursor-consistent memories (see [wf] below); kept as in
-     the original development. Unused by the codebase. *)
   Lemma domm_alloc :
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
   Admitted.
 
-  (* ------------------------------------------------------------------ *)
-  (* Extensions for the S2I forward-simulation proof (block injection).  *)
 
   Definition wf (m : t) : Prop :=
     forall b, b \in domm m -> b < nextblock m.

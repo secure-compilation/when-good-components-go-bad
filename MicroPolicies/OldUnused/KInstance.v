@@ -1,21 +1,3 @@
-(* Phase 5, tier 1: the CONCRETE model of [MPCompilerSig]'s static half.
-
-   [KStatics B] instantiates the abstract linearizer with [lin_side B.L B.P
-   B.C] (Recomposition/LinearizeMerged.v) and PROVES all static axioms of
-   [MPCompilerSig] — interface/buffers/main preservation, MP-level
-   well-formedness, linearizer-output shape, label-space disjointness, and
-   the cross-side entry-cell agreement [lin_jal_cross] (glued from
-   [lin_jal_foreign] + [mk_entry_inj] + interface-determinism of
-   [head_tag]).  [lin_ok] packages the label-scheme bounds and the
-   nonempty-procedures/buffer conditions the linearizer facts need.
-
-   The dynamic half — [H_bwd] (backward correctness of the linearizer
-   w.r.t. the overlay semantics) and [H_bt] (the back-translation package)
-   — remains assumed, now about the CONCRETE [lin_side]:
-   [KDynamicsSig].  [KConcrete B D] assembles a full [MPCompilerSig], so
-   [RSC_MP (KConcrete B D) (X)] yields the end-to-end theorem with the
-   assumption surface reduced to the two dynamic bridges. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -62,7 +44,6 @@ Require Import Coq.micromega.Lia.
 Import DoNotation.
 Import Types.
 
-(* the label-scheme bounds, fixed per instance *)
 Module Type LinBoundsSig.
   Parameter L : nat.
   Parameter P : nat.
@@ -82,8 +63,6 @@ Module KStatics (B : LinBoundsSig).
   Definition lin (a : Intermediate.program) : program :=
     lin_side B.L B.P B.C a.
 
-  (* linearizability: nonempty procedure maps, buffer shape, and the
-     label/procedure/component bounds of the canonical label scheme *)
   Definition lin_ok (a : Intermediate.program) : Prop :=
     [/\ (forall cid Cprocs,
            Intermediate.prog_procedures a cid = Some Cprocs ->
@@ -99,13 +78,9 @@ Module KStatics (B : LinBoundsSig).
       & (forall cid,
            cid \in domm (Intermediate.prog_interface a) -> cid < B.C)].
 
-  (* the generic linearizability predicate of the back-translation pipeline
-     (BackTranslation.lin_ok_at) is definitionally THIS instance's lin_ok *)
   Lemma lin_ok_atE : forall x,
     lin_ok_at B.L B.P B.C x <-> lin_ok x.
   Proof. move=> x. split; exact: id. Qed.
-
-  (* ---- static preservation: definitional *)
 
   Lemma lin_interface : forall a,
     prog_interface (lin a) = Intermediate.prog_interface a.
@@ -119,8 +94,6 @@ Module KStatics (B : LinBoundsSig).
     prog_main (lin a)
     = (Component.main \in domm (Intermediate.prog_interface a)).
   Proof. by []. Qed.
-
-  (* ---- well-formedness *)
 
   Lemma lin_wf : forall a,
     Intermediate.well_formed_program a -> lin_ok a ->
@@ -139,8 +112,6 @@ Module KStatics (B : LinBoundsSig).
     move=> a Hwf. apply: lin_side_output_wf. exact: Hwf.
   Qed.
 
-  (* ---- label spaces of interface-disjoint programs are disjoint *)
-
   Lemma lin_labels_disjoint : forall a b,
     Intermediate.well_formed_program a ->
     Intermediate.well_formed_program b ->
@@ -155,9 +126,6 @@ Module KStatics (B : LinBoundsSig).
               HLb HPb HCb Hdis H).
   Qed.
 
-  (* ---- cross-side entry agreement *)
-
-  (* [head_tag] is a function of the interface alone *)
   Lemma head_tag_iface : forall a b c p,
     Intermediate.prog_interface a = Intermediate.prog_interface b ->
     head_tag a c p = head_tag b c p.
@@ -213,8 +181,6 @@ Module KStatics (B : LinBoundsSig).
 
 End KStatics.
 
-(* the remaining assumed half: the two dynamic bridges, now about the
-   CONCRETE [lin_side] *)
 Module Type KDynamicsSig (B : LinBoundsSig).
   Module S := KStatics B.
 
@@ -231,9 +197,6 @@ Module Type KDynamicsSig (B : LinBoundsSig).
       program_behaves (I.CS.sem (Intermediate.program_link a b)) beh
       /\ (CompCertExtensions.prefix m beh \/ behavior_improves_finpref beh m).
 
-  (* the instance's finite-machine fit bound (to be pinned to the exact
-     label/size inequalities of the back-translated artifacts when [H_bt]
-     is discharged) *)
   Parameter bt_fits :
     Intermediate.program -> Intermediate.program -> Events.trace -> Prop.
 
@@ -252,7 +215,6 @@ Module Type KDynamicsSig (B : LinBoundsSig).
     bt_package S.NC S.lin S.lin_ok a b m0.
 End KDynamicsSig.
 
-(* the assembled model of [MPCompilerSig] *)
 Module KConcrete (B : LinBoundsSig) (D : KDynamicsSig B) <: MPCompilerSig.
   Module S := KStatics B.
   Include S.

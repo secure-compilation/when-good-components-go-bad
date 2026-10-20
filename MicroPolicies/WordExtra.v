@@ -1,14 +1,3 @@
-(* Generic word/bit lemmas over CoqUtils words (any width [k]).
-
-   This is the algebraic kernel that discharges the word/bitwise leaf obligations of the
-   MicroPolicies development (Int32.v's [shlw_all_one]/[shlw_zero], LRC.v's
-   [component_memory_prefix_*]/[mask_range], the [mask_alloc_label] family, ...).
-
-   PROOF DISCIPLINE: never reduce/reflexivity over concrete 2^32 words (unary nat — hangs the
-   kernel).  Everything goes through val-level characterizations ([valw_as_word]) and abstract
-   exponent arithmetic (leq_exp2l/expnD + lia/nia over 2^a atoms).  The master mask bridge is
-   [val_andw_shlw_mone]: and-ing with a left-shifted all-ones mask truncates the low bits. *)
-
 From mathcomp Require Import
   ssreflect ssrfun ssrbool eqtype ssrnat div seq choice fintype bigop finfun tuple binomial ssrint ssralg intdiv.
 From mathcomp Require Import zify.
@@ -23,8 +12,6 @@ Section WordBitsKernel.
 
 Variable k : nat.
 Implicit Types (w x y : word k).
-
-(* --- val-level characterizations ------------------------------------------ *)
 
 Lemma valw_as_word (m : nat) : val (as_word m : word k) = m %% 2 ^ k :> nat.
 Proof. by rewrite /= modz_nat absz_nat modn_mod. Qed.
@@ -56,21 +43,15 @@ apply: val_inj; apply: ord_inj.
 rewrite valw_as_word valw_monew modn_small; lia.
 Qed.
 
-(* The all-ones constant [as_word (Posz (2^k) - 1)] used in [LRC.mask] is [monew].  Stated with
-   the INT subtraction [Posz (2^k) - 1] (not [Posz (2^k - 1)]) so it matches [mask]'s
-   [as_word (2 ^ word_size mt - 1)], whose [- 1] is the int subtraction. *)
 Lemma as_word_pred1 : as_word (Posz (2 ^ k) - 1)%R = (monew : word k).
 Proof.
 rewrite -mone_as_word; congr as_word.
 rewrite subzn ?expn_gt0 //.
 Qed.
 
-(* nat-level equality of vals lifts to word equality (in the [nat_of_ord] coercion shape
-   that the valw_* lemmas above produce). *)
 Lemma word_nat_inj (x y : word k) : val x = val y :> nat -> x = y.
 Proof. move=> H; apply: val_inj; exact: ord_inj H. Qed.
 
-(* a small shifted value is computed exactly (no wrap) *)
 Lemma valw_shlw_small (c m : nat) :
   m <= k -> c * 2 ^ m < 2 ^ k ->
   val (shlw (as_word (Posz c)) (as_word (Posz m)) : word k) = c * 2 ^ m :> nat.
@@ -84,8 +65,6 @@ have Hc : c < 2 ^ k.
 by rewrite Hmk (modn_small Hc) (modn_small Hcm).
 Qed.
 
-(* --- bits ------------------------------------------------------------------ *)
-
 Lemma bits_of_wordE w (i : 'I_k) : bits_of_word w i = odd (val w %/ 2 ^ i).
 Proof. by rewrite /bits_of_word -lock ffunE. Qed.
 
@@ -93,7 +72,6 @@ Lemma bits_andw x y (i : 'I_k) :
   bits_of_word (andw x y) i = bits_of_word x i && bits_of_word y i.
 Proof. by rewrite /andw /bitwise2 word_of_bitsK ffunE. Qed.
 
-(* The binary-decomposition workhorse: the low [m] bits of [x] sum to [x %% 2^m]. *)
 Lemma sum_bits_low (x : nat) (m : nat) :
   \sum_(i < m) odd (x %/ 2 ^ i) * 2 ^ i = x %% 2 ^ m.
 Proof.
@@ -120,8 +98,6 @@ Qed.
 Lemma valw_word_of_bits (bs : {ffun pred 'I_k}) :
   val (word_of_bits bs) = \sum_(i < k) bs i * 2 ^ i :> nat.
 Proof. by rewrite /word_of_bits valw_as_word modn_small // sum_bits_bound. Qed.
-
-(* --- the shifted all-ones mask -------------------------------------------- *)
 
 Lemma shlw_mone_val (n : nat) :
   ((2 ^ k - 1) * 2 ^ n) %% 2 ^ k = 2 ^ k - 2 ^ minn n k.
@@ -176,8 +152,6 @@ case: (leqP (val n) k) => [Hle | Hgt]; first by [].
 by rewrite leqNgt (ltn_ord i) leqNgt (ltn_trans (ltn_ord i) Hgt).
 Qed.
 
-(* --- the master mask bridge ------------------------------------------------ *)
-
 Lemma andw_shlw_mone x (n : word k) :
   andw x (shlw monew n) = as_word (Posz ((val x %/ 2 ^ val n) * 2 ^ val n)).
 Proof.
@@ -218,8 +192,6 @@ case: (leqP (val n) k) => [Hnk | Hnk].
   apply: (ltn_trans Hx); by rewrite ltn_exp2l.
 Qed.
 
-(* --- the Int32.v leaves ----------------------------------------------------- *)
-
 Lemma shlw_zero' (n : word k) : shlw (zerow : word k) n = zerow.
 Proof.
 apply: word_nat_inj.
@@ -244,9 +216,6 @@ Qed.
 
 End WordBitsKernel.
 
-(* --- generic nat helper (for LRC.mask_range) -------------------------------- *)
-
-(* a quotient pinned at both endpoints of an interval is pinned on the interior *)
 Lemma divn_between (a b c E Q : nat) :
   a %/ E = Q -> (a + c) %/ E = Q -> b <= c -> (a + b) %/ E = Q.
 Proof.

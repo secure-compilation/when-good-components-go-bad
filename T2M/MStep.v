@@ -1,7 +1,3 @@
-(** * T2M step-simulation diagrams (part 1): per-opcode lemmas taking
-    one T step to one me step with [match_states] re-established —
-    shared statics, silent 1:1 opcodes, and control-flow diagrams. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -47,8 +43,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* Prove in an empty context: a `2 ^ literal` nat hypothesis can make a
-   later `done`/`assumption` evaluate 2^32 in unary. *)
 Lemma expn_ws_32 : (2 : nat) ^ word_size mt = 2 ^ 32.
 Proof. by rewrite word_size_mt. Qed.
 
@@ -59,7 +53,6 @@ Lemma inc_offset (p : Pointer.t) :
   Pointer.offset (Pointer.inc p) = BinInt.Z.add (Pointer.offset p) 1.
 Proof. by case: p => [[? ?] ?]. Qed.
 
-(* a store at an EXISTING address preserves the syscall-entry gap *)
 Lemma gap_setm (mmem : {fmap mword mt -> atom (mword mt) mem_tag})
     (w : mword mt) (mc0 x : atom (mword mt) mem_tag) :
   mmem (@word_of_nat (word_size mt) Merged.alloc_label) = None ->
@@ -73,7 +66,6 @@ case: (altP (@word_of_nat (word_size mt) Merged.alloc_label =P w))
 by rewrite -E Hgap in Hw.
 Qed.
 
-(* [setm] on an EXISTING key preserves the domain *)
 Lemma domm_setm_pres (mmem : {fmap mword mt -> atom (mword mt) mem_tag})
     (k : mword mt) (v0 v : atom (mword mt) mem_tag) :
   mmem k = Some v0 ->
@@ -86,7 +78,6 @@ case: (altP (x =P k)) => [->|_] //=.
 by rewrite mem_domm Hk.
 Qed.
 
-(* an element of a strictly-sorted list is bounded by its last *)
 Lemma sorted_in_leq_last (T : ordType) (x0 x : T) (s : seq T) :
   sorted (@Ord.lt T) s -> x \in s -> Ord.leq x (last x0 s).
 Proof.
@@ -102,8 +93,6 @@ rewrite inE => /orP[/eqP ->|Hx].
 - exact: (IH a (path_sorted Hp) Hx).
 Qed.
 
-(* the allocator's bump pointer dominates every mapped in-region
-   address: [last] of the sorted, filtered domain is its maximum *)
 Lemma domm_filter_last_max
     (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (p : pred (mword mt)) (dflt w : mword mt) :
@@ -118,7 +107,6 @@ apply: sorted_in_leq_last Hsf _.
 by rewrite mem_filter Hp /=.
 Qed.
 
-(* the word successor the me machine computes at every fall-through *)
 Lemma addw_onew (n : nat) :
   addw (@word_of_nat (word_size mt) n) onew
   = @word_of_nat (word_size mt) n.+1.
@@ -151,24 +139,17 @@ Local Notation reg_syncedW := (reg_synced L P C pra prb PB PI).
 
 Hypothesis Hbound : pc0 + size codeW < 2 ^ word_size mt.
 
-(* the canonical joint buffer map, and side well-formedness (used by the
-   CONST diagram to transport the per-side [imm_fits] facts to PB) *)
 Hypothesis HPB :
   PB = Intermediate.prog_buffers (Intermediate.program_link pra prb).
 Hypothesis Hwfa : Intermediate.well_formed_program pra.
 Hypothesis Hwfb : Intermediate.well_formed_program prb.
 Hypothesis Hlinkable :
   linkable (Intermediate.prog_interface pra) (Intermediate.prog_interface prb).
-(* the link fits the 15-bit / alloc_label window (from [link_fits]) *)
 Hypothesis Hsmall :
   size (linearize_bufs PB) + size codeW < Merged.alloc_label.
-(* the per-side immediate statics *)
 Hypothesis Himm_a : MDefs.imm_fits pra.
 Hypothesis Himm_b : MDefs.imm_fits prb.
 
-(* ================================================================== *)
-(* 1. Code cells are code-tagged in the owner's colour.               *)
-(* ================================================================== *)
 
 Lemma side_cell_props (pr : Intermediate.program) c cseg q
     (x : Transitional.instr * mem_tag) :
@@ -201,7 +182,6 @@ case Hside: (c \in domm (Intermediate.prog_procedures pra)) => Hc Hq.
   exact: side_cell_props Hc Hq.
 Qed.
 
-(* [check_pc]'s content, extracted through the boolean [has_next] *)
 Lemma check_pc_next (cde0 : Transitional.code) pc1 tg1 :
   Transitional.check_pc cde0 pc1 tg1 ->
   exists i' tni,
@@ -222,7 +202,6 @@ split.
 - exact: E1.
 Qed.
 
-(* the shape [executing] always provides *)
 Lemma executing_props tpc i tg c :
   Transitional.executing cdeW tpc i tg c ->
   [/\ c = Pointer.component tpc, is_code tg = true & color tg = c].
@@ -232,9 +211,6 @@ have [Hic Hcol] := tcell_props Hcde Hnth.
 by rewrite Hcomp.
 Qed.
 
-(* ================================================================== *)
-(* 2. The fall-through successor.                                     *)
-(* ================================================================== *)
 
 Lemma take_nth_error (A : Type) (l : seq A) q (x : A) :
   List.nth_error l q = Some x ->
@@ -257,9 +233,6 @@ rewrite /tpos -addnA; congr addn.
 by rewrite (take_nth_error Hq) /tseg_size map_rcons -cats1 sumn_cat /= addn0.
 Qed.
 
-(** The fall-through lemma for every 1-cell opcode: the me pc is
-    [pos + pc0], the successor address [addw _ onew] holds the successor
-    cell (tag [tni] for [check_belong]), and [pc_rel] holds at [Pointer.inc]. *)
 Lemma silent_next (mmem : {fmap mword mt -> matom})
     (tpc : Pointer.t) (w : mword mt)
     (i : Transitional.instr) (tg : mem_tag)
@@ -346,9 +319,6 @@ split.
 - rewrite Haddr -Epos1. exact: Hpc'.
 Qed.
 
-(* ================================================================== *)
-(* 3. The first diagram: Nop.                                         *)
-(* ================================================================== *)
 
 Lemma cell_exp_snd cseg' (i' : Transitional.instr) (tg' : mem_tag) k cell :
   List.nth_error
@@ -447,7 +417,6 @@ split.
 - exact: erefl.
 Qed.
 
-(* [Label] is the same diagram: both [MrLabel] spellings decode to Nop. *)
 Lemma sim_label (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
     (tpc : Pointer.t) (tpct : Transitional.pc_tag)
@@ -534,11 +503,7 @@ split.
 - exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 4. CONST: the immediate is faithful.                               *)
-(* ================================================================== *)
 
-(* a [TrConst] cell comes from an [IConst] of the side program *)
 Lemma const_origin (pr : Intermediate.program) c cseg q
     (v : imvalue) (r : register) (tg : mem_tag) :
   Transitional.intermediate_to_transitional_gen PI pr c = Some cseg ->
@@ -571,8 +536,6 @@ case=> [Ehd | [mi [HmIn Emi]]].
   by exists Cp, Pid, Pcode, n.
 Qed.
 
-(* the [imm_fits] fact at an executing [TrConst], with buffers already
-   transported to the JOINT map PB *)
 Lemma const_fact (tpc : Pointer.t) (v : imvalue) (r : register)
     (tg : mem_tag) :
   Transitional.executing cdeW tpc (TrConst v r) tg (Pointer.component tpc) ->
@@ -619,7 +582,6 @@ case Hside: (Pointer.component tpc
   by rewrite Hbufs.
 Qed.
 
-(* the expanded CONST immediate lands, RELATED, in the register file *)
 Lemma vrel_const (amap : amap_t) (tmem : Transitional.Memory.t)
     (tpc : Pointer.t) (v : imvalue) (r : register) (tg : mem_tag) :
   amap_ok PB amap tmem ->
@@ -675,21 +637,16 @@ case: v Hfact {Hex} => [z|p] Hfact.
   + by rewrite Himm (swcast_word_of_nat_small Hbnd).
 Qed.
 
-(* the two (identical) register tables, bridged pointwise *)
 Lemma to_natE (r : register) :
   Transitional.Register.to_nat r = Intermediate.Register.to_nat r.
 Proof. by case: r. Qed.
 
-(* record-eta for [tvrel], needed at rewrites *)
 Lemma tvrel_eta (amap : amap_t) (tval : Transitional.tvalue) (w : mword mt) :
   tvrel cmapWW amap tval w ->
   tvrel cmapWW amap
     (Transitional.MVal (Transitional.tvtag tval) (Transitional.val tval)) w.
 Proof. by case: tval. Qed.
 
-(* re-tagging with the invalidate-if-address discipline preserves the
-   relation: Invalidated values are unconstrained, and non-address tags
-   are [Other], where the data relation carries over *)
 Lemma tvrel_retag (amap : amap_t) (tval : Transitional.tvalue)
     (w : mword mt) :
   tvrel cmapWW amap tval w ->
@@ -703,7 +660,6 @@ rewrite /tvrel /=.
 by case: vt.
 Qed.
 
-(* register updates: setm on both sides, keys aligned *)
 Lemma mregs_rel_set (amap : amap_t) (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register)
     (tv : value) (vt : value_tag) (w : mword mt) :
@@ -727,9 +683,6 @@ case: (altP (Intermediate.Register.to_nat r''
   + right. exists ra''. by split.
 Qed.
 
-(* the clobbered-write mirror: T writes [tUndef] while me keeps a
-   stale word under [Invalidated] — the register lands in the
-   clobbered arm (loads of [clobcell] cells produce exactly this) *)
 Lemma mregs_rel_set_clob (amap : amap_t)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) (w : mword mt) :
@@ -860,9 +813,6 @@ split.
   + exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 5. MOV and BNZ-fall-through.                                       *)
-(* ================================================================== *)
 
 Lemma vrel_int_inv (amap : amap_t) (z : Z) (w : mword mt) :
   vrel amap (Int z) w -> wrepr z w.
@@ -885,7 +835,6 @@ exists a.
 by split.
 Qed.
 
-(* only the zero word represents 0 *)
 Lemma wrepr_zero (w : mword mt) : wrepr 0 w -> w = 0%w.
 Proof.
 rewrite /wrepr => H.
@@ -896,7 +845,6 @@ have Hi : int_of_word w = ssrint.Posz 0.
 by rewrite -(int_of_wordK w) Hi.
 Qed.
 
-(* distinct registers, distinct me keys *)
 Lemma to_nat_inj : injective Intermediate.Register.to_nat.
 Proof. by case; case => // H; discriminate H. Qed.
 
@@ -913,7 +861,6 @@ apply/negP => /eqP /to_nat_inj E.
 exact: Hne.
 Qed.
 
-(* re-writing a register with its own content preserves the relation *)
 Lemma mregs_rel_refresh (amap : amap_t) (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) (ra : @ratom mt) :
   mregs (@word_of_nat (reg_field_size mt)
@@ -1190,12 +1137,6 @@ split.
 - exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 6. BINOP.  The arithmetic core is congruence modulo 2^32:          *)
-(*    [wrepr_val]/[wrepr_congr] pin the value up to one wrap.  Bounds  *)
-(*    go through Z LITERALS (lia treats Z.pow/expn as opaque, and      *)
-(*    k·2^32 with symbolic 2^32 is nonlinear).                         *)
-(* ================================================================== *)
 
 Lemma convert_subz (a b : nat) :
   Symbolic.convert ((a%:Z) - (b%:Z))%R
@@ -1251,7 +1192,6 @@ apply: Symbolic.convert_inj.
 by rewrite H1 H2.
 Qed.
 
-(* val-level characterizations of the remaining word operations *)
 Lemma valw_mulw' (w1 w2 : mword mt) :
   nat_of_ord (word.ord_of_word (mulw w1 w2))
   = (nat_of_ord (word.ord_of_word w1) * nat_of_ord (word.ord_of_word w2))
@@ -1267,7 +1207,6 @@ Proof.
 by rewrite /subw /oppw valw_addw valw_as_word modnDmr.
 Qed.
 
-(* mod by M, for arguments below 2·M: at most one wrap *)
 Lemma modn_two (a M : nat) :
   0 < M -> a < M.*2 ->
   (a < M /\ a %% M = a) \/ (M <= a /\ a %% M = a - M).
@@ -1279,8 +1218,6 @@ case: (ltnP a M) => H.
   rewrite -{1}(subnKC H) modnDl modn_small //.
   rewrite ltn_subLR //. by rewrite addnn.
 Qed.
-
-(* ---- the three arithmetic operators, related under result-fit ---- *)
 
 Lemma wrepr_addw (z1 z2 : Z) (w1 w2 : mword mt) :
   MDefs.int_fits (BinInt.Z.add z1 z2) ->
@@ -1368,7 +1305,6 @@ rewrite Hval.
 by nia.
 Qed.
 
-(* equality: canonical words decide it *)
 Lemma wrepr_eqw (z1 z2 : Z) (w1 w2 : mword mt) :
   MDefs.int_fits z1 -> MDefs.int_fits z2 ->
   wrepr z1 w1 -> wrepr z2 w2 ->
@@ -1542,12 +1478,7 @@ split.
   + exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 7. LOAD.  The memory halves come from [minj_load] (the fetch) and  *)
-(*    [minj_store] (T's tag write-back = me's MemRead re-tag).        *)
-(* ================================================================== *)
 
-(* every encoded code atom carries some code cell's tag *)
 Lemma encode_code_tag (cde0 : @Merged.code mt) (pc1 : nat)
     (w : mword mt) (v : matom) :
   encode_code cde0 pc1 w = Some v ->
@@ -1576,7 +1507,6 @@ elim: l => [|a l IH] /=.
   by case: (IH H) => [Hl|->]; [left; right | right].
 Qed.
 
-(* all cells of the linked code are code-tagged *)
 Lemma codeW_is_code (n : nat) (cell : @Merged.instr mt * mem_tag) :
   List.nth_error codeW n = Some cell -> is_code cell.2 = true.
 Proof.
@@ -1717,7 +1647,7 @@ case: Hrelmc => [Hrelmc|Hclob]; last first.
       ({| Transitional.val := Transitional.val v.1;
           Transitional.tvtag := ts' |}, tagT)
       (Atom wmc (MTag Invalidated (Pointer.component tpc) None false)).
-  { (* explicit closers only: [done] hangs against this context *)
+  {
     split.
     - split.
       + rewrite /= Ev1 Ets'. exact: erefl.
@@ -1913,11 +1843,7 @@ split.
     * exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 8. STORE.                                                          *)
-(* ================================================================== *)
 
-(* a successful store's target cell exists, so it can be loaded *)
 Lemma store_load (tmem : Transitional.Memory.t) (ptr : Pointer.t)
     (cell : Transitional.tvalue * mem_tag) (tmem' : Transitional.Memory.t) :
   Transitional.Memory.store tmem ptr cell = Some tmem' ->
@@ -2164,9 +2090,6 @@ split.
       -- exact: Hu2.
 Qed.
 
-(* ================================================================== *)
-(* 9. HALT: a T final state is an me final state.                     *)
-(* ================================================================== *)
 
 Lemma sim_halt (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
@@ -2201,13 +2124,7 @@ split.
 - by rewrite Htagv.
 Qed.
 
-(* ================================================================== *)
-(* 10. JUMP (internal): invert the register's [code_rel] through       *)
-(*     [cmap_pc_rel]; the 12-register scan computes literally, every    *)
-(*     update a self-read ([setmI]).                                    *)
-(* ================================================================== *)
 
-(* [check_pc_jump]'s content *)
 Lemma check_pc_jump_ex (cde0 : Transitional.code) (tg1 : mem_tag)
     (pc1 : Pointer.t) (c1 : Component.id) :
   Transitional.check_pc_jump cde0 tg1 pc1 c1 ->
@@ -2414,13 +2331,7 @@ split.
 - exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 11. The T-side label bridge: [find_label] inverted to the array    *)
-(*     position of the defining [TrLabel] cell (feeds MPosT's         *)
-(*     [tlink_label_pos_body_*] for the Jal/BnzNZ targets).           *)
-(* ================================================================== *)
 
-(* [find_label]'s counter is a local fix; top-level twin + bridge *)
 Fixpoint laux (cd : seq (Transitional.instr * mem_tag))
     (l : label) (o : Z) : option Z :=
   match cd with
@@ -2439,8 +2350,6 @@ by case: i => [|[l'|[c' p']]|v r|r1 r2|op r1 r2 r3|r1 r2|r1 r2|r1 r2
               |r l0|r|l0|lp|] /=; rewrite -?IH; case: cd {IH}.
 Qed.
 
-(* keep the accumulator arithmetic folded ([simpl] shreds [Z.add 1 o]
-   into a raw match that lia cannot read) *)
 Local Arguments BinInt.Z.add : simpl never.
 Local Arguments BinInt.Z.sub : simpl never.
 
@@ -2482,7 +2391,6 @@ all: move=> /IH [Hle [xt Hnth]];
   exact: Hnth.
 Qed.
 
-(* the payoff: a successful [find_label_in_comp] pins the label cell *)
 Lemma find_label_in_comp_nth (cde0 : Transitional.code)
     (c : Component.id) (l : label) (pc1 : Pointer.t) :
   Transitional.find_label_in_comp cde0 c l = Some pc1 ->
@@ -2508,12 +2416,7 @@ split.
   exact: Hnth.
 Qed.
 
-(* ================================================================== *)
-(* 12. Jal: the jump-and-link diagram.                                *)
-(* ================================================================== *)
 
-(* the label statics feeding the me-side label-position bridges
-   (ILabel bound, component bound, per-label uniqueness) *)
 Hypothesis Hlab_a : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pra cid = Some Cprocs ->
   Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -2533,7 +2436,6 @@ Hypothesis Huniq_b : forall cid l0 Cprocs0,
   sumn [seq count (ilab l0) (odflt [::] (Cprocs0 p')) | p' <- domm Cprocs0]
   <= 1.
 
-(* procedure-map disjointness, from linkability + well-formedness *)
 Let Hdisj : fdisjoint (domm (Intermediate.prog_procedures pra))
                       (domm (Intermediate.prog_procedures prb)).
 Proof.
@@ -2543,7 +2445,6 @@ rewrite -(Intermediate.wfprog_defined_procedures Hwfa)
 exact: Hd.
 Qed.
 
-(* a pc relation IS a code capability *)
 Lemma pc_rel_code_rel (p : Pointer.t) (w : mword mt) :
   pc_relW p w -> code_rel cmapWW (Ptr p) w.
 Proof.
@@ -2557,7 +2458,6 @@ split.
 - exact: Hw.
 Qed.
 
-(* a non-R_RA scan key survives the R_RA write *)
 Lemma askey_ra_neq (k : nat) :
   k < 32 -> (k == 4) = false ->
   (word.as_word (ssrint.Posz k) == (ra : reg mt)) = false.
@@ -2910,11 +2810,7 @@ split.
 - exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 13. BnzNZ: the taken branch.                                       *)
-(* ================================================================== *)
 
-(* [addw] is addition of representatives *)
 Lemma addw_word_of_nat (a b : nat) :
   addw (@word_of_nat (word_size mt) a) (@word_of_nat (word_size mt) b)
   = @word_of_nat (word_size mt) (a + b).
@@ -2922,7 +2818,6 @@ Proof.
 by rewrite /word_of_nat as_word_addwD.
 Qed.
 
-(* [tpos] is monotone in the cell index *)
 Lemma tseg_take_leq (cseg : seq (Transitional.instr * mem_tag)) q q' :
   q <= q' ->
   tseg_size (take q cseg) <= tseg_size (take q' cseg).
@@ -2945,7 +2840,6 @@ rewrite /tpos leq_add2l.
 exact: tseg_take_leq.
 Qed.
 
-(* a related nonzero integer is a nonzero word *)
 Lemma vrel_nonzero (amap : amap_t) (z : Z) (w : mword mt) :
   vrel amap (Int z) w -> z <> BinNums.Z0 -> (w == 0%w) = false.
 Proof.
@@ -3175,11 +3069,7 @@ split.
 - exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 14. Call: the cross-component event diagram.                       *)
-(* ================================================================== *)
 
-(* the procedure-bound statics (entry-label bridges) *)
 Hypothesis Hproc_a : forall cid Cprocs Pid,
   Intermediate.prog_procedures pra cid = Some Cprocs ->
   Pid \in domm Cprocs -> Pid < P.
@@ -3187,7 +3077,6 @@ Hypothesis Hproc_b : forall cid Cprocs Pid,
   Intermediate.prog_procedures prb cid = Some Cprocs ->
   Pid \in domm Cprocs -> Pid < P.
 
-(* the T-side ENTRY-label bridge: [find_plabel] inverted *)
 Fixpoint plaux (cd : seq (Transitional.instr * mem_tag))
     (c : Component.id) (p : Procedure.id) (o : Z) : option Z :=
   match cd with
@@ -3272,7 +3161,6 @@ split.
   exact: Hnth.
 Qed.
 
-(* [check_comp_belongs] is boolean membership *)
 Lemma check_comp_belongs_mem (c0 : Component.id) (l0 : seq Component.id) :
   Transitional.check_comp_belongs c0 l0 -> mem_seq l0 c0.
 Proof.
@@ -3654,11 +3542,6 @@ split.
 - exact: erefl.
 Qed.
 
-(* ================================================================== *)
-(* 14b. The syscall entry: no code label is [alloc_label] (labels are  *)
-(*      ODD, the entry is a power of two), so [code_label_pos] falls   *)
-(*      through [findopt] to the entry address itself.                 *)
-(* ================================================================== *)
 
 Lemma tlink_no_alloc :
   findopt (MicroPolicies.Recomposition.Definitions.is_label_def
@@ -3678,7 +3561,6 @@ Proof.
 by rewrite /code_label_pos tlink_no_alloc eqxx.
 Qed.
 
-(* the whole register relation transports along the ALLOC extension *)
 Lemma mregs_rel_upd (amap : amap_t) (c b base : nat)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) :
@@ -3695,10 +3577,6 @@ case: (Hrel r) => [[ra [H1 H2 H3]]|Hclob].
 - by right.
 Qed.
 
-(* ================================================================== *)
-(* 15. Return: the cross-component ERet diagram (Jump on a spent      *)
-(*     RET capability; the compiled convention returns through R_RA). *)
-(* ================================================================== *)
 
 Lemma sim_ret (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)

@@ -1,9 +1,3 @@
-(** * T2M — the backward walk.
-
-    [t2me_walk]: a T run transported along the observed me prefix — either
-    stays within the prefix (full transport), or is decomposed exactly at
-    the prefix boundary with the pending event-step recorded. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -82,7 +76,6 @@ Local Notation mregs_relW := (mregs_rel L P C pra prb PB PI).
 Local Notation reg_syncedW := (reg_synced L P C pra prb PB PI).
 Local Notation mstep := (RSCDefs.prog_step_me NC).
 
-(* ---- the standing side conditions ---- *)
 Variable MM : Component.id -> seq sv.
 Hypothesis HMM : forall c S,
   getm cdeW c = Some S -> comp_ok (c, 1, Z0) S (MM c).
@@ -115,7 +108,6 @@ Hypothesis HNCeq : NC = MDefs.NC.
 Hypothesis Himm_a : MDefs.imm_fits pra.
 Hypothesis Himm_b : MDefs.imm_fits prb.
 
-(* ---- the label/procedure statics ---- *)
 Hypothesis Hlab_a : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pra cid = Some Cprocs ->
   Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -140,8 +132,6 @@ Hypothesis Hproc_a : forall cid Cprocs Pid,
 Hypothesis Hproc_b : forall cid Cprocs Pid,
   Intermediate.prog_procedures prb cid = Some Cprocs ->
   Pid \in domm Cprocs -> Pid < P.
-
-(* ---- the code-shape statics this file consumes ---- *)
 
 Hypothesis Hself : forall tpc r1 r2 tg c,
   Transitional.executing cdeW tpc (TrMov r1 r2) tg c -> r1 <> r2.
@@ -180,19 +170,15 @@ Hypothesis Hc1s : forall tpc i tg c,
 Local Notation tpW := (Intermediate.program_link pra prb).
 Local Notation heap_invW := (heap_inv NC).
 
-(* the closed dispatch, saturated with the section context *)
 Local Notation step_sim :=
   (t2me_step_sim HMM Hcst HuniqL Hbound HPB Hwfa Hwfb Hlinkable Hsmall HNCws HNCal
      HNCeq Himm_a Himm_b Hlab_a Hlab_b Hcomp_a Hcomp_b Huniq_a Huniq_b
      Hproc_a Hproc_b Hself Hjra Hbf HlL_bnz HlL_jal HpP Hsucc_jal
      Hsucc_call Hc1s).
 
-(* an arbitrary program pins the me determinacy instance; the step
-   relation [prog_step_me NC] does not depend on it *)
 Variable Wdet : program.
 Let DETme : determinate (me_sem NC Wdet) := det_me_sem NC Wdet.
 
-(* T steps carry at most one event *)
 Lemma tr_shape (s1 : TS.state) (tr : Events.trace) (s2 : TS.state) :
   TS.step cdeW s1 tr s2 -> tr = E0 \/ exists e, tr = [:: e].
 Proof.
@@ -345,7 +331,6 @@ elim: HstarT => [tsX|tsX tr tsB u' ts1' u0 Hstep Hrest IH Eu0]
            ** apply: star_trans; [exact: Hone | exact: HB3 | by []].
 Qed.
 
-(* every silent T chain pumps at least as many silent me steps *)
 Lemma t2me_silent_pump (t : Events.trace) (ts_base : TS.state) :
   TSim.t_initial_base cdeW tpW ts_base ->
   MDefs.run_fits cdeW tpW t ->
@@ -393,11 +378,7 @@ elim: n => [|n IH] tsA ts1 HsN tdone amapA msA Hroot Hm Hh Hdsy Hrem.
   apply: starN_step; [exact: H6 | exact: HqN | by []].
 Qed.
 
-(* ================================================================== *)
-(* The contradiction kernels for the flip.                            *)
-(* ================================================================== *)
 
-(* two same-trace me runs from one state are silently linked *)
 Lemma same_trace_silent_link (tm : Events.trace)
     (msO msA msB : @Symbolic.state mt lrc_tags unit) :
   star mstep tt msO tm msA -> star mstep tt msO tm msB ->
@@ -415,7 +396,6 @@ case: (star_run_compare DETme HA HB) => [[t2 [Et2 HS]]|[u2 [Eu2 HS]]].
   by rewrite -Eu in HS.
 Qed.
 
-(* a stuck state admits only the reflexive run *)
 Lemma nostep_star_refl (msX msY : @Symbolic.state mt lrc_tags unit)
     (tr : Events.trace) :
   (forall t' s', ~ mstep tt msX t' s') ->
@@ -426,7 +406,6 @@ inversion Hst; subst; first by [].
 by case: (Hns _ _ H).
 Qed.
 
-(* an me run about to emit an event passes a silently-stuck state *)
 Lemma me_first_event_stuck (e : Events.event) (rest : Events.trace)
     (msA msB : @Symbolic.state mt lrc_tags unit) :
   star mstep tt msA (e :: rest) msB ->
@@ -444,7 +423,6 @@ exists msx. split=> // s' Hs'.
 exact: (event_no_silent DETme Hstep Hs').
 Qed.
 
-(* reaching a stuck state yields a silently-stuck state on the way *)
 Lemma stuck_target (t2 : Events.trace)
     (ms1 s_m : @Symbolic.state mt lrc_tags unit) :
   star mstep tt ms1 t2 s_m ->
@@ -457,8 +435,6 @@ case: t2 => [|ev rest] Hst Hns.
 - exact: me_first_event_stuck Hst.
 Qed.
 
-(* the pending-event kernel: a matched T event step at the exhausted
-   prefix boundary contradicts a stuck end of the me run *)
 Lemma boundary_event_dead (tm : Events.trace)
     (ts_base ts_t ts_next : TS.state) (e : Events.event)
     (amap1 : amap_t)
@@ -498,8 +474,6 @@ case: (same_trace_silent_link Hms1 Hsm) => Hlink; last first.
     * by case: (Hns _ _ H).
 Qed.
 
-(* the divergence kernel: silent T divergence at a matched state
-   contradicts a silently-stuck state on the me path *)
 Lemma silent_div_dead (t : Events.trace) (ts_base ts1 : TS.state)
     (tdone : Events.trace) (amap1 : amap_t)
     (ms1 msx : @Symbolic.state mt lrc_tags unit) :
@@ -525,9 +499,6 @@ have Hbound' := silent_starN_bound DETme HsN0 Hstuck HpN.
 by lia.
 Qed.
 
-(* ================================================================== *)
-(* The base-rooted walk (tdone = E0), as consumed by the assembly.    *)
-(* ================================================================== *)
 
 Corollary t2me_walk0 (t : Events.trace)
     (ms0 ms_m : @Symbolic.state mt lrc_tags unit)
@@ -571,10 +542,6 @@ case: (t2me_walk Hbase Hrf Hmrun Hstar Hrefl_t Hm0 Hh0 Hdsy0 Hrefl_m
   by exists tpref, e, urest, ts_t, ts_next, amap1, ms1; split.
 Qed.
 
-(* ================================================================== *)
-(* The backward flip: an observed me prefix is matched by a T          *)
-(* behaviour that prefixes or improves it.                             *)
-(* ================================================================== *)
 
 Theorem t2me_bwd_prefix_for (m : finpref_behavior)
     (bT : program_behavior) :

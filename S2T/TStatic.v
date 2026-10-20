@@ -1,18 +1,3 @@
-(** * Stage 3 — the static facts about the LINEARIZED compiled program.
-
-    See plan-i2t-redo.md §3.
-
-    Everything Stage 4 and Stage 5 took as a premise — `entry_int`,
-    `entry_ext`, the `labelsP`-domain fact, and `start_ok`'s code half — is a
-    statement about `intermediate_to_transitional tp`, and all of them rest on
-    ONE decomposition: a component's array is the concatenation, over its
-    procedures, of a HEADER cell followed by that procedure's mapped
-    instructions. Locate the header and everything else follows.
-
-    The standing rule of the redo applies here with full force: no
-    `Hypothesis`, no `Variable` standing in for a fact. Every lemma below is
-    about the linearizer's actual output. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Source.Language.
@@ -55,7 +40,6 @@ Proof.
   - case: (IH Hin) => [s1 [s2 E]]. by exists (y :: s1), s2; rewrite E.
 Qed.
 
-(** The component array of a component that HAS procedures. *)
 Lemma cde_getm pr c Cprocs :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm (Transitional.intermediate_to_transitional pr) c
@@ -73,21 +57,12 @@ Proof.
     by case: E => Ec _; move: Hne; rewrite ?Ec -?Ec eqxx.
 Qed.
 
-(* ================================================================== *)
-(* Where a procedure HEADER is, and that the machine finds it there    *)
-(* ================================================================== *)
 
-(** The cells a cross-component call can land on. Only [inr] — an ordinary
-    [ILabel] is [inl], which is what keeps `Bnz` and `ICall` from confusing
-    each other's targets. *)
 Definition is_phdr (c : Component.id) (p : Procedure.id)
                    (x : Transitional.instr * mem_tag) : bool :=
   if x.1 is Transitional.TrLabel (inr (c', p')) then
     Nat.eqb c c' && Nat.eqb p p' else false.
 
-(** The same accumulator trick as `TLabel`: [find_plabel]'s counter is a local
-    [let fix], so it cannot be named in a lemma; give it a top-level twin and
-    bridge the two by generalising the accumulator. *)
 Fixpoint pfaux (cd : seq (Transitional.instr * mem_tag))
                (c : Component.id) (p : Procedure.id) (o : Z) : option Z :=
   match cd with
@@ -135,8 +110,6 @@ Proof.
   move=> H. by rewrite find_plabel_pfaux pfaux_cat_notin // Z.add_0_r.
 Qed.
 
-(** A procedure's MAPPED instructions contain no header: [instr_to_transitional]
-    sends [ILabel] to [inl], and nothing to [inr]. *)
 Lemma no_phdr_map c p cd :
   count (is_phdr c p) [seq Transitional.instr_to_transitional c i | i <- cd]
   = 0.
@@ -145,7 +118,6 @@ Proof.
   by case: i => * //=; case: (Nat.eqb c _).
 Qed.
 
-(** …so a procedure's whole block contributes a header only for ITSELF. *)
 Lemma no_phdr_proc pr c p q :
   q <> p ->
   count (is_phdr c p) (Transitional.linearize_proc pr c q) = 0.
@@ -167,17 +139,7 @@ Proof.
   by move=> E; move: Hq; rewrite E eqxx.
 Qed.
 
-(* ================================================================== *)
-(* The payoff: where a cross-component call lands                      *)
-(* ================================================================== *)
 
-(** ★ For a compiled program, `find_plabel_in_code` resolves a procedure to the
-    HEADER cell of its block, and the procedure's own code sits immediately
-    after it. Both halves of Stage 4's `entry_ext` premise come from here: the
-    resolution itself, and the `code_at_I` at `Pointer.inc pcW`.
-
-    The uniqueness the resolution needs is not assumed — it is `domm`'s, and
-    the only header in the prefix belongs to some OTHER procedure. *)
 Lemma find_plabel_in_code_at pr c Cprocs P cd :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -216,19 +178,7 @@ Proof.
   by rewrite find_plabel_at.
 Qed.
 
-(* ================================================================== *)
-(* From the decomposition to [code_at_I]                               *)
-(* ================================================================== *)
 
-(** ★ Any CONTIGUOUS slice of a compiled procedure's code is a [code_at_I] at
-    a COMPUTABLE pc — `size pre + 1 + size A`, i.e. the header's offset, one
-    past it, then whatever precedes the slice. This is the bridge Stage 4's two
-    entry premises are instantiated through: give it the split of
-    `compile_proc`'s output and it hands back the program point.
-
-    Stated non-existentially on purpose: `entry_ext` needs the wrapper's code
-    at `Pointer.inc pcW` SPECIFICALLY — the cell an `ICall` reaches after the
-    administrative header step — and that is the `A = [::]` instance. *)
 Lemma code_at_I_in_proc pr c Cprocs P cd A B D pre post :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -253,8 +203,6 @@ Proof.
   - rewrite size_cat /= size_map. congr (Z.of_nat _). by lia.
 Qed.
 
-(** The [A = [::]] instance, with the pc in the form the [ICall] rule leaves
-    it: one past the header that [find_plabel_in_code] resolved to. *)
 Lemma code_at_I_after_header pr c Cprocs P cd B D pre post :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -274,22 +222,7 @@ Proof.
      rewrite Ecd.
 Qed.
 
-(* ================================================================== *)
-(* [compile_proc]'s output, main's flavour                             *)
-(* ================================================================== *)
 
-(** The companion of `S2I/Simulation.v:1546`'s `compile_proc_shape_std`, for the
-    one procedure the MACHINE enters rather than a caller. Main's wrapper is
-    longer by the FLAG protocol — load the flag, push its old value as the
-    context marker, branch on it, install `Int 0` as the argument on the initial
-    run, then set the flag — and it ends at an `IHalt`/`IReturn` pair rather
-    than a bare `IReturn`. That is precisely the code `ef_main_entry_run` and
-    `ef_halt_run` consume, at the two ends.
-
-    `immediately_final e = false` is a premise because it is what makes the
-    `halt_pad` empty, so the first cell after the procedure header really is
-    the `IConst 1 R_ONE` the entry run expects. It is the same condition the
-    I-level development carries as `vi_mainnf`. *)
 Lemma compile_proc_shape_main C0 plm P e s cd s' pl :
   compile_proc C0 (lbp C0) (scr C0) plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -330,15 +263,6 @@ Proof.
   by rewrite -Ecd Hmain Hnf.
 Qed.
 
-(** ★ The PAD-TOLERANT version, and the one `entry_int` needs at `(main, main)`.
-
-    `compile_proc` emits `halt_pad ++ ext_entry ++ ILabel pl :: body`
-    (`S2I/Compiler.v:422`), with `halt_pad = [:: IHalt]` exactly when main's
-    body is immediately final. `compile_proc_shape_main` assumes the pad away
-    because `start_ok`'s ordinary case needs the wrapper to sit right after the
-    header; but the BODY is emitted either way, and an intra-component call to
-    `(main, main)` resolves through `ILabel pl` and so does not care where the
-    wrapper begins. Keeping the pad symbolic is the whole difference. *)
 Lemma compile_proc_shape_main_gen C0 plm P e s cd s' pl :
   compile_proc C0 (lbp C0) (scr C0) plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -379,16 +303,7 @@ Proof.
   do 4!eexists. split; [by [] | exact: EE | by rewrite -Ecd Hmain].
 Qed.
 
-(* ================================================================== *)
-(* Discharging Stage 4's entry premises                                *)
-(* ================================================================== *)
 
-(** ★ `entry_ext`, for one callee. Everything composes: `compile_proc_shape_std`
-    (`S2I/Simulation.v:1546`) splits the compiled procedure into its WRAPPER and
-    its BODY at the `ILabel pl`; `find_plabel_in_code_at` locates the header;
-    `code_at_I_after_header` puts the wrapper one cell past it — where an
-    `ICall` lands after the administrative header step — and
-    `code_at_I_in_proc` puts the body after the wrapper. *)
 Lemma entry_ext_of_compiled pr c Cprocs P cd plm pl e s s' :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -448,9 +363,6 @@ Proof.
   - exact: (code_at_I_in_proc (A := W) (B := B) (D := [::]) Hg HgP Elin EcdWB).
 Qed.
 
-(** ★ `entry_int`, the same composition minus the wrapper: an intra-component
-    call resolves through the ORDINARY label `pl`, so only the body slice is
-    needed. *)
 Lemma entry_int_of_compiled pr c Cprocs P cd plm pl e s s' :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -473,10 +385,6 @@ Proof.
   by exists pcE, cbody, sA, sB.
 Qed.
 
-(** …and at `(main, main)`, where the body sits after a possible one-cell halt
-    pad AND the longer dual entry. The conclusion is IDENTICAL to
-    `entry_int_of_compiled`'s — only the offset of `pcE` differs, and that is
-    existential. *)
 Lemma entry_int_of_compiled_main pr c Cprocs P cd plm pl e s s' :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -527,7 +435,6 @@ Proof.
     move: Hc. rewrite /B. by do 10!rewrite -?catA ?cat_cons ?cat0s ?cats0.
 Qed.
 
-(** ★ …hence `entry_int` for EVERY callee, main included. *)
 Lemma entry_int_any_of_compiled pr c Cprocs P cd plm pl e s s' :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -549,8 +456,6 @@ Proof.
   - exact: (entry_int_of_compiled Hg HgP Hcp Hpl Hm).
 Qed.
 
-(** ★ …and the same composition for main: the header resolution, the ENTRY the
-    machine lands on, and the body. This is the code half of `start_ok`. *)
 Lemma entry_main_of_compiled pr c Cprocs P cd plm pl e s s' :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -623,9 +528,6 @@ Proof.
   - exact: (code_at_I_in_proc (A := W) (B := B) (D := [::]) Hg HgP Elin EcdWB).
 Qed.
 
-(** The header cell IS what the machine reads at the resolved address — the
-    third premise of `TS.Call`, and the carrier of the `entry` tag its
-    `check_pc_call` inspects. *)
 Lemma nth_error_cat_size {A : Type} (l1 l2 : seq A) (x : A) :
   List.nth_error (l1 ++ x :: l2) (size l1) = Some x.
 Proof. by elim: l1 => [|y l1 IH] //=. Qed.
@@ -648,12 +550,7 @@ Proof.
   by rewrite /= Nat2Z.id Elin nth_error_cat_size.
 Qed.
 
-(* ================================================================== *)
-(* …and up to the whole compiled program                               *)
-(* ================================================================== *)
 
-(** ★ …and the guard-free version, which is `TSim.entry_int` itself once the
-    global environment's procedure map is unfolded. *)
 Lemma entry_int_whole_any p tp C P P_expr plm tl :
   Source.well_formed_program p ->
   compile_program p = Some tp ->
@@ -683,11 +580,6 @@ Proof.
   exact: (entry_int_any_of_compiled HgT HgTP Hcp Htl).
 Qed.
 
-(** The LRC entry check, discharged. `head_tag`'s allowed-caller list is
-    `filter allowed_call_by (domm I)`, and `allowed_call_by C` unfolds to the
-    conjunction of the callee EXPORTING the procedure and the caller IMPORTING
-    it — so `check_pc_call` needs both halves of the interface agreement, not
-    just the caller's import. *)
 Lemma check_comp_belongs_in (C : Component.id) (l : seq Component.id) :
   C \in l -> Transitional.check_comp_belongs C l.
 Proof.
@@ -710,11 +602,6 @@ Proof.
   by rewrite /= Hc HC Hex Him.
 Qed.
 
-(** ★ `entry_ext`'s CODE half for every callee, main included — a THREE-way
-    disjunction, because `compile_proc` gives `(main, main)` its dual entry and,
-    when main's body is immediately final, puts the HALT PAD in front of that.
-    All three are real shapes of real compiled programs; the diagram kills the
-    third from the invariant. *)
 Lemma entry_ext_any_of_compiled pr c Cprocs P cd plm pl e s s' :
   getm (Intermediate.prog_procedures pr) c = Some Cprocs ->
   getm Cprocs P = Some cd ->
@@ -806,26 +693,19 @@ Proof.
   exists (c, 0, Z.of_nat (size pre)), pcE, cbody, sA', sB'.
   split=> //.
   case Hfin: (immediately_final e); rewrite Hfin /= in Ecd.
-  - (* the HALT PAD is there *)
+  -
     right; right. split; first exact: Ec. split; first exact: EP.
     exists [::].
     apply: (code_at_I_after_header (B := [:: IHalt]) (D := W ++ B)
               Hg HgP Elin).
     by rewrite Ecd.
-  - (* no pad: main's dual entry sits right after the header *)
+  -
     right; left. split; first exact: Ec. exists lmain, lreturn.
     have Hc := code_at_I_after_header (B := W) (D := B) Hg HgP Elin
                  (ltac:(by rewrite Ecd) : cd = W ++ B).
     move: Hc. rewrite /W. by do 12!rewrite -?catA ?cat_cons ?cat0s ?cats0.
 Qed.
 
-(** ★ `entry_ext` for a whole compiled program, at EVERY callee.
-
-    The four interface facts `check_pc_call_header` needs come from the two
-    halves of the interface story: `imported_procedure` (a premise — the source
-    step that triggers this carries it) gives the CALLER's side, and
-    `closed_interface` turns it into the CALLEE's export. Neither is derivable
-    from "Cf has a procedure P", which is why the premise had to be added. *)
 Lemma entry_ext_whole_any p tp C Cf P P_expr :
   Source.well_formed_program p ->
   Source.closed_program p ->
@@ -886,7 +766,6 @@ Lemma entry_ext_whole_any p tp C Cf P P_expr :
            ++ cbody ++ pop R_ARG ++ pop R_SP ++ [:: IJump])].
 Proof.
   move=> Hwf Hclosed Hcomp Him Hfind.
-  (* --- the four interface facts --- *)
   case: Him => [CIC [HgCIC Himp]].
   have Him' : imported_procedure (Source.prog_interface p) C Cf P
     by exists CIC.
@@ -894,7 +773,6 @@ Proof.
   have Eif : Intermediate.prog_interface tp = Source.prog_interface p
     := compilation_preserves_interface _ _ Hcomp.
   split; first by rewrite mem_domm HgCIf.
-  (* --- the code --- *)
   move: Hfind. rewrite /Source.find_procedure.
   case HgC: (getm (Source.prog_procedures p) Cf) => [Cprocs|] //= HgP.
   case: (compile_prog_procedures_spec Hwf Hcomp)
@@ -920,11 +798,6 @@ Proof.
   - by rewrite Elab.
 Qed.
 
-(** ★ The `labelsP`-domain fact: a component with a label map is a component
-    of the program. `gen_all_procedures_labels_spec` characterises the map's
-    domain as the procedure map's, and well-formedness identifies that with the
-    INTERFACE's — which is the form Stage 4's `vi_dom` and `diagram_return_ext`
-    consume. *)
 Lemma labelsP_domm p C plm :
   Source.well_formed_program p ->
   getm (labelsP p) C = Some plm ->
@@ -944,14 +817,7 @@ Proof.
   by rewrite (Source.wfprog_defined_procedures Hwf).
 Qed.
 
-(* ================================================================== *)
-(* Component-wide label uniqueness                                     *)
-(* ================================================================== *)
 
-(** `cde_getm`'s converse-in-shape: whatever the code map returns for a
-    component, it is that component's linearization. Enough on its own —
-    a component with no procedures linearizes to `[::]`, whose label count is
-    trivially 0. *)
 Lemma cde_getm_shape pr c C_code :
   getm (Transitional.intermediate_to_transitional pr) c = Some C_code ->
   C_code = Transitional.linearize_component pr c.
@@ -961,25 +827,13 @@ Proof.
   by case: ifP => [/eqP -> [<-]|_ H] //; exact: IH H.
 Qed.
 
-(** The opcode map takes `ILabel` to `TrLabel (inl _)` and everything else to
-    something that is not a `TrLabel (inl _)`, so the two label counts agree
-    cell for cell. `is_tlabel`/`is_ilabel` compare their arguments in opposite
-    orders, which is the only wrinkle. *)
 Lemma is_tlabel_map c l i :
   TLabel.is_tlabel l (Transitional.instr_to_transitional c i) = is_ilabel l i.
 Proof.
-  (* [ICall] is the one non-label case that does not compute away: its image is
-     an [if Nat.eqb c c'] whose two branches are both [TrJalProc]. *)
   case: i => [|l'|v r|r1 r2|op r1 r2 r3|r1 r2|r1 r2|r1 r2|r l0|
               |l0|c' P||] //=. by case: (Nat.eqb c c').
 Qed.
 
-(** ★ `TDrain.labels_uniq` for a compiled program: `S2I/LabelUniq.v:834`'s
-    `compiled_labels_unique` states the bound as a `sumn` of per-procedure
-    counts, and `linearize_component` is a `flatten` of per-procedure
-    linearizations — so `count_flatten` lines the two up directly. The
-    procedure HEADERS are `TrLabel (inr _)` and are not counted, which is what
-    makes flattening procedures into one array safe. *)
 Lemma labels_uniq_compiled p tp :
   compile_program p = Some tp ->
   forall C0, TDrain.labels_uniq (Transitional.intermediate_to_transitional tp)
@@ -999,13 +853,7 @@ Proof.
   exact: (compiled_labels_unique Hcomp l Hp).
 Qed.
 
-(* ================================================================== *)
-(* The initial state                                                   *)
-(* ================================================================== *)
 
-(** Every declared component has a memory at startup: the initial memory is a
-    `mkfmapf` over `domm (prog_interface tp)`, so membership IS existence.
-    This is `ef_main_entry_run`'s `exists cm, getm m C = Some cm`. *)
 Lemma initial_memory_component tp C :
   C \in domm (Intermediate.prog_interface tp) ->
   exists cm,
@@ -1017,9 +865,6 @@ Proof.
   by rewrite mkfmapfE HC /=; eexists.
 Qed.
 
-(** `Register.init` is a literal seven-key map of `tUndef`, so every register
-    starts DATA-tagged — including `R_RA`, which is what makes main's entry a
-    junk push rather than a capability spill. *)
 Lemma init_regs_tag r :
   Transitional.Register.get_tag r Transitional.Register.init = Some Other.
 Proof. by case: r. Qed.
@@ -1031,10 +876,6 @@ Proof. by case: r. Qed.
 Lemma init_regs_dom : TInv.regs_dom Transitional.Register.init.
 Proof. by case=> /=; eexists. Qed.
 
-(** Reserving procedure blocks does not touch CONTENT — [reserve_block] only
-    bumps [nextblock] — so the buffers `prealloc` laid down survive into the
-    initial memory untouched. With the accumulator threaded, this is a
-    two-line induction. *)
 Lemma reserve_blocks_content m n :
   Transitional.Memory.content (Transitional.Memory.reserve_blocks m n).1
   = Transitional.Memory.content m.
@@ -1050,12 +891,6 @@ Proof.
   by rewrite /Transitional.Memory.load_b reserve_blocks_content.
 Qed.
 
-(** ★ The two cells main's entry reads. `gen_buffers` puts
-    `inr [:: Undef; Int 0]` at block 1 of every component, `prealloc` tags both
-    cells `Other` through `to_tagged_block`, and reserving procedure blocks
-    leaves `content` alone — so the SCRATCH cell starts `Undef` and the FLAG
-    cell starts `Int 0`, which is what makes main's `IBnz` fall through to its
-    `IHalt` on the initial run. *)
 Lemma initial_cells tp C ii :
   getm (Intermediate.prog_buffers tp) C
     = Some (mkfmap [:: (0, ii); (1, inr [:: Undef; Int 0])]) ->
@@ -1103,15 +938,7 @@ Proof.
   by split; [rewrite (Hload 0%Z) | rewrite (Hload 1%Z)]; try lia.
 Qed.
 
-(* ================================================================== *)
-(* Towards the initial [minj]                                          *)
-(* ================================================================== *)
 
-(** With the EMPTY renaming, four of `minj`'s ten fields are vacuous
-    (`mj_load`, `mj_rng`, `mj_dom`, `mj_data` all quantify over `a C b = Some
-    b'`), and the rest are structural facts about the two initial memories.
-    `mj_wf_t` is the one with content: `prealloc` sets `nextblock` to one past
-    the largest declared block, so every block it lays down is in range. *)
 Lemma fold_max_ge (s : seq nat) acc : acc <= fold_left Nat.max s acc.
 Proof.
   elim: s acc => [|x s IH] acc //=.
@@ -1133,8 +960,6 @@ Proof.
   by rewrite ltnS; exact: fold_max_ub.
 Qed.
 
-(** …and reserving procedure blocks keeps it: `content` is untouched and
-    `nextblock` only grows. *)
 Lemma reserve_blocks_nextblock m n :
   Transitional.Memory.nextblock m
   <= Transitional.Memory.nextblock (Transitional.Memory.reserve_blocks m n).1.
@@ -1151,13 +976,6 @@ Proof.
   apply: leq_trans (reserve_blocks_nextblock m n). exact: Hwf.
 Qed.
 
-(** ★ The question `mj_load` raised, settled by well-formedness rather than by
-    a side condition: `Source.well_formed_buffer_value` forces every pointer in
-    a static buffer to point at `(C, Block.local, _)` — the record's own comment
-    calls this "buffer contents do not forge pointers into dynamic memory or
-    into other components" — and `Block.local` is precisely the block
-    `init_renaming` maps, identically. So every buffer value injects into
-    itself. *)
 Lemma val_inject_init_buffer C v :
   Source.well_formed_buffer_value C v -> val_inject init_renaming v v.
 Proof.
@@ -1168,11 +986,6 @@ Proof.
   - by move=> _; exact: VI_undef.
 Qed.
 
-(** `mj_data` at the initial state: every cell of a component's block 0 is
-    `Other`-tagged, because `prealloc` builds it either from `repeat tUndef`
-    (the `inl` case) or from `to_tagged_block`, whose `to_tagged_cell` is
-    `MVal Other` (the `inr` case). Both are `Other`, so a dereference through
-    the α-image of a source pointer never lands on a capability husk. *)
 Lemma initial_block0_data tp C ii i w :
   getm (Intermediate.prog_buffers tp) C
     = Some (mkfmap [:: (0, ii); (1, inr [:: Undef; Int 0])]) ->
@@ -1222,16 +1035,7 @@ Proof.
     + exact: IH k.
 Qed.
 
-(* ================================================================== *)
-(* The two [prealloc]s correspond                                      *)
-(* ================================================================== *)
 
-(** `mj_load`'s remaining obstacle: the source and target initial memories are
-    built by DIFFERENT `prealloc`s — `Common/Memory.v:151` lays down
-    `repeat Undef` / `chunk`, `Transitional.v` lays down
-    `repeat tUndef` / `to_tagged_block c chunk`. The two `init_block`s are
-    structurally parallel, so the target chunk's VALUE projection is the source
-    chunk, cell for cell. *)
 Lemma nth_error_map_omap {A B : Type} (f : A -> B) (l : seq A) k :
   List.nth_error [seq f x | x <- l] k = omap f (List.nth_error l k).
 Proof. by elim: l k => [|x l IH] [|k] //=. Qed.
@@ -1259,8 +1063,6 @@ Proof.
     by case: (List.nth_error chunk k).
 Qed.
 
-(** The SOURCE side's block 0, via `ComponentMemory.load_prealloc` — the
-    module seals `load`, so it cannot be unfolded directly. *)
 Lemma source_block0_load p C ib i :
   getm (Source.prog_buffers p) C = Some ib ->
   Common.Memory.Memory.load (Source.prepare_buffers p) (C, Block.local, i)
@@ -1297,10 +1099,6 @@ Proof.
     by apply: List.nth_error_In Hin.
 Qed.
 
-(** ★ `mj_load` at the initial state. Both sides reduce to an `nth_error` on
-    their own block-0 chunk; `chunk_vals` identifies them, so the two options
-    are the SAME option, and each value injects into itself by
-    `val_inject_init_buffer`. *)
 Lemma initial_mj_load p tp C ib i :
   getm (Source.prog_buffers p) C = Some ib ->
   Source.well_formed_buffer C ib ->
@@ -1321,7 +1119,6 @@ Proof.
                  | inl size => repeat Undef size
                  | inr chunk => chunk
                  end).
-  (* --- the target's block 0 --- *)
   have Hcm : getm (Transitional.Memory.prepare_procedures_initial_memory tp) C
            = Some (Transitional.Memory.reserve_component_blocks tp C
                      (Transitional.Memory.prealloc
@@ -1354,7 +1151,6 @@ Proof.
       by rewrite E.
     rewrite /Transitional.Memory.load_b Ec reserve_blocks_content Hchunk.
     by case: (0 <=? i)%Z. }
-  (* --- the source's block 0 --- *)
   have Esrc : Common.Memory.Memory.load (Source.prepare_buffers p)
                 (C, Block.local, i)
             = if (0 <=? i)%Z
@@ -1366,14 +1162,7 @@ Proof.
   apply: val_inject_init_buffer. exact: (buffer_chunk_wf Hwfb E).
 Qed.
 
-(* ================================================================== *)
-(* The four shape fields                                               *)
-(* ================================================================== *)
 
-(** `mj_local_t`: block 0 is in the target component's domain. `prealloc` is a
-    `mapm` over the component's buffer map and `reserve_blocks` leaves
-    `content` alone, so both `domm`s collapse and the field comes down to
-    `Block.local \in domm bufs` — which `gen_buffers`' block-0 entry gives. *)
 Lemma initial_local_t tp C cm bufs :
   getm (Transitional.Memory.prepare_procedures_initial_memory tp) C = Some cm ->
   getm (Intermediate.prog_buffers tp) C = Some bufs ->
@@ -1396,9 +1185,6 @@ Proof.
              !domm_map Hbuf.
 Qed.
 
-(** The source initial memory is a `mapm` too, so a component memory THERE is
-    always a `prealloc` of the singleton buffer map — which is all three
-    source-side fields need. *)
 Lemma prepare_buffers_get p C cm :
   getm (Source.prepare_buffers p) C = Some cm ->
   exists ib, getm (Source.prog_buffers p) C = Some ib
@@ -1423,9 +1209,6 @@ Proof.
   by rewrite (Common.Memory.ComponentMemory.domm_prealloc _ _ erefl) mem_domm.
 Qed.
 
-(** `mj_domm`: the T memory has every component the source has. Both memories
-    are keyed by the same interface — the source through `prog_buffers` (equal
-    domains by well-formedness), the target through `prog_interface`. *)
 Lemma initial_mj_domm p tp C cm :
   domm (Source.prog_buffers p) = domm (Intermediate.prog_interface tp) ->
   getm (Source.prepare_buffers p) C = Some cm ->
@@ -1437,9 +1220,6 @@ Proof.
   apply: initial_memory_component. by rewrite -Hd mem_domm Hib.
 Qed.
 
-(** Having a component memory at startup means being declared — the converse of
-    `initial_memory_component`, and what turns a successful target load into the
-    `gen_buffers` shape the tag lemmas want. *)
 Lemma initial_mem_dom tp C cm :
   getm (Transitional.Memory.prepare_procedures_initial_memory tp) C = Some cm ->
   C \in domm (Intermediate.prog_interface tp).
@@ -1468,14 +1248,7 @@ Proof.
   rewrite Ec. apply: cwf_reserve_blocks. exact: cwf_prealloc.
 Qed.
 
-(* ================================================================== *)
-(* Nothing is a capability at startup                                  *)
-(* ================================================================== *)
 
-(** `initial_block0_data` generalised off block 0 — and it needs NO premise at
-    all. `prealloc`'s `init_block` is `repeat tUndef` on one branch and
-    `to_tagged_block`, i.e. `map (to_tvalue = MVal Other)`, on the other, so
-    every cell it lays down is `Other` whatever block it sits in. *)
 Lemma prealloc_all_other C bufs b i w :
   Transitional.Memory.load_b
     (Transitional.Memory.prealloc (mapm (fun a => (C, a)) bufs)) b i = Some w ->
@@ -1513,15 +1286,6 @@ Proof.
   exact: prealloc_all_other.
 Qed.
 
-(** ★ The initial `tag_inv`, over the EMPTY ledger. Three of its seven fields
-    are vacuous because the ledger is empty; the one with content is `ti_data`
-    — "the only live capability cells are the ledger's" — which holds because
-    at startup there are no live cells AT ALL. That is `initial_all_other`.
-
-    The ledger is empty rather than `[:: (CReg, InternalJump)]` because
-    `Register.init` puts junk in `R_RA`: main's activation is entered by the
-    MACHINE, not by a caller, so there is no capability to record until the
-    wrapper's own `IJal`. *)
 Lemma initial_tag_inv tp :
   TInv.tag_inv [::] (Transitional.Memory.prepare_procedures_initial_memory tp)
                Transitional.Register.init (Level 0).
@@ -1541,22 +1305,7 @@ Proof.
   - exact: init_regs_dom.
 Qed.
 
-(* ================================================================== *)
-(* ★ The initial memory injection                                      *)
-(* ================================================================== *)
 
-(** All ten fields at once. The three premises are the compiler's static
-    guarantees, and nothing else is needed:
-
-    - every source buffer is well formed (`wfprog_buffer_values`);
-    - `gen_buffers` puts the source buffer at block 0 and the scratch/flag pair
-      at block 1 of the corresponding target buffer map;
-    - the source's buffer domain is the target's interface domain.
-
-    Note where the WORK went: only `mj_load` and `mj_data` have content, and
-    both were done above. Everything here is dispatch — four fields are vacuous
-    at `init_renaming` because it maps `Block.local` and nothing else, and the
-    remaining four are the shape lemmas just proved. *)
 Lemma initial_minj p tp :
   (forall C ib, getm (Source.prog_buffers p) C = Some ib ->
      Source.well_formed_buffer C ib) ->
@@ -1568,7 +1317,6 @@ Lemma initial_minj p tp :
     (Transitional.Memory.prepare_procedures_initial_memory tp).
 Proof.
   move=> Hwfb Hgen Hd.
-  (* the shape of a component that HAS a target memory, used three times *)
   have Hshape : forall C cm,
       getm (Transitional.Memory.prepare_procedures_initial_memory tp) C
       = Some cm ->
@@ -1579,8 +1327,8 @@ Proof.
     case E: (getm (Source.prog_buffers p) C) => [ib|] // _.
     by exists ib; split=> //; exact: Hgen. }
   split.
-  - (* mj_ok *) exact: init_renaming_ok.
-  - (* mj_load *)
+  -  exact: init_renaming_ok.
+  -
     move=> C b b' i. rewrite /init_renaming.
     case Eb: (b == Block.local); last by [].
     move=> [<-]. move/eqP: Eb => ->.
@@ -1590,7 +1338,7 @@ Proof.
       * exact: (Hwfb _ _ E).
       * exact: (Hgen _ _ E).
       * by rewrite -Hd mem_domm E.
-    + (* undeclared: both memories miss the component *)
+    +
       have -> : Common.Memory.Memory.load (Source.prepare_buffers p)
                   (C, Block.local, i) = None
         by rewrite /Common.Memory.Memory.load /= /Source.prepare_buffers mapmE E.
@@ -1605,20 +1353,20 @@ Proof.
                 mkfmapfE.
         by move/negbTE: HC => ->. }
       by [].
-  - (* mj_wf_t *) exact: initial_cwf.
-  - (* mj_local_t *)
+  -  exact: initial_cwf.
+  -
     move=> C cm Hcm. case: (Hshape _ _ Hcm) => [ib [_ Hbuf]].
     apply: (initial_local_t Hcm Hbuf). by rewrite mem_domm.
-  - (* mj_rng — vacuous: [init_renaming] only maps [Block.local] *)
+  -
     move=> C b b'. rewrite /init_renaming.
     by case Eb: (b == Block.local).
-  - (* mj_wf_s *) exact: initial_wf_s.
-  - (* mj_local_s *) exact: initial_local_s.
-  - (* mj_dom — vacuous for the same reason *)
+  -  exact: initial_wf_s.
+  -  exact: initial_local_s.
+  -
     move=> C b b'. rewrite /init_renaming.
     by case Eb: (b == Block.local).
-  - (* mj_domm *) move=> C cm. exact: initial_mj_domm.
-  - (* mj_data *)
+  -  move=> C cm. exact: initial_mj_domm.
+  -
     move=> C b b' i w. rewrite /init_renaming.
     case Eb: (b == Block.local); last by [].
     move=> [<-] Hl.

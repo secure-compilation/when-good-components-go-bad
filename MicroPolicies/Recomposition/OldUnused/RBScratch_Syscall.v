@@ -1,5 +1,3 @@
-(* SCRATCH (not in _CoqProject): develop stepf_reflect against RecBackward.vo.
-   Admits allowed here; port the finished proof into RecBackward.v. *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -43,8 +41,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
   Module RB := RecBackward S.
   Import RB.
 
-  (* keep the kernel from re-normalising the word-op-laden allocator body in the Syscall case
-     (the documented 42min->24s syscall fix); harmless for the Nop/Const/Mov bullets. *)
   Opaque andw shlw as_word word_of_nat.
   Opaque mask component_memory_prefix.
   Opaque unionm setm mkfmap mkfmapfp.
@@ -57,8 +53,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
     color_of s0 = match taga (pc s0) with Level _ c => c end.
   Proof. by move=> [m r [v tp] e]. Qed.
 
-  (* [evi] succeeds on the strong side whenever it succeeds on the merged side (same [rcom] register
-     domain via [reg_reflect]). *)
   Lemma rb_evi_reflect : forall i M s s3,
     registers_match i M s s3 -> (exists a3, regs s3 rcom = Some a3) -> exists ei, evi s = Some ei.
   Proof.
@@ -85,7 +79,7 @@ Module RBScratch_Syscall (S : RecompositionContext).
     suff [s' [ev' Hf]] : exists s' ev', step_eval_me (NC := NC) s = Some (s', ev').
     { exists s', ev'. by apply/Exec.stepP. }
     case: ev Hstep => [e|] Hstep.
-    { (* ev = Some e: cross-component Jump/Jal *) admit. }
+    {  admit. }
     inversion Hstep
       as [mem3 reg3 pc3 tpc3 i3 ti3 extra3 ST3 PC3 INST3 mv3 NEXT3
          |mem3 reg3 pc3 tpc3 i3 ti3 n3 r3 old3 told3 extra3 ST3 PC3 INST3 OLD3 mv3 NEXT3
@@ -97,7 +91,7 @@ Module RBScratch_Syscall (S : RecompositionContext).
          |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
          |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
          |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-    - (* Nop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -121,7 +115,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
       have [v' Hmems] := succ_code_reflect Hcc Hrel Hcode3s Hcolc Hd3s.
       have Hmems' : mem s (vala (pc s) + 1)%w = Some (v' @ t3s)
         by rewrite Hpcaddr.
-      (* builder: s mirrors the Nop step *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -143,7 +136,7 @@ Module RBScratch_Syscall (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         by rewrite Hcd Hpccol Hcolc eqxx /=.
-    - (* Const *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -190,7 +183,7 @@ Module RBScratch_Syscall (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hold /=.
         by [].
-    - (* Mov *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -241,13 +234,13 @@ Module RBScratch_Syscall (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hr1 /= setmE.
         by case: (r2 =P r1) => Hr21 /=; rewrite ?Hr2 //=.
-    - (* Binop *) admit.
-    - (* Load *) admit.
-    - (* Store *) admit.
-    - (* Jump *) admit.
-    - (* Bnz *) admit.
-    - (* Jal *) admit.
-    - (* Syscall *)
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -
       have Hpc3 : vala (pc s3) = pc3 by rewrite ST3 /=.
       have Hmem3none : mem s3 (vala (pc s3)) = None by rewrite ST3 /= PC3.
       have Hmemsnone : mem s (vala (pc s)) = None.
@@ -271,10 +264,7 @@ Module RBScratch_Syscall (S : RecompositionContext).
               have Hrelv : is_relevant_comp i (color (taga (vv @ tv))) by rewrite /= Hcolv.
               have [d' [_ Hmems3]] := proj2 (Hmm (vala (pc s)) (vv @ tv) Hnc Hrelv) Hcell.
               by rewrite Hmem3none' in Hmems3.
-          + (* NON-running colour pc cell: the documented backward belong corner.  Ruled out at
-               runtime by code-region contiguity (the pc only ever addresses running-coloured cells),
-               an invariant not available as a state predicate here.  This is the single isolated
-               gap of the syscall reflection, dual to the [Jump]/[Bnz] belong corner. *)
+          +
             admit. }
       have Hpceq : vala (pc s) = pc3.
       { rewrite (same_pc_eq Hsp Hside Hval) Hpc3 //. }
@@ -304,7 +294,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
         case: (obind_inv H3) => addr3 [Haddr3 {}H3].
         move: H3; rewrite /updm.
         case Hret3 : (regs s3 syscall_ret) => [retv|] //= _.
-        (* reflect the three register reads onto [s] (same tag via [data_match]) *)
         have [v_ra Hra_s] := reg_reflect Hrm Hra3.
         have [v_sz Hsz_s] := reg_reflect Hrm Hsz3.
         have [v_ret Hret_s] := reg_reflect Hrm Hret3.
@@ -312,14 +301,11 @@ Module RBScratch_Syscall (S : RecompositionContext).
           by move: Hjmp3; rewrite /is_jump; case: (taga ra_val).
         have E_sat : taga sz = Other
           by move: Hoth3; rewrite /is_other; case: (taga sz).
-        (* running-colour facts for [s], [s3] (shared via [Hcoleq]) *)
         have Hccs : match taga (pc s) with Level _ c => c end = color_of s
           by rewrite -rb_color_ofE.
         have Hcc3 : match taga (pc s3) with Level _ c => c end = color_of s
           by rewrite -rb_color_ofE Hcoleq.
-        (* the merged return-cell check forces [reta3] to be running CODE *)
         move: Hretcol3; rewrite Hcc3 => /andP [Hic3 /eqP Hcol3].
-        (* the [ra] value is offset-mapped (InternalJump); offset 0 ⇒ same address on [s] *)
         have [off Hoff0] := get_offset_some Hrel.
         have Hz0 := get_offset_zero Hrel Hoff0.
         have [d_ra [Hdm_ra Hra_s2]] := proj1 (Hrm ra ra_val) Hra3.
@@ -331,11 +317,9 @@ Module RBScratch_Syscall (S : RecompositionContext).
           move: Hop; rewrite /= Hoff0 /= => Hb. by rewrite Hb Hz0 addw0. }
         have Hra_s'' : regs s ra = Some (v_ra @ InternalJump).
         { rewrite E_rat in Hra_s; exact Hra_s. }
-        (* reflect the return-address code cell from [s3] to [s] (same address, same tag) *)
         have Hreta3' : mem s3 (vala ra_val) = Some ((vala reta3) @ (taga reta3))
           by rewrite Hreta3; case: (reta3) => ? ? /=.
         have [vr_s Hreta_s] := succ_code_reflect Hcc Hrel Hic3 Hcol3 Hreta3'.
-        (* the value of [ra] read on [s] is [v_ra] = [vala d_ra] = [vala ra_val] *)
         have Hdra_eq : v_ra @ InternalJump = d_ra.
         { move: Hra_s2; rewrite Hra_s'' => -[Hde]; exact Hde. }
         have Hvra_eq : v_ra = vala ra_val by rewrite -Hvalra -Hdra_eq.
@@ -345,7 +329,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
         have Hck_s : (if is_code (taga (vr_s @ (taga reta3)))
                          && (color (taga (vr_s @ (taga reta3))) == color_of s)
                       then Some tt else None) = Some tt by rewrite /= Hretchk_s.
-        (* size: [Other] tag preserved, value preserved *)
         have Hsz_s'' : regs s syscall_arg1 = Some (v_sz @ Other).
         { rewrite E_sat in Hsz_s; exact Hsz_s. }
         have E_dsv : v_sz = vala sz.
@@ -355,7 +338,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
           have Hde : Some (v_sz @ Other) = Some d_sz by rewrite -Hsz_s'' Hsz_s2.
           move: Hv Hde; case: d_sz {Hdm_sz Hsz_s2 E_dsat} => dv dt /= Hv [Hd1 Hd2].
           by rewrite Hd1 Hv. }
-        (* prefix filter coincides on [s]/[s3] ⇒ same [max_addr] ⇒ same bound check + head block *)
         have Hmpcs : memory_prefix_condition' (mem s) by case: Hgmcs => _ [H _].
         have Hmpcs3 : memory_prefix_condition' (mem s3) by case: Hgmc3 => _ [H _].
         have Hdomm :
@@ -366,9 +348,7 @@ Module RBScratch_Syscall (S : RecompositionContext).
             (fun mw : word (word_size mt) => andw mw (@mask mt NC) ==
                @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s))) (domm (mem s3))
           by apply: (match_mem_pref_condition_filter_eq Hrel Hmm Hmpcs Hmpcs3).
-        (* convert the s3 bound check + head into s-side via the running colour and filter eq *)
         rewrite Hcc3 -Hdomm in Hchk3 Haddr3.
-        (* rebuild [alloc_fun s] *)
         rewrite /alloc_fun Hccs.
         rewrite Hra_s'' obindE; cbn beta.
         rewrite is_jumpE obindE; cbn beta.
@@ -387,8 +367,6 @@ Module RBScratch_Syscall (S : RecompositionContext).
           by rewrite /updm Hret_s.
         rewrite Hupd_s obindE; cbn beta.
         by eexists. }
-      (* run_syscall sc s = Some (s', None): [evi s] succeeds (its [rcom] read reflects from [s3]),
-         the SERVICE transfer is unconditionally [Some], and [sem sc s = alloc_fun s = Some s']. *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: CALL3; rewrite /run_syscall /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 |]. }

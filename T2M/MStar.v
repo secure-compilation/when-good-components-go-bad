@@ -1,8 +1,3 @@
-(** * T2M per-step dispatch and star simulation.  [t2me_step_sim] turns
-    one [TS.step] into a [plus] of me steps preserving [match_st] and the
-    heap occupancy invariant, dispatching on the T instruction to the
-    per-opcode diagrams (MStep.v / MAlloc.v). *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -84,8 +79,6 @@ Local Notation mregs_relW := (mregs_rel L P C pra prb PB PI).
 Local Notation reg_syncedW := (reg_synced L P C pra prb PB PI).
 Local Notation mstep := (RSCDefs.prog_step_me NC).
 
-(* ---- the checker context (discharged at assembly, like the other
-   standing hypotheses) ---- *)
 Variable MM : Component.id -> seq sv.
 Hypothesis HMM : forall c S,
   getm cdeW c = Some S -> comp_ok (c, 1, Z0) S (MM c).
@@ -104,7 +97,6 @@ Hypothesis HuniqL : forall (c : Component.id) (S : TS.tcode) (l : label)
 
 Local Notation mm_dsyncW := (mm_dsync L P C pra prb PB PI MM cdeW).
 
-(* ---- the standing side conditions (as in MStep/MAlloc) ---- *)
 Hypothesis Hbound : pc0 + size codeW < 2 ^ word_size mt.
 Hypothesis HPB :
   PB = Intermediate.prog_buffers (Intermediate.program_link pra prb).
@@ -120,7 +112,6 @@ Hypothesis HNCeq : NC = MDefs.NC.
 Hypothesis Himm_a : MDefs.imm_fits pra.
 Hypothesis Himm_b : MDefs.imm_fits prb.
 
-(* ---- the label/procedure statics (as in MStep) ---- *)
 Hypothesis Hlab_a : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pra cid = Some Cprocs ->
   Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -145,8 +136,6 @@ Hypothesis Hproc_a : forall cid Cprocs Pid,
 Hypothesis Hproc_b : forall cid Cprocs Pid,
   Intermediate.prog_procedures prb cid = Some Cprocs ->
   Pid \in domm Cprocs -> Pid < P.
-
-(* ---- the statics this file consumes ---- *)
 
 Hypothesis Hself : forall tpc r1 r2 tg c,
   Transitional.executing cdeW tpc (TrMov r1 r2) tg c -> r1 <> r2.
@@ -181,12 +170,7 @@ Hypothesis Hc1s : forall tpc i tg c,
   Transitional.executing cdeW tpc i tg c ->
   1 + Pointer.component tpc < 2 ^ NC.
 
-(* ================================================================== *)
-(* 1. Deriving [reg_synced] — refuting the clobbered disjunct.        *)
-(* ================================================================== *)
 
-(* any fact contradicting [get r tregs = tUndef] flips [mregs_rel]'s
-   disjunction to the strong branch *)
 Lemma mregs_rel_synced (amap : amap_t)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) :
@@ -199,7 +183,6 @@ case: (Hrel r) => [//|[ra [_ Hu _]]].
 by rewrite Hu in Hne.
 Qed.
 
-(* the common refuters *)
 Lemma get_int_synced (amap : amap_t)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) (z : Z) :
@@ -224,9 +207,6 @@ apply: mregs_rel_synced Hrel _ => E.
 by rewrite E in Hv.
 Qed.
 
-(* the [rtaint]-row map: every register the checker taints [AU] at a
-   [dinv]+[sync_claims] state has its me image in the synced branch.
-   The only reader of the [rtaint] shape. *)
 Lemma rtaint_AU_synced (amap : amap_t)
     (mem : Transitional.Memory.t) (regs : Transitional.Register.t)
     (ms : @Symbolic.state mt lrc_tags unit)
@@ -267,13 +247,7 @@ case Ea1q: (is_r r R_AUX1).
          exact: (sy_com HS).
 Qed.
 
-(* ================================================================== *)
-(* 2. The heap occupancy invariant.                                   *)
-(* ================================================================== *)
 
-(* the me bump allocator's high-water mark stays within the region
-   start plus the T-side footprint — what [sim_alloc]'s capacity
-   premise ([Hfitcap]) consumes, maintained along the star *)
 Definition heap_inv (tmem : Transitional.Memory.t)
     (mmem : {fmap mword mt -> matom}) : Prop :=
   forall cid cm,
@@ -289,7 +263,6 @@ Proof.
 by rewrite /maxaddr => ->.
 Qed.
 
-(* silent me steps + unchanged T memory *)
 Lemma heap_inv_pres (tmem : Transitional.Memory.t)
     (mmem mmem' : {fmap mword mt -> matom}) :
   domm mmem' = domm mmem ->
@@ -300,7 +273,6 @@ rewrite (maxaddr_domm _ Hd).
 exact: (Hh _ _ Hcm Hb).
 Qed.
 
-(* T stores keep the footprint; me stores keep the domain *)
 Lemma heap_inv_store (tmem tmem' : Transitional.Memory.t)
     (ptr : Pointer.t) (v : Transitional.tvalue * mem_tag)
     (mmem mmem' : {fmap mword mt -> matom}) :
@@ -322,7 +294,6 @@ case: (altP (cid =P Pointer.component ptr)) => [->|Hne] Hcm Hb.
   exact: (Hh _ _ Hcm Hb).
 Qed.
 
-(* six silent me steps make a [plus] *)
 Lemma star1 (a b c : @Symbolic.state mt lrc_tags unit) :
   step_me (NC := NC) a b None ->
   star mstep tt b E0 c -> star mstep tt a E0 c.
@@ -349,8 +320,6 @@ apply: star1 H5 _. apply: star1 H6 _.
 exact: star_refl.
 Qed.
 
-(* an upper bound for the high-water mark: bound the default and every
-   in-region key *)
 Lemma maxaddr_ub (m : {fmap mword mt -> matom}) (c0 B : nat) :
   ((\val (LRC.component_memory_prefix (NC := NC)
             (ssrint.Posz (1 + c0)) : mword mt) : nat) <= B) ->
@@ -370,11 +339,7 @@ move: Hin; rewrite mem_filter => /andP[Hp Hd].
 exact: Hmem Hd Hp.
 Qed.
 
-(* ================================================================== *)
-(* 2b. The BINOP arithmetic bridge (pointer shapes).                  *)
-(* ================================================================== *)
 
-(* adding a related integer to a flat address, in words *)
 Lemma won_addw_wrepr (m m' : nat) (nz : Z) (w2 : mword mt) :
   wrepr nz w2 ->
   Z.of_nat m' = BinInt.Z.add (Z.of_nat m) nz ->
@@ -406,7 +371,6 @@ exact: (eq_trans Hval
                (eq_trans Hmid (esym Em2))))).
 Qed.
 
-(* subtracting a related integer from a flat address *)
 Lemma won_subw_wrepr (m m' : nat) (nz : Z) (w2 : mword mt) :
   wrepr nz w2 ->
   Z.of_nat m' = BinInt.Z.sub (Z.of_nat m) nz ->
@@ -448,8 +412,6 @@ exact: (eq_trans Hval
                      (eq_trans Hmid (esym Em2))))))).
 Qed.
 
-(* the flat difference of two same-block addresses decodes to the
-   offset difference *)
 Lemma won_subw_won (m1 m2 : nat) (z : Z) :
   m1 <= 2 ^ word_size mt ->
   m2 <= 2 ^ word_size mt ->
@@ -511,7 +473,6 @@ have [E0|E1] : Z.of_nat v = z
   rewrite -/v. by lia.
 Qed.
 
-(* flat same-block equality decodes to offset equality *)
 Lemma wrepr_eq_flat (a o1 o2 : nat) :
   a + o1 < 2 ^ word_size mt ->
   a + o2 < 2 ^ word_size mt ->
@@ -530,9 +491,6 @@ case E: (o1 == o2) => /=.
   by [].
 Qed.
 
-(* flat same-block comparison decodes to offset comparison: signed word
-   comparison agrees with [Leq] on the WHOLE [int_fits] window (the me
-   [LEQ] is signed via [int_of_word]) *)
 Lemma wrepr_lequw (z1 z2 : Z) (w1 w2 : mword mt) :
   MDefs.int_fits z1 -> MDefs.int_fits z2 ->
   wrepr z1 w1 -> wrepr z2 w2 ->
@@ -580,8 +538,6 @@ rewrite /Transitional.Register.get_value /Transitional.Register.get.
 by case: (getm _ _).
 Qed.
 
-(* an indexed CArg contradicts CArg-freeness (mirror of
-   [MDisc.nth_error_hasCRa]) *)
 Lemma nth_error_hasCArg (sg : seq class3) (j : nat) :
   nth_error sg j = Some CArg -> has (fun k => c3_eqb k CArg) sg.
 Proof.
@@ -590,9 +546,6 @@ elim: sg j => [|x sg IH] [|j] //=.
 - move=> H. by rewrite (IH _ H) orbT.
 Qed.
 
-(* the cell-claim transport across a T allocation: fresh cells are
-   trivially synced (T Undef vs me 0, both def-tagged); old cells
-   convert through the extension shape *)
 Lemma cell_synced_alloc_trans (amap : amap_t) (base : nat)
     (tmem tmem' : Transitional.Memory.t)
     (mmem BB : {fmap mword mt -> matom})
@@ -661,9 +614,6 @@ case: (altP ((c0, b0) =P (Pointer.component ptr, Pointer.block ptr)))
               (Hold _ _ _ _ _ Hcm2 Hblk2 Hnth2 Ha2' HmcO)).
 Qed.
 
-(* ================================================================== *)
-(* 3. The per-step dispatch.                                          *)
-(* ================================================================== *)
 
 Theorem t2me_step_sim (ts ts' : TS.state) (tr : Events.trace)
     (amap : amap_t) (ms : @Symbolic.state mt lrc_tags unit) :
@@ -963,8 +913,7 @@ case: Hstep.
       apply: (wrepr_lequw Hfit1 Hfit2).
       + exact: (vrel_int_inv Hbound HPB Hsmall Hv1).
       + exact: (vrel_int_inv Hbound HPB Hsmall Hv2).
-    (* Leq-Ptr-Ptr is fit-excluded ([binop_ok] arm = False) and is
-       closed by the case chain itself *) }
+     }
   have [ms' [w [Hs Hm' Hdm Hv [Hrgs Hmm]]]] :=
     sim_binop NC Hbound Hsmall Hm Hsync1 Hsync2 Hex Hcp Ht1 Ht2 Harith.
   exists amap, ms'. split; [|split; [|split]].
@@ -1848,9 +1797,6 @@ case: Hstep.
       -- exact: HS.
 Qed.
 
-(* ================================================================== *)
-(* 4. The star-level simulation.                                      *)
-(* ================================================================== *)
 
 Theorem t2me_star_sim (s0 : TS.state) (tr : Events.trace) (s : TS.state) :
   star TS.step cdeW s0 tr s ->
@@ -1893,21 +1839,15 @@ elim: Hstar => [s1|s1 t1 s2 t2 s3 t Hstep Hst IH Et] amap ms Hm Hh Hdsy
   exact: (star_trans (plus_star Hplus) Hstar' (erefl _)).
 Qed.
 
-(* ================================================================== *)
-(* 5. The behavior-level transport.                                   *)
-(* ================================================================== *)
 
 Local Notation tpW := (Intermediate.program_link pra prb).
 
-(* T steps emit at most one event *)
 Lemma t_single (s1 : TS.state) (t : Events.trace) (s2 : TS.state) :
   TS.step cdeW s1 t s2 -> (length t <= 1)%coq_nat.
 Proof.
 by case=> *; simpl; lia.
 Qed.
 
-(* a me memory with no key at or above the first heap region satisfies
-   the occupancy invariant outright *)
 Lemma heap_inv_init (tmem0 : Transitional.Memory.t)
     (mmem0 : {fmap mword mt -> matom}) :
   (forall w : mword mt,

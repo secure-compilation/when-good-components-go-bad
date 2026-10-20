@@ -1,17 +1,3 @@
-(* ============================================================================
-   Padding.v — the NOP-padding ALIGNMENT pass (Phase 4).
-
-   [pad_align q q'] takes two equal-interface programs and inserts DEAD NOP cells
-   at procedure-block boundaries so that, in the padded pair:
-     (i)  every procedure occupies the same span in both programs (so corresponding
-          procedure entries sit at the same absolute position), and
-     (ii) the two total code sizes are equal.
-   The inserted NOPs follow a procedure's terminating Halt/return, so they are never
-   executed; jump/branch targets are symbolic ([MrLabel]/[label_pos]) and re-resolve
-   under the shift, so behaviour is preserved.  Applied to the recompiled pairs
-   (p,p') and (c,c'), this discharges the alignment hypotheses of RecompositionInit
-   ([align_code_size], [offset2_zero], [jal_target_corresp], …).
-   ============================================================================ *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -51,16 +37,12 @@ Section Padding.
 Local Notation mcell := ((@Merged.instr mt) * mem_tag)%type.
 Local Notation mcode := (@Merged.code mt).
 
-(* A dead NOP cell coloured [c] (instruction-tagged, [Other] value-tag, no entry). *)
 Definition nop_cell (c : Component.id) : mcell :=
   (MrNop, MTag Other c None true).
 
-(* A cell that begins a procedure (it carries an [entry] tag). *)
 Definition is_entry (x : mcell) : bool :=
   if entry (snd x) is Some _ then true else false.
 
-(* Split a code list into procedure blocks: each block begins at the next entry cell
-   (the first block absorbs any leading non-entry code). *)
 Fixpoint proc_split_fuel (n : nat) (cde : mcode) : seq mcode :=
   match n with
   | 0 => if cde is [::] then [::] else [:: cde]
@@ -76,15 +58,12 @@ Fixpoint proc_split_fuel (n : nat) (cde : mcode) : seq mcode :=
 Definition proc_split (cde : mcode) : seq mcode :=
   proc_split_fuel (size cde) cde.
 
-(* The colour of a procedure block (its first cell's colour; [main] for an empty block). *)
 Definition block_color (b : mcode) : Component.id :=
   if b is x :: _ then color (snd x) else Component.main.
 
-(* Pad a block with dead NOPs (of the block's colour) up to length [n]. *)
 Definition block_pad (n : nat) (b : mcode) : mcode :=
   b ++ nseq (n - size b) (nop_cell (block_color b)).
 
-(* Pad two block-lists pairwise to the per-block maximum, then concatenate. *)
 Fixpoint align_blocks (bs bs' : seq mcode) : mcode * mcode :=
   match bs, bs' with
   | b :: bs2, b' :: bs2' =>
@@ -97,15 +76,12 @@ Fixpoint align_blocks (bs bs' : seq mcode) : mcode * mcode :=
 Definition pad_code (cde cde' : mcode) : mcode * mcode :=
   align_blocks (proc_split cde) (proc_split cde').
 
-(* The padded pair of two equal-interface programs (interfaces / buffers / main unchanged). *)
 Definition pad_align (q q' : program) : program * program :=
   let cc := pad_code (code q) (code q') in
   ({| prog_interface := prog_interface q; code := cc.1;
       prog_buffers := prog_buffers q; prog_main := prog_main q |},
    {| prog_interface := prog_interface q'; code := cc.2;
       prog_buffers := prog_buffers q'; prog_main := prog_main q' |}).
-
-(* ===== Preservation of the non-code program data (immediate from the definition). ===== *)
 
 Lemma pad_align_interface q q' :
   prog_interface (pad_align q q').1 = prog_interface q /\
@@ -122,9 +98,6 @@ Lemma pad_align_main q q' :
   prog_main (pad_align q q').2 = prog_main q'.
 Proof. by []. Qed.
 
-(* ===== Block-list structural facts (foundation for the alignment proofs). ===== *)
-
-(* [proc_split] is lossless: concatenating the blocks recovers the original code. *)
 Lemma proc_split_fuel_flatten n cde : size cde <= n -> flatten (proc_split_fuel n cde) = cde.
 Proof.
   elim: n cde => [|n IH] cde Hsz /=.
@@ -140,7 +113,6 @@ Proof. rewrite /proc_split. exact: (proc_split_fuel_flatten (leqnn _)). Qed.
 Lemma block_pad_size n b : size (block_pad n b) = maxn (size b) n.
 Proof. by rewrite /block_pad size_cat size_nseq maxnE. Qed.
 
-(* [align_blocks] makes the two outputs equal-sized when the block-lists match in length. *)
 Lemma align_blocks_size bs bs' :
   size bs = size bs' -> size (align_blocks bs bs').1 = size (align_blocks bs bs').2.
 Proof.
@@ -150,22 +122,14 @@ Proof.
   cbn [fst snd]. rewrite /block_pad !size_cat !size_nseq Hr. by lia.
 Qed.
 
-(* [align_code_size]: the two padded codes have equal size, provided the inputs split into the
-   same number of procedure blocks (true for two compilations of the same interface). *)
 Lemma pad_align_code_size q q' :
   size (proc_split (code q)) = size (proc_split (code q')) ->
   size (code (pad_align q q').1) = size (code (pad_align q q').2).
 Proof. move=> H. rewrite /pad_align /= /pad_code. exact: align_blocks_size. Qed.
 
-(* ===== CELL-MEMBERSHIP SPEC — every cell of the padded code is either an original cell or a
-   dead NOP.  This is the foundation of the preservation theorems below (the wrapper consumes
-   them to re-establish [code_tags_wf], [entry_tag_unique], [no_mrlabel_alloc] for padded code). ===== *)
-
 Lemma in_nseq_eq (T : Type) (v : T) k x : List.In x (nseq k v) -> x = v.
 Proof. elim: k => [|k IH] //=. by case=> [<-|/IH ->]. Qed.
 
-(* The left output of [align_blocks] is made of cells of [flatten bs] plus dead NOPs;
-   each NOP is coloured by some block of [bs] (so its colour traces back to an original cell). *)
 Lemma align_blocks_cells_l bs bs' x :
   List.In x (align_blocks bs bs').1 ->
   List.In x (flatten bs) \/ exists b, List.In b bs /\ x = nop_cell (block_color b).
@@ -190,7 +154,6 @@ Proof.
   rewrite proc_split_flatten => -[H|[b [_ ->]]]; [by left | by right; exists (block_color b)].
 Qed.
 
-(* Same for the right output (mirror). *)
 Lemma align_blocks_cells_r bs bs' x :
   List.In x (align_blocks bs bs').2 ->
   List.In x (flatten bs') \/ exists b, List.In b bs' /\ x = nop_cell (block_color b).
@@ -215,10 +178,6 @@ Proof.
   rewrite proc_split_flatten => -[H|[b [_ ->]]]; [by left | by right; exists (block_color b)].
 Qed.
 
-(* ===== PRESERVATION THEOREMS (the "correctness theorem" content that the wrapper consumes). ===== *)
-
-(* [code_tags_wf]: padding keeps every cell instruction-tagged with value-tag [Other]
-   (the dead NOPs are [is_code]/[Other] by construction). *)
 Lemma pad_code_tags_wf cde cde' :
   (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
   forall i t, List.In (i, t) (pad_code cde cde').1 -> is_code t = true /\ vtag t = Other.
@@ -235,9 +194,6 @@ Proof.
   by have -> : t = snd (nop_cell col) by rewrite -Hcol.
 Qed.
 
-(* Padding introduces NO new entry tags (dead NOPs carry [entry = None]); so any entry-tagged
-   cell of the padded code is an original cell — this is what re-establishes [entry_tag_unique]
-   and the [find_rank]/[entry] facts for the padded program. *)
 Lemma pad_code_entry_orig cde cde' i t e :
   entry t = Some e -> List.In (i, t) (pad_code cde cde').1 -> List.In (i, t) cde.
 Proof.
@@ -245,8 +201,6 @@ Proof.
   by move: He; have -> : t = snd (nop_cell col) by rewrite -Hcol.
 Qed.
 
-(* Padding introduces NO new [MrLabel] cells (dead NOPs are [MrNop]); so any [MrLabel] cell of
-   the padded code is an original cell — re-establishes [no_mrlabel_alloc] and label-resolution. *)
 Lemma pad_code_mrlabel_orig cde cde' i t l :
   i = @MrLabel mt l -> List.In (i, t) (pad_code cde cde').1 -> List.In (i, t) cde.
 Proof.
@@ -254,10 +208,6 @@ Proof.
   by move: Hi; have -> : i = fst (nop_cell col) by rewrite -Hcol.
 Qed.
 
-(* ===== [code_color] preservation: a NOP's colour is some block's colour = an original cell's
-   colour, so it stays inside the same component domain. ===== *)
-
-(* blocks produced by [proc_split] are non-empty (each begins with a head cell). *)
 Lemma proc_split_fuel_nonempty n cde b : List.In b (proc_split_fuel n cde) -> b <> [::].
 Proof.
   elim: n cde => [|n IH] cde /=.
@@ -268,7 +218,6 @@ Qed.
 Lemma proc_split_nonempty cde b : List.In b (proc_split cde) -> b <> [::].
 Proof. exact: proc_split_fuel_nonempty. Qed.
 
-(* a cell of a block of [bs] is a cell of [flatten bs]. *)
 Lemma in_flatten_intro (T : Type) (y : T) b bs :
   List.In y b -> List.In b bs -> List.In y (flatten bs).
 Proof.
@@ -277,7 +226,6 @@ Proof.
   by apply/List.in_or_app; right; exact: IH.
 Qed.
 
-(* the colour of a [proc_split] block is the colour of an original cell. *)
 Lemma block_color_in cde b :
   List.In b (proc_split cde) ->
   exists i t, List.In (i, t) cde /\ block_color b = color t.

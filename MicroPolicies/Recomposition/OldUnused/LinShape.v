@@ -1,11 +1,3 @@
-(* The scan-shape campaign: the window-class facts [code_shape] hold for
-   every S2I-compiled procedure body.
-
-   Part 1: the scan algebra — how [ra_dead_scan] traverses
-   concatenations — and the compositional fragment invariant [frag_ok]
-   (balanced: a fragment entered live is left live; and the per-site
-   class facts hold inside). *)
-
 Require Import Common.Definitions.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
@@ -27,8 +19,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ==================== scan concatenation ==================== *)
-
 Lemma ra_dead_scan_cat_l (c1 c2 : code) (dead : bool) (o : nat) :
   o <= size c1 ->
   ra_dead_scan (c1 ++ c2) dead o = ra_dead_scan c1 dead o.
@@ -47,9 +37,6 @@ Proof.
 elim: c1 dead => [|i c1' IH] dead //=.
 Qed.
 
-(* ==================== the fragment invariant ==================== *)
-
-(* the class facts of a fragment, relative to a LIVE entry flag *)
 Record frag_ok (c : code) : Prop := FragOk {
   fr_bal : ra_dead_scan c false (size c) = false;
   fr_label : forall o l,
@@ -75,9 +62,6 @@ Record frag_ok (c : code) : Prop := FragOk {
       ra_dead_scan c false o = false
 }.
 
-(* ==================== the decidable checker ==================== *)
-
-(* the per-instruction class condition, as a boolean *)
 Definition frag_cond (i : instr) (dead : bool) : bool :=
   match i with
   | ILabel _ | IBnz _ _ | IJump | IReturn => ~~ dead
@@ -110,8 +94,6 @@ elim: c d => [|i c' IH] d /=.
   + exact: Hfacts.
 Qed.
 
-(* checked fragments satisfy the invariant — literal blocks discharge
-   by computation *)
 Lemma frag_scan_check_ok (c : code) :
   frag_scan_check c false -> frag_ok c.
 Proof.
@@ -126,7 +108,6 @@ constructor=> //.
 - move=> o r Hn. by have := Hfacts _ _ Hn => /= /negbTE.
 Qed.
 
-(* index bound: positions past a fetched cell are inside the code *)
 Lemma nth_error_size (c : code) (o : nat) (i : instr) :
   List.nth_error c o = Some i -> o < size c.
 Proof.
@@ -135,8 +116,6 @@ move=> /IH Ho.
 by [].
 Qed.
 
-(* concatenation: two balanced fragments compose, and each fact routes
-   to the owning side *)
 Lemma frag_ok_cat (c1 c2 : code) :
   frag_ok c1 -> frag_ok c2 -> frag_ok (c1 ++ c2).
 Proof.
@@ -170,7 +149,7 @@ have SPLIT : forall (o : nat) (i : instr),
     rewrite {1}Eo ra_dead_scan_cat_r.
     by rewrite (fr_bal F1). }
 constructor.
-- (* balance *)
+-
   have -> : size (c1 ++ c2) = size c1 + size c2 by rewrite size_cat.
   rewrite ra_dead_scan_cat_r (fr_bal F1).
   exact: (fr_bal F2).
@@ -190,10 +169,6 @@ constructor.
     [exact: (fr_storera F1 Hn) | exact: (fr_storera F2 Hn)].
 Qed.
 
-(* ==================== the wrapper checker ==================== *)
-
-(* the code_shape-level condition: no demands on labels/branches (the
-   entry stub's flag test legitimately sits inside its window) *)
 Definition shape_cond (i : instr) (dead : bool) : bool :=
   match i with
   | IJump | IReturn => ~~ dead
@@ -227,12 +202,10 @@ elim: c d => [|i c' IH] d /=.
   + exact: Hfacts.
 Qed.
 
-(* fragments weaken to the wrapper level *)
 Lemma frag_cond_shape (i : instr) (d : bool) :
   frag_cond i d -> shape_cond i d.
 Proof. by case: i => //=. Qed.
 
-(* a scan-neutral live instruction prepends to any fragment *)
 Lemma frag_ok_cons (i : instr) (c : code) :
   frag_cond i false ->
   ra_dead_step i false = false ->
@@ -259,7 +232,6 @@ constructor.
   rewrite Hstep. exact: (fr_storera F Hn).
 Qed.
 
-(* fragments satisfy the wrapper conditions position-wise *)
 Lemma frag_ok_shape_cond (c : code) :
   frag_ok c ->
   forall o i, List.nth_error c o = Some i ->
@@ -280,8 +252,6 @@ case: i Hn => //=.
   by rewrite (fr_ret F Hn).
 Qed.
 
-(* the sandwich: wrapper-checked pre/post around a fragment body give
-   the wrapper conditions at every position of the concatenation *)
 Lemma sandwich_shape_facts (pre body post : code) :
   shape_scan_check pre false ->
   frag_ok body ->
@@ -325,7 +295,6 @@ case: (ltnP o (size pre)) => Ho.
   exact: (SPLIT2 _ _ Hn2).
 Qed.
 
-(* decomposition-parameterized sandwich *)
 Lemma sandwich_at (c pre body post : code) :
   c = pre ++ body ++ post ->
   shape_scan_check pre false ->
@@ -338,9 +307,6 @@ move=> -> Hpre Fb Hpost.
 exact: sandwich_shape_facts.
 Qed.
 
-(* ==================== bnz-operand intervals ==================== *)
-
-(* every conditional branch targets a label in the window [lo, hi) *)
 Definition bnz_in (lo hi : nat) (c : code) : Prop :=
   forall r l, List.In (IBnz r l) c -> lo <= l < hi.
 
@@ -381,7 +347,6 @@ Lemma bnz_in_pop (r0 : register) (lo hi : nat) :
   bnz_in lo hi (pop r0).
 Proof. by move=> r l [E|[E|[]]]; case: E. Qed.
 
-(* computational closer for branch-free literal tails *)
 Fixpoint bnz_free (c : code) : bool :=
   match c with
   | [::] => true
@@ -397,8 +362,6 @@ by case: mi => /=;
   try by move=> *; apply: bnz_in_cons_nobnz => //; apply: IH.
 Qed.
 
-(* every branch in a compiled expression targets a label allocated
-   during its own compilation *)
 Lemma compile_expr_bnz (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : code) (s' : comp_env),
@@ -407,13 +370,13 @@ Lemma compile_expr_bnz (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- <-]; by apply: bnz_free_in.
-- (* E_arg *)
+-
   move: Hc => /= [<- <-]. by apply: bnz_free_in.
-- (* E_local *)
+-
   move: Hc => /= [<- <-]. by apply: bnz_free_in.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -430,7 +393,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: bnz_in_cat.
   { apply: (bnz_in_widen _ _ (IH2 _ _ _ E2)); by lia. }
   by apply: bnz_free_in.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -443,7 +406,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: bnz_in_cat.
   { apply: (bnz_in_widen _ _ (IH1 _ _ _ E1)); by lia. }
   apply: (bnz_in_widen _ _ (IH2 _ _ _ E2)); by lia.
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -474,21 +437,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: bnz_in_cat.
   { apply: (bnz_in_widen _ _ (IH2 _ _ _ E2)); by lia. }
   by apply: bnz_free_in.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- <-].
   apply: bnz_in_cat; first exact: (IH _ _ _ E1).
   by apply: bnz_free_in.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- <-].
   apply: bnz_in_cat; first exact: (IH _ _ _ E1).
   by apply: bnz_free_in.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -505,7 +468,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: bnz_in_cat.
   { apply: (bnz_in_widen _ _ (IH1 _ _ _ E1)); by lia. }
   by apply: bnz_free_in.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -519,13 +482,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- <-].
     apply: bnz_in_cat; first exact: (IH _ _ _ E1).
     by apply: bnz_free_in.
-- (* E_exit *)
+-
   move: Hc => /= [<- <-]. by apply: bnz_free_in.
 Qed.
 
-(* ==================== occurrence collectors ==================== *)
-
-(* branch operands of a code block *)
 Fixpoint bnz_ops (c : code) : seq nat :=
   match c with
   | [::] => [::]
@@ -542,7 +502,6 @@ elim: c => [|mi c IH] //= [E|HIn].
   right. exact: IH HIn.
 Qed.
 
-(* label values of a code block *)
 Fixpoint lab_vals (c : code) : seq nat :=
   match c with
   | [::] => [::]
@@ -567,10 +526,6 @@ Lemma lab_vals_cat (c1 c2 : code) :
   lab_vals (c1 ++ c2) = lab_vals c1 ++ lab_vals c2.
 Proof. by elim: c1 => [|mi c1 IH] //=; case: mi => //= *; rewrite IH. Qed.
 
-(* ==================== position-class checker ==================== *)
-
-(* every position whose instruction passes [test] has scan class
-   [want], relative to the incoming flag *)
 Fixpoint class_check (test : instr -> bool) (want : bool) (c : code)
     (dead : bool) : bool :=
   match c with
@@ -608,12 +563,6 @@ elim: c1 d => [|mi c1 IH] d /=.
 - by rewrite IH andbA.
 Qed.
 
-(* ==================== the sandwich pair fact ==================== *)
-
-(* branch/label pairs of a sandwich share their window class: pre's
-   internal pairs are given, body pairs are both live, and cross pairs
-   cannot exist — pre's label/operand values sit below the body's
-   allocation interval, and the post literal has neither *)
 Lemma sandwich_bnz_label (pre body post : code) (lo hi : nat) :
   ra_dead_scan pre false (size pre) = false ->
   frag_ok body ->
@@ -635,7 +584,6 @@ Proof.
 move=> Hbal F Hbnzb Hlabb Hbnzp Hlabp Hbnzpost Hlabpost Hpair
   o o' r l Ho Ho'.
 rewrite /dead_at.
-(* classify the branch position *)
 have Hbn : (o < size pre /\ List.nth_error pre o = Some (IBnz r l))
            \/ (exists ob, [/\ o = size pre + ob, ob < size body
                  & List.nth_error body ob = Some (IBnz r l)]).
@@ -661,7 +609,6 @@ have Hbn : (o < size pre /\ List.nth_error pre o = Some (IBnz r l))
                      = o - size pre - size body by lia. }
       have := In_bnz_ops (List.nth_error_In _ _ Hb3).
       by rewrite Hbnzpost. }
-(* classify the label position *)
 have Hlb : (o' < size pre /\ List.nth_error pre o' = Some (ILabel l))
            \/ (exists ob', [/\ o' = size pre + ob', ob' < size body
                  & List.nth_error body ob' = Some (ILabel l)]).
@@ -689,28 +636,27 @@ have Hlb : (o' < size pre /\ List.nth_error pre o' = Some (ILabel l))
       by rewrite Hlabpost. }
 case: Hbn => [[Hlt1 Hp1]|[ob [Eo Hltb Hp1]]];
   case: Hlb => [[Hlt1' Hp1']|[ob' [Eo' Hltb' Hp1']]].
-- (* both in pre *)
+-
   rewrite (ra_dead_scan_cat_l _ _ (ltnW Hlt1)).
   rewrite (ra_dead_scan_cat_l _ _ (ltnW Hlt1')).
   exact: (Hpair _ _ _ _ Hp1 Hp1').
-- (* branch in pre, label in body: interval clash *)
+-
   exfalso.
   have Hlow := Hbnzp _ (In_bnz_ops (List.nth_error_In _ _ Hp1)).
   have Hhigh := Hlabb _ (List.nth_error_In _ _ Hp1').
   by lia.
-- (* branch in body, label in pre: interval clash *)
+-
   exfalso.
   have Hlow := Hlabp _ (In_lab_vals (List.nth_error_In _ _ Hp1')).
   have Hhigh := Hbnzb _ _ (List.nth_error_In _ _ Hp1).
   by lia.
-- (* both in body: both live *)
+-
   rewrite Eo Eo' !ra_dead_scan_cat_r Hbal.
   rewrite (ra_dead_scan_cat_l _ _ (ltnW Hltb)).
   rewrite (ra_dead_scan_cat_l _ _ (ltnW Hltb')).
   by rewrite (fr_label F Hp1') (fr_bnz F Hp1).
 Qed.
 
-(* decomposition-parameterized form *)
 Lemma sandwich_bnz_label_at (c pre body post : code) (lo hi : nat) :
   c = pre ++ body ++ post ->
   ra_dead_scan pre false (size pre) = false ->
@@ -731,15 +677,12 @@ Lemma sandwich_bnz_label_at (c pre body post : code) (lo hi : nat) :
     dead_at c o' = dead_at c o.
 Proof. move=> ->. exact: sandwich_bnz_label. Qed.
 
-(* the position-class tests fed to [class_check] *)
 Definition is_bnz_to (l0 : nat) (i : instr) : bool :=
   match i with IBnz _ l => l == l0 | _ => false end.
 
 Definition is_lab_of (l0 : nat) (i : instr) : bool :=
   match i with ILabel l => l == l0 | _ => false end.
 
-(* the main-variant wrapper prefix (ext_entry ++ prologue), abstracted
-   over its three labels and the frame-size immediate *)
 Definition ext_wrap (lm lr pl : label) (scr : Pointer.t) (sfz : Z)
   : code :=
   [:: IConst (IInt 1) R_ONE] ++
@@ -756,8 +699,6 @@ Definition ext_wrap (lm lr pl : label) (scr : Pointer.t) (sfz : Z)
   push R_AUX1 ++ load_arg scr R_AUX1 ++ push R_AUX1 ++ push R_ARG ++
   [:: IMov R_COM R_ARG].
 
-(* internal pairs of the main wrapper: the flag-test pair is dead, the
-   result-test pair is live *)
 Lemma ext_wrap_pair (lm lr pl : label) (scr : Pointer.t) (sfz : Z) :
   (lr == lm) = false -> (lm == lr) = false ->
   (pl == lm) = false -> (pl == lr) = false ->
@@ -800,7 +741,6 @@ move=> /= [El|[El|[]]]; subst l.
   by rewrite Hd Hd'.
 Qed.
 
-(* pair facts survive a class-neutral, branch/label-free head *)
 Lemma pair_cons_skip (mi : instr) (c : code) :
   ra_dead_step mi = id ->
   (forall r l, mi <> IBnz r l) ->
@@ -824,9 +764,6 @@ rewrite /dead_at /= Hstep.
 exact: (Hpair _ _ _ _ Hp Hp').
 Qed.
 
-(* ==================== jal targets ==================== *)
-
-(* every jal in a compiled expression targets a procedure entry label *)
 Definition jal_tgt (plm : NMap label) (c : code) : Prop :=
   forall l, List.In (IJal l) c ->
     exists P', getm plm P' = Some l.
@@ -881,13 +818,13 @@ Lemma compile_expr_jal (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _]; by apply: jal_free_tgt.
-- (* E_arg *)
+-
   move: Hc => /= [<- _]. by apply: jal_free_tgt.
-- (* E_local *)
+-
   move: Hc => /= [<- _]. by apply: jal_free_tgt.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -900,7 +837,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: jal_tgt_cons_nojal => //.
   apply: jal_tgt_cat; first exact: (IH2 _ _ _ E2).
   by apply: jal_free_tgt.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -909,7 +846,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (jal_tgt_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -931,21 +868,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: jal_tgt_cons_nojal => //.
   apply: jal_tgt_cat; first exact: (IH2 _ _ _ E2).
   by apply: jal_free_tgt.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: jal_tgt_cat; first exact: (IH _ _ _ E1).
   by apply: jal_free_tgt.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: jal_tgt_cat; first exact: (IH _ _ _ E1).
   by apply: jal_free_tgt.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -958,7 +895,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: jal_tgt_cons_nojal => //.
   apply: jal_tgt_cat; first exact: (IH1 _ _ _ E1).
   by apply: jal_free_tgt.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -975,11 +912,9 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: jal_tgt_cat; first exact: (IH _ _ _ E1).
     by apply: jal_free_tgt.
-- (* E_exit *)
+-
   move: Hc => /= [<- _]. by apply: jal_free_tgt.
 Qed.
-
-(* ==================== compiled expressions are fragments ============ *)
 
 Lemma compile_expr_frag (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
@@ -989,16 +924,16 @@ Lemma compile_expr_frag (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _].
   by apply: frag_scan_check_ok.
-- (* E_arg *)
+-
   move: Hc => /= [<- _].
   by apply: frag_scan_check_ok.
-- (* E_local *)
+-
   move: Hc => /= [<- _].
   by apply: frag_scan_check_ok.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1011,7 +946,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: frag_ok_cons => //.
   apply: frag_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: frag_scan_check_ok.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1020,7 +955,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (frag_ok_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1042,21 +977,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: frag_ok_cons => //.
   apply: frag_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: frag_scan_check_ok.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: frag_ok_cat; first exact: (IH _ _ _ E1).
   by apply: frag_scan_check_ok.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: frag_ok_cat; first exact: (IH _ _ _ E1).
   by apply: frag_scan_check_ok.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1069,7 +1004,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: frag_ok_cons => //.
   apply: frag_ok_cat; first exact: (IH1 _ _ _ E1).
   by apply: frag_scan_check_ok.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1084,12 +1019,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: frag_ok_cat; first exact: Hc1.
     by apply: frag_scan_check_ok.
-- (* E_exit *)
+-
   move: Hc => /= [<- _].
   by apply: frag_scan_check_ok.
 Qed.
-
-(* ==================== compiled procedures ==================== *)
 
 Lemma compile_proc_shape_facts (C0 : Component.id)
     (lbp scr : Pointer.t) (plm : NMap label) (P0 : Procedure.id)
@@ -1145,7 +1078,6 @@ case Hm: (Component.eqb C0 Component.main
     (body := pcode) (post := POST)).
 Qed.
 
-(* the branch/label pair fact for a compiled procedure *)
 Lemma compile_proc_pair (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) (pl0 : label) :
@@ -1218,9 +1150,6 @@ case Hm: (Component.eqb C0 Component.main
     by [].
 Qed.
 
-(* ==================== the program-level shape theorem ============== *)
-
-(* every procedure of a compiled program has the window shape *)
 Theorem compiled_code_shape (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->
@@ -1271,10 +1200,6 @@ have [[plm [e [s0 [s1 [pl [Hcpc Hpl Hb _]]]]]] | [lab Ecd]]
     * by rewrite List.nth_error_nil.
 Qed.
 
-(* ==================== bnz forwardness ==================== *)
-
-(* scan with the labels emitted so far: every branch targets a label
-   not yet seen (compiled branches jump forward) *)
 Fixpoint nb_check (c : code) (seen : seq nat) : bool :=
   match c with
   | [::] => true
@@ -1289,20 +1214,19 @@ Lemma nb_check_subset (c : code) (seen seen' : seq nat) :
 Proof.
 elim: c seen seen' => [|mi c IH] seen seen' Hsub //=.
 case: mi => //=; try by move=> *; apply: (IH _ _ Hsub).
-- (* ILabel *)
+-
   move=> l Hrest.
   apply: (IH _ (l :: seen')) Hrest.
   move=> x. rewrite !in_cons.
   case/orP => [-> //|Hx].
   by rewrite (Hsub _ Hx) orbT.
-- (* IBnz *)
+-
   move=> r l /andP [Hnotin Hrest].
   apply/andP; split; last exact: (IH _ _ Hsub Hrest).
   apply/negP => Hin.
   by rewrite (Hsub _ Hin) in Hnotin.
 Qed.
 
-(* a branch to an already-seen label never occurs under the check *)
 Lemma nb_check_seen (c : code) (seen : seq nat) (o : nat)
     (r : register) (l : nat) :
   nb_check c seen = true ->
@@ -1325,7 +1249,6 @@ case: o Hnth => [|o] Hnth.
     exact: (IH _ _ Hrest Hin Hnth).
 Qed.
 
-(* the check survives to the tail under SOME seen set *)
 Lemma nb_check_tail (mi : instr) (c : code) (seen : seq nat) :
   nb_check (mi :: c) seen = true ->
   exists seen2, nb_check c seen2 = true.
@@ -1335,7 +1258,6 @@ case: mi => /=; try by move=> *; exists seen.
 - by move=> r l /andP [_ Hc]; exists seen.
 Qed.
 
-(* concatenation: the tail is checked under the head's emitted labels *)
 Lemma nb_check_cat (c1 c2 : code) (seen : seq nat) :
   nb_check c1 seen = true ->
   nb_check c2 (lab_vals c1 ++ seen) = true ->
@@ -1343,19 +1265,18 @@ Lemma nb_check_cat (c1 c2 : code) (seen : seq nat) :
 Proof.
 elim: c1 seen => [|mi c1 IH] seen /=; first by [].
 case: mi => //=; try by move=> *; apply: IH => //.
-- (* ILabel *)
+-
   move=> l Hc1 Hc2.
   apply: IH => //.
   apply: (nb_check_subset _ Hc2).
   move=> x. rewrite mem_cat in_cons in_cons mem_cat.
   by case/orP => [Hx | /orP [Hx|Hx]]; rewrite Hx ?orbT.
-- (* IBnz *)
+-
   move=> r l /andP [Hnotin Hc1] Hc2.
   apply/andP; split=> //.
   exact: IH Hc1 Hc2.
 Qed.
 
-(* the checked scan makes every branch/label pair forward *)
 Lemma nb_check_fwd (c : code) (seen : seq nat) :
   nb_check c seen = true ->
   forall (o o' : nat) (r : register) (l : nat),
@@ -1367,13 +1288,13 @@ elim: c seen => [|mi c IH] seen Hc o o' r l Hb Hl;
   first by rewrite List.nth_error_nil in Hb.
 case: o Hb => [|o] Hb; case: o' Hl => [|o'] Hl //.
 - case: Hb => E; subst mi. by case: Hl.
-- (* label at the head, branch below: the branch sees it *)
+-
   case: Hl => E; subst mi.
   move: Hc => /= Hc.
   exfalso.
   apply: (nb_check_seen Hc _ Hb).
   by rewrite in_cons eqxx.
-- (* both below the head *)
+-
   rewrite ltnS.
   move: Hb Hl => /= Hb Hl.
   have [seen2 Hc2] := nb_check_tail Hc.
@@ -1389,8 +1310,6 @@ move=> l0. rewrite in_cons.
 by case/orP => [/eqP ->|Hx]; [left|right; apply: IH].
 Qed.
 
-(* every branch of a compiled expression clears the incoming labels:
-   the seen set stays outside the expression's allocation window *)
 Lemma compile_expr_nb (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : code) (s' : comp_env),
@@ -1402,13 +1321,13 @@ Lemma compile_expr_nb (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   by case: v Hc => [i|p|] //= [<- <-] seen _.
-- (* E_arg *)
+-
   by move: Hc => /= [<- <-] seen _.
-- (* E_local *)
+-
   by move: Hc => /= [<- <-] seen _.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1427,7 +1346,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     - have [? ?] := HlabIn1 _ (lab_vals_mem Hx). by lia.
     - have := Hout _ Hx. by lia. }
   by [].
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1443,7 +1362,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   rewrite mem_cat. case/orP => [Hx|Hx].
   + have [? ?] := HlabIn1 _ (lab_vals_mem Hx). by lia.
   + have := Hout _ Hx. by lia.
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1493,7 +1412,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
       + have [? ?] := HlabIn1 _ (lab_vals_mem Hx). by lia.
       + have := Hout _ Hx. by lia. }
   by [].
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1501,7 +1420,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: nb_check_cat.
   { apply: (IH _ _ _ E1) => l0 /Hout ?. by lia. }
   by [].
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1509,7 +1428,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: nb_check_cat.
   { apply: (IH _ _ _ E1) => l0 /Hout ?. by lia. }
   by [].
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1528,7 +1447,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     - have [? ?] := HlabIn2 _ (lab_vals_mem Hx). by lia.
     - have := Hout _ Hx. by lia. }
   by [].
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1544,11 +1463,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     apply: nb_check_cat.
     { apply: (IH _ _ _ E1) => l0 /Hout ?. by lia. }
     by [].
-- (* E_exit *)
+-
   by move: Hc => /= [<- <-] seen _.
 Qed.
 
-(* the whole compiled procedure passes the forwardness scan *)
 Lemma compile_proc_nb (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) (pl0 : label) :
@@ -1592,8 +1510,6 @@ case Hm: (Component.eqb C0 Component.main
   case/orP => [/eqP ->|//]; by left; lia.
 Qed.
 
-(* compiled procedure bodies are longer than the wrap-main stub, so
-   the 3-instruction stub literal is a sound stub detector *)
 Lemma compile_proc_size (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) :
@@ -1617,8 +1533,6 @@ case Hm: (Component.eqb C0 Component.main
 - by [].
 Qed.
 
-(* stub-literal-valued procedures are never exported: real compiled
-   bodies are longer, and the wrap-main stub's id is fresh *)
 Theorem compiled_stub_not_exported (p : Source.program)
     (tp : Intermediate.program) :
   Source.well_formed_program p ->
@@ -1707,7 +1621,6 @@ case Em: (isSome (Source.prog_main p)).
   move: Hsize. rewrite Ecd /=. by lia.
 Qed.
 
-(* every branch of a compiled program jumps forward *)
 Theorem compiled_bnz_forward (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->
@@ -1733,9 +1646,6 @@ case: (Hper _ _ HgetP)
   by move=> /= [E|[E|[E|[]]]]; case: E.
 Qed.
 
-(* ==================== the jal-target theorem ==================== *)
-
-(* every jal in a compiled procedure targets an entry label *)
 Lemma compile_proc_jal (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) :
@@ -1771,7 +1681,6 @@ case Hm: (Component.eqb C0 Component.main
   by apply: jal_free_tgt.
 Qed.
 
-(* low labels — those below the fresh window — sit at live positions *)
 Lemma sandwich_low_label (pre body post : code) (lo : nat) (l : label) :
   ra_dead_scan pre false (size pre) = false ->
   (forall l0, List.In (ILabel l0) body -> lo <= l0) ->
@@ -1821,8 +1730,6 @@ Lemma sandwich_low_label_at (c pre body post : code) (lo : nat)
     dead_at c o = false.
 Proof. move=> ->. exact: sandwich_low_label. Qed.
 
-(* in a compiled procedure, positions of labels below the compile-start
-   counter are live (they can only be the prologue entry label) *)
 Lemma compile_proc_label_low (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) (l : label) :
@@ -1880,7 +1787,6 @@ case Hm: (Component.eqb C0 Component.main
   by rewrite /= ?if_same.
 Qed.
 
-(* the program-level jal-target theorem: jal-targeted labels are live *)
 Theorem compiled_jal_target (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->

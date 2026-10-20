@@ -1,14 +1,3 @@
-(* ============================================================================
-   PaddingLink.v — [pad_align] DISTRIBUTES over [program_link].
-
-   Goal: [pad_align (program_link p c) (program_link p' c')] = the link of the padded components,
-   so the padded linked program equals [program_link (pad p) (pad c)].  This connects [RecPadded]'s
-   semantics (on the padded linked programs) to [pad_align] of the ORIGINAL linked programs, enabling
-   the [does_prefix] transfer via [padding_forward_closed]/[padding_backward_closed].
-
-   Pieces: [align_blocks_cat] (align_blocks over ++, equal left block-counts) and [proc_split_cat]
-   (proc_split over ++ at an entry boundary), assembled into [pad_align_link_code].
-   ============================================================================ *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -44,7 +33,6 @@ Section PaddingLink.
 Local Notation mcell := ((@Merged.instr mt) * mem_tag)%type.
 Local Notation mcode := (@Merged.code mt).
 
-(* [align_blocks] distributes over block-list concatenation when the left parts match in length. *)
 Lemma align_blocks_cat (bs1 bs1' bs2 bs2' : seq mcode) :
   size bs1 = size bs1' ->
   align_blocks (bs1 ++ bs2) (bs1' ++ bs2') =
@@ -61,8 +49,6 @@ Proof.
     by rewrite !catA.
 Qed.
 
-(* [align_blocks] is symmetric: padding [bs'] against [bs] (right output) = padding [bs'] against
-   [bs] (left output of the swap). Per-pair the pad target [maxn |b| |b'|] is symmetric. *)
 Lemma align_blocks_sym (bs bs' : seq mcode) :
   (align_blocks bs bs').2 = (align_blocks bs' bs).1.
 Proof.
@@ -73,7 +59,6 @@ Proof.
   have := IH bs'. rewrite E E' /= => ->. by rewrite maxnC.
 Qed.
 
-(* [proc_split_fuel] is fuel-independent once the fuel covers the code size. *)
 Lemma proc_split_fuel_ge : forall f cde n m,
   size cde <= f -> size cde <= n -> size cde <= m ->
   proc_split_fuel n cde = proc_split_fuel m cde.
@@ -87,11 +72,9 @@ Proof.
       rewrite size_drop; move: Hf Hn Hm => /=; lia.
 Qed.
 
-(* a sufficiently-fuelled [proc_split_fuel] equals [proc_split]. *)
 Lemma proc_split_fuelE cde n : size cde <= n -> proc_split_fuel n cde = proc_split cde.
 Proof. move=> Hn. exact: (proc_split_fuel_ge Hn Hn (leqnn _)). Qed.
 
-(* recursive characterisation of [proc_split] (fuel-free). *)
 Lemma proc_split_cons_eq (y : mcell) (ys : mcode) :
   proc_split (y :: ys)
   = (y :: take (find is_entry ys) ys) :: proc_split (drop (find is_entry ys) ys).
@@ -100,7 +83,6 @@ Proof.
   apply: (proc_split_fuel_ge (f := size ys)); rewrite size_drop; lia.
 Qed.
 
-(* [proc_split] distributes over concatenation when the right part begins at a procedure entry. *)
 Lemma proc_split_cat : forall f cde1 cde2,
   size cde1 <= f ->
   (if cde2 is x :: _ then is_entry x else true) ->
@@ -122,8 +104,6 @@ Proof.
       by rewrite Hk1 Hf2 addn0 take_size_cat // drop_size_cat // take_size drop_size.
 Qed.
 
-(* [pad_align] distributes over [program_link] at the code level: padding the linked program
-   equals linking the padded components (given equal p-block-counts and entry-headed [code c]/[c']). *)
 Lemma pad_align_link_code (p c p' c' : program) :
   size (proc_split (code p)) = size (proc_split (code p')) ->
   (if code c  is x :: _ then is_entry x else true) ->
@@ -138,8 +118,6 @@ Proof.
   by rewrite (align_blocks_cat (proc_split (code c)) (proc_split (code c')) Hblk).
 Qed.
 
-(* [pad_align] distributes over [program_link] as PROGRAMS (code via [pad_align_link_code];
-   interface/buffers/main are preserved by padding and unioned by [program_link]). *)
 Lemma pad_align_link (p c p' c' : program) :
   size (proc_split (code p)) = size (proc_split (code p')) ->
   (if code c  is x :: _ then is_entry x else true) ->
@@ -154,9 +132,6 @@ Proof.
   by move: Hcode; rewrite /program_link /= => ->.
 Qed.
 
-(* [pad_align] is symmetric: padding [q'] against [q] (right output) equals padding [q'] against
-   [q] (left output of the swap).  Needed for the mixed run [prog'' = p + c'] whose [c'] component is
-   padded against [c] ([(pad_align c c').2]) — the same program as [(pad_align c' c).1]. *)
 Lemma pad_align_sym (q q' : program) :
   (pad_align q q').2 = (pad_align q' q).1.
 Proof.

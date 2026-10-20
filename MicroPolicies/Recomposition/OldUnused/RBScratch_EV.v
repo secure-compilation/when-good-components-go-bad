@@ -1,5 +1,3 @@
-(* SCRATCH (not in _CoqProject): develop stepf_reflect against RecBackward.vo.
-   Admits allowed here; port the finished proof into RecBackward.v. *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -44,12 +42,6 @@ Module RBScratch_EV (S : RecompositionContext).
   Module RB := RecBackward S.
   Import RB.
 
-  (* NB: the standalone Syscall file sets several [Opaque] directives (the 42min->24s syscall
-     speed fix). They are intentionally NOT replicated here at module scope because the
-     Bnz/Binop/Load/Store/Jump/Jal bullets rely on those very symbols (word ops + [setm]/
-     [updm]) reducing. The Syscall bullet below still type-checks without them (slower). *)
-
-  (* ===== base helpers ===== *)
   Lemma rb_belong_some_eq : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
     belong c (Some t) -> c = color t.
   Proof. by move=> c [vt ct et ict] /= /eqP. Qed.
@@ -62,8 +54,6 @@ Module RBScratch_EV (S : RecompositionContext).
     color_of s0 = match taga (pc s0) with Level _ c => c end.
   Proof. by move=> [m r [v tp] e]. Qed.
 
-  (* [evi] succeeds on the strong side whenever it succeeds on the merged side (same [rcom] register
-     domain via [reg_reflect]). *)
   Lemma rb_evi_reflect : forall i M s s3,
     registers_match i M s s3 -> (exists a3, regs s3 rcom = Some a3) -> exists ei, evi s = Some ei.
   Proof.
@@ -72,7 +62,6 @@ Module RBScratch_EV (S : RecompositionContext).
     rewrite /evi Ha'. by eexists.
   Qed.
 
-  (* strong_equiv field accessors (s' side) for the jump/call-target corners. *)
   Lemma strong_reg_addr2 : forall i m s s',
     strong_equiv i m s s' -> register_address_correctness i s'.
   Proof. by move=> i m s s' [? ? ? ? ? ? ? H ? ?]. Qed.
@@ -83,16 +72,10 @@ Module RBScratch_EV (S : RecompositionContext).
     strong_equiv i m s s' -> entry_points_offset i (mem s) (mem s').
   Proof. by move=> i m s s' [? ? ? ? ? H ? ? ? ?]. Qed.
 
-  (* ===== Binop helpers ===== *)
-  (* [updm] succeeds (and equals a [setm]) on any in-domain key. *)
   Lemma rb_updm_some {St : Type} (m : {fmap reg mt -> St}) k a v :
     m k = Some a -> updm m k v = Some (setm m k v).
   Proof. by rewrite /updm => ->. Qed.
 
-  (* From a successful merged BINOP transfer, the two source-operand tags pass the [is_other]
-     gates.  Mirror [merged_transfer_iscode]: peel gate1 (is_code ti), gate2 (BINOP not
-     STORE/LOAD ⟹ Some tt), then LRC.instr_rules's [current==current'] gate, then the two
-     [is_other] obinds. *)
   Lemma rb_binop_is_other : forall b tpc ti (t1 t2 told : tag_type lrc_tags R) tni i r,
     Merged.transfer (IVec (OP (BINOP b)) tpc ti [hseq t1; t2; told] tni) i = Some r ->
     is_other t1 = Some tt /\ is_other t2 = Some tt.
@@ -100,11 +83,8 @@ Module RBScratch_EV (S : RecompositionContext).
     move=> b tpc ti t1 t2 told tni [rc] r.
     cbn [Merged.transfer Merged.instr_rules] => H.
     apply obind_inv in H; destruct H as [out [Hir _]].
-    (* peel gate1: is_code ti *)
     apply obind_inv in Hir; destruct Hir as [u1 [_ Hir]].
-    (* peel gate2: BINOP ⟹ Some tt *)
     apply obind_inv in Hir; destruct Hir as [u2 [_ Hir]].
-    (* now Hir : (do! out <- LRC.instr_rules ... ; ...) = Some out *)
     apply obind_inv in Hir; destruct Hir as [lout [Hlrc _]].
     move: Hlrc; clear r out u1 u2; rewrite /LRC.instr_rules.
     move: lout; case: ti => vti cti eti icti; case: tpc => lpc cpc => lout; cbv zeta.
@@ -115,8 +95,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by rewrite Ho1 Ho2; move: Ho1 Ho2; case: v1 => _; case: v2 => _.
   Qed.
 
-  (* From a successful merged [next_state_updates_and_pc] (BINOP form), the two source operand
-     tags pass [is_other].  Mirrors [nsu_transfer_iscode]. *)
   Lemma nsu_binop_is_other : forall (s : @Symbolic.state mt lrc_tags unit) b tpc ti
       (t1 t2 told : tag_type lrc_tags R) updts pc' res,
     @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -131,7 +109,6 @@ Module RBScratch_EV (S : RecompositionContext).
     - case: (obind_inv H) => ov_ev [Htr _]. exact: (rb_binop_is_other Htr).
   Qed.
 
-  (* ===== Store helpers (rb_is_other_eq shared with Event) ===== *)
   Lemma rb_is_other_eq : forall t : value_tag, is_other t = Some tt -> t = Other.
   Proof. by case. Qed.
 
@@ -143,13 +120,10 @@ Module RBScratch_EV (S : RecompositionContext).
     move=> tpc ti t1 t2 told tni [rc] r.
     cbn [Merged.transfer Merged.instr_rules] => H.
     apply obind_inv in H; destruct H as [out [Hir _]].
-    (* peel gate1: is_code ti *)
     apply obind_inv in Hir; destruct Hir as [u1 [_ Hir]].
-    (* peel gate2: STORE ⟹ if is_code told then None else Some tt *)
     apply obind_inv in Hir; destruct Hir as [u2 [Hg2 Hir]].
     have Hicfalse : is_code told = false.
     { by move: Hg2; case: (is_code told). }
-    (* peel LRC.instr_rules *)
     apply obind_inv in Hir; destruct Hir as [lout [Hlrc _]].
     move: Hlrc; clear r out u1 u2 Hg2; rewrite /LRC.instr_rules.
     move: lout Hicfalse; case: ti => vti cti eti icti; case: tpc => lpc cpc => lout Hicfalse;
@@ -157,9 +131,7 @@ Module RBScratch_EV (S : RecompositionContext).
     case: (cti == cpc) => //=.
     move=> Hg.
     apply obind_inv in Hg; destruct Hg as [v1 [Ho1 Hg]].
-    (* check_belong current tni *)
     apply obind_inv in Hg; destruct Hg as [v2 [_ Hg]].
-    (* check_belong current (Some told) ⟹ belong cti (Some told) *)
     apply obind_inv in Hg; destruct Hg as [v3 [Hbel _]].
     move: Hbel Hicfalse; rewrite /check_belong /belong.
     case: told => vtd ctd etd ictd /=.
@@ -168,7 +140,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by move: Ho1; case: t1 => //=.
   Qed.
 
-  (* From a successful merged [next_state_updates] (STORE form), extract the same gate facts. *)
   Lemma nsu_store_gates : forall (s : @Symbolic.state mt lrc_tags unit) tpc ti
       (t1 t2 : tag_type lrc_tags R) (told : tag_type lrc_tags M) updts pc' res,
     @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -183,7 +154,6 @@ Module RBScratch_EV (S : RecompositionContext).
     - case: (obind_inv H) => ov_ev [Htr _]. exact: (rb_store_gates Htr).
   Qed.
 
-  (* ===== Bnz helpers ===== *)
   Lemma rb_bnz_is_other : forall tpc ti (t1 : tag_type lrc_tags R) tni i r,
     Merged.transfer (IVec (OP BNZ) tpc ti [hseq t1] tni) i = Some r ->
     is_other t1 = Some tt.
@@ -202,8 +172,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by rewrite Ho1; move: Ho1; case: v1 => _.
   Qed.
 
-  (* From a successful merged [next_state_updates_and_pc] (BNZ form), the source operand tag
-     passes [is_other].  Mirrors [nsu_binop_is_other]. *)
   Lemma nsu_bnz_is_other : forall (s : @Symbolic.state mt lrc_tags unit) tpc ti
       (t1 : tag_type lrc_tags R) updts pc' res,
     @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -218,7 +186,6 @@ Module RBScratch_EV (S : RecompositionContext).
     - case: (obind_inv H) => ov_ev [Htr _]. exact: (rb_bnz_is_other Htr).
   Qed.
 
-  (* ===== Jump helpers (rb_reg_clear_aux_reflect shared with Event) ===== *)
   Lemma rb_reg_clear_aux_reflect : forall (i : side) M s s3 (l : seq nat)
       (top : tag_type lrc_tags R) (res : hseq (tag_type lrc_tags) (nseq (S (size l)) R)),
     registers_match i M s s3 ->
@@ -235,9 +202,6 @@ Module RBScratch_EV (S : RecompositionContext).
       rewrite Htag (IH (taga v3) l3 Hrm H3l) /=. by [].
   Qed.
 
-  (* Register-value reflection for an [InternalJump]-tagged register: the strong-side value is
-     [v'] with [w = addw v' (as_word off)]; under alignment [off = 0] so [v' = w].  (This pins the
-     strong-side jump TARGET to be the SAME [w] as the merged side.) *)
   Lemma rb_reg_ijump_reflect : forall (i : side) M s s3 r w,
     registers_match i M s s3 -> is_relevant_comp i (color_of s) ->
     regs s3 r = Some (w @ InternalJump) ->
@@ -254,9 +218,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by rewrite -Hw in Hr.
   Qed.
 
-  (* From a SILENT LRC JUMP transfer (the [if belong .. then do! _<-is_jump tp ..] branch), the
-     jump-register tag [tp] (= 2nd input) is [InternalJump].  Mirror of [silent_transfer_belong]
-     for the [is_jump] gate. *)
   Lemma rb_jump_silent_isjump :
     forall tpc ti (tra tp trcom : tag_type lrc_tags R)
            (next : hseq (tag_type lrc_tags) (nseq 10 R)) tni evi (ov : ovec lrc_tags JUMP),
@@ -270,19 +231,17 @@ Module RBScratch_EV (S : RecompositionContext).
     move: Hg; case Heq: (_ == current') => // _.
     move: Hrest; cbn -[check_belong belong is_other is_jump get_tni_color check_ret].
     case Hb: (belong (match ti with {| color := c |} => c end) tni) => Hrest; last first.
-    - (* cross/return branch: ev = Some (ERet ..) <> None, contradiction *)
+    -
       exfalso.
       case: (obind_inv Hrest) => ? [_ {}Hrest]; case: (obind_inv Hrest) => ? [_ {}Hrest].
       by case: (obind_inv Hrest) => ? [_ Hf]; move: Hf => [= _].
-    - (* silent intra branch: do! _ <- is_jump tp; .. *)
+    -
       move: Hrest; case Hij: (is_jump tp) => [u'|] //= _. by case: u' Hij.
   Qed.
 
   Lemma rb_is_jump_eq : forall t : value_tag, is_jump t = Some tt -> t = InternalJump.
   Proof. by case. Qed.
 
-  (* From a SILENT merged JUMP step ([next_state_updates_and_pc] with [Merged.transfer], target
-     [pc' = w], inputs [HSeqCons rat l]), the jump-register tag [hshead l] is [InternalJump]. *)
   Lemma rb_merged_jump_isjump :
     forall (st s' : RB.state) tpc ti (rat : tag_type lrc_tags R)
            (l : hseq (tag_type lrc_tags) (nseq 12 R)) updts (w : mword mt),
@@ -302,15 +261,6 @@ Module RBScratch_EV (S : RecompositionContext).
        exact: (rb_jump_silent_isjump Htr)).
   Qed.
 
-  (* Belong-gate reflection for the JUMP target, driven from the MERGED side.  From the merged
-     side's successful [belong c] at the target cell [mem s3 w] (always true for a silent jump),
-     recover [belong c (mem s w)].  Cases on [mem s3 w]:
-       - [Some d3]: merged belong pins [color(taga d3) = c].
-           * code:  [succ_code_reflect] (backward, off = 0) ⟹ [mem s w = Some(_@taga d3)], colour c.
-           * data:  colour-c cell is relevant ⟹ [memory_match] proj1 ⟹ strong cell, same colour c.
-       - [None]: belong [None] is vacuously true; reflect to the strong side via [combined_codes]/
-           [memory_match] (the strong target is either absent or colour-c).  This last branch needs
-           the merged target to be present for a *reachable* intra-jump and is the documented corner. *)
   Lemma rb_target_belong : forall (i : side) M s s3 (w : mword mt),
     combined_codes i s s3 -> memory_match i M s s3 ->
     is_relevant_comp i (color_of s) -> side_of (color_of s) = i ->
@@ -320,17 +270,17 @@ Module RBScratch_EV (S : RecompositionContext).
   Proof.
     move=> i M s s3 w Hcc Hmm Hrel Hside Hne Hbel3.
     case Hm3 : (mem s3 w) Hbel3 => [d3|] Hbel3.
-    - (* merged target present *)
+    -
       have Hcolc3 : color (taga d3) = color_of s.
       { move: Hbel3; rewrite /belong; case: (taga d3) => vt ct et ict /= /eqP H. by rewrite H. }
       clear Hbel3.
       case Hcode3 : (is_code (taga d3)).
-      + (* code: backward reflect to strong side, same tag, colour c *)
+      +
         have Hm3' : mem s3 w = Some ((vala d3) @ (taga d3)) by case: d3 Hm3 Hcolc3 Hcode3 => v3 t3 /= ->.
         have [v' Hsw] := succ_code_reflect Hcc Hrel Hcode3 Hcolc3 Hm3'.
         rewrite Hsw /belong /=.
         by case: (taga d3) Hcolc3 => vt ct et ict /= ->; rewrite eqxx.
-      + (* data: colour-c hence relevant; reflect via memory_match proj1 *)
+      +
         have Hn : ~ is_code (taga d3) by rewrite Hcode3.
         have Hrelc3 : is_relevant_comp i (color (taga d3)) by rewrite Hcolc3.
         have [d' [Hdm' Hsw]] := proj1 (Hmm w d3 Hn Hrelc3) Hm3.
@@ -339,15 +289,10 @@ Module RBScratch_EV (S : RecompositionContext).
         rewrite /data_match' /= => -[Htt _]. subst td.
         rewrite Hsw /belong /=. clear Hsw.
         by case: t3 Hcolc3 => vt ct et ict /= ->; rewrite eqxx.
-    - (* merged target absent.  For a reachable silent intra-component jump the target is a code
-         cell of the running component, hence present on the merged side; the [None] branch
-         (merged target absent while the strong target is a non-running-component cell) is the
-         present on the merged side (register_address_correctness ⟹ InternalJump targets exist),
-         supplied by the caller as [Hne]. *)
+    -
       by exfalso; exact: (Hne Hm3).
   Qed.
 
-  (* ===== Jal helpers (rb_reg_clear_aux_reflect renamed -> _jal) ===== *)
   Lemma rb_belong_color : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
     belong c (Some t) -> c = color t.
   Proof. by move=> c [vt ct et bt] /= /eqP. Qed.
@@ -364,8 +309,6 @@ Module RBScratch_EV (S : RecompositionContext).
     c = color t -> belong c (Some t).
   Proof. by move=> c [vt ct et bt] /= ->; rewrite eqxx. Qed.
 
-  (* [reg_clear_list_aux] reflects across [registers_match]: it only reads register tags, which are
-     preserved by [data_match] (the tag component is always equal), so it produces the SAME hseq. *)
   Lemma rb_reg_clear_aux_reflect_jal : forall i M s s3 (ll : seq nat) (top : tag_type lrc_tags R) res,
     registers_match i M s s3 ->
     reg_clear_list_aux ll (regs s3) top = Some res ->
@@ -380,9 +323,6 @@ Module RBScratch_EV (S : RecompositionContext).
       rewrite (IH (taga a3) l3 Hrm Hrec3) /=. by [].
   Qed.
 
-  (* The Merged silent JAL transfer result, computed once with controlled reduction: when the
-     colour guards hold (current == pc-colour, head check_belong, target belong), the transfer
-     produces the intra OVec with [tr = tret :: InternalJump :: hsbehead l] and event [None]. *)
   Lemma rb_jal_transfer_silent :
     forall (tpc : tag_type lrc_tags P) ti tret
            (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R)) (tjd : tag_type lrc_tags Symbolic.M) ei,
@@ -403,7 +343,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by [].
   Qed.
 
-  (* [tni = None] variant (allocator JAL target absent from memory): [belong current None = true]. *)
   Lemma rb_jal_transfer_silent_none :
     forall (tpc : tag_type lrc_tags P) ti tret
            (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R)) ei,
@@ -423,8 +362,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by [].
   Qed.
 
-  (* From a silent merged JAL transfer, the head register-clear tag [tret] (= RA-cell tag) has the
-     running (pc-tag) colour: the LRC JAL rule runs [check_belong current (Some tret)] first. *)
   Lemma jal_silent_head_belong :
     forall tpc ti tret (l : hseq (tag_type lrc_tags) (nseq (size reg_list).+1 R)) tni evi
            (ov : ovec lrc_tags JAL),
@@ -440,7 +377,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by case: tret => vt ct et bt /=; case: (cti == ct).
   Qed.
 
-  (* ===== Event helpers ===== *)
   Lemma rb_reg_ret_reflect : forall (i : side) M s s3 r w n,
     registers_match i M s s3 ->
     regs s3 r = Some (w @ (Ret n)) ->
@@ -457,10 +393,6 @@ Module RBScratch_EV (S : RecompositionContext).
     by exists n'.
   Qed.
 
-  (* From an EVENT LRC JUMP transfer (the [else] return branch [belong = false]): the jump
-     register tag [tp] is [Ret (level.-1)], the running-component gate [is_other trcom] holds,
-     the target cell colour is recoverable ([get_tni_color tni = Some c']) and the event is the
-     return [ERet current _ c'].  This is the LRC return rule read off backwards. *)
   Lemma rb_jump_event_inv :
     forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
            (tra tp trcom : tag_type lrc_tags R)
@@ -482,9 +414,9 @@ Module RBScratch_EV (S : RecompositionContext).
     have Hcur : (match ti with {| color := c |} => c end) = current' by apply/eqP.
     move: Hrest; cbn -[check_belong belong is_other is_jump get_tni_color check_ret].
     case Hb: (belong (match ti with {| color := c |} => c end) tni) => Hrest.
-    - (* silent intra branch: ev = None, contradiction with Some e *)
+    -
       exfalso. case: (obind_inv Hrest) => u' [_ {}Hrest]. by move: Hrest => [= _].
-    - (* return branch *)
+    -
       case: (obind_inv Hrest) => uo [Hother {}Hrest].
       case: uo Hother => Hother.
       case: (obind_inv Hrest) => c' [Hc' {}Hrest].
@@ -498,9 +430,6 @@ Module RBScratch_EV (S : RecompositionContext).
       split; [ exact Hck | exact Hcur ].
   Qed.
 
-  (* Merged version: from a merged JUMP EVENT step (target [w], inputs [HSeqCons rat l]), extract
-     the return-branch facts about the target cell tag [tni3 = match mem s3 w with Some ni => Some
-     (taga ni) | None => None] and the jump-register tag [hshead l]. *)
   Lemma rb_merged_jump_event :
     forall (st s' : RB.state) (tpc : tag_type lrc_tags P) ti (rat : tag_type lrc_tags R)
            (l : hseq (tag_type lrc_tags) (nseq 12 R)) updts (w : mword mt) e,
@@ -526,10 +455,6 @@ Module RBScratch_EV (S : RecompositionContext).
        (split; [ exists c'; exact Hc' | exact Hret ])).
   Qed.
 
-  (* From an EVENT LRC JAL transfer (the [else] call branch [belong = false]): the running-side
-     gates [check_belong current (Some tnext)], [is_other trcom] hold, and the foreign-target gates
-     [get_tni_color tni = Some c'], [get_proc_name tni = Some p], [check_entry current tni] succeed,
-     with event [ECall current p _ c'].  The LRC call rule read off backwards. *)
   Lemma rb_jal_event_inv :
     forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
            (tnext : tag_type lrc_tags Symbolic.M) (tra trcom : tag_type lrc_tags R)
@@ -551,13 +476,12 @@ Module RBScratch_EV (S : RecompositionContext).
     case: (obind_inv Hrest) => ucb [Hcb {}Hrest]. case: ucb Hcb => Hcb.
     move: Hrest; cbn -[check_belong belong is_other is_jump get_tni_color check_ret get_proc_name check_entry].
     case Hb: (belong (match ti with {| color := c |} => c end) tni) => Hrest.
-    - (* silent intra branch: ev = None, contradiction *)
+    -
       exfalso. by move: Hrest => [= _].
-    - (* call branch *)
+    -
       case: (obind_inv Hrest) => uo [Hother {}Hrest]. case: uo Hother => Hother.
       case: (obind_inv Hrest) => c' [Hc' {}Hrest].
       case: (obind_inv Hrest) => uent [Hent Hfin]. case: uent Hent => Hent.
-      (* the event is built from get_proc_name tni; for Some e it must succeed *)
       move: Hfin => [= Hov Hev].
       have Hpn : exists p, get_proc_name tni = Some p.
       { move: Hev; case Hp: (get_proc_name tni) => [p|] //= _. by exists p. }
@@ -593,13 +517,6 @@ Module RBScratch_EV (S : RecompositionContext).
        (split; [ by exists c' |]); (split; [ by exists p | exact Hent ])).
   Qed.
 
-  (* ===== per-frame stack invariant extraction ===== *)
-
-  (* Each frame [(a, b, c, col)] of a [wf_stack m1 m2 m3 cn M] satisfies the three slot
-     [points_to_comp_code(')] facts: [m1 (vala a)], [m2 (vala b)], [m3 (vala c)] all exist and
-     carry colour [col].  This is the per-element read-off of [wf_stack] (same induction pattern as
-     [wf_stack_levels_lt'] in StepEventReturn.v).  The cross-component EVENT corners use it to learn
-     the colour of the foreign-target cell of the strong run from the metadata stack. *)
   Lemma wf_stack_in_pts :
     forall (m1 m2 m3 : memory) (cn : nat) (M : stack),
       wf_stack m1 m2 m3 cn M ->
@@ -623,9 +540,6 @@ Module RBScratch_EV (S : RecompositionContext).
       + exact: IH a b c col Hin.
   Qed.
 
-  (* Colour projections of the per-frame points-to facts (the only thing the [belong] obligation
-     needs): the cell at [vala a] of the [Left]/running mem [m1], and at [vala c] of the merged
-     mem [m3], both exist and carry the frame's colour [col]. *)
   Lemma wf_stack_in_color_left :
     forall (m1 m2 m3 : memory) (cn : nat) (M : stack) a b c col,
       wf_stack m1 m2 m3 cn M -> In (a, b, c, col) M ->
@@ -659,16 +573,6 @@ Module RBScratch_EV (S : RecompositionContext).
     case E: (m3 (vala c)) => [d|] //= [Hcol _]. by exists d.
   Qed.
 
-  (* CROSS-COMPONENT RETURN colour bridge.  The running register holds a [Ret n']-tagged value [w']
-     whose [data_match] (from [registers_match]) places it, together with the merged side's read
-     value [w] (slot 3, value-tag [Ret n']), into a SINGLE frame [(_, _, _, col)] of the metadata
-     stack.  [wf_stack] then says both the running-mem cell at [w'] and the merged-mem cell at [w]
-     carry that frame's colour [col].  Hence [mem s w'] and [mem s3 w] have the SAME colour, which
-     transports the merged-side [belong = false] (a cross-component return) to the strong side.
-     [Hwf] is [mem (running)]/[mem (weak)]/[mem s3]-instantiated; the running mem is slot [i]. *)
-  (* From the running-side [data_match] (Ret branch) and the side-instantiated [wf_stack], recover
-     BOTH the running-mem cell at [w'] and the merged-mem cell at [w] with a COMMON colour [col].
-     [mrun] = running mem (= slot [i] of the stack), [m3] = merged mem (= slot 3). *)
   Lemma ret_frame_colors :
     forall (i : side) (M : stack) (mrun mwk m3 : memory)
            (n0 lvl : nat) (w' w : mword mt) (cs : Component.id),
@@ -681,13 +585,13 @@ Module RBScratch_EV (S : RecompositionContext).
     move=> i M mrun mwk m3 n0 lvl w' w cs Hwf Hdm.
     move: Hdm; rewrite /data_match /=.
     case: i Hwf => Hwf [_ Hin].
-    - (* Left: running value [w'@(Ret n0)] is slot 1, merged [w@(Ret n0)] is slot 3 *)
+    -
       move: Hin => [sv' [comp' Hin]].
       have [d  [Hd  Hcol ]] := wf_stack_in_color_left  Hwf Hin.
       have [ds [Hds Hcols]] := wf_stack_in_color_right Hwf Hin.
       exists comp', d, ds. rewrite /= in Hd Hds.
       by split; [exact Hd | split; [exact Hcol | split; [exact Hds | exact Hcols]]].
-    - (* Right: running value is slot 2, merged is slot 3 *)
+    -
       move: Hin => [sv' [comp' Hin]].
       have [d  [Hd  Hcol ]] := wf_stack_in_color_mid   Hwf Hin.
       have [ds [Hds Hcols]] := wf_stack_in_color_right Hwf Hin.
@@ -695,7 +599,6 @@ Module RBScratch_EV (S : RecompositionContext).
       by split; [exact Hd | split; [exact Hcol | split; [exact Hds | exact Hcols]]].
   Qed.
 
-  (* [reg_clear_list_aux] reads every register in [l]; if it succeeds, each such register exists. *)
   Lemma reg_clear_list_aux_mem :
     forall (l : seq nat) (rs : {fmap reg mt -> atom (mword mt) (tag_type lrc_tags R)})
            (top : tag_type lrc_tags R) res,
@@ -709,12 +612,6 @@ Module RBScratch_EV (S : RecompositionContext).
     exact: (IH rs (taga ve) l'' Hrec n Hn).
   Qed.
 
-  (* A [RegRead k] update succeeds (returns [Some _]) iff register [k] exists; it preserves the
-     register domain ([updm] is in-place).  Hence a fold of [RegRead]s succeeds and preserves the
-     domain whenever every read key is present.  Used to discharge the cross-component RETURN/CALL
-     [next_state_do_updates] (all reads/writes), where the OUTPUT tag-hseq is the invalidation hseq
-     rather than the silent identity — so [jump_do_updates_result] (which fixes the tags) does not
-     apply, but mere success does. *)
   Lemma ndsu_regread_some_dom :
     forall (ks : seq (reg mt)) (tags : hseq (tag_type lrc_tags) (nseq (size ks) R))
            (st : RB.state),
@@ -744,10 +641,6 @@ Module RBScratch_EV (S : RecompositionContext).
       exists st'. split; [exact Hst' | by rewrite Hdom' Hdom1].
   Qed.
 
-  (* The [reg_clear_read] fold ([= map (RegRead \o (as_word \o Posz)) reg_list]) succeeds for ANY
-     R-kind output-tag hseq, given that [reg_clear_list_aux reg_list] succeeds (so every read register
-     exists); it also preserves the register domain.  Proven by induction over [reg_list], so no
-     [mapP]/eqType-of-mapped-list machinery is needed. *)
   Local Opaque next_state_do_updates next_state_do_update.
   Lemma reg_clear_read_aux_some :
     forall (l : seq nat) (tags : hseq (tag_type lrc_tags) (nseq (size l) R))
@@ -775,10 +668,6 @@ Module RBScratch_EV (S : RecompositionContext).
         Local Opaque next_state_do_update. }
       have [st1 [Hst1 [Hdom1 Hregs1]]] := Hstep.
       rewrite (hseq_eta tags) ndsu_cons Hst1 /=.
-      (* the residual clear of [l'] succeeds: [reg_clear_list_aux l' (regs st1) (taga ve)] = [Some l'']
-         because [setm] at [as_word e] doesn't touch the [l']-keys (which are read at their own slots;
-         the recursive call uses [regs st], and domain is preserved). We re-derive existence over
-         [regs st1] by domain-preservation, then recurse. *)
       have Hrec1 : exists l1, reg_clear_list_aux l' (regs st1) (taga ve) = Some l1.
       { apply: (reg_clear_list_aux_total (rs := regs st1) (l := l') (taga ve)).
         move=> n Hn. have [a0 Ha0] := reg_clear_list_aux_mem Hrec Hn.
@@ -792,11 +681,6 @@ Module RBScratch_EV (S : RecompositionContext).
   Qed.
   Local Transparent next_state_do_updates next_state_do_update.
 
-  (* The cross-component RETURN/CALL [next_state_do_updates] succeeds: its updates are
-     [RegRead ra :: RegRead r :: reg_clear_read] (return) / [MemRead .. :: RegWrite .. :: reg_clear_read]
-     (call); for the RETURN, every read register exists ([Hra], [Hr], and [reg_clear_list]'s success),
-     so the all-[RegRead] fold returns [Some] for ANY R-kind output-tag hseq (e.g. the invalidation
-     hseq).  We expose just the [Some]-ness via [ndsu_regread_some_dom]. *)
   Lemma ndsu_ret_event_some :
     forall (st : RB.state) (ra0 r0 : reg mt) (top : tag_type lrc_tags R) l a b
            (t0 t1 : tag_type lrc_tags R)
@@ -810,7 +694,6 @@ Module RBScratch_EV (S : RecompositionContext).
   Proof.
     Local Opaque next_state_do_updates.
     move=> st ra0 r0 top l a b t0 t1 tags Hra0 Hr0 Hcl.
-    (* peel [RegRead ra0] then [RegRead r0] (both registers present), domain preserved each step *)
     have Hua : exists st1, next_state_do_update st (t0 : tag_type lrc_tags R) (RegRead ra0) = Some st1
                         /\ domm (regs st1) = domm (regs st)
                         /\ regs st1 = setm (regs st) ra0 ((vala a)@t0).
@@ -829,7 +712,6 @@ Module RBScratch_EV (S : RecompositionContext).
       by rewrite (updm_domm_eq (m := regs st1) (k := r0) (v := (vala c0)@t1) _) // /updm Hc0. }
     have [st2 [Hu2 Hdom2]] := Hub.
     rewrite ndsu_cons Hu2 /=.
-    (* the residual [reg_clear_read] fold succeeds over [st2] (domain preserved from [st]) *)
     have Hcl2 : exists l2, reg_clear_list_aux reg_list (regs st2) top = Some l2.
     { apply: (reg_clear_list_aux_total (rs := regs st2) (l := reg_list) top).
       move=> n Hn. have [c Hc] := reg_clear_list_aux_mem Hcl Hn.
@@ -843,11 +725,6 @@ Module RBScratch_EV (S : RecompositionContext).
     Local Transparent next_state_do_updates.
   Qed.
 
-  (* The cross-component CALL [next_state_do_updates] (JAL prologue) succeeds: its updates are
-     [MemRead (pc.+1) :: RegWrite ra (pc.+1) :: reg_clear_read]; the [MemRead] reads the present
-     return cell, the [RegWrite] writes [ra] (present), and the [reg_clear_read] reads the present
-     [reg_list] registers — all succeed for ANY output-tag hseq (here [tret :: Ret level :: Other ::
-     reg_invalidate_hseq]).  Mirror of [ndsu_ret_event_some] for the JAL prologue. *)
   Lemma ndsu_call_event_some :
     forall (st : RB.state) (pcw : mword mt) (top : tag_type lrc_tags R) l a vret
            (tret : tag_type lrc_tags Symbolic.M) (t1 : tag_type lrc_tags R)
@@ -862,7 +739,6 @@ Module RBScratch_EV (S : RecompositionContext).
   Proof.
     move=> st pcw top l a vret tret t1 tags Hmem Hra0 Hcl.
     Local Opaque next_state_do_updates.
-    (* [MemRead] no-op on the present return cell; then [RegWrite ra] (ra present); domain preserved *)
     rewrite ndsu_cons.
     Local Transparent next_state_do_update.
     rewrite (mem_read_update_id Hmem).
@@ -890,7 +766,6 @@ Module RBScratch_EV (S : RecompositionContext).
     Local Transparent next_state_do_updates next_state_do_update.
   Qed.
 
-  (* Project the side-instantiated [wf_stack] out of the extra [common_equiv] premise. *)
   Lemma ce_wf_stack :
     forall (i : side) M s sweak s3,
       common_equiv M (if i is Left then s else sweak) (if i is Left then sweak else s) s3 ->
@@ -903,8 +778,6 @@ Module RBScratch_EV (S : RecompositionContext).
       by exists n.
   Qed.
 
-  (* The running side [s] and the merged side [s3] share the pc-tag LEVEL (both [= n] from the
-     [common_equiv] pc-tag fields).  Needed for the RETURN [check_ret level (Ret n')] = [Some tt]. *)
   Lemma ce_pc_level :
     forall (i : side) M s sweak s3,
       common_equiv M (if i is Left then s else sweak) (if i is Left then sweak else s) s3 ->
@@ -918,10 +791,6 @@ Module RBScratch_EV (S : RecompositionContext).
     - by rewrite Htg2 Htg3.
   Qed.
 
-  (* [next_state_updates_and_pc] succeeds once the [transfer] at the lifted target tag succeeds and
-     the resulting [do_updates] fold succeeds.  This is a clean unfolding of the [nsuap]/[next_state]
-     definition, isolated so the cross-component event corners need only supply the two component
-     facts (transfer-Some and do_updates-Some) without fighting the dependent [op iv] match. *)
   Lemma nsuap_some_of_parts :
     forall (s : RB.state) (op : opcode) (tpc : tag_type lrc_tags P)
            (ti : tag_type lrc_tags Symbolic.M) (ts : hseq (tag_type lrc_tags) (inputs op))
@@ -941,20 +810,10 @@ Module RBScratch_EV (S : RecompositionContext).
       rewrite Htr /= Hupd /=; by [].
   Qed.
 
-  (* ===== the big lemma ===== *)
   Lemma stepf_reflect_pf : forall (i : side) M s sweak s3 s3' ev,
     combined_codes i s s3 -> strong_equiv i M s s3 -> pc_color_inv s3 -> pc_color_inv s ->
     general_memory_correctness (mem s) -> general_memory_correctness (mem s3) ->
     is_relevant_comp i (color_of s) ->
-    (* EXTRA 3-WAY PREMISE (dischargeable at the call site, where [common_equiv M s1 s2 s3] is in
-       scope): the running side [s] occupies the [i]-indexed running slot of a [common_equiv] whose
-       third (merged) component is [s3].  For [i = Left], [s] is slot 1 and [sweak] slot 2; for
-       [i = Right], [s] is slot 2 and [sweak] slot 1.  Caller in RecBackward.[nostep_reflect]:
-         Left  branch: [s = s1], [sweak = s2], [Hcom : common_equiv M s1 s2 s3];
-         Right branch: [s = s2], [sweak = s1], [Hcom : common_equiv M s1 s2 s3].
-       So this is exactly [Hcom] in both branches — NOT a new axiom.  It supplies the metadata
-       stack invariant ([wf_stack]) + [capability_correctness] for the running side and for [s3],
-       which are NOT carried by [strong_equiv] and which the cross-component event corners need. *)
     common_equiv M (if i is Left then s else sweak) (if i is Left then sweak else s) s3 ->
     step_me (NC := NC) s3 s3' ev -> exists s' ev', step_me (NC := NC) s s' ev'.
   Proof.
@@ -967,18 +826,13 @@ Module RBScratch_EV (S : RecompositionContext).
     have Hside := strong_side Hstr.
     have Hpcaddr : vala (pc s) = vala (pc s3) by apply: (same_pc_eq Hsp Hside Hval).
     have Hend3 : end_condition (mem s3) by case: Hgmc3 => _ [_ [_ [_ [_ [H _]]]]]; exact H.
-    (* extra prologue hypothesis from the standalone Jal file: the allocator address is absent
-       from [mem s] (used by the alloc-JAL sub-case of the Jal bullet, which discharges it via
-       [done]/assumption — so the name is irrelevant there).  Named [Hallocs_pro] to avoid the
-       clash with the [Hallocs] introduced inside the Syscall bullet. *)
     have Hallocs_pro : mem s (word_of_nat alloc_label) = None
       by case: Hgmcs => _ [_ [_ [H _]]]; exact H.
-    (* side-instantiated metadata stack invariant (running mem in slot [i], merged mem in slot 3) *)
     have [lvl Hwf] := ce_wf_stack Hce.
     suff [s' [ev' Hf]] : exists s' ev', step_eval_me (NC := NC) s = Some (s', ev').
     { exists s', ev'. by apply/Exec.stepP. }
     case: ev Hstep => [e|] Hstep.
-    { (* ev = Some e: cross-component Jump/Jal *)
+    {
       inversion Hstep
         as [mem3 reg3 pc3 tpc3 i3 ti3 extra3 ST3 PC3 INST3 mv3 NEXT3
            |mem3 reg3 pc3 tpc3 i3 ti3 n3 r3 old3 told3 extra3 ST3 PC3 INST3 OLD3 mv3 NEXT3
@@ -990,31 +844,31 @@ Module RBScratch_EV (S : RecompositionContext).
            |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
            |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
            |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-      - (* nop: silent transfer cannot emit event *)
+      -
         rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* const *)
+      -
         rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* mov *)
+      -
         rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* binop *)
+      -
         rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* load *)
+      -
         rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* store *)
+      -
         rewrite /next_state_updates in NEXT3; unfold mv3 in NEXT3.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT3).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* JUMP — cross-component return *)
+      -
         have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
         have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
         have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1025,27 +879,21 @@ Module RBScratch_EV (S : RecompositionContext).
           - rewrite INST3 in Ha2; discriminate Ha2.
           - rewrite INST3 in Hj2; discriminate Hj2. }
         have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-        (* operand reflections (same tags) *)
         have RW3' : regs s3 r = Some (w @ t1) by rewrite ST3 /=.
         have RA3' : regs s3 ra = Some (rav @ rat) by rewrite ST3 /=.
         have [rav' Hra] := reg_reflect Hrm RA3'. cbn [taga] in Hra.
-        (* reg_clear_list reflects to the SAME tag-hseq on the strong side *)
         have Hclear3 : reg_clear_list_aux reg_list (regs s3) t1 = Some l
           by rewrite ST3 /=; exact CLEAR3.
         have Hclears : reg_clear_list_aux reg_list (regs s) t1 = Some l
           := rb_reg_clear_aux_reflect Hrm Hclear3.
-        (* hshead l = t1 (the top_reg_tag of reg_clear_list is t1) *)
         have Hheadl : hshead l = t1.
         { move: Hclear3; rewrite /reg_list /=.
           case: (regs s3 (word.as_word (ssrint.Posz 1))) => [v1|] //= Hco.
           case: (obind_inv Hco) => l2 [_ ]; move=> [= Hl]. by rewrite -Hl. }
-        (* the merged JUMP event step is a cross-component RETURN: extract the return-branch facts *)
         have [Hbel3 [Hother3 [[c' Hc'3] [n' [Hheadret Hlevel]]]]] := rb_merged_jump_event NEXT3.
-        rewrite Hheadl in Hheadret.  (* t1 = Ret n' *)
-        (* reflect the jump (return) register: same tag [Ret n'], value [w'] (metadata-related) *)
+        rewrite Hheadl in Hheadret.
         have RW3'' : regs s3 r = Some (w @ (Ret n')) by rewrite RW3' Hheadret.
         have [w' Hrw] := rb_reg_ret_reflect Hrm RW3''.
-        (* reflect reg_clear_list with the [Ret n'] tag *)
         have Hclears' : reg_clear_list_aux reg_list (regs s) (Ret n') = Some l
           by rewrite -Hheadret.
         have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
@@ -1054,32 +902,20 @@ Module RBScratch_EV (S : RecompositionContext).
         have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
         have Hiscode : is_code td by rewrite Htag.
         have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
-        (* CROSS-COMPONENT RETURN colour bridge: the running register [r] and the merged register [r]
-           share a [Ret n']-tagged value living in the SAME metadata stack frame; via [wf_stack] the
-           strong-side target cell [mem s w'] and the merged-side target cell [mem s3 w] then have a
-           COMMON colour [col].  Combined with the merged-side cross-component [belong = false]
-           ([Hbel3]) this gives [color td <> col], hence the strong JUMP takes the RETURN branch. *)
         have Hdm : data_match i (color_of s) M (w' @ (Ret n')) (w @ (Ret n')).
         { have [d' [Hdm Hr]] := proj1 (Hrm r (w @ (Ret n'))) RW3''.
           have Heqd : d' = (w' @ (Ret n')) by rewrite Hr in Hrw; case: Hrw.
           by rewrite -Heqd. }
         have [col [ds [ds3 [Hsw' [Hcolds [Hs3w Hcolds3]]]]]] := ret_frame_colors Hwf Hdm.
-        (* merged-side [belong = false] at [mem s3 w] gives [color td <> col] (= [color ds3]);
-           hence the strong-side [belong (color td) (Some (taga (mem s w'))) = false]. *)
         have Hbels : ((match td with {| color := c |} => c end) == color (taga ds)) = false.
         { have Hcolti3 : color ti3 = color_of s by rewrite (Hpci (i3 @ ti3) Hd3) Hcoleq.
-          (* merged side: [belong (color ti3) (Some (taga ds3)) = false] ==> [color ti3 <> col] *)
           have Hbel3' : belong (color ti3) (Some (taga ds3)) = false
             by move: Hbel3; rewrite Hs3w.
           rewrite rb_belong_someE in Hbel3'.
           have Htdne : color td <> col.
           { rewrite Hcd -Hcolti3 -Hcolds3. by apply/eqP; rewrite Hbel3'. }
           apply/eqP => Heq; apply: Htdne. by rewrite -Hcolds. }
-        (* level alignment: [check_ret level (Ret n')] needs [level = S n']; [Hlevel] gives it on the
-           merged side and the pc-tag levels coincide ([Hsp]/[common_equiv]). *)
         have Hlvls := ce_pc_level Hce.
-        (* the do_updates succeed (derived before [eexists] so [st'] is in the event/state witnesses'
-           scope), and the event is the cross-component RETURN [ERet (color_of s) _ (color (taga ds))]. *)
         have [st' Hupd] := @ndsu_ret_event_some s ra r _ _ _ _
           Invalidated Invalidated (Other :: reg_invalidate_hseq)%hseq
           Hra Hrw Hclears'.
@@ -1093,13 +929,10 @@ Module RBScratch_EV (S : RecompositionContext).
         + exact Hrw.
         + exact Hra.
         + rewrite /reg_clear_list. exact Hclears'.
-        + (* Discharge [next_state_updates_and_pc] by driving the strong-side [Merged.transfer] into
-             the SAME cross-component RETURN branch as the merged side, then closing the do_updates via
-             [Hupd].  Keep [next_state_do_updates] Opaque so the gate-[/=]s do not iota-expand it. *)
+        +
           have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
           { rewrite [in LHS](hseq_eta l) [in hsbehead l](hseq_eta (hsbehead l)). by []. }
           have Htpc3 : pct s3 = tpc3 by rewrite ST3.
-          (* the witnessed pc-tag colour / event component [color_of s] = [match td ..] *)
           have Hcols : color_of s = (match td with {| color := c |} => c end) by rewrite -Hcd.
           rewrite Hcols.
           Local Opaque next_state_do_updates.
@@ -1107,11 +940,9 @@ Module RBScratch_EV (S : RecompositionContext).
           rewrite /Merged.transfer /Merged.instr_rules Hiscode /=.
           rewrite El /LRC.instr_rules; cbv zeta.
           move: Hlvls Hbels Hupd; case Epc : (pct s) => [lvl0 cur0] /= Hlvls Hbels Hupd.
-          (* [current == current']: [match td .. == cur0] holds ([Hcd]/[Hpccol] at [pct s = Level lvl0 cur0]) *)
           have Hcc' : (match td with {| color := c |} => c end) == cur0.
           { rewrite -Hcols; move: Hpccol; rewrite Epc /= => ->; exact: eqxx. }
           rewrite (eqP Hcc') eqxx /=.
-          (* the JUMP RETURN branch: [belong (= cur0 == color (taga ds)) = false] *)
           have Hbel0 : (match taga ds with {| color := c' |} => cur0 == c' end) = false.
           { move: Hbels; rewrite (eqP Hcc'). by case: (taga ds). }
           rewrite Hbel0.
@@ -1119,29 +950,21 @@ Module RBScratch_EV (S : RecompositionContext).
           rewrite Hhd Hother3 /=.
           have Hckret : lvl0 == (S n') by rewrite Hlvls Htpc3; apply/eqP; exact Hlevel.
           rewrite /get_tni_color /check_ret (eqP Hckret) eqxx /=.
-          (* the event's component is [cur0 = match td ..]; align with the witness via [Hcc'] *)
           rewrite -(eqP Hcc').
           case Etds : (taga ds) => [vt2 c2 e2 ic2] /=.
           rewrite Hupd /=.
           reflexivity.
           Local Transparent next_state_do_updates.
-      - (* bnz *)
+      -
         unfold mv3 in NEXT.
         have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv (nsu_and_pc_bridge NEXT).
         by case: (transfer_event_jumpjal Htr) => E; discriminate.
-      - (* JAL — cross-component call *)
+      -
         have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
         have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT).
         have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
         move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
         have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-        (* The strong side also decodes a JAL (decode_match: no_JAL is impossible since i3 is a Jal).
-           For the cross-component EVENT call the merged-side JAL took the CALL branch ([belong = false]
-           at its target), which forces the [decode_match_JAL] sub-case (the [alloc_JAL] sub-case is the
-           silent allocator).  That sub-case ALSO relates the two call-target cells: the strong target
-           [mem s (swcast imm')] and the merged target [mem s3 (swcast imm)] carry the SAME memory tag
-           ([Htagd]).  This is exactly the cross-component entry-point correspondence the call corner
-           needs — it comes straight from [combined_codes]/[decode_match] (no extra premise). *)
         have Hbel3pre : belong (color ti3)
              (match mem s3 (swcast imm) with Some ni => Some (taga ni) | None => None end) = false
           by have [_ [H _]] := rb_merged_jal_event NEXT; exact H.
@@ -1151,27 +974,22 @@ Module RBScratch_EV (S : RecompositionContext).
                           /\ taga dd = taga dd'.
         { inversion Hdec as [Hnj Hnj' Heq | Ha Ha2 | imm2 imm2' dd0 dd0' Hj Hj2 Hmd Hmd' Hicd Htagd0 Hreld].
           - exfalso. rewrite Heq in Hnj. by move: (Hnj imm); rewrite INST3.
-          - (* alloc_JAL: [imm = alloc_label], but then the merged target is the allocator cell and
-               [belong] would not be false (the allocator JAL is silent); contradiction with [Hbel3pre]. *)
+          -
             exfalso. move: Hbel3pre. rewrite INST3 in Ha2.
             have [= Himm] := Ha2. rewrite Himm.
-            (* [mem s3 (swcast alloc_label)] absent (alloc_empty) ⇒ [belong _ None = true ≠ false] *)
             have Halloc3 : mem s3 (word_of_nat alloc_label) = None
               by case: Hgmc3 => _ [_ [_ [H _]]]; exact H.
             by rewrite swcast_word_of_nat_alloc_label Halloc3.
-          - (* the genuine JAL case: [imm2 = imm'], [imm2' = imm] *)
+          -
             move: Hj Hj2; rewrite INST3 => Hj [= Himm2']; subst imm2'.
             exists imm2. split; [exact Hj |].
             by exists dd0, dd0'; rewrite Hmd Hmd'. }
-        (* operand reflections (running side): ra register + reg_clear_list + the return cell. *)
         have OLD3' : regs s3 ra = Some (old3 @ told3) by rewrite ST3 /=.
         have [old' Hold] := reg_reflect Hrm OLD3'. cbn [taga] in Hold.
         have Hclear3 : reg_clear_list_aux reg_list (regs s3) told3 = Some l
           by rewrite ST3 /=; exact CLEAR3.
         have Hclears : reg_clear_list_aux reg_list (regs s) told3 = Some l
           := rb_reg_clear_aux_reflect Hrm Hclear3.
-        (* The return cell at [pc.+1] is a running-colour code cell (end_condition + check_belong),
-           hence reflects to the strong side with the SAME tag [tret]. *)
         have Hra3cell : mem s3 (addw (vala (pc s3)) onew) = Some (vret @ tret).
         { rewrite ST3 /=. move: RA3. by []. }
         have Hcode_ret : is_code tret.
@@ -1180,7 +998,6 @@ Module RBScratch_EV (S : RecompositionContext).
           - have Heqv : v3 = (vret @ tret) by congruence.
             move: Hcv3; rewrite Heqv /=. by apply. }
         have [Hcb3 [Hbel3 [Hother3 [[c' Hc'3] [[pn Hpn3] Hent3]]]]] := rb_merged_jal_event NEXT.
-        (* check_belong current (Some tret) = Some tt  ==>  color tret = color ti3 = color_of s *)
         have Hcolti3 : color ti3 = color_of s by rewrite (Hpci (i3 @ ti3) Hd3) Hcoleq.
         have Hcolret : color tret = color_of s.
         { have Hbel : belong (color ti3) (Some tret).
@@ -1194,17 +1011,10 @@ Module RBScratch_EV (S : RecompositionContext).
         have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
         have Hiscode : is_code td by rewrite Htag.
         have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
-        (* CROSS-COMPONENT CALL: the strong call target [mem s (swcast imm')] = [Some dd] has the SAME
-           memory tag [taga dd = taga dd'] as the merged target [mem s3 (swcast imm)] = [Some dd']
-           (from [combined_codes]/[decode_match_JAL], [Htagd]).  So every LRC gate the merged side
-           passed at [Some (taga dd')] — [belong = false], [get_tni_color], [get_proc_name],
-           [check_entry] — holds at [Some (taga dd)] too.  ([check_belong current (Some tret)] holds
-           since [tret] is the running-coloured return cell, [Hcb3] reflected via [Hcolret].) *)
         have Htni3 : (match mem s3 (swcast imm) with Some ni => Some (taga ni) | None => None end)
                    = Some (taga dd') by rewrite Hdd'.
         rewrite Htni3 in Hbel3 Hc'3 Hpn3 Hent3.
         have Hcols : color_of s = (match td with {| color := c |} => c end) by rewrite -Hcd.
-        (* the running-colour [check_belong current (Some tret)] reflects to the strong side *)
         have Hcbs : check_belong (match td with {| color := c |} => c end) (Some tret) = Some tt.
         { rewrite /check_belong rb_belong_someE.
           have -> : (match td with {| color := c |} => c end) = color tret by rewrite -Hcols Hcolret.
@@ -1223,8 +1033,7 @@ Module RBScratch_EV (S : RecompositionContext).
         + exact Hdecs.
         + exact Hold.
         + rewrite /reg_clear_list. exact Hclears.
-        + (* drive [Merged.transfer] into the cross-component CALL branch at [Some (taga dd)] (= the
-             merged target tag), then close the JAL-prologue do_updates via [Hupd]. *)
+        +
           rewrite Hcols.
           have Htpc3 : pct s3 = tpc3 by rewrite ST3.
           have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
@@ -1237,26 +1046,17 @@ Module RBScratch_EV (S : RecompositionContext).
           have Hcc' : (match td with {| color := c |} => c end) == cur0.
           { rewrite -Hcols; move: Hpccol; rewrite Epc /= => ->; exact: eqxx. }
           rewrite (eqP Hcc') eqxx /=.
-          (* [check_belong cur0 (Some tret)] = [Some tt] (same [tret] as merged, [Hcbs]) *)
           have HcbsE : check_belong cur0 (Some tret) = Some tt
             by rewrite -(eqP Hcc'); exact Hcbs.
           rewrite HcbsE /=.
-          (* [cur0 = color ti3]: [cur0 = match td .. = color_of s = color ti3] *)
           have Hcurti3 : cur0 = color ti3
             by rewrite -(eqP Hcc') -Hcols Hcolti3.
-          (* the strong call target tag equals the merged one; rewrite [taga dd -> taga dd'] so the
-             merged-side CALL facts ([Hbel3]/[Hc'3]/[Hpn3]/[Hent3]) apply directly. *)
           rewrite Htagd.
-          (* [belong cur0 (Some (taga dd')) = false] from the merged [Hbel3] ([color ti3 = cur0]) *)
           have Hbel0 : (match taga dd' with {| color := c' |} => cur0 == c' end) = false.
           { move: Hbel3; rewrite rb_belong_someE Hcurti3. by case: (taga dd'). }
           rewrite Hbel0.
-          (* [is_other (hshead (hsbehead l))] (same [l], peeled by [El]) *)
           rewrite Hother3 /=.
-          (* [get_tni_color (Some (taga dd')) = Some c'] ([Hc'3]) *)
           move: Hc'3; rewrite /get_tni_color => Hc'3; rewrite Hc'3 /=.
-          (* [check_entry cur0 (Some (taga dd')) = Some tt] ([Hent3], [cur0 = color ti3]) and the
-             event's [get_proc_name (Some (taga dd')) = Some pn] ([Hpn3]) *)
           move: Hent3 Hpn3; rewrite /check_entry /get_proc_name Hcurti3.
           case: (taga dd') => vt2 c2 [[p2 le2]|] ic2 //=.
           case: ifP => // _ _ [= Hp2].
@@ -1265,7 +1065,7 @@ Module RBScratch_EV (S : RecompositionContext).
           rewrite /pcv Hupd /=.
           reflexivity.
           Local Transparent next_state_do_updates.
-      - (* syscall: run_syscall always returns event None *)
+      -
         exfalso. move: CALL3; rewrite /run_syscall.
         move=> H. case: (obind_inv H) => evinp [_ {}H].
         move: H; case: (Merged.transfer _ _) => [u|] //= H.
@@ -1282,7 +1082,7 @@ Module RBScratch_EV (S : RecompositionContext).
          |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
          |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
          |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-    - (* Nop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1306,7 +1106,6 @@ Module RBScratch_EV (S : RecompositionContext).
       have [v' Hmems] := succ_code_reflect Hcc Hrel Hcode3s Hcolc Hd3s.
       have Hmems' : mem s (vala (pc s) + 1)%w = Some (v' @ t3s)
         by rewrite Hpcaddr.
-      (* builder: s mirrors the Nop step *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -1328,7 +1127,7 @@ Module RBScratch_EV (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         by rewrite Hcd Hpccol Hcolc eqxx /=.
-    - (* Const *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1375,7 +1174,7 @@ Module RBScratch_EV (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hold /=.
         by [].
-    - (* Mov *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1426,7 +1225,7 @@ Module RBScratch_EV (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hr1 /= setmE.
         by case: (r2 =P r1) => Hr21 /=; rewrite ?Hr2 //=.
-    - (* Binop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1482,11 +1281,9 @@ Module RBScratch_EV (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /=.
-        (* resolve read 1 (r1) and its updm via Hr1 *)
         rewrite Hr1 /= (rb_updm_some _ Hr1) /=.
-        (* read 2 (r2) on [setm (regs s) r1 (w1'@t1)]: only the read VALUE can alias r1 *)
         case: (r2 =P r1) => [Hr21|Hr21].
-        { (* r2 = r1: re-read of r1's freshly-written value forces w1' = w2' *)
+        {
           have Hw12 : w1' = w2'.
           { by move: Hr2; rewrite Hr21 Hr1 => -[] ->. }
           rewrite Hr21.
@@ -1498,7 +1295,6 @@ Module RBScratch_EV (S : RecompositionContext).
           { rewrite !setmE; case: (r3 == r1); first by eauto.
             by rewrite Hr3; eauto. }
           rewrite (rb_updm_some _ Hb3) /=. by rewrite Hw12. }
-        (* r2 <> r1: read r2 gives [regs s r2] = w2'@t2 *)
         rewrite setmE; move: Hr21 => /eqP/negbTE Hr21; rewrite Hr21 Hr2 /=.
         rewrite (rb_updm_some _ (a := w2' @ t2)); last by rewrite setmE Hr21 Hr2.
         rewrite /=.
@@ -1507,7 +1303,7 @@ Module RBScratch_EV (S : RecompositionContext).
         { rewrite !setmE; case: (r3 == r2); first by eauto.
           case: (r3 == r1); first by eauto. by rewrite Hr3; eauto. }
         by rewrite (rb_updm_some _ Hb3) /=.
-    - (* Load *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1530,17 +1326,14 @@ Module RBScratch_EV (S : RecompositionContext).
       have [v' Hmems] := succ_code_reflect Hcc Hrel Hcode3s Hcolc Hd3s.
       have Hmems' : mem s (vala (pc s) + 1)%w = Some (v' @ t3s) by rewrite Hpcaddr.
       have Honew : (vala (pc s3) + 1)%w = addw (vala (pc s3)) onew by [].
-      (* Establish evi s3 succeeds and the transfer gates *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /mv3 /next_state_updates /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [ei3 Hevi3] : exists ei3, evi s3 = Some ei3.
       { rewrite /evi Hrcom3. by eexists. }
-      (* Peel the transfer of NEXT3 to extract t1=Other, is_code t2=false, color t2 *)
       have Hti3col : color ti3 = color_of s by rewrite (Hpci (i3 @ ti3) Hd3) Hcoleq.
       have Htpc3col : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
       rewrite /mv3 in NEXT3. clear mv3.
-      (* Destructure the pc-tag pair so [current'] in the LRC rule reduces. *)
       have Htpcgen : forall p : tag_type lrc_tags P,
           match p with Level n c' => (n, c') end
           = (match p with Level n _ => n end, match p with Level _ c => c end)
@@ -1548,10 +1341,8 @@ Module RBScratch_EV (S : RecompositionContext).
       have Htpcpair : match tpc3 with Level n c' => (n, c') end
                       = (match tpc3 with Level n _ => n end, color_of s).
       { by rewrite (Htpcgen tpc3) Htpc3col. }
-      (* The current'-guard passes (running colour matches pc colour). *)
       have Hcurpass : (match ti3 with {| color := c |} => c end == color_of s) = true.
       { by rewrite -[match ti3 with {| color := c |} => c end]/(color ti3) Hti3col eqxx. }
-      (* Extract the three transfer facts: is_code t2 = false, t1 = Other, belong (color ti3) (Some t2). *)
       have [Hc2 [Ht1 Hbelt2]] :
         is_code t2 = false /\ t1 = Other /\ belong (color ti3) (Some t2).
       { move: NEXT3.
@@ -1561,7 +1352,6 @@ Module RBScratch_EV (S : RecompositionContext).
         case Hc2 : (is_code t2) => /=; first by [].
         rewrite Hcurpass /=.
         case Ht1 : t1 => [ | | | ] /=; try by [].
-        (* discharge check_belong on the fall-through (next-pc) cell t3s *)
         have Hbelgen : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
             (c == color t) -> check_belong c (Some t) = Some tt
           by move=> c [vt ct et ict] /= H; rewrite /check_belong /belong /= H.
@@ -1576,16 +1366,13 @@ Module RBScratch_EV (S : RecompositionContext).
       have Hbelt2' : color t2 = color_of s.
       { move: Hbelt2; rewrite /belong; case: t2 {Hc2 MEM13} => vt2 ct2 et2 ict2 /=.
         move/eqP => <-. by rewrite Hti3col. }
-      (* Address register r1: t1 = Other forces equal value (data_match Other). *)
       have R1W3' : regs s3 r1 = Some (w1 @ t1) by rewrite ST3 /=.
       have HR1 : regs s r1 = Some (w1 @ Other).
       { have [d' [Hdm Hr1]] := proj1 (Hrm r1 (w1 @ t1)) R1W3'.
         move: Hdm Hr1; rewrite Ht1; case: d' => vd1 td1 /= [Htt Hveq] Hr1.
         subst td1 vd1. exact Hr1. }
-      (* Other register r2: reflects with same tag. *)
       have OLD3' : regs s3 r2 = Some (old3 @ told3) by rewrite ST3 /=.
       have [old' Hr2] := reg_reflect Hrm OLD3'. cbn [taga] in Hr2.
-      (* Loaded cell: mem s3 w1 non-code relevant colour ⟹ reflects with SAME M-tag t2. *)
       have MEM13' : mem s3 w1 = Some (w2 @ t2) by rewrite ST3 /=.
       have Hncode2 : ~ is_code (taga (w2 @ t2)) by rewrite /= Hc2.
       have Hrel2 : is_relevant_comp i (color (taga (w2 @ t2))).
@@ -1593,16 +1380,12 @@ Module RBScratch_EV (S : RecompositionContext).
       have [d' [Hdm' Hms1]] := proj1 (Hmm w1 (w2 @ t2) Hncode2 Hrel2) MEM13'.
       move: Hdm'; case: d' Hms1 => vload tload Hms1 /=.
       rewrite /data_match' /= => -[Htloadeq _].
-      (* tload = t2, so mem s w1 = Some (vload @ t2) *)
       subst tload.
-      (* aux facts for the builder *)
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
-      (* expose the switch_val components ts' (new loaded-cell M-tag) and td' (new r2 R-tag) *)
       case Esw : (switch_val t2 (if is_address (vtag t2) then Invalidated else Other))
         => [ts' td'].
-      (* the mem update on w1 succeeds (key present) *)
       have [mem' Hmem'] : exists mem', updm (mem s) w1 (vload @ ts') = Some mem'.
       { rewrite /updm Hms1. by eexists. }
       exists (@State mt lrc_tags unit mem'
@@ -1619,37 +1402,31 @@ Module RBScratch_EV (S : RecompositionContext).
       + rewrite /next_state_updates /next_state_updates_and_pc /next_state Hmems' /= Hevi /=.
         rewrite /Merged.transfer /Merged.instr_rules Hiscode /= Hc2 /= /LRC.instr_rules.
         cbv zeta.
-        (* pc-tag pair *)
         have Hpcpair : match pct s with Level n c' => (n, c') end
                        = (match pct s with Level n _ => n end, color_of s)
           by rewrite (Htpcgen (pct s)) Hpccol.
         rewrite Hpcpair /=.
-        (* colour guard td vs pc *)
         have Hcurpass' : (match td with {| color := c |} => c end == color_of s) = true
           by rewrite -[match td with {| color := c |} => c end]/(color td) Hcd eqxx.
         rewrite Hcurpass' /=.
-        (* check_belong on fall-through cell t3s *)
         have Hbelt3sS : check_belong (color td) (Some t3s) = Some tt.
         { rewrite /check_belong /belong.
           move: Hcolc; case: t3s {Hd3s Hcode3s Hmems Hmems'} => vt3 ct3 et3 ict3 /= ->.
           by rewrite Hcd eqxx. }
         rewrite Hbelt3sS /=.
-        (* belong (color td) (Some t2) is true (color t2 = color_of s = color td) *)
         have Hbelgen2 : forall (c : Component.id) (t : tag_type lrc_tags Symbolic.M),
             (c == color t) -> belong c (Some t) = true
           by move=> c [vt ct et ict] /= H; rewrite /belong /= H.
         have Hbelt2S : belong (color td) (Some t2) = true
           by apply: Hbelgen2; rewrite Hcd -Hbelt2' eqxx.
         rewrite -/(belong (color td) (Some t2)) Hbelt2S /=.
-        (* switch_val already destructured (Esw) *)
         rewrite Esw /=.
-        (* apply the register/memory updates *)
         rewrite /updm HR1 /= Hms1 /= setmE.
         have Hmemeq : mem' = setm (mem s) w1 (vload @ ts')
           by move: Hmem'; rewrite /updm Hms1 /= => -[<-].
         rewrite Hmemeq.
         by case Hr21 : (r2 == r1) => /=; rewrite ?Hr2 //=.
-    - (* Store *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1674,17 +1451,13 @@ Module RBScratch_EV (S : RecompositionContext).
       have R1W3' : regs s3 r1 = Some (w1 @ t1) by rewrite ST3 /=.
       have R2W3' : regs s3 r2 = Some (w2 @ t2) by rewrite ST3 /=.
       have OLD3' : mem s3 w1 = Some (old3 @ told3) by rewrite ST3 /=.
-      (* gate facts from the merged step success *)
       have [Hot1 [Hictold3 Hbelold3]] := nsu_store_gates NEXT3.
       have Ht1 : t1 = Other := rb_is_other_eq Hot1.
-      (* address register: [t1 = Other] forces the strong-side address value to coincide with [w1] *)
       have Hr1 : regs s r1 = Some (w1 @ Other).
       { have [d' [Hdm Hr]] := proj1 (Hrm r1 (w1 @ t1)) R1W3'.
         move: Hdm Hr; case: d' => va' ta'; rewrite Ht1 /= => -[] -> Hv Hr.
         by rewrite Hr Hv. }
-      (* value register reflects with the same tag *)
       have [w2' Hr2] := reg_reflect Hrm R2W3'. cbn [taga] in Hr2.
-      (* target memory cell: non-code, relevant colour ⟹ reflects with the SAME mem-tag [told3] *)
       have Hcoltold3 : color told3 = color_of s.
       { rewrite -Hbelold3. by rewrite (Hpci (i3 @ ti3) Hd3) Hcoleq. }
       have [old' Hold] : exists old', mem s w1 = Some (old' @ told3).
@@ -1725,7 +1498,7 @@ Module RBScratch_EV (S : RecompositionContext).
         rewrite /updm Hr1 /=.
         rewrite setmE.
         case: (r2 =P r1) => [Hr21|Hr21] /=.
-        { (* r2 = r1: the freshly re-tagged r1 value is w1; and w2' = w1 since r1 = r2 *)
+        {
           have Hww : w1 = w2' /\ t1 = t2.
           { move: Hr2; rewrite Hr21 Hr1 Ht1 => -[] -> ->. by split. }
           case: Hww => Hww _; rewrite -Hww /=.
@@ -1733,7 +1506,7 @@ Module RBScratch_EV (S : RecompositionContext).
           by rewrite -Hr21. }
         rewrite Hr2 /=.
         by rewrite Hold /=.
-    - (* Jump *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1745,16 +1518,13 @@ Module RBScratch_EV (S : RecompositionContext).
         - rewrite INST3 in Hj2; discriminate Hj2. }
       have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
       have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      (* operand reflections (same tags) *)
       have RW3' : regs s3 r = Some (w @ t1) by rewrite ST3 /=.
       have RA3' : regs s3 ra = Some (rav @ rat) by rewrite ST3 /=.
       have [rav' Hra] := reg_reflect Hrm RA3'. cbn [taga] in Hra.
-      (* reg_clear_list reflects to the SAME tag-hseq on the strong side *)
       have Hclear3 : reg_clear_list_aux reg_list (regs s3) t1 = Some l
         by rewrite ST3 /=; exact CLEAR3.
       have Hclears : reg_clear_list_aux reg_list (regs s) t1 = Some l
         := rb_reg_clear_aux_reflect Hrm Hclear3.
-      (* the jump-register tag is InternalJump (from the merged JUMP [is_jump] gate); hshead l = t1 *)
       have Hij := rb_merged_jump_isjump NEXT3.
       have Hheadl : hshead l = t1.
       { move: Hclear3; rewrite /reg_list /=.
@@ -1765,10 +1535,8 @@ Module RBScratch_EV (S : RecompositionContext).
       have RW3'' : regs s3 r = Some (w @ InternalJump) by rewrite RW3' Ht1.
       have Hclears' : reg_clear_list_aux reg_list (regs s) InternalJump = Some l
         by rewrite -Ht1.
-      (* reflect the jump-register value: off = 0 so the strong target is the SAME w *)
       have Hrw : regs s r = Some (w @ InternalJump)
         := rb_reg_ijump_reflect Hrm Hrel RW3''.
-      (* belong of the strong target cell *)
       have Htpc3c : match tpc3 with Level _ c => c end = color_of s.
       { by rewrite Hcoleq ST3 /=. }
       have Hne3 : mem s3 w <> None.
@@ -1778,7 +1546,6 @@ Module RBScratch_EV (S : RecompositionContext).
                      (match mem s w with Some ni => Some (taga ni) | None => None end).
       { apply: (rb_target_belong (s3 := s3) Hcc Hmm Hrel Hside Hne3).
         by move: Hbel; rewrite Htpc3c. }
-      (* evi reflects *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -1786,7 +1553,6 @@ Module RBScratch_EV (S : RecompositionContext).
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
       have Hcdpc : color td = match pct s with Level _ c => c end by rewrite Hcd Hpccol.
-      (* build the strong-side jump step *)
       exists (@State mt lrc_tags unit (mem s) (regs s) (w @ (pct s)) (internal s)), None.
       apply/Exec.stepP.
       eapply step_jump.
@@ -1796,7 +1562,7 @@ Module RBScratch_EV (S : RecompositionContext).
       + exact Hrw.
       + exact Hra.
       + rewrite /reg_clear_list. exact Hclears'.
-      + (* the [RegRead ra :: RegRead r :: reg_clear_read] fold is the identity on [s] *)
+      +
         Local Opaque next_state_do_updates.
         have Hupd : next_state_do_updates s
                       (HSeqCons rat l : hseq (tag_type lrc_tags) (R :: nseq (size reg_list).+1 R))
@@ -1810,7 +1576,6 @@ Module RBScratch_EV (S : RecompositionContext).
           exact: (reg_clear_do_updates_id (l := reg_list) (st := s) (k0 := r)
                     (a0 := w @ InternalJump) Hrw Hcl). }
         rewrite /next_state_updates_and_pc /next_state Hevi /=.
-        (* the JUMP-register input tag is [InternalJump] *)
         have Hhij : hshead l = InternalJump by rewrite Hheadl Ht1.
         have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
         { rewrite [in LHS](hseq_eta l) [in hsbehead l](hseq_eta (hsbehead l)). by []. }
@@ -1828,19 +1593,15 @@ Module RBScratch_EV (S : RecompositionContext).
           ( rewrite (_ : (match td with {| color := c |} => c end == cpc) = true);
             last by (apply/eqP; rewrite Hcurc Hpccol) );
           rewrite /=.
-        * (* mem s w = Some ni: belong holds at the target *)
+        *
           rewrite (Hfold ni); last by (move: Hbelw; rewrite Hmsw /=).
           rewrite -El Hhij /is_jump /=.
           by rewrite Hupd.
-        * (* mem s w = None: belong None is true *)
+        *
           rewrite -El Hhij /is_jump /=.
           by rewrite Hupd.
-    (* The Jump bullet issued [Local Opaque next_state_do_updates] (needed there so the [Hupd]
-       fold survives [/=]).  Unlike in the standalone Jump file (where it is rolled back at the
-       file's [Qed]), here it would leak into the Bnz/Jal/Syscall bullets that follow and which
-       require [next_state_do_updates] to reduce.  Restore the default reduction behaviour. *)
     Local Transparent next_state_do_updates.
-    - (* Bnz *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -1851,16 +1612,13 @@ Module RBScratch_EV (S : RecompositionContext).
         - rewrite INST3 in Ha2; discriminate Ha2.
         - rewrite INST3 in Hj2; discriminate Hj2. }
       have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      (* value equality on the branch register via [is_other t1] ⟹ t1 = Other ⟹ data_match value eq *)
       have RW3' : regs s3 r = Some (w @ t1) by rewrite ST3 /=.
-      (* extract everything from [NEXT]/[mv3] BEFORE we case on [t1] (they let-depend on it) *)
       have Hot1 := nsu_bnz_is_other NEXT.
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT; rewrite /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
       have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT.
       clear mv3 NEXT.
-      (* [is_other t1] ⟹ t1 = Other; case it everywhere it appears (RW3/RW3'/Hot1) *)
       move: Hot1 RW3 RW3'; rewrite /is_other; case: t1 => //= _ RW3 RW3'.
       have Hr : regs s r = Some (w @ Other).
       { have [d' [Hdm Hrs]] := proj1 (Hrm r (w @ Other)) RW3'.
@@ -1870,9 +1628,6 @@ Module RBScratch_EV (S : RecompositionContext).
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
       have Hiscode : is_code td by rewrite Htag.
       have Htpc3 : match tpc3 with Level _ c => c end = color_of s by rewrite Hcoleq ST3 /=.
-      (* target cell at pc' on the merged side: code, colour [color_of s]; carried to [s].
-         Each branch proved as a SMALL standalone fact to avoid casing inside the big
-         existential goal (which blows up [swcast]/[addw] terms, ~160s ⟹ ~1s). *)
       have Hzero : exists d3s, mem s3 (addw (vala (pc s3)) onew) = Some d3s /\ is_code (taga d3s).
       { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
         by move: Hhalt; cbn [vala]; rewrite INST3. }
@@ -1913,26 +1668,21 @@ Module RBScratch_EV (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hr /=.
         by [].
-    - (* Jal *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
       move: Hd Hdec Htag; case: d => vd td; cbn [vala taga] => Hd Hdec Htag.
       have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
-      (* colour of the running pc-tag *)
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
-      (* RA cell (pc+1) on the merged side; it is the end_condition successor, hence code colour=current *)
       have HRA3 : mem s3 (vala (pc s3) + 1)%w = Some (vret @ tret) by rewrite ST3 /=.
       have [d3s [Hd3s Hcode3s]] :
           exists d3s, mem s3 (vala (pc s3) + 1)%w = Some d3s /\ is_code (taga d3s).
       { case: (Hend3 (vala (pc s3)) (i3 @ ti3) Hd3 Hcode3) => [Hhalt | H]; last exact H.
         by move: Hhalt; cbn [vala]; rewrite INST3. }
-      (* the end_condition successor IS the RA cell (pc+1): so tret is code *)
       have Htretcode : is_code tret.
       { move: Hd3s; rewrite HRA3 => -[Hd3eq]. by rewrite -Hd3eq in Hcode3s; move: Hcode3s; cbn [taga]. }
-      (* target belong from merged silent transfer *)
       have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT.
-      (* head check_belong: color tret = running colour.  Bridge merged->LRC then peel. *)
       have HtretBel : belong (match ti3 with {| color := c |} => c end) (Some tret).
       { have HL := nsu_and_pc_bridge NEXT.
         move: HL; rewrite /next_state_updates_and_pc /next_state.
@@ -1948,34 +1698,27 @@ Module RBScratch_EV (S : RecompositionContext).
       { have := Hpci (i3 @ ti3) Hd3; cbn [taga] => H. by rewrite H Hcoleq. }
       have Hcoltret : color tret = color_of s.
       { have HtretEq := rb_belong_color HtretBel. by rewrite -HtretEq -Hcolti3. }
-      (* --- strong-side operand facts shared by both decode_match cases --- *)
-      (* strong-side RA cell (pc+1): reflect the merged code RA cell *)
       have [vret' HRAs] := succ_code_reflect Hcc Hrel Htretcode Hcoltret HRA3.
       have HRAs' : mem s (vala (pc s) + 1)%w = Some (vret' @ tret) by rewrite Hpcaddr.
-      (* strong-side OLD reg (ra) *)
       have OLD3' : regs s3 ra = Some (old3 @ told3) by rewrite ST3 /=.
       have [old' Holds] := reg_reflect Hrm OLD3'. cbn [taga] in Holds.
-      (* strong-side reg_clear_list (same l, tags preserved) *)
       have CLEAR3' : reg_clear_list (regs s3) told3 = Some l by rewrite ST3 /=.
       have CLEARs : reg_clear_list (regs s) told3 = Some l
         by apply: (rb_reg_clear_aux_reflect_jal Hrm CLEAR3').
-      (* the [evi] succeeds on the strong side *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT; rewrite /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a4|] /=; [exists a4 | ]. }
       have [ei Hevi] := rb_evi_reflect Hrm (ex_intro _ a3 Hrcom3).
       have Hiscode : is_code td by rewrite Htag.
-      (* the two colour guards (tag/pc-colour match, head check_belong) are case-independent *)
       have Hg1 : (match td with {| color := c |} => c end)
                  == (match pct s with Level _ c' => c' end)
         by rewrite !rb_color_match Hcd Hpccol eqxx.
       have Hg2 : belong (match td with {| color := c |} => c end) (Some tret)
         by rewrite rb_color_match; apply: rb_belong_color_eq; rewrite Hcd Hcoltret.
-      (* invert decode_match: only JAL or alloc-JAL survive *)
       inversion Hdec as [Hnj Hnj' Heq | Halloc Halloc2 | jimm jimm' jd jd' Hjs Hj3 Htgts Htgt3 Hcodet Htagteq Hoff].
-      + (* no_JAL: contradicted, i3 IS a Jal *)
+      +
         exfalso. by move: (Hnj' imm); rewrite INST3.
-      + (* alloc_JAL: target is the allocator address, absent from memory (alloc_empty) *)
+      +
         have Htgtnone : mem s (@swcast _ (word_size mt) (@word_of_nat (imm_size mt) alloc_label)) = None
           by rewrite swcast_word_of_nat_alloc_label.
         eexists. exists None.
@@ -1994,10 +1737,8 @@ Module RBScratch_EV (S : RecompositionContext).
           rewrite (jal_do_updates_result (vv := vret') (a4 := old' @ told3) HRAs' Holds CLEARs).
           rewrite /next_state_do_update /updm Holds /=.
           by [].
-      + (* genuine JAL *)
-        (* jimm' (merged) = imm (NEXT3 target = swcast imm) *)
+      +
         have Himm3 : jimm' = imm by move: Hj3; rewrite INST3 => -[].
-        (* merged target cell = jd' and its colour = running *)
         have Htgt3' : mem s3 NEXT3 = Some jd'.
         { rewrite -[NEXT3]/(swcast imm) -Himm3. exact Htgt3. }
         have Hcoljd' : color (taga jd') = color_of s.
@@ -2007,7 +1748,6 @@ Module RBScratch_EV (S : RecompositionContext).
             by rewrite Hcoleq ST3 /=.
           by rewrite -Htpc3c -Heq. }
         have Hcoljd : color (taga jd) = color_of s by rewrite Htagteq.
-        (* target colour is running ⇒ offset 0 ⇒ swcast jimm' = swcast jimm *)
         have HtgtRel : is_relevant_comp i (color (taga jd))
           by rewrite Hcoljd; apply: Hrel.
         have [offt Hofft] := get_offset_some HtgtRel.
@@ -2017,7 +1757,6 @@ Module RBScratch_EV (S : RecompositionContext).
         have Himmeq : @swcast _ (word_size mt) jimm' = @swcast _ (word_size mt) jimm.
         { have Hoff' := Hoff offt. rewrite HsideJd in Hoff'.
           have Hoe := Hoff' Hofft. rewrite Hzt addw0 in Hoe. exact Hoe. }
-        (* build the strong-side step *)
         eexists. exists None.
         apply/Exec.stepP.
         eapply step_jal.
@@ -2027,7 +1766,7 @@ Module RBScratch_EV (S : RecompositionContext).
         * exact Hjs.
         * exact Holds.
         * exact CLEARs.
-        * (* discharge NEXT via the localised transfer + do_updates helpers (no giant cbv zeta) *)
+        *
           have Hg3 : belong (match td with {| color := c |} => c end) (Some (taga jd))
             by rewrite rb_color_match; apply: rb_belong_color_eq; rewrite Hcd Hcoljd.
           have HtrS := rb_jal_transfer_silent l ei Hiscode Hg1 Hg2 Hg3.
@@ -2037,7 +1776,7 @@ Module RBScratch_EV (S : RecompositionContext).
           rewrite (jal_do_updates_result (vv := vret') (a4 := old' @ told3) HRAs' Holds CLEARs).
           rewrite /next_state_do_update /updm Holds /=.
           by [].
-    - (* Syscall *)
+    -
       have Hpc3 : vala (pc s3) = pc3 by rewrite ST3 /=.
       have Hmem3none : mem s3 (vala (pc s3)) = None by rewrite ST3 /= PC3.
       have Hmemsnone : mem s (vala (pc s)) = None.
@@ -2061,8 +1800,7 @@ Module RBScratch_EV (S : RecompositionContext).
               have Hrelv : is_relevant_comp i (color (taga (vv @ tv))) by rewrite /= Hcolv.
               have [d' [_ Hmems3]] := proj2 (Hmm (vala (pc s)) (vv @ tv) Hnc Hrelv) Hcell.
               by rewrite Hmem3none' in Hmems3.
-          + (* NON-running colour pc cell: ruled out by [pc_color_inv s] (the strong-side pc only
-               addresses running-coloured cells). *)
+          +
             have Hc := Hpcis (vv @ tv) Hcell. cbn [taga] in Hc.
             rewrite Hc eqxx in Hcolv. discriminate Hcolv. }
       have Hpceq : vala (pc s) = pc3.
@@ -2093,7 +1831,6 @@ Module RBScratch_EV (S : RecompositionContext).
         case: (obind_inv H3) => addr3 [Haddr3 {}H3].
         move: H3; rewrite /updm.
         case Hret3 : (regs s3 syscall_ret) => [retv|] //= _.
-        (* reflect the three register reads onto [s] (same tag via [data_match]) *)
         have [v_ra Hra_s] := reg_reflect Hrm Hra3.
         have [v_sz Hsz_s] := reg_reflect Hrm Hsz3.
         have [v_ret Hret_s] := reg_reflect Hrm Hret3.
@@ -2101,14 +1838,11 @@ Module RBScratch_EV (S : RecompositionContext).
           by move: Hjmp3; rewrite /is_jump; case: (taga ra_val).
         have E_sat : taga sz = Other
           by move: Hoth3; rewrite /is_other; case: (taga sz).
-        (* running-colour facts for [s], [s3] (shared via [Hcoleq]) *)
         have Hccs : match taga (pc s) with Level _ c => c end = color_of s
           by rewrite -rb_color_ofE.
         have Hcc3 : match taga (pc s3) with Level _ c => c end = color_of s
           by rewrite -rb_color_ofE Hcoleq.
-        (* the merged return-cell check forces [reta3] to be running CODE *)
         move: Hretcol3; rewrite Hcc3 => /andP [Hic3 /eqP Hcol3].
-        (* the [ra] value is offset-mapped (InternalJump); offset 0 ⇒ same address on [s] *)
         have [off Hoff0] := get_offset_some Hrel.
         have Hz0 := get_offset_zero Hrel Hoff0.
         have [d_ra [Hdm_ra Hra_s2]] := proj1 (Hrm ra ra_val) Hra3.
@@ -2120,11 +1854,9 @@ Module RBScratch_EV (S : RecompositionContext).
           move: Hop; rewrite /= Hoff0 /= => Hb. by rewrite Hb Hz0 addw0. }
         have Hra_s'' : regs s ra = Some (v_ra @ InternalJump).
         { rewrite E_rat in Hra_s; exact Hra_s. }
-        (* reflect the return-address code cell from [s3] to [s] (same address, same tag) *)
         have Hreta3' : mem s3 (vala ra_val) = Some ((vala reta3) @ (taga reta3))
           by rewrite Hreta3; case: (reta3) => ? ? /=.
         have [vr_s Hreta_s] := succ_code_reflect Hcc Hrel Hic3 Hcol3 Hreta3'.
-        (* the value of [ra] read on [s] is [v_ra] = [vala d_ra] = [vala ra_val] *)
         have Hdra_eq : v_ra @ InternalJump = d_ra.
         { move: Hra_s2; rewrite Hra_s'' => -[Hde]; exact Hde. }
         have Hvra_eq : v_ra = vala ra_val by rewrite -Hvalra -Hdra_eq.
@@ -2134,7 +1866,6 @@ Module RBScratch_EV (S : RecompositionContext).
         have Hck_s : (if is_code (taga (vr_s @ (taga reta3)))
                          && (color (taga (vr_s @ (taga reta3))) == color_of s)
                       then Some tt else None) = Some tt by rewrite /= Hretchk_s.
-        (* size: [Other] tag preserved, value preserved *)
         have Hsz_s'' : regs s syscall_arg1 = Some (v_sz @ Other).
         { rewrite E_sat in Hsz_s; exact Hsz_s. }
         have E_dsv : v_sz = vala sz.
@@ -2144,7 +1875,6 @@ Module RBScratch_EV (S : RecompositionContext).
           have Hde : Some (v_sz @ Other) = Some d_sz by rewrite -Hsz_s'' Hsz_s2.
           move: Hv Hde; case: d_sz {Hdm_sz Hsz_s2 E_dsat} => dv dt /= Hv [Hd1 Hd2].
           by rewrite Hd1 Hv. }
-        (* prefix filter coincides on [s]/[s3] ⇒ same [max_addr] ⇒ same bound check + head block *)
         have Hmpcs : memory_prefix_condition' (mem s) by case: Hgmcs => _ [H _].
         have Hmpcs3 : memory_prefix_condition' (mem s3) by case: Hgmc3 => _ [H _].
         have Hdomm :
@@ -2155,9 +1885,7 @@ Module RBScratch_EV (S : RecompositionContext).
             (fun mw : word (word_size mt) => andw mw (@mask mt NC) ==
                @component_memory_prefix mt NC (ssrint.Posz (1 + color_of s))) (domm (mem s3))
           by apply: (match_mem_pref_condition_filter_eq Hrel Hmm Hmpcs Hmpcs3).
-        (* convert the s3 bound check + head into s-side via the running colour and filter eq *)
         rewrite Hcc3 -Hdomm in Hchk3 Haddr3.
-        (* rebuild [alloc_fun s] *)
         rewrite /alloc_fun Hccs.
         rewrite Hra_s'' obindE; cbn beta.
         rewrite is_jumpE obindE; cbn beta.
@@ -2176,8 +1904,6 @@ Module RBScratch_EV (S : RecompositionContext).
           by rewrite /updm Hret_s.
         rewrite Hupd_s obindE; cbn beta.
         by eexists. }
-      (* run_syscall sc s = Some (s', None): [evi s] succeeds (its [rcom] read reflects from [s3]),
-         the SERVICE transfer is unconditionally [Some], and [sem sc s = alloc_fun s = Some s']. *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: CALL3; rewrite /run_syscall /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 |]. }

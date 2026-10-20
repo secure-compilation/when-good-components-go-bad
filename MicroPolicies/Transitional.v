@@ -327,10 +327,6 @@ Module Memory. (* : AbstractComponentMemory.*)
 
   (* all functions below are used to initialize the memory *)
   
-  (* NB: the accumulator must be THREADED. Passing the outer [m] to
-     [reserve_block] on every iteration hands back the same fresh id [n]
-     times, and [reserve_component_blocks]'s [mkfmap (zip bs code)] then keeps
-     only the last procedure of each component. *)
   Definition reserve_blocks (m : mem) (n : nat) : (mem * list Block.id) :=
     let acc '(mcur, bs) :=
       let (mem', b) := reserve_block mcur in
@@ -564,12 +560,6 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     Pointer.component pc' <> Pointer.component pc ->
     (Some pct = value_to_pc_tag (tvtag (Register.get r regs))) ->
     (val (Register.get R_COM regs) = Int rcomval) ->
-    (* The return target must be a valid instruction in ITS OWN component
-       (mirrors [eval_step]'s [nth_error (cde (comp pc')) ...] check). The old
-       [check_pc_jump cde tg pc' c] was vacuous for a cross-return: it demands
-       [comp pc' = c = comp pc], contradicting [comp pc' <> comp pc]. And
-       [eval_step] INVALIDATES the callee's registers on return, so the
-       relational rule must too (only [R_COM]/[R_RA] survive). *)
     check_pc_jump cde tg pc' (Pointer.component pc') ->
     step cde (st, mem, regs, pc, pct) [ERet (Pointer.component pc) rcomval (Pointer.component pc')]
     (st, mem, Register.invalidate regs, pc', dec_pc_tag pct)
@@ -580,11 +570,6 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     (tvtag (Register.get r regs) = Other) ->
     val (Register.get r regs) = Int v ->
     (v <> 0) % Z ->
-    (* COMPONENT-LOCAL resolution (2026-07-23): S2I's label counters are
-       per-component, so the same numeric label can occur in several
-       components; global-first-match ([find_label_in_code]) could jump into a
-       FOREIGN component.  Bnz targets are always emitted in the same
-       component as the branch. *)
     find_label_in_comp cde c l = Some pc' ->
     check_pc_jump cde tg pc' c ->
     step cde (st, mem, regs, pc, pct) E0
@@ -787,17 +772,6 @@ Fixpoint execN (n: nat) (cde: code) (st: stackless) : option Z + nat :=
 
 (*** Compilation & execution ***)
 
-
-(* GENERALIZED over the interface the entry tags are computed against
-   (T2M audit, plan-t2me.md §3.8, 2026-08-08).  [head_tag]'s allowed-caller
-   list used to filter over the COMPILING program's own interface; for a
-   separately-compiled SIDE of a link that interface misses the other
-   side's components, so the me/mp machines' [check_entry] refused every
-   cross-side call.  Like the canonical label scheme and the joint buffer
-   map, separately-compiled sides must agree on the JOINT interface [PI].
-   The whole-program instantiations below ([head_tag], [linearize_proc],
-   …, [intermediate_to_transitional]) fix [PI := prog_interface pr] and
-   unfold to exactly the old bodies. *)
 
 Definition head_tag_gen (PI : Program.interface)
     (c : Component.id) (p : Procedure.id) : mem_tag :=

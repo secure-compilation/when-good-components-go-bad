@@ -1,20 +1,3 @@
-(* Buffer SHAPE determinism of the data segment.
-
-   The flat layout of [Merged.initial_memory pb] — every base address, the
-   total size, and the concretization of stored pointers — depends only on
-   the buffers' SHAPE (which blocks exist, with which cell counts), never on
-   their contents.  Consequently two buffer maps that agree in shape
-   everywhere and in CONTENT on some component produce initial memories
-   that agree on that component's cells (and have equal domains and sizes).
-
-   This is the kernel for weakening [RecompositionContext]'s buffer axioms
-   [prog_buffers_p_p'] / [prog_buffers_c_c'] from content equality to shape
-   equality, which is what the back-translated programs can actually
-   provide ([bt_ip'_buffers]/[bt_ic'_buffers], see BackTranslation.v).
-
-   Builds directly on BufferLayout.v's address kernel
-   ([nat_addr]/[bl_base]/[linearize_bufsE]/[eq_mapk]/[won_inj]). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
@@ -42,12 +25,9 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ==================== the shape of a buffer map ==================== *)
-
 Definition bsize (blk : nat + seq Values.value) : nat :=
   match blk with inl n => n | inr l => size l end.
 
-(* forget contents, keep the cell counts *)
 Definition bufs_shape (pb : NMap {fmap Values.Block.id -> nat + seq Values.value})
   : NMap {fmap Values.Block.id -> nat} :=
   mapm (mapm bsize) pb.
@@ -83,7 +63,6 @@ Qed.
 Lemma size_repeat (T : Type) (x : T) k : size (List.repeat x k) = k.
 Proof. by rewrite -size_length List.repeat_length. Qed.
 
-(* block sizes coincide *)
 Lemma lb_size_shape : forall c b,
   size (linearize_buf pb c b) = size (linearize_buf pb' c b).
 Proof.
@@ -130,9 +109,6 @@ Proof. move=> [[c b] o]. by rewrite /nat_addr bl_base_shape. Qed.
 
 End Shape.
 
-(* ==================== the explicit data-segment encoder ==================== *)
-
-(* verbatim replicas of [Merged.initial_memory]'s let-bound pieces *)
 Definition imem_base (pb : NMap {fmap Values.Block.id -> nat + seq Values.value})
     (c b : nat) : nat :=
   length (domm (filterm (fun x (_ : Values.value * mem_tag) =>
@@ -175,7 +151,6 @@ case: v => [z|p|] //=.
 by rewrite (imem_concretize_shape p Hsh).
 Qed.
 
-(* [initial_memory] as the explicit mapk *)
 Lemma initial_memory_encE pb :
   initial_memory (mt := mt) pb
   = Tmp.mapk (fun k => @word_of_nat (word_size mt) (nat_addr pb k))
@@ -188,7 +163,6 @@ congr as_word. congr ssrint.Posz. congr addn.
 rewrite size_length. exact: base_filterm.
 Qed.
 
-(* injectivity of the address map on the cell keys *)
 Lemma won_addr_inj_gen pb
     (Hb : size (linearize_bufs pb) < 2 ^ (word_size mt)) :
   {in domm (linearize_bufs pb) &,
@@ -200,7 +174,6 @@ exact: (nat_addr_inj Hx Hy
                    (ltn_trans (nat_addr_lt Hy) Hb) E)).
 Qed.
 
-(* forward: a declared cell sits, encoded, at its canonical address *)
 Lemma initial_memory_atE pb k cell
     (Hb : size (linearize_bufs pb) < 2 ^ (word_size mt)) :
   linearize_bufs pb k = Some cell ->
@@ -216,7 +189,6 @@ have Hmk : mapm (imem_enc pb) (linearize_bufs pb) k = Some (imem_enc pb cell).
 exact: (mapk_Some_inv Hinj Hmk).
 Qed.
 
-(* backward: every data cell comes from a declared cell *)
 Lemma initial_memory_invE pb w d :
   initial_memory (mt := mt) pb w = Some d ->
   exists k cell,
@@ -232,8 +204,6 @@ exists k, cell. split.
 - by rewrite -Hd.
 - by rewrite -Hfk.
 Qed.
-
-(* ==================== cell tags and per-component contents ==================== *)
 
 Lemma nth_error_nth' (T : Type) (d : T) (l : seq T) i :
   i < size l -> List.nth_error l i = Some (nth d l i).
@@ -266,7 +236,6 @@ apply: (List.nth_error_In _ o).
 exact: (nth_error_nth' _ Hlt).
 Qed.
 
-(* [linearize_buf] only reads the component's own entry *)
 Lemma linearize_buf_local (pb pb' : NMap {fmap Values.Block.id -> nat + seq Values.value}) c b :
   pb c = pb' c -> linearize_buf pb c b = linearize_buf pb' c b.
 Proof. move=> H. by rewrite /linearize_buf H. Qed.
@@ -278,10 +247,6 @@ Proof.
 move=> H. rewrite !linearize_bufsE H (linearize_buf_local b H). by [].
 Qed.
 
-(* ==================== the master agreement lemmas ==================== *)
-
-(* Shape-equal buffer maps that agree in content on a component produce
-   initial memories that agree on that component's cells. *)
 Lemma initial_memory_shape_agree pb pb' w d :
   bufs_shape pb = bufs_shape pb' ->
   size (linearize_bufs pb) < 2 ^ (word_size mt) ->
@@ -304,8 +269,6 @@ by rewrite -(nat_addr_shape Hsh ((c, b, o) : nat * nat * nat))
            -Hw -(imem_enc_shape cell Hsh) -Hd.
 Qed.
 
-(* Shape-equal buffer maps produce data segments with the same domain,
-   size, and cell tags. *)
 Lemma initial_memory_shape_size pb pb' :
   bufs_shape pb = bufs_shape pb' ->
   size (linearize_bufs pb) < 2 ^ (word_size mt) ->
@@ -328,8 +291,6 @@ have Hb' : size (linearize_bufs pb') < 2 ^ (word_size mt).
 rewrite (initial_memory_domm_iota Hb) (initial_memory_domm_iota Hb').
 by rewrite (total_shape Hsh).
 Qed.
-
-(* ==================== unionm lifting and agreement glue ==================== *)
 
 Lemma bufs_shape_unionm a b :
   bufs_shape (unionm a b) = unionm (bufs_shape a) (bufs_shape b).

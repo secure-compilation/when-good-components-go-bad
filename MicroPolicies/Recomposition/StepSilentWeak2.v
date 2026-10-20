@@ -38,33 +38,15 @@ Import TraceBracket(switch_val_color, switch_val_iscode, setm_self).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentWeak.
 
-(* The s2/LEFT weak silent-step diagram square: s2 (= prog', L2) takes a silent step while
-   LEFT-matched (s1/p is the strongly-related side), so the recomposed run s3 (= prog'') does
-   NOT move; only M / the weak (Right) equivalence with s2 update.  PROVEN (Qed): s2 steps via
-   [step_me] (Merged.transfer) in [sem']; the bridge [step_me_mp] converts it to a [step_mp]
-   (LRC.transfer) step so the whole weak1 LRC step-machinery applies, and the Right-side
-   [preserves_weak_*_r] mirrors rebuild both equivalences. *)
-
 Module StepWeak2 (S: RecompositionContext).
 
-  (* Chain off StepWeak so the whole recomposition shares ONE Defs instance. *)
   Include StepWeak S.
   Import PCCM.
 
-  (* [Step sem'] IS [step_me] (sem'.(step) = step1, and step1 _ _ [::] _ = step_me _ _ None). *)
   Lemma weak2_step1 : forall s2 s2', Step sem' s2 E0 s2' -> step_me (NC:=NC) s2 s2' None.
   Proof. move=> s2 s2' H. exact: H. Qed.
 
-  (* ===================================================================================== *)
-  (* RIGHT-SIDE MIRRORS of the weak1 [preserves_weak_*] reconstruction lemmas.  These rebuild *)
-  (* [weak_equiv Right M s2' s3] + [common_equiv M s1 s2' s3] (the stepping state s2 sits in   *)
-  (* the SECOND common-equiv slot; s1/s3 are fixed).  Proofs mirror the Left versions, with     *)
-  (* the running component's non-relevance ([~ is_relevant_comp Right (color_of s2)]) now        *)
-  (* obtained via the [domm ip]/[domm ic] DISJOINTNESS (on the Left it was free).                *)
-  (* ===================================================================================== *)
 
-  (* The running component of an s2 weakly-Right-matched state is NOT a [Right]-relevant
-     component: it sits in [domm ip] (its side is [Left]) which is disjoint from [domm ic]. *)
   Lemma running_not_relevant_right : forall (s s' : state) M,
       weak_equiv Right M s s' -> ~ is_relevant_comp Right (color_of s).
   Proof.
@@ -78,8 +60,6 @@ Module StepWeak2 (S: RecompositionContext).
     pose proof Hmergeable_ifaces as [[_ Hdis] _]. exact: (fdisjointP Hdis _ Hip).
   Qed.
 
-  (* bare [points_to_comp_code] (the m2/m3 stack slots) survives a confined non-code write:
-     the pointed-to cell is CODE, the written cell [w0] holds non-code [old], so they differ. *)
   Lemma pts_code_data_write : forall (m : memory) (w0 : mword mt) v old v2 C,
     m w0 = Some old -> ~ is_code (taga old) ->
     points_to_comp_code m v2 C -> points_to_comp_code (setm m w0 v) v2 C.
@@ -242,7 +222,7 @@ Module StepWeak2 (S: RecompositionContext).
       + exact: Hcap.
       + exact: capa_cor3.
       + exact: code_left.
-      + (* combined_codes Right s2' s3 *)
+      +
         move=> w v0 t off c Hrelc Hoff Hcodet Hcolt.
         move: (code_right w v0 t off c Hrelc Hoff Hcodet Hcolt) => [H1 H2]. split.
         * move=> Hs2'.
@@ -391,31 +371,31 @@ Module StepWeak2 (S: RecompositionContext).
                           wgmc1 wgmc2 wgmc3 wcap1 wcap2 wcap3 wcl wcr wval].
     subst m0 c1 c2 c3.
     inversion step_mp.
-    - (* 1  nop *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s2') = taga (pc s2) by (rewrite Htt ST).
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 2  const *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s2') = taga (pc s2) by (rewrite Htt ST).
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 3  mov *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s2') = taga (pc s2) by (rewrite Htt ST).
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 4  binop *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s2') = taga (pc s2) by (rewrite Htt ST).
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 5  load *)
+    -
       have [Hw0 [Hmem' [Htag Hguard]]] := weak_load_facts ST MEM1 NEXT.
       apply: (preserves_weak_load_r weak common Hw0 Hmem' Htag Hguard).
       + exact: (lrc_silent_regdomm step_mp wrd2).
@@ -423,7 +403,7 @@ Module StepWeak2 (S: RecompositionContext).
       + apply: (lrc_silent_gmc step_mp _ wgmc2).
         by rewrite (color_of_pc_tag s2) wtpc2.
       + exact: (PCCM.silent_step_pc_code_color step_mp).
-    - (* 6  store *)
+    -
       have [vnew [oldd [Hw0 [Hmem' [Htag [Hcolv [Hcolold [Hncv [Hncold _Hentvo]]]]]]]]] :=
         weak_store_facts ST OLD NEXT.
       apply: (preserves_weak_mem_write_r weak common Hw0 Hmem' Htag Hcolv Hcolold Hncv Hncold).
@@ -432,17 +412,17 @@ Module StepWeak2 (S: RecompositionContext).
       + apply: (lrc_silent_gmc step_mp _ wgmc2).
         by rewrite (color_of_pc_tag s2) wtpc2.
       + exact: (PCCM.silent_step_pc_code_color step_mp).
-    - (* 7  jump *)
+    -
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s2') = taga (pc s2) by (rewrite Htt ST).
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 8  bnz *)
+    -
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s2') = taga (pc s2) by (rewrite Htt ST).
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 9  jal — confined identity MemRead, mem unchanged (inlined, cf. weak1) *)
+    -
       unfold mvec, pc' in NEXT.
       have Hmemcell : mem s2 (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
       have [Hmm Htag] : mem s2' = mem s2 /\ taga (pc s2') = taga (pc s2).
@@ -467,7 +447,7 @@ Module StepWeak2 (S: RecompositionContext).
               | rewrite /= Htrpc; by rewrite ST ] ). }
       apply: (preserves_weak_local_r weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd2) | exact: (lrc_silent_cap step_mp wcap2) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 10 syscall (alloc) — confined memory extension by the running component *)
+    -
       have [Htag [Hext1 Hext2]] := weak_alloc_facts GETCALL CALL.
       apply: (preserves_weak_alloc_r weak common Htag Hext1 Hext2).
       + exact: (lrc_silent_regdomm step_mp wrd2).
@@ -476,12 +456,5 @@ Module StepWeak2 (S: RecompositionContext).
         by rewrite (color_of_pc_tag s2) wtpc2.
       + exact: (PCCM.silent_step_pc_code_color step_mp).
   Qed.
-
-  (* [Print Assumptions step_silent_weak2] (checked once, not left in the functor body so it is not
-     re-run on every downstream [Include]) lists ONLY the policy-allowed low-level LRC axioms
-     ([shlw_*], [mask_*], [component_memory_prefix_*], [register_index_bound], [colors_bounded]) plus
-     the module's [RecompositionContext] parameters.  No recomposition-substantive lemma is admitted:
-     the [step_me]->[step_mp] bridge ([merged_transfer_lrc]/[step_me_mp]) and the Right-side
-     [preserves_weak_*_r] reconstructions are all proved (Qed), and no [Classical] is used. *)
 
 End StepWeak2.

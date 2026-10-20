@@ -44,14 +44,8 @@ Require Import MicroPolicies.Recomposition.StepEventReturn.
 
 Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
 
-  (* Chain off StepEventReturn: this pulls the WHOLE diagram (step_silent_strong1/2,
-     step_silent_weak1/2, step_event_call, step_event_return) into one shared Defs instance,
-     so RecompositionTop can assemble [tsim_properties_match_states]. *)
   Include StepEventReturn S.
 
-  (*** Diagrams ***)
-
-  (* All entries in linearize_buf have tag def_mem_tag c false *)
   Lemma linearize_buf_tag: forall pb c b n vt,
     nth_error (linearize_buf pb c b) n = Some vt ->
     snd vt = def_mem_tag c false.
@@ -79,20 +73,17 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact (IH n v).
   Qed.
 
-  (* All values in linearize_bufs have tag def_mem_tag c false for some c *)
   Lemma linearize_bufs_tag: forall pb k val_tag,
     linearize_bufs pb k = Some val_tag ->
     exists c, snd val_tag = def_mem_tag c false.
   Proof.
     intros pb k val_tag.
     unfold linearize_bufs.
-    (* Chain: mapk -> uncurrym -> mapm -> mapim -> fmap_of_seq -> linearize_buf *)
     intros H. apply mapk_Some in H.
     destruct H as [k0 [? Hk0]].
     move: Hk0. rewrite uncurrymE mapmE.
     destruct k0 as [k1 k2].
     simpl.
-    (* Need to destruct the nested lookups *)
     destruct (mapim (fun c map =>
       mapim (fun b _ => fmap_of_seq (linearize_buf pb c b)) map) pb k1)
       as [inner_map |] eqn:Hinner; simpl; [| try discriminate].
@@ -126,7 +117,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       rewrite Hpb. simpl. congruence.
   Qed.
 
-  (* All initial_memory values have tag (def_mem_tag c false) for some c *)
   Lemma initial_memory_tag: forall pb w v,
     @initial_memory mt pb w = Some v ->
     exists c, taga v = def_mem_tag c false.
@@ -143,11 +133,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma seqE : forall len start, List.seq start len = iota start len.
   Proof. elim=> [|len IH] start; first by []. by rewrite /= IH. Qed.
 
-  (* Buffer-layout correctness, isolated as ONE clearly-true assumption (per the admit policy this is
-     allowed plumbing): [initial_memory] lays its cells contiguously at addresses [word_of_nat 0..size-1]
-     by construction ([base_adress]/[concretize] partition [0,size)).  A deep cardinality fact over the
-     inline [linearize_bufs] structure — Phase-5 / padding dischargeable.  The two memory leaves below
-     ([initial_memory_prefix_zero], [encode_code_initial_memory_disjoint]) are PROVEN from it. *)
   Lemma initial_memory_domm: forall b,
       size (linearize_bufs b) < alloc_label ->
       domm (@initial_memory mt b) = fset (map word_of_nat (List.seq 0 (size (@initial_memory mt b)))).
@@ -186,8 +171,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact (IH n v).
   Qed.
 
-  (* Stronger version: the n-th output entry corresponds to the n-th input entry *)
-  (* The foldr counter: after processing n entries from the right, acc.2 = n *)
   Lemma encode_code_foldr_counter: forall cde lp offset,
     (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x lp (offset - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).2
@@ -215,8 +198,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         split; [reflexivity |]. split.
         * unfold encode_instr_atom. simpl. reflexivity.
         * unfold encode_instr_atom, encode_instr. simpl.
-          (* pos = offset - 1 - acc.2 = offset - 1 - size cde' (by foldr_counter) *)
-          (* conclusion wants: offset - 1 - (size (i0,t0 :: cde') - 1 - 0) = offset - 1 - size cde' *)
           rewrite subn0. simpl size.
           replace ((size cde').+1 - 1) with (size cde').
           2: { rewrite subn1 //=. }
@@ -225,9 +206,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + simpl in Hnth.
         destruct (IH lp offset n' v Hnth) as [i' [t' [Hin' [Htag' Hval']]]].
         exists i', t'. split; [exact Hin' |]. split; [exact Htag' |].
-        (* Hval' has: offset - 1 - (size cde' - 1 - n') *)
-        (* need: offset - 1 - (size (i0,t0 :: cde') - 1 - n'.+1) *)
-        (* size (i0,t0 :: cde') - 1 - n'.+1 = (size cde').+1 - 1 - n'.+1 = size cde' - 1 - n' *)
         simpl size.
         replace (offset - 1 - ((size cde').+1 - 1 - n'.+1)) with (offset - 1 - (size cde' - 1 - n')).
         exact Hval'.
@@ -267,8 +245,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite -fmap_of_seqE in Hnth.
     eapply mapk_Some_inv with (f := (fun x : nat => word_of_nat (x + pc0)))
       in Hnth; eauto.
-    (* on-domm injectivity of the position relabel: positions are < size cde, so a+pc0,b+pc0
-       stay < 2^word and word_of_nat is injective there. *)
     move=> a b Ha Hb H.
     have Hsz : size list = size cde by exact: encode_code_foldr_size.
     have Halt : a < size cde.
@@ -288,8 +264,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
 
 
-  (* The foldr output has size = size of input *)
-  (* Converse: encode_code lookup at word_of_nat (n + pc0) gives the n-th atom *)
   Lemma encode_code_nth_inv: forall cde pc0 w v,
     encode_code cde pc0 w = Some v ->
     exists n, w = word_of_nat (n + pc0) /\
@@ -319,7 +293,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact Hfmap.
   Qed.
 
-  (* Every atom in the foldr output has a tag from some input entry *)
   Lemma encode_code_foldr_tag: forall cde lp offset n v,
     nth_error (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x lp (offset - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).1 n = Some v ->
@@ -328,16 +301,15 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     intros cde. induction cde as [| [i0 t0] cde' IH]; intros lp offset n v Hnth.
     - simpl in Hnth. destruct n; discriminate.
     - simpl in Hnth.
-      (* output = encode_instr_atom (i0,t0) lp (...) :: (foldr ... cde').1 *)
       set acc := (foldr _ _ cde') in Hnth.
       destruct n as [| n'].
-      + (* n = 0: v is the head, from (i0, t0) *)
+      +
         simpl in Hnth. injection Hnth => <-.
         exists i0, t0. split.
         * left. reflexivity.
-        * (* taga (encode_instr_atom (i0,t0) lp _) = t0 *)
+        *
           unfold encode_instr_atom. simpl. reflexivity.
-      + (* n > 0: v is in the tail, which comes from foldr on cde' *)
+      +
         simpl in Hnth.
         destruct (IH lp offset n' v Hnth) as [i' [t' [Hin' Htag']]].
         exists i', t'. split.
@@ -345,9 +317,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         * exact Htag'.
   Qed.
 
-  (* All atoms produced by encode_code have their tag from the input code entries.
-     encode_instr_atom x lp pos = (encode_instr (fst x) lp pos) @ (snd x),
-     so taga = snd x where x ∈ (cde ++ [:: (MrHalt, MTag Other Component.main None true)]) *)
   Lemma encode_code_tag: forall cde pc0 w v,
     encode_code cde pc0 w = Some v ->
     exists i t,
@@ -372,7 +341,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     eapply Hwf. eauto.
   Qed.
 
-  (* For any program code that satisfies code_tags_wf, encode_code produces is_code = true *)
   Lemma encode_code_is_code: forall cde pc w v,
     (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
     encode_code cde pc w = Some v ->
@@ -384,11 +352,9 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
 
 
-  (* val of [word_of_nat] (abstract size: no nesting, no divergent conversion). *)
   Lemma valw_won (k n : nat) : val (@word_of_nat k n) = n %% 2 ^ k :> nat.
   Proof. by rewrite /word_of_nat valw_as_word. Qed.
 
-  (* For addresses below alloc_label, the high bits (mask) are 0 *)
   Lemma small_addr_mask_zero: forall x,
       x < alloc_label ->
       andw (@word_of_nat (word_size mt) x) (@mask mt NC) = 0%w.
@@ -399,11 +365,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite (modn_small Hx32). apply: (leq_trans Hx). exact: ltnW alloc_label_lt_word_NC.
   Qed.
 
-  (* The size bound is essential: code sits at [size(initmem), size(initmem)+size cde) and data
-     at [0, size(initmem)); without [size(initmem)+size cde < alloc_label] the code region is not
-     pinned to the low (< alloc_label, mask-0) range, so it could wrap/extend onto a data address.
-     The bound is exactly memory_size{,',''}; the mask separation alone does NOT suffice since
-     component_memory_prefix 0 = 0 (component-0 data shares the code mask). *)
   Lemma encode_code_initial_memory_disjoint: forall cde pb w v,
     size (linearize_bufs pb) + size cde < alloc_label ->
     initial_memory (mt := mt) pb w = Some v ->
@@ -449,8 +410,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     eapply (leq_ltn_trans G Hbound).
   Qed.
 
-  (* component_memory_prefix puts [c] in the top NC bits, so it is injective ONLY on the
-     [< 2^NC] range (component ids).  Unbounded it wraps: prefix 0 = prefix (2^NC). *)
   Lemma component_memory_prefix_inj: forall n1 n2,
       n1 < 2 ^ NC -> n2 < 2 ^ NC ->
       @component_memory_prefix mt NC (ssrint.Posz n1) = @component_memory_prefix mt NC (ssrint.Posz n2) ->
@@ -482,7 +441,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
 
 
-  (* The color of a linearize_bufs entry is a key of pb *)
   Lemma linearize_bufs_color: forall pb k val_tag,
     linearize_bufs pb k = Some val_tag ->
     exists c, snd val_tag = def_mem_tag c false /\ c \in domm pb.
@@ -494,7 +452,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     move: Hk0. rewrite uncurrymE mapmE.
     destruct k0 as [k1 k2].
     simpl.
-    (* Need to destruct the nested lookups *)
     destruct (mapim (fun c map =>
       mapim (fun b _ => fmap_of_seq (linearize_buf pb c b)) map) pb k1)
       as [inner_map |] eqn:Hinner; simpl; [| try discriminate].
@@ -555,52 +512,26 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     - simpl in Hfind. discriminate.
     - simpl in Hfind.
       destruct (foldr _ None rest) as [n |] eqn:Hrest.
-      + (* rest returned Some n *)
+      +
         inv Hfind.
         specialize (IH n Logic.eq_refl).
-        (* m = n + 1 *)
         simpl. rewrite ltnS. rewrite addn1.
         eauto.
-      + (* rest returned None *)
+      +
         destruct (pred0 x) eqn:Hpred.
-        * injection Hfind => <-. (* m = 0 *)
-          simpl. done. (* 0 < size (x :: rest) *)
+        * injection Hfind => <-.
+          simpl. done.
         * discriminate.
   Qed.
   
-  (* The old [∀cde] label-resolution Hypotheses are GONE (they were FALSE as stated, and
-     silently excluded cross-side calls).  Per-side BNZ resolution comes from the linearizer
-     ([low_bnz_resolved]); JAL labels resolve at the LINKED level (locally, or in the other
-     side via the [A.jal_cross_*] fields) — see [bnz_resolved_prog*]/[jal_resolved_prog*]
-     after the [findopt] helpers below. *)
 
-  (* LABEL DISJOINTNESS (linearizer property; padding preserves but cannot create it).  A label
-     defined in the shared prefix [code p] does not also appear in [code c] or [code c'].  This is
-     needed because [findopt] resolves to the RIGHTMOST match (see [findopt_cat] below): without
-     disjointness a suffix re-definition in [c]/[c'] would shadow the prefix label.  With it, the
-     prefix [Bnz]/[Jal] labels resolve identically in [code prog] (= p+c) and [code prog''] (= p+c').
-     [bnz_findopt_shared] (prefix) is now a LEMMA derived from this; [bnz_findopt_shared'] (suffix)
-     needs NO disjointness (the suffix-priority of [findopt] works in its favour) — both are below,
-     after the [findopt] helpers. *)
-  (* lifted to the [AlignmentFacts] parameter [A] (linearizer-output spec). *)
   Definition labels_disjoint_prefix := A.labels_disjoint_prefix.
-
-  (* NO code-size alignment is assumed: the recomposition is offset-general.
-     [align_data_size]/[align_data_size_left] are LEMMAS (derived from the group-C buffer
-     equalities [prog_buffers_p_p']/[prog_buffers_c_c'] below); see after those hypotheses.
-     [offset2_val] (after [offset1_is_zero] below) computes the Right offset as the faithful
-     prefix-size difference |code p| - |code p'|. *)
 
   Lemma alloc_label_lt_imm: alloc_label < 2 ^ (imm_size mt).
   Proof. by rewrite /alloc_label ltn_exp2l. Qed.
   Lemma alloc_label_lt_w: alloc_label < 2 ^ (word_size mt).
   Proof. by rewrite /alloc_label ltn_exp2l. Qed.
-  (* [NC < word_size mt] ([NC_lt_word]) and [alloc_label < 2^(word_size - NC)]
-     ([alloc_label_lt_word_NC]) now come from [RecompositionContext] (via [Include S]), since the
-     [LRC] prefix lemmas / [mask_alloc_label] need them upstream of this file. *)
 
-  (* Which side owns main: derived from closedness + per-side wf.  Gives the main-coloured
-     code cell in EVERY program variant of that side. *)
   Lemma main_side :
     (Component.main \in domm ip
        /\ has (fun '(_,tag) => color tag == Component.main) (code p)
@@ -656,9 +587,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     by case: (find_rank _ _) => [st|] //; exists st.
   Qed.
 
-  (* Compiler invariant: each program's code ends in an MrHalt (the trailing Halt per block).
-     This is what makes [encode_code_last_is_halt] sound — it is NOT derivable from the
-     generic is_code/Other well-formedness of an arbitrary [cde]. *)
   Lemma last_halt_cat (l1 l2 : @Merged.code mt) t :
     nth_error l2 (size l2 - 1) = Some (@MrHalt mt, t) ->
     nth_error (l1 ++ l2) (size (l1 ++ l2) - 1) = Some (@MrHalt mt, t).
@@ -703,15 +631,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + by rewrite Hc0 in Hc'.
   Qed.
 
-  (* word/bitwise leaves (per policy).  REWRITE DISCIPLINE (rocq-9.1, [mt] opaque): rewriting
-     [valw_as_word]/[as_wordK] on a [val (as_word X)] where [X] itself contains a [val (as_word _)]
-     makes the engine try to match the OUTER occurrence, forcing a divergent conversion on
-     [2 ^ word_size mt].  So: (1) compute inner [val]s as CONCRETE [move:]-ed equations
-     ([valw_won]) and rewrite those first; (2) never close a word goal with [//]/[done]/[exact: id]
-     while residual [val (as_word _)] remain ([done] computes [2^32]); (3) cancel via [GRing.addIr]
-     ([addw] = the word zmod [+%R]) — [rewrite addwA] alone diverges on the ring instance. *)
-
-  (* [word_of_nat] is additive modulo [2^k] (unconditional). *)
   Lemma word_of_natDall (k a b : nat) :
     (@word_of_nat k a + @word_of_nat k b)%w = @word_of_nat k (a + b).
   Proof.
@@ -748,8 +667,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite /swcast /word_of_nat (as_wordK H) /zerow. exact: erefl.
   Qed.
 
-  (* word (per policy): successor commutes with word_of_nat — TRUE unconditionally since
-     addw is modular (addw (a mod 2^k) 1 = (a+1) mod 2^k). reflexivity over words hangs. *)
   Lemma word_of_nat_succ : forall a,
       (@word_of_nat (word_size mt) a + 1)%w = @word_of_nat (word_size mt) (a + 1).
   Proof.
@@ -798,8 +715,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       { rewrite encode_code_foldr_size. exact Hm_bound. }
       destruct (nth_error_Some_ex Hm_bound2) as [v' Hv'].
       have Henc_m := encode_code_nth (ltn_trans Hsize alloc_label_lt_w) Hv'.
-      (* Case split: k <= m (forward jump) or m < k (backward, wraps to 0) *)
-      (* rewrite Hfind in Hn. *)
       have Hk_bound: k < size cde := Hlt.
       have HX: pc0 + size cde - 1 - (size cde - 1 - k) = k + pc0.
       { rewrite subnBA.
@@ -815,7 +730,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       have Hoff: pc0 + m - (k + pc0) = m - k.
       { rewrite (addnC k pc0). rewrite subnDl. reflexivity. }
       case: (leqP k m) => [Hkm | Hmk].
-      + (* k <= m: forward jump — target is at position m *)
+      +
         exists v'. split.
         * suffices Heq: (w + swcast n0)%w = word_of_nat (m + pc0) by rewrite Heq.
           rewrite Hw.
@@ -831,7 +746,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           congr word_of_nat. move/leP: Hkm => Hkm'. lia.
         * destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]].
           rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1.
-      + (* m < k: backward jump — m - k = 0, target is w itself *)
+      +
         have Hmk0: m - k = 0 by apply/eqP; rewrite subn_eq0; exact (ltnW Hmk).
         exists v. split.
         * have Hn0 : n0 = word_of_nat 0.
@@ -867,7 +782,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       with Some m => pc0 + m | None => if l0 == alloc_label then l0 else default end).
     destruct (findopt (fun p : Merged.instr * mem_tag => match p.1 with MrLabel l1 => l == l1 | _ => false end) cde)
       as [m |] eqn:Hfind.
-    (* rewrite Hfind in Hn. *)
     - left.
       have Hm_bound: m < size cde.
       { eapply findopt_bound; eauto. }
@@ -886,26 +800,23 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
                    | None => if l == alloc_label then l else default
                    end) (g - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) cde).1.
       { rewrite encode_code_foldr_size. exact Hm_bound. }
-      (* change (m < length (foldr _ ([::], 0) cde').1) in Hm_bound2. *)
       destruct (nth_error_Some_ex Hm_bound2) as [v' Hv'].
-      (* encode_code at word_of_nat (m + pc0) = Some v' *)
       have Henc_m := encode_code_nth (ltn_trans Hsize alloc_label_lt_w) Hv'.
-      (* n0 = word_of_nat (pc0 + m), swcast n0 = word_of_nat (pc0 + m) at word_size *)
       exists v'. split.
       + have Hpm : pc0 + m < alloc_label.
         { apply: (ltn_trans _ Hsize). by rewrite ltn_add2l. }
         rewrite -Hn (swcast_word_of_nat_id Hpm) (addnC pc0 m). exact Henc_m.
-      + (* is_code (taga v') *)
+      +
         destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]].
         rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1.
-    - (* findopt didn't find the label *)
+    -
       simpl in Hn.
       destruct (l == alloc_label) eqn:Halloc.
-      + (* l = alloc_label *)
+      +
         right.
         move/eqP : Halloc => Halloc. subst l.
         eauto.
-      + (* l != alloc_label: fallback to default = pos *)
+      +
         exfalso.
         have Hneq: l <> alloc_label by move/eqP: Halloc.
         have [m' Hfind'] := Hres _ _ _ Hnth_cde Hneq.
@@ -913,10 +824,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
   
   
-  (* Well-formedness leaf (per policy): the last cell of well-formed code is a Halt — the
-     compiler emits a trailing Halt per code block; not derivable from code_tags_wf alone. *)
-  (* Given the trailing-Halt premise, the last encoded cell decodes to Halt.  (Residual
-     admit is only the encode-position/no-wrap bookkeeping, as in encode_code_nth.) *)
   Lemma encode_code_last_is_halt : forall cde pc0 v,
     pc0 + size cde < 2 ^ (word_size mt) ->
     (exists t, nth_error cde (size cde - 1) = Some (@MrHalt mt, t)) ->
@@ -948,7 +855,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     intros cde pc0 w v Hwf Hlast Henc Hcode Hsz_ec.
     destruct (encode_code_nth_inv Henc) as [n [Hw [Hlt Hnth]]].
     case: (ltnP (n + 1) (size cde)) => [Hlt' | Hge].
-    - (* n+1 < size cde: the successor cell exists and is code *)
+    -
       right.
       have Hlt2 : n + 1 < size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
         (encode_instr_atom x
@@ -964,7 +871,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         exact Henc_succ.
       + destruct (encode_code_foldr_tag Hv') as [i' [t' [Hin' Htag']]].
         rewrite Htag'. exact (code_tags_wf_all Hwf Hin').1.
-    - (* n is the last cell: it decodes to Halt *)
+    -
       left.
       have Hnlast : n = size cde - 1.
       { move/ltP: Hlt => ?. move/leP: Hge => ?. lia. }
@@ -984,7 +891,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     - exact (Hcolor i t Hin).
   Qed.
 
-  (* The color of initial_memory values comes from the prog_buffers domain *)
   Lemma initial_memory_color_gen: forall pb w v,
     initial_memory (mt := mt) pb w = Some v ->
     color (taga v) \in domm pb.
@@ -1030,8 +936,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite Htag. exact (code_tags_wf_all Hwf Hin).2.
   Qed.
 
-  (* code_tags_wf_prog/prog'/prog'' and convenience wrappers defined after Hypotheses below *)
-
   Lemma encode_code_vtag_not_ret: forall cde pc0 w v,
     (forall i t, List.In (i, t) cde -> is_code t = true /\ vtag t = Other) ->
     encode_code cde pc0 w = Some v ->
@@ -1048,8 +952,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     by rewrite Htag.
   Qed.
 
-  (* All code tags in the programs have is_code = true and vtag = Other.
-     This holds for code produced by the compilation pipeline (def_mem_tag c true). *)
   Definition code_tags_wf_p := low_tags A.lin_wf_p.
   Definition code_tags_wf_c := low_tags A.lin_wf_c.
   Definition code_tags_wf_p' := low_tags A.lin_wf_p'.
@@ -1079,8 +981,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     by lia.
   Qed.
     
-  (* RESTATED on the pre-collapse buffer total (BufferLayout); the three use sites all sit
-     under [memory_size*]-derived bounds, which are total-based via [A.memory_size_lin*]. *)
   Lemma alloc_label_not_in_initial_memory: forall pb,
       size (linearize_bufs pb) < alloc_label ->
       initial_memory (mt := mt) pb (word_of_nat alloc_label) = None.
@@ -1130,8 +1030,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma lin_size_wo_code'':
     size (linearize_bufs (unionm (prog_buffers p) (prog_buffers c'))) < alloc_label.
   Proof. apply: (leq_ltn_trans _ A.memory_size_lin''). exact: leq_addr. Qed.
-
-  (* [find_rank_main_shared] is GONE: the init match is offset-general ([as_word_shiftD]). *)
 
   Lemma domm_buffers_p: domm (prog_buffers p) = domm ip.
   Proof. exact: (esym (wfprog_defined_buffers Hwfp)). Qed.
@@ -1199,8 +1097,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Definition bufs_shape_c_c' : bufs_shape (prog_buffers c) = bufs_shape (prog_buffers c')
     := A.bufs_shape_c_c'.
 
-  (* the linked buffer unions of the three runs are SHAPE-equal (contents on
-     the primed sides may differ — cf. BufferShape.v) *)
   Lemma bufs_shape_prog_prog'' :
     bufs_shape (prog_buffers prog) = bufs_shape (prog_buffers prog'').
   Proof.
@@ -1215,14 +1111,12 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exact: (bufs_shape_unionm_l _ (esym bufs_shape_p_p')).
   Qed.
 
-  (* pre-collapse totals fit the word (from the size premises) *)
   Lemma total_bound_prog : size (linearize_bufs (prog_buffers prog)) < 2 ^ (word_size mt).
   Proof. apply: (ltn_trans _ alloc_label_lt_w). exact: lin_size_wo_code. Qed.
 
   Lemma total_bound_prog' : size (linearize_bufs (prog_buffers prog')) < 2 ^ (word_size mt).
   Proof. apply: (ltn_trans _ alloc_label_lt_w). exact: lin_size_wo_code'. Qed.
 
-  (* DATA-SIZE alignment: the data-segment size is shape-determined. *)
   Lemma align_data_size: size (initial_memory (mt := mt) (prog_buffers prog'))
                        = size (initial_memory (mt := mt) (prog_buffers prog'')).
   Proof. exact: (initial_memory_shape_size bufs_shape_prog'_prog'' total_bound_prog'). Qed.
@@ -1231,7 +1125,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
                             = size (initial_memory (mt := mt) (prog_buffers prog'')).
   Proof. exact: (initial_memory_shape_size bufs_shape_prog_prog'' total_bound_prog). Qed.
 
-  (* domain agreement of the data segments *)
   Lemma align_data_domm: domm (initial_memory (mt := mt) (prog_buffers prog'))
                        = domm (initial_memory (mt := mt) (prog_buffers prog'')).
   Proof. exact: (initial_memory_shape_domm bufs_shape_prog'_prog'' total_bound_prog'). Qed.
@@ -1255,9 +1148,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     = domm (@initial_memory mt (unionm (prog_buffers p) (prog_buffers c))).
   Proof. by rewrite align_data_domm_u -align_data_domm_left_u. Qed.
 
-  (* Transported data cells: the data segments agree pointwise on the cells
-     of the side whose buffers are content-equal, because the OTHER side is
-     shape-equal (BufferShape.initial_memory_shape_agree). *)
   Lemma init_data_left_31 : forall w (d : atom (mword mt) mem_tag),
     color (taga d) \in domm ip ->
     @initial_memory mt (unionm (prog_buffers p) (prog_buffers c')) w = Some d ->
@@ -1318,8 +1208,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     - exact: (unionm_agree_r (prog_buffers c') Hnp' Hnp).
   Qed.
 
-  (* [align_find_rank_main_right] is GONE: the Right init match is offset-general. *)
-
   Lemma encode_int_of_nat : forall n, encode_int (Z.of_nat n) = ssrint.Posz n.
   Proof. case=> [//|m] /=. by rewrite nat_of_pos_succ. Qed.
 
@@ -1328,7 +1216,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       size (domm m) = size m.
   Proof. by move=> T S m; rewrite val_domm size_map. Qed.
 
-  (* --- generic find_rank lemmas (recomposition infrastructure) --- *)
   Lemma find_rank'_cat {T} (f: pred T) (l1 l2: seq T) n:
     find_rank' f (l1 ++ l2) n =
     if find_rank' f l1 n is Some m then Some m else find_rank' f l2 (n + size l1).
@@ -1355,7 +1242,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite Hnone. by case: (find_rank' f l1 0).
   Qed.
 
-  (* find_rank (Recomposition, first-match, option) relates to mathcomp seq.find. *)
   Lemma find_rank'E {T} (f: pred T) (l: seq T) k:
     find_rank' f l k = if has f l then Some (k + seq.find f l) else None.
   Proof.
@@ -1375,8 +1261,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite find_rankE; case: ifP => Hhas // [<-]. split=> //. by rewrite -has_find.
   Qed.
 
-  (* --- findopt helpers (copied locally; PaddingCorrect.v builds AFTER this file). [findopt]
-     (Merged.v) returns the RIGHTMOST match's index. --- *)
   Lemma findopt_cons T (pred : T -> bool) x s :
     findopt pred (x :: s)
     = if findopt pred s is Some n then Some (n + 1) else if pred x then Some 0 else None.
@@ -1418,8 +1302,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       by [].
   Qed.
 
-  (* LINKED-level BNZ resolution: a Bnz cell of a linked program resolves its label in that
-     program (its side resolves it, findopt over the concatenation keeps it defined). *)
   Lemma bnz_resolved_prog : forall n r l t,
       nth_error (code prog) n = Some (@MrBnz mt r l, t) ->
       exists m, findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code prog) = Some m.
@@ -1457,8 +1339,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     - right. exact: (low_bnz_resolved A.lin_wf_c' Hcell).
   Qed.
 
-  (* LINKED-level JAL resolution: locally, or — for a FOREIGN label — in the other side
-     (the [A.jal_cross_*] fields), which is part of the same linked program. *)
   Lemma jal_resolved_prog : forall n l t,
       nth_error (code prog) n = Some (@MrJal mt l, t) -> l <> alloc_label ->
       exists m, findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code prog) = Some m.
@@ -1521,10 +1401,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
 
 
-  (* [bnz_findopt_shared] (was a Hypothesis): a Bnz in the shared prefix [code p] resolves its
-     label identically in [code prog] and [code prog''].  Both share [code p]; the label is in
-     [code p] ([code_bnz_labels_resolved] on [code p]) and — by [labels_disjoint_prefix] — absent
-     from [code c]/[code c'], so [findopt] (suffix-first) falls through to the prefix in both. *)
   Lemma bnz_findopt_shared: forall k r l t,
       k < size (code p) ->
       nth_error (code prog) k = Some (@MrBnz mt r l, t) ->
@@ -1545,10 +1421,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     by rewrite !findopt_cat Hnc Hnc'.
   Qed.
 
-  (* [bnz_findopt_shared'] (was a Hypothesis): a Bnz in the shared c' SUFFIX.  No disjointness
-     needed — the label is in [code c'] ([code_bnz_labels_resolved] on [code c']), and [findopt]'s
-     suffix-priority returns that occurrence in both [code prog'] (=p'+c') and [code prog''] (=p+c'),
-     shifted by [size (code p')] resp. [size (code p)]; the relative offset is preserved. *)
   Lemma bnz_findopt_shared': forall k k'' r l t m' m'',
       size (code p') <= k ->
       k'' = size (code p) + (k - size (code p')) ->
@@ -1571,8 +1443,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     subst m' m''. rewrite Hk''eq. lia.
   Qed.
 
-  (* Minimal alignment postulate: the allocator label is never a code MrLabel (alloc is a
-     reserved syscall), so [findopt] never resolves it inside the code. *)
   Lemma no_mrlabel_alloc_prog :
     findopt (fun p : Merged.instr * mem_tag => match p.1 with MrLabel l0 => alloc_label == l0 | _ => false end) (code prog) = None.
   Proof.
@@ -1592,14 +1462,11 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     have -> := (low_no_alloc A.lin_wf_c'). exact: (low_no_alloc A.lin_wf_p).
   Qed.
 
-  (* word/bitwise (per policy): word_of_nat is injective below 2^imm_size (JAL immediates). *)
   Lemma word_of_nat_inj_imm: forall a b,
       a < 2 ^ (imm_size mt) -> b < 2 ^ (imm_size mt) ->
       @word_of_nat (imm_size mt) a = word_of_nat b -> a = b.
   Proof. move=> a b Ha Hb. exact: (won_inj Ha Hb). Qed.
 
-  (* A MrJal l resolves to the allocator immediate iff its label IS the allocator label.
-     PROVEN from no_mrlabel_alloc + word_of_nat_inj + the address ceiling (cluster A). *)
   Lemma jal_alloc_iff : forall cde pc0 k l t a n,
     pc0 + size cde < alloc_label ->
     findopt (fun p : Merged.instr * mem_tag => match p.1 with MrLabel l0 => alloc_label == l0 | _ => false end) cde = None ->
@@ -1629,8 +1496,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     set POS := pc0 + size cde - 1 - (size cde - 1 - k) in Hn.
     have HposP : (POS < alloc_label)%coq_nat by (rewrite /POS; apply/ltP; lia).
     destruct (findopt (fun p : Merged.instr * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) cde) as [m | ] eqn:Hfind.
-    - (* findopt found l at m: target is pc0 + m < alloc, so n is NOT the allocator,
-         and l = alloc_label is impossible (would be a MrLabel alloc) *)
+    -
       simpl in Hn.
       have Hm_ltP : (m < size cde)%coq_nat by (apply/ltP; exact (findopt_bound Hfind)).
       split.
@@ -1640,7 +1506,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         { apply (word_of_nat_inj_imm alloc_label_lt_imm Hbm). rewrite Hae. symmetry. exact Hn. }
         lia.
       + move=> Hla. exfalso. subst l. rewrite Hfind in Hno. discriminate.
-    - (* findopt failed: target is (l if l=alloc else POS) *)
+    -
       case Hla: (l == alloc_label).
       + move/eqP: Hla => Hla. subst l.
         rewrite eqxx in Hn.
@@ -1655,16 +1521,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         * move=> Hla'. rewrite Hla' eqxx in Hla. discriminate.
   Qed.
 
-  (* ALIGNMENT INTERFACE (JAL targets; Left/shared-prefix cut; discharged by the Phase-4 NOP-padding
-     pass — see project-label-alignment-padding).  This is the cross-component analogue of
-     [combined_codes_forward], specialised to the JAL targets of a MrJal sitting in the shared code-p
-     prefix.  Cross-component transfer is entry-only (ICall -> MrJal (make_label)) and local labels are
-     component-namespaced, so the SAME jump (pinned by the two nth_error premises at the SAME index k)
-     has its target cell at corresponding addresses: the two target cells carry the same tag, and their
-     addresses differ exactly by the target component's offset [get_offset].  Stated conclusion-shaped
-     as the file's other layout facts ([offset2_val], [bnz_findopt_shared']); the linearizer pins
-     every procedure entry to the same relative position, which is what makes it a theorem. *)
-  (* word: alloc_label < 2^imm so the sign-cast preserves it *)
   Lemma swcast_alloc : @swcast _ (word_size mt) (word_of_nat alloc_label : imm mt) = word_of_nat alloc_label.
   Proof.
     have H15 : alloc_label < 2 ^ imm_size mt by rewrite imm_size_mt /alloc_label ltn_exp2l //.
@@ -1674,10 +1530,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma as_word_encode_int_zero : as_word (encode_int 0) = zerow :> mword mt.
   Proof. rewrite /encode_int /zerow. congr as_word. Qed.
 
-  (* The Left-side offset is genuinely 0: a colour in [domm ip] resolves (via [find_rank])
-     into the *shared* [code p] prefix of both [code prog] and [code prog''] at the same
-     index, and the data segments have equal size ([prog_buffers_c_c']). Pure find_rank/Z
-     reasoning — no word arithmetic.  (Moved up: used by [jal_target_corresp].) *)
   Lemma offset1_is_zero : forall (t : mem_tag) off,
       color t \in domm ip -> offset1 (color t) = Some off -> off = encode_int 0.
   Proof.
@@ -1721,13 +1573,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite -Hoff_eq HD int_diffE GRing.subrr. by [].
   Qed.
 
-  (* [jal_findopt_shared]: a Jal in the shared prefix [code p] resolves its label identically in
-     [code prog] and [code prog''] (mirror of [bnz_findopt_shared]; extra [alloc_label] case where
-     [findopt] is [None] on both via [no_mrlabel_alloc_prog{,''}]). *)
-
-  (* [valjal]: the encoded value of a Jal cell whose label resolves to [findopt = Some m] is
-     [Jal (word_of_nat (pc0 + m))] (absolute target; unlike [valbnz] the [pos] argument is unused).
-     Mirror of [valbnz]. *)
   Lemma valjal : forall (cde : @Merged.code mt) (pc0 m k : nat) l (t' : mem_tag) (b : matom),
     k < size cde ->
     pc0 + size cde < 2 ^ word_size mt ->
@@ -1750,24 +1595,16 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     cbn beta iota. by rewrite Hfo.
   Qed.
 
-  (* [jal_target_corresp] (was a Hypothesis): a Jal in the shared prefix [code p].  Its label is in
-     [code p] ([code_jal_labels_resolved] + [labels_disjoint_prefix] ⇒ not shadowed), so it resolves
-     to the same position [m < size (code p)] in both runs ([jal_findopt_shared] / [findopt_cat]).
-     Hence [n = n'' = word_of_nat (pc0 + m)] ([valjal]), the targets are the same shared-prefix cell
-     ([taga d = taga d']), and the target colour is in [ip] so its offset is 0 ([offset1_is_zero]).
-     The [alloc_label] case is impossible — its target is out of code range ([jal_alloc_iff]). *)
   Lemma jal_target_corresp : forall k l (t' : mem_tag) (v v'' : matom) (n n'' : imm mt) d d',
     nth_error (code prog)   k = Some (MrJal l, t') ->
     nth_error (code prog'') k = Some (MrJal l, t') ->
-    k < size (code p) ->   (* pins position k to the SHARED code-p prefix (same cell in both) *)
-    (* v, v'' are the MrJal cells at position k, and n, n'' THEIR resolved immediates: *)
+    k < size (code p) ->
     encode_code (code prog)   (size (initial_memory (mt := mt) (prog_buffers prog)))
       (word_of_nat (k + size (initial_memory (mt := mt) (prog_buffers prog))))   = Some v ->
     encode_code (code prog'') (size (initial_memory (mt := mt) (prog_buffers prog'')))
       (word_of_nat (k + size (initial_memory (mt := mt) (prog_buffers prog'')))) = Some v'' ->
     decode_instr (vala v)   = Some (Jal n) ->
     decode_instr (vala v'') = Some (Jal n'') ->
-    (* d, d' are the cells those immediates point at: *)
     encode_code (code prog)   (size (initial_memory (mt := mt) (prog_buffers prog)))   (@swcast _ (word_size mt) n)   = Some d ->
     encode_code (code prog'') (size (initial_memory (mt := mt) (prog_buffers prog''))) (@swcast _ (word_size mt) n'') = Some d' ->
     taga d = taga d' /\
@@ -1786,9 +1623,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     have Hsz'' : pc0'' + size (code prog'') < alloc_label by exact memory_size''.
     have Hb    : pc0  + size (code prog)   < 2 ^ word_size mt by apply: (ltn_trans Hsz)   alloc_label_lt_w.
     have Hb''  : pc0'' + size (code prog'') < 2 ^ word_size mt by apply: (ltn_trans Hsz'') alloc_label_lt_w.
-    (* make [pc0]/[pc0''] OPAQUE: their [set] bodies are [size (initial_memory …)]; if left as
-       let-bindings, [lia]/[zify] unfolds them into huge terms and diverges.  All facts needing the
-       bodies ([Hpc], [Hsz], [Hb], …) are already established above. *)
     clearbody pc0 pc0''.
     have Hp_p : nth_error (code p) k = Some (MrJal l, t').
     { move: Hp. have ->: code prog = code p ++ code c by [].
@@ -1803,9 +1637,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       have Heq : alloc_label = kd + pc0 by apply: (word_of_nat_inj alloc_label_lt_w Hb2 Hwd).
       lia. }
     case Hloc : (findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code p)) => [m|]; last first.
-    { (* FOREIGN: cross-side call — the label lives in c/c'; both targets are the callee's
-         entry cells, which carry the SAME interface-determined tag of a RIGHT colour, so the
-         Left-guarded offset field is vacuous. *)
+    {
       have Hloc' : findopt (is_label_def l) (code p) = None by exact Hloc.
       have [mc [mc' [ic_ [i_ [tc [Hfc Hfc' [Hnthc Hnthc'] [Hictc Hcoltc]]]]]]]
         := A.jal_cross_p Hp_p Hne Hloc'.
@@ -1902,9 +1734,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     subst kd kd'.
     have [id  [td  [Hnth_d  [Htag_d  _]]]] := encode_code_foldr_nth Hfd.
     have [id' [td' [Hnth_d' [Htag_d' _]]]] := encode_code_foldr_nth Hfd'.
-    (* explicit [done | …] dispatch: a bare [//]/[done] on the [nth_error_app1] side goal
-       [m < length (code p)] sends [done] into a [trivial]/[assumption] scan over the huge
-       context and DIVERGES.  [done] on the main goal (reflexivity) is fine. *)
     have Hpref   : nth_error (code prog)   m = nth_error (code p) m.
     { have ->: code prog = code p ++ code c by [].
       rewrite nth_error_app1; [done | apply/ltP; exact: Hm_lt]. }
@@ -1924,14 +1753,10 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     have Hside : side_of (color td) = Left by rewrite /side_of Hcolp.
     rewrite Htag_d Hside in Hoff0.
     have Hz := offset1_is_zero Hcolp Hoff0.
-    (* avoid [rewrite addw0] (diverges on the word ring) and reflexivity on word terms *)
     rewrite Hsw Hsw'' Hpc Hz as_word_encode_int_zero.
     by apply: esym; exact: addw0.
   Qed.
 
-  (* the encoded value of a Bnz cell: its RELATIVE target [findopt l − k] (pc0 cancels).
-     Stated via [instr_merged_to_mp ... (fun _ _ => m) k] to avoid naming the section-local
-     [to_nat] notation — both sides unfold to [Bnz (to_nat r) (word_of_nat (m − k))]. *)
   Lemma valbnz : forall (cde : @Merged.code mt) (pc0 m k : nat) r l (t' : mem_tag) (b : matom),
     k < size cde ->
     pc0 + size cde < 2 ^ word_size mt ->
@@ -1959,7 +1784,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma bnz_encoding_aligned : forall k r l (t' : mem_tag) (a a'' : matom),
     nth_error (code prog)   k = Some (MrBnz r l, t') ->
     nth_error (code prog'') k = Some (MrBnz r l, t') ->
-    k < size (code p) ->   (* pins position k to the SHARED code-p prefix *)
+    k < size (code p) ->
     encode_code (code prog)   (size (initial_memory (mt := mt) (prog_buffers prog)))
       (word_of_nat (k + size (initial_memory (mt := mt) (prog_buffers prog))))   = Some a ->
     encode_code (code prog'') (size (initial_memory (mt := mt) (prog_buffers prog'')))
@@ -1982,10 +1807,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     reflexivity.
   Qed.
 
-  (* same MrJal l (pinned by nth_error) resolves to the allocator on one side iff on the
-     other — the alloc disjunct happens exactly when l = alloc_label, which is shared.
-     (NOTE: the old [jal_imm_aligned] concluding [n = n''] was UNSOUND — false for a
-     cross-component JAL whose target sits in code c vs code c'.) *)
   Lemma jal_resolution_consistent : forall k l (t' : mem_tag) (a a'' : matom) (n n'' : imm mt),
     nth_error (code prog)   k = Some (MrJal l, t') ->
     nth_error (code prog'') k = Some (MrJal l, t') ->
@@ -2004,12 +1825,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Qed.
 
 
-  (* [offset2_val]: a c'-component's Right offset is the (possibly NEGATIVE) prefix-size
-     difference |code p| - |code p'|.  Mirror of [offset1_is_zero] for the SUFFIX.  [cc ∈ ic]
-     colours no cell of [code p]/[code p'] (disjoint from [ip]), so its rank in
-     [code prog'' = code p ++ code c'] is [size (code p) + rank-in-c'] and in
-     [code prog' = code p' ++ code c'] is [size (code p') + rank-in-c'].  The common rank-in-c'
-     and the equal data sizes cancel, leaving the prefix-size difference.  NO alignment assumed. *)
   Lemma offset2_val : forall cc, cc \in domm ic ->
     offset2 cc = Some ((ssrint.Posz (size (code p)) - ssrint.Posz (size (code p')))%R).
   Proof.
@@ -2058,83 +1873,56 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     intros w v t off Hrel Hoff Hcode Henc.
     set pc0 := size (@initial_memory mt (prog_buffers prog)).
     set pc0'' := size (@initial_memory mt (prog_buffers prog'')).
-    (* Step 1: get position k *)
     destruct (encode_code_nth_inv Henc) as [k [Hw [Hlt Hnth]]].
-    (* Step 2: get the instruction and tag at position k *)
     destruct (encode_code_foldr_nth Hnth) as [i [t' [Hnth_cde [Htag Hval]]]].
-    (* Step 3: k < size (code p) since color t ∈ domm ip *)
-    (* code prog = code p ++ code c. Entry k has color t ∈ domm ip. *)
-    (* Entries from code c have color ∈ domm ic (disjoint from domm ip). *)
-    (* So entry k must be from code p, hence k < size (code p). *)
     have Hk_in_p: k < size (code p).
-    { (* code p is shadowed by Merged.code. Use prog instead. *)
-      (* code prog = code p ++ code c, so size (code p) <= size (code prog) *)
-      (* Hlt : k < size (code prog). If k >= size (code p), entry is from code c. *)
+    {
 
     { case Hk_p: (k < size (code p)); [auto |].
       exfalso.
       move/negbT: Hk_p. rewrite -leqNgt => Hk_ge_p.
-      (* Hk_ge_p : size (code p) <= k *)
-      (* Entry at position k in code prog = code p ++ code c is from code c *)
       have Hnth_c: nth_error (code c) (k - size (code p)) = Some (i, t').
       { have: nth_error (code prog) k = Some (i, t').
         auto.
         simpl. rewrite nth_error_app2; [done | apply/leP; exact Hk_ge_p]. }
-      (* color t' ∈ domm ic *)
       have Hic: color t' \in domm ic.
       { eapply code_color_c. apply nth_error_In in Hnth_c. exact Hnth_c. }
-      (* But color t = color t' ∈ domm ip (Hrel), contradiction by disjointness *)
       simpl in Htag. rewrite -Htag in Hic.
       pose proof Hmergeable_ifaces as [[G H] ?].
       have := fdisjointP H _ Hrel.
       by rewrite Hic. } }
-    (* Step 4: same entry at position k in code prog'' *)
     have Hnth_prog'': nth_error (code prog'') k = Some (i, t').
-    { (* code prog'' = code p ++ code c'. k < size (code p). *)
+    {
       simpl. rewrite nth_error_app1; [| apply/ltP; exact Hk_in_p].
       have: nth_error (code prog) k = Some (i, t').
       { eauto. }
       simpl. rewrite nth_error_app1; [done | apply/ltP; exact Hk_in_p]. }
-    (* Step 5: get the foldr entry at position k for prog'' *)
     have Hk_lt'': k < size (code prog'').
     { simpl. rewrite size_cat. move/ltP: Hk_in_p => ?. apply/ltP. lia. }
     have Hk_lt2: k < size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
       (encode_instr_atom x (fun l default => match findopt (fun p0 => match p0.1 with MrLabel l0 => l == l0 | _ => false end) (code prog'') with Some m => pc0'' + m | None => if l == alloc_label then l else default end) (pc0'' + size (code prog'') - 1 - acc.2) :: acc.1, acc.2.+1)) ([::], 0) (code prog'')).1.
-    { (* change (k < size (foldr _ ([::], 0) (code prog'')).1). *)
+    {
       rewrite encode_code_foldr_size. exact Hk_lt''. }
     destruct (nth_error_Some_ex Hk_lt2) as [v'' Hv''].
     have Henc'' := encode_code_nth (ltn_trans memory_size'' alloc_label_lt_w) Hv''.
-    (* Henc'' : encode_code (code prog'') pc0'' (word_of_nat (k + pc0'')) = Some v'' *)
-    (* Step 6: show v'' has the same tag t *)
     destruct (encode_code_foldr_nth Hv'') as [i'' [t'' [Hnth_cde2 [Htag'' Hval'']]]].
     rewrite Hnth_prog'' in Hnth_cde2. injection Hnth_cde2 => Ht'' Hi''.
     subst i'' t''.
-    (* Step 7: show w + as_word off = word_of_nat (k + pc0'') *)
     have Haddr: (w + as_word off)%w = word_of_nat (k + pc0'').
     { rewrite Hw.
 
       
-      (* word_of_nat (k + pc0) + as_word off = word_of_nat (k + pc0'') *)
-      (* off = encode_int (p0 prog'' (color t) - p0 prog (color t)) *)
-      (* p0 prog (color t) = start + pc0, p0 prog'' (color t) = start + pc0'' *)
-      (* (same start since main is in shared code p prefix) *)
-      (* So off = encode_int (pc0'' - pc0), and word_of_nat_offset gives the result *)
-      (* Step 1: unfold off from Hoff *)
       unfold offset1 in Hoff. rewrite mkfmapfpE in Hoff.
       rewrite Hrel /= in Hoff.
       unfold p0 in Hoff.
-      (* Hoff should now have find_rank for prog and prog'' *)
       destruct (find_rank (fun '(_, tag) => color tag == color t) (code prog)) as [start |] eqn:Hfr;
         [| simpl in Hoff].
       destruct (find_rank (fun '(_, tag) => color tag == color t) (code prog'')) as [start'' |] eqn:Hfr'';
         [| simpl in Hoff; discriminate].
       simpl in Hoff. injection Hoff => Hoff_eq.
-      (* Hoff_eq : off = encode_int (Z.of_nat (start'' + pc0'') - Z.of_nat (start + pc0)) *)
 
-      (* Step 2: show start = start'' (same position in shared code p prefix) *)
       have Hstart_eq: start = start''.
-      { (* color t ∈ domm ip; code c / code c' entries have colour in domm ic
-           (disjoint), so the first match is in the shared code p prefix. *)
+      {
         have Hprog : find_rank (fun '(_, tag) => color tag == color t) (code prog)
                    = find_rank (fun '(_, tag) => color tag == color t) (code p).
         { have ->: code prog = code p ++ code c by [].
@@ -2160,35 +1948,27 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         congruence. }
       subst start''.
 
-      (* Step 3: word arithmetic *)
-      (* off = encode_int (Z.of_nat (start + pc0'') - Z.of_nat (start + pc0)) *)
       have Hpc_eq: pc0'' = pc0.
       { rewrite /pc0'' /pc0. exact: (esym align_data_size_left). }
       rewrite Hpc_eq. unfold pc0.
       rewrite -Hoff_eq.
       rewrite align_data_domm_left_u.
       rewrite int_diffE GRing.subrr.
-      (* goal: word_of_nat (k+pc0) + as_word 0 = word_of_nat (k+pc0).
-         Close via apply: addw0 (NOT reflexivity — that converts the big word term and hangs). *)
       rewrite as_word_int0. apply: addw0.
-      (* find_rank (code prog) = None branch: Hoff is (obind (fun _ => None) _) = Some off, contradictory *)
       exfalso. move: Hoff.
       by case: (find_rank (fun '(_, tag) => color tag == color t) (code p ++ code c')) => [a|].
       }
-    (* Step 8: construct v' and decode_match *)
     exists (vala v'').
     split.
-    - (* decode_match: case on instruction type *)
+    -
       destruct i.
-      9: { (* MrBnz: local branch — Bnz decodes (not Jal); v = v'' since the relative
-              target resolves identically (the label is in the shared code p prefix). *)
+      9: {
         apply decode_match_no_JAL.
         - move=> imm; rewrite (Hval : v = _) encodeK; discriminate.
         - rewrite Hval''; move=> imm; rewrite encodeK; discriminate.
         - rewrite Hw in Henc.
           exact: (bnz_encoding_aligned Hnth_cde Hnth_prog'' Hk_in_p Henc Henc''). }
-      9: { (* MrJal: cross-component jump — decode_match_JAL relates the two targets
-              (which sit at offset get_offset(target-component) apart). *)
+      9: {
         have [n Dv] : exists n, decode_instr v = Some (Jal n).
         { rewrite (Hval : v = _); eexists; apply encodeK. }
         have [n'' Dv''] : exists n'', decode_instr (vala v'') = Some (Jal n'').
@@ -2196,18 +1976,18 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         have JT  := encode_code_jal_target code_tags_wf_prog   jal_resolved_prog   memory_size   Henc   Dv.
         have JT'' := encode_code_jal_target code_tags_wf_prog'' jal_resolved_prog'' memory_size'' Henc'' Dv''.
         case: JT => [[d [Hd Hcd]] | Halloc]; case: JT'' => [[d' [Hd' Hcd']] | Halloc''].
-        - (* both targets are code cells: decode_match_JAL via the c/c' correspondence *)
+        -
           rewrite Hw in Henc.
           have [Htagd Hreld] := jal_target_corresp Hnth_cde Hnth_prog'' Hk_in_p Henc Henc'' Dv Dv'' Hd Hd'.
           eapply decode_match_JAL.
           + exact Dv.
           + exact Dv''.
-          + by rewrite unionmE Hd.        (* mem prog (swcast n) = Some d *)
-          + by rewrite unionmE Hd'.       (* mem prog'' (swcast n'') = Some d' *)
-          + exact Hcd.                     (* is_code (taga d) *)
-          + exact Htagd.                   (* taga d = taga d' *)
-          + exact Hreld.                   (* the (guarded) offset relation *)
-        - (* prog code, prog'' alloc — vacuous: l = alloc_label resolves alike in both *)
+          + by rewrite unionmE Hd.
+          + by rewrite unionmE Hd'.
+          + exact Hcd.
+          + exact Htagd.
+          + exact Hreld.
+        -
           exfalso.
           rewrite Hw in Henc.
           have Hcons := jal_resolution_consistent Hnth_cde Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2216,7 +1996,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c)))) memory_size.
           move: Hd. rewrite -Hna swcast_alloc => Hd.
           rewrite HN in Hd. discriminate.
-        - (* prog alloc, prog'' code — symmetric *)
+        -
           exfalso.
           rewrite Hw in Henc.
           have Hcons := jal_resolution_consistent Hnth_cde Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2225,7 +2005,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))) memory_size''.
           move: Hd'. rewrite -Hna swcast_alloc => Hd'.
           rewrite HN in Hd'. discriminate.
-        - (* both alloc: jump to the allocator entry *)
+        -
           apply decode_match_alloc_JAL.
           + by rewrite Dv Halloc.
           + by rewrite Dv'' Halloc''. }
@@ -2233,15 +2013,12 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         [ move=> imm; rewrite (Hval : v = _) encodeK; discriminate
         | rewrite Hval''; move=> imm; rewrite encodeK; discriminate
         | rewrite Hval''; exact Hval ].
-    - (* mem prog'' (w + as_word off) = Some (vala v'')@t *)
+    -
       rewrite Haddr. simpl.
       rewrite unionmE Henc'' /=.
       simpl in Htag. rewrite Htag. destruct v''. subst. simpl. eauto.
   Qed.
 
-  (* Backward (Right→Left) companion of combined_codes_forward: code encoded in prog''
-     at (w + off) with color in domm ip corresponds to code in prog at w.
-     Symmetric to combined_codes_forward (shared code-p prefix); encoding/layout per policy. *)
   Lemma combined_codes_backward: forall w v t off,
       color t \in domm ip ->
       offset1 (color t) = Some off ->
@@ -2258,10 +2035,8 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     intros w v t off Hrel Hoff Hcode Henc''.
     set pc0 := size (@initial_memory mt (prog_buffers prog)).
     set pc0'' := size (@initial_memory mt (prog_buffers prog'')).
-    (* Step 1: position k of the given prog'' cell *)
     destruct (encode_code_nth_inv Henc'') as [k [Hwk [Hlt'' Hnth_f'']]].
     destruct (encode_code_foldr_nth Hnth_f'') as [i [t' [Hnth_prog'' [Htag Hval_g]]]].
-    (* Step 2: k < size (code p) since color t ∈ domm ip (entry in shared code p prefix) *)
     have Hk_in_p: k < size (code p).
     { case Hk_p: (k < size (code p)); [auto |].
       exfalso.
@@ -2276,13 +2051,11 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       pose proof Hmergeable_ifaces as [[G H] ?].
       have := fdisjointP H _ Hrel.
       by rewrite Hic. }
-    (* Step 3: same entry at position k in code prog *)
     have Hnth_cde: nth_error (code prog) k = Some (i, t').
     { simpl. rewrite nth_error_app1; [| apply/ltP; exact Hk_in_p].
       have: nth_error (code prog'') k = Some (i, t').
       { eauto. }
       simpl. rewrite nth_error_app1; [done | apply/ltP; exact Hk_in_p]. }
-    (* Step 4: construct the prog cell at position k *)
     have Hk_lt: k < size (code prog).
     { simpl. rewrite size_cat. move/ltP: Hk_in_p => ?. apply/ltP. lia. }
     have Hk_lt2: k < size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
@@ -2290,30 +2063,25 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     { rewrite encode_code_foldr_size. exact Hk_lt. }
     destruct (nth_error_Some_ex Hk_lt2) as [v' Hv'].
     have Henc := encode_code_nth (ltn_trans memory_size alloc_label_lt_w) Hv'.
-    (* Henc : encode_code (code prog) pc0 (word_of_nat (k + pc0)) = Some v' *)
     destruct (encode_code_foldr_nth Hv') as [i' [t'2 [Hnth_cde2 [Htag_c Hval_c]]]].
     rewrite Hnth_cde in Hnth_cde2. injection Hnth_cde2 => Ht'2 Hi'.
     subst i' t'2.
-    (* Step 5: w = word_of_nat (k + pc0) — the offset is 0 (shared prefix, equal data) *)
     have Hwaddr: w = word_of_nat (k + pc0).
     { have Hoff0 := offset1_is_zero Hrel Hoff.
       have Hpc_eq: size (@initial_memory mt (prog_buffers prog'')) = pc0.
       { rewrite /pc0. exact: (esym align_data_size_left). }
       move: Hwk. rewrite Hoff0 Hpc_eq => Hwk'.
-      (* Hwk' : (w + as_word (encode_int 0))%w = word_of_nat (k + pc0).
-         Rewrite in the hypothesis + exact (NOT reflexivity over the big word term). *)
       rewrite as_word_encode_int_zero addw0 in Hwk'. exact Hwk'. }
-    (* Step 6: construct v' and decode_match *)
     exists (vala v').
     split.
     - destruct i.
-      9: { (* MrBnz *)
+      9: {
         apply decode_match_no_JAL.
         - move=> imm; rewrite Hval_c encodeK; discriminate.
         - rewrite (Hval_g : v = _); move=> imm; rewrite encodeK; discriminate.
         - rewrite Hwk in Henc''.
           exact: (bnz_encoding_aligned Hnth_cde Hnth_prog'' Hk_in_p Henc Henc''). }
-      9: { (* MrJal *)
+      9: {
         have [n Dv] : exists n, decode_instr (vala v') = Some (Jal n).
         { rewrite Hval_c; eexists; apply encodeK. }
         have [n'' Dv''] : exists n'', decode_instr v = Some (Jal n'').
@@ -2321,7 +2089,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         have JT  := encode_code_jal_target code_tags_wf_prog   jal_resolved_prog   memory_size   Henc   Dv.
         have JT'' := encode_code_jal_target code_tags_wf_prog'' jal_resolved_prog'' memory_size'' Henc'' Dv''.
         case: JT => [[d [Hd Hcd]] | Halloc]; case: JT'' => [[d' [Hd' Hcd']] | Halloc''].
-        - (* both code *)
+        -
           rewrite Hwk in Henc''.
           have [Htagd Hreld] := jal_target_corresp Hnth_cde Hnth_prog'' Hk_in_p Henc Henc'' Dv Dv'' Hd Hd'.
           eapply decode_match_JAL.
@@ -2332,7 +2100,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           + exact Hcd.
           + exact Htagd.
           + exact Hreld.
-        - (* prog code, prog'' alloc — vacuous: l = alloc_label resolves alike in both *)
+        -
           exfalso.
           rewrite Hwk in Henc''.
           have Hcons := jal_resolution_consistent Hnth_cde Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2341,7 +2109,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c)))) memory_size.
           move: Hd. rewrite -Hna swcast_alloc => Hd.
           rewrite HN in Hd. discriminate.
-        - (* prog alloc, prog'' code — vacuous *)
+        -
           exfalso.
           rewrite Hwk in Henc''.
           have Hcons := jal_resolution_consistent Hnth_cde Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2350,7 +2118,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))) memory_size''.
           move: Hd'. rewrite -Hna swcast_alloc => Hd'.
           rewrite HN in Hd'. discriminate.
-        - (* both alloc *)
+        -
           apply decode_match_alloc_JAL.
           + by rewrite Dv Halloc.
           + by rewrite Dv'' Halloc''. }
@@ -2358,28 +2126,17 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         [ move=> imm; rewrite Hval_c encodeK; discriminate
         | rewrite (Hval_g : v = _); move=> imm; rewrite encodeK; discriminate
         | rewrite (Hval_g : v = _); exact Hval_c ].
-    - (* mem prog w = Some (vala v')@t *)
+    -
       rewrite Hwaddr. simpl.
       rewrite unionmE Henc /=.
       simpl in Htag. rewrite Htag. destruct v'. subst. simpl. eauto.
   Qed.
 
-  (* ALIGNMENT INTERFACE (JAL targets; Right/c'-suffix cut; discharged by the Phase-4 NOP-padding pass).
-     Same padding justification as the Left [jal_target_corresp], adapted to the prog'↔prog'' cut where
-     [code c'] is a SUFFIX sitting at different offsets (after [code p'] resp. [code p]), so the same c'
-     entry has DIFFERENT positions k (in prog') and k'' (in prog''); the padding equalises the prefixes
-     so the targets correspond. *)
-  (* [jal_target_corresp'] (was a Hypothesis): a Jal in the shared c' SUFFIX.  Mirror of
-     [jal_target_corresp]: the label is in [code c'] (so NO disjointness needed — [findopt]'s
-     suffix-priority finds it), resolving at the SAME relative index [mc] in both runs; the targets
-     are the same c'-cell ([taga d = taga d']); the target colour is in [ic] (side Right) so its
-     offset is the prefix-size difference ([offset2_val]); [as_word_shiftAB] does the word arithmetic. *)
   Lemma jal_target_corresp' : forall k k'' l (t' : mem_tag) (v v'' : matom) (n n'' : imm mt) d d',
     nth_error (code prog')  k   = Some (MrJal l, t') ->
     nth_error (code prog'') k'' = Some (MrJal l, t') ->
-    size (code p') <= k ->                          (* k is in the c' SUFFIX of prog'     *)
-    k'' = size (code p) + (k - size (code p')) ->   (* k'' is the SAME c'-index in prog'' *)
-    (* v, v'' are the MrJal cells at positions k / k'', and n, n'' THEIR immediates: *)
+    size (code p') <= k ->
+    k'' = size (code p) + (k - size (code p')) ->
     encode_code (code prog')  (size (initial_memory (mt := mt) (prog_buffers prog')))
       (word_of_nat (k   + size (initial_memory (mt := mt) (prog_buffers prog'))))  = Some v ->
     encode_code (code prog'') (size (initial_memory (mt := mt) (prog_buffers prog'')))
@@ -2407,11 +2164,9 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     have Hcp'  : size (code prog')  = size (code p') + size (code c') by rewrite /prog' /program_link /= size_cat.
     have Hcp'' : size (code prog'') = size (code p)  + size (code c') by rewrite /prog'' /program_link /= size_cat.
     clearbody pc0' pc0''.
-    (* the c' suffix cell (mirror of [bnz_findopt_shared'] extraction) *)
     have Hj : nth_error (code c') (k - size (code p')) = Some (MrJal l, t').
     { move: Hp'. have ->: code prog' = code p' ++ code c' by [].
       rewrite nth_error_app2; last by apply/leP; exact: Hsfx. by []. }
-    (* l <> alloc_label (else target out of code range, no d) *)
     have Hne : l <> alloc_label.
     { move=> Hl.
       have I := jal_alloc_iff Hsz' no_mrlabel_alloc_prog' Hp' Hev Hdv.
@@ -2422,9 +2177,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       have Heq : alloc_label = kd + pc0' by apply: (word_of_nat_inj alloc_label_lt_w Hbk Hwd).
       lia. }
     case Hloc : (findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code c')) => [mc|]; last first.
-    { (* FOREIGN: the c'-label lives in p'/p; both targets are the callee's entry cells with
-         the SAME interface-determined tag of a LEFT colour, so the Right-guarded offset
-         field is vacuous. *)
+    {
       have Hloc' : findopt (is_label_def l) (code c') = None by exact Hloc.
       have [mp' [mp [ip_ [i_ [tp [Hfp' Hfp [Hnthp' Hnthp] [Hiptp Hcoltp]]]]]]]
         := A.jal_cross_c' Hj Hne Hloc'.
@@ -2481,7 +2234,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         discriminate Hside. }
     have Hmc : findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code c') = Some mc := Hloc.
     have Hmc_lt : mc < size (code c') by apply: (findopt_bound Hmc).
-    (* findopt: suffix-priority resolves into c' on BOTH runs (no disjointness needed) *)
     have Hfo' : findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code prog') = Some (size (code p') + mc).
     { have ->: code prog' = code p' ++ code c' by []. by rewrite findopt_cat Hmc. }
     have Hfo'' : findopt (fun p : @Merged.instr mt * mem_tag => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code prog'') = Some (size (code p) + mc).
@@ -2507,7 +2259,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     subst kd kd'.
     have [id  [td  [Hnth_d  [Htag_d  _]]]] := encode_code_foldr_nth Hfd.
     have [id' [td' [Hnth_d' [Htag_d' _]]]] := encode_code_foldr_nth Hfd'.
-    (* both targets land on c'-index [mc] *)
     have Hpref  : nth_error (code prog')  (size (code p') + mc) = nth_error (code c') mc.
     { have ->: code prog' = code p' ++ code c' by [].
       rewrite nth_error_app2; last by apply/leP; exact: leq_addr.
@@ -2526,9 +2277,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     move=> _ off0 Hoff0.
     have HIn : List.In (id, td) (code c') by apply: (nth_error_In _ _ E1).
     have Hcic : color td \in domm ic by apply: code_color_c'; exact: HIn.
-    (* [side_of (color td) = Right]: explicit branch handling — a bare [//] would run [done] on
-       the [color td ∈ ip] (true) branch goal [Left = Right], which [done] cannot close by
-       reflexivity and then DIVERGES scanning the huge context. *)
     have Hside : side_of (color td) = Right.
     { rewrite /side_of; case E: (color td \in domm ip); last by [].
       pose proof Hmergeable_ifaces as [[_ Hdis] _].
@@ -2546,7 +2294,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma bnz_encoding_aligned' : forall k k'' r l (t' : mem_tag) (a a'' : matom),
     nth_error (code prog')  k   = Some (MrBnz r l, t') ->
     nth_error (code prog'') k'' = Some (MrBnz r l, t') ->
-    size (code p') <= k ->                          (* same c' cell, suffix index *)
+    size (code p') <= k ->
     k'' = size (code p) + (k - size (code p')) ->
     encode_code (code prog')  (size (initial_memory (mt := mt) (prog_buffers prog')))
       (word_of_nat (k   + size (initial_memory (mt := mt) (prog_buffers prog'))))  = Some a ->
@@ -2569,8 +2317,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exact Hrel.
   Qed.
 
-  (* same MrJal l (pinned by nth_error) resolves to the allocator on one side iff on the
-     other — the label is in the shared c', so it is found in both or neither. *)
   Lemma jal_resolution_consistent' : forall k k'' l (t' : mem_tag) (a a'' : matom) (n n'' : imm mt),
     nth_error (code prog')  k   = Some (MrJal l, t') ->
     nth_error (code prog'') k'' = Some (MrJal l, t') ->
@@ -2588,15 +2334,12 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     split => H; [exact (proj2 I2 (proj1 I1 H)) | exact (proj2 I1 (proj1 I2 H))].
   Qed.
 
-  (* Right-side address correspondence (per policy, padding-justified): the same c' entry
-     (positions k in prog', k'' in prog'') has prog''-address = prog'-address + offset2, since
-     offset2 (color t') = encode_int of the uniform suffix shift size(code p) - size(code p'). *)
   Lemma offset2_addr_corresp : forall (i : Merged.instr) (t' : mem_tag) off k k'',
     color t' \in domm ic ->
     offset2 (color t') = Some off ->
     nth_error (code prog')  k   = Some (i, t') ->
     nth_error (code prog'') k'' = Some (i, t') ->
-    size (code p') <= k ->                          (* same c' cell at the same suffix index *)
+    size (code p') <= k ->
     k'' = size (code p) + (k - size (code p')) ->
     (@word_of_nat (word_size mt) (k + size (initial_memory (mt := mt) (prog_buffers prog'))) + as_word off)%w
       = @word_of_nat (word_size mt) (k'' + size (initial_memory (mt := mt) (prog_buffers prog''))).
@@ -2611,13 +2354,9 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite /word_of_nat. exact (esym (as_word_shiftAB _ _ _ _)).
   Qed.
 
-  (* word right-cancellation: [addw] is the word zmod [+%R], so this is [GRing.addIr].
-     ([rewrite addwA] alone diverges on the ring instance, hence the GRing route.) *)
   Lemma addwIr : forall (x y a : mword mt), (x + a)%w = (y + a)%w -> x = y.
   Proof. move=> x y a H. apply: (GRing.addIr a). exact: H. Qed.
 
-  (* Backward read of the same correspondence: recover the prog' address from the prog'' one.
-     PROVEN from the forward version by right-cancelling [as_word off]. *)
   Lemma offset2_addr_corresp_bwd : forall (i : Merged.instr) (t' : mem_tag) off k k'' w,
     color t' \in domm ic ->
     offset2 (color t') = Some off ->
@@ -2636,8 +2375,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exact (addwIr Heq).
   Qed.
 
-  (* Right-side (c'-shared) companions: prog' and prog'' share code c'. offset2/domm ic.
-     Symmetric to the Left combined_codes_forward/backward; encoding/layout per policy. *)
   Lemma combined_codes_forward': forall w v t off,
       color t \in domm ic ->
       offset2 (color t) = Some off ->
@@ -2654,10 +2391,8 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     intros w v t off Hrel Hoff Hcode Henc.
     set pc0' := size (@initial_memory mt (prog_buffers prog')).
     set pc0'' := size (@initial_memory mt (prog_buffers prog'')).
-    (* Step 1: position k of the given prog' cell *)
     destruct (encode_code_nth_inv Henc) as [k [Hw [Hlt Hnth]]].
     destruct (encode_code_foldr_nth Hnth) as [i [t' [Hnth_prog' [Htag Hval]]]].
-    (* Step 2: size (code p') <= k — a colour-ic entry is in the code c' suffix *)
     have Hk_ge: size (code p') <= k.
     { case Hk_p: (size (code p') <= k); [auto |].
       exfalso.
@@ -2672,7 +2407,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       pose proof Hmergeable_ifaces as [[_ Hdis] _].
       have := fdisjointP Hdis _ Hip.
       by rewrite Hrel. }
-    (* Step 3: the same c' entry sits at k'' = size (code p) + (k - size (code p')) in prog'' *)
     have Hk_tot: k < size (code p') + size (code c').
     { move: Hlt. simpl. by rewrite size_cat. }
     have Hj_lt: k - size (code p') < size (code c').
@@ -2691,7 +2425,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           by rewrite minusE addKn. }
         exact Hnth_c'.
       - rewrite /k''. apply/leP. exact: leq_addr. }
-    (* Step 4: construct the prog'' cell at k'' *)
     have Hk_lt'': k'' < size (code prog'').
     { simpl. rewrite size_cat /k''. move/ltP: Hj_lt => ?. apply/ltP. lia. }
     have Hk_lt2: k'' < size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
@@ -2702,22 +2435,20 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     destruct (encode_code_foldr_nth Hv'') as [i'' [t'' [Hnth_cde2 [Htag'' Hval'']]]].
     rewrite Hnth_prog'' in Hnth_cde2. injection Hnth_cde2 => Ht'' Hi''.
     subst i'' t''.
-    (* Step 5: address correspondence — off = offset2 encodes (k''+pc0'')-(k+pc0') *)
     have Haddr: (w + as_word off)%w = word_of_nat (k'' + pc0'').
     { have Et : t = t' := Htag.
       rewrite Hw. rewrite Et in Hrel Hoff.
       exact: (offset2_addr_corresp Hrel Hoff Hnth_prog' Hnth_prog'' Hkp' Hidx). }
-    (* Step 6: construct v'' and decode_match *)
     exists (vala v'').
     split.
     - destruct i.
-      9: { (* MrBnz: relative branch — same displacement, so same bits *)
+      9: {
         apply decode_match_no_JAL.
         - move=> imm; rewrite (Hval : v = _) encodeK; discriminate.
         - rewrite Hval''; move=> imm; rewrite encodeK; discriminate.
         - rewrite Hw in Henc.
           exact: (bnz_encoding_aligned' Hnth_prog' Hnth_prog'' Hkp' Hidx Henc Henc''). }
-      9: { (* MrJal *)
+      9: {
         have [n Dv] : exists n, decode_instr v = Some (Jal n).
         { rewrite (Hval : v = _); eexists; apply encodeK. }
         have [n'' Dv''] : exists n'', decode_instr (vala v'') = Some (Jal n'').
@@ -2725,7 +2456,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         have JT  := encode_code_jal_target code_tags_wf_prog'  jal_resolved_prog'  memory_size'  Henc   Dv.
         have JT'' := encode_code_jal_target code_tags_wf_prog'' jal_resolved_prog'' memory_size'' Henc'' Dv''.
         case: JT => [[d [Hd Hcd]] | Halloc]; case: JT'' => [[d' [Hd' Hcd']] | Halloc''].
-        - (* both code *)
+        -
           rewrite Hw in Henc.
           have [Htagd Hreld] := jal_target_corresp' Hnth_prog' Hnth_prog'' Hkp' Hidx Henc Henc'' Dv Dv'' Hd Hd'.
           eapply decode_match_JAL.
@@ -2736,7 +2467,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           + exact Hcd.
           + exact Htagd.
           + exact Hreld.
-        - (* prog' code, prog'' alloc — vacuous: l resolves consistently *)
+        -
           exfalso.
           rewrite Hw in Henc.
           have Hcons := jal_resolution_consistent' Hnth_prog' Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2745,7 +2476,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           have HN := @alloc_label_not_in_encode_code (code prog')
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p') (prog_buffers c')))) memory_size'.
           rewrite HN in Hd. discriminate.
-        - (* prog' alloc, prog'' code — vacuous *)
+        -
           exfalso.
           rewrite Hw in Henc.
           have Hcons := jal_resolution_consistent' Hnth_prog' Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2754,7 +2485,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           have HN := @alloc_label_not_in_encode_code (code prog'')
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))) memory_size''.
           rewrite HN in Hd'. discriminate.
-        - (* both alloc *)
+        -
           apply decode_match_alloc_JAL.
           + by rewrite Dv Halloc.
           + by rewrite Dv'' Halloc''. }
@@ -2762,7 +2493,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         [ move=> imm; rewrite (Hval : v = _) encodeK; discriminate
         | rewrite Hval''; move=> imm; rewrite encodeK; discriminate
         | rewrite Hval''; exact Hval ].
-    - (* mem prog'' (w + as_word off) = Some (vala v'')@t *)
+    -
       rewrite Haddr. simpl.
       rewrite unionmE Henc'' /=.
       simpl in Htag. rewrite Htag. destruct v''. subst. simpl. eauto.
@@ -2784,10 +2515,8 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     intros w v t off Hrel Hoff Hcode Henc''.
     set pc0' := size (@initial_memory mt (prog_buffers prog')).
     set pc0'' := size (@initial_memory mt (prog_buffers prog'')).
-    (* Step 1: position k'' of the given prog'' cell *)
     destruct (encode_code_nth_inv Henc'') as [k'' [Hwk [Hlt'' Hnth_f'']]].
     destruct (encode_code_foldr_nth Hnth_f'') as [i [t' [Hnth_prog'' [Htag Hval_g]]]].
-    (* Step 2: size (code p) <= k'' — colour-ic entry is in the code c' suffix of prog'' *)
     have Hk_ge: size (code p) <= k''.
     { case Hk_p: (size (code p) <= k''); [auto |].
       exfalso.
@@ -2802,7 +2531,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       pose proof Hmergeable_ifaces as [[_ Hdis] _].
       have := fdisjointP Hdis _ Hip.
       by rewrite Hrel. }
-    (* Step 3: the same c' entry sits at k = size (code p') + (k'' - size (code p)) in prog' *)
     have Hk_tot: k'' < size (code p) + size (code c').
     { move: Hlt''. simpl. by rewrite size_cat. }
     have Hj_lt: k'' - size (code p) < size (code c').
@@ -2822,7 +2550,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           by rewrite minusE addKn. }
         exact Hnth_c'.
       - rewrite /k. apply/leP. exact: leq_addr. }
-    (* Step 4: construct the prog' cell at k *)
     have Hk_lt: k < size (code prog').
     { simpl. rewrite size_cat /k. move/ltP: Hj_lt => ?. apply/ltP. lia. }
     have Hk_lt2: k < size (foldr (fun (x : Merged.instr * mem_tag) (acc : seq matom * nat) =>
@@ -2833,22 +2560,20 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     destruct (encode_code_foldr_nth Hv') as [i' [t'2 [Hnth_cde2 [Htag_c Hval_c]]]].
     rewrite Hnth_prog' in Hnth_cde2. injection Hnth_cde2 => Ht'2 Hi'.
     subst i' t'2.
-    (* Step 5: address — w = word_of_nat (k + pc0') (offset2 + suffix shift) *)
     have Hwaddr: w = word_of_nat (k + pc0').
     { have Et : t = t' := Htag.
       rewrite Et in Hrel Hoff.
       exact: (offset2_addr_corresp_bwd Hrel Hoff Hnth_prog' Hnth_prog'' Hkp' Hidx Hwk). }
-    (* Step 6: construct v' and decode_match *)
     exists (vala v').
     split.
     - destruct i.
-      9: { (* MrBnz *)
+      9: {
         apply decode_match_no_JAL.
         - move=> imm; rewrite Hval_c encodeK; discriminate.
         - rewrite (Hval_g : v = _); move=> imm; rewrite encodeK; discriminate.
         - rewrite Hwk in Henc''.
           exact: (bnz_encoding_aligned' Hnth_prog' Hnth_prog'' Hkp' Hidx Henc Henc''). }
-      9: { (* MrJal *)
+      9: {
         have [n Dv] : exists n, decode_instr (vala v') = Some (Jal n).
         { rewrite Hval_c; eexists; apply encodeK. }
         have [n'' Dv''] : exists n'', decode_instr v = Some (Jal n'').
@@ -2856,7 +2581,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         have JT  := encode_code_jal_target code_tags_wf_prog'  jal_resolved_prog'  memory_size'  Henc   Dv.
         have JT'' := encode_code_jal_target code_tags_wf_prog'' jal_resolved_prog'' memory_size'' Henc'' Dv''.
         case: JT => [[d [Hd Hcd]] | Halloc]; case: JT'' => [[d' [Hd' Hcd']] | Halloc''].
-        - (* both code *)
+        -
           rewrite Hwk in Henc''.
           have [Htagd Hreld] := jal_target_corresp' Hnth_prog' Hnth_prog'' Hkp' Hidx Henc Henc'' Dv Dv'' Hd Hd'.
           eapply decode_match_JAL.
@@ -2867,7 +2592,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           + exact Hcd.
           + exact Htagd.
           + exact Hreld.
-        - (* prog' code, prog'' alloc — vacuous *)
+        -
           exfalso.
           rewrite Hwk in Henc''.
           have Hcons := jal_resolution_consistent' Hnth_prog' Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2876,7 +2601,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           have HN := @alloc_label_not_in_encode_code (code prog')
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p') (prog_buffers c')))) memory_size'.
           rewrite HN in Hd. discriminate.
-        - (* prog' alloc, prog'' code — vacuous *)
+        -
           exfalso.
           rewrite Hwk in Henc''.
           have Hcons := jal_resolution_consistent' Hnth_prog' Hnth_prog'' Henc Henc'' Dv Dv''.
@@ -2885,7 +2610,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           have HN := @alloc_label_not_in_encode_code (code prog'')
                        (size (initial_memory (mt := mt) (unionm (prog_buffers p) (prog_buffers c')))) memory_size''.
           rewrite HN in Hd'. discriminate.
-        - (* both alloc *)
+        -
           apply decode_match_alloc_JAL.
           + by rewrite Dv Halloc.
           + by rewrite Dv'' Halloc''. }
@@ -2893,15 +2618,13 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
         [ move=> imm; rewrite Hval_c encodeK; discriminate
         | rewrite (Hval_g : v = _); move=> imm; rewrite encodeK; discriminate
         | rewrite (Hval_g : v = _); exact Hval_c ].
-    - (* mem prog' w = Some (vala v')@t *)
+    -
       clear Hidx Hkp'.
       rewrite Hwaddr. simpl.
       rewrite unionmE Henc /=.
       simpl in Htag. rewrite Htag. destruct v'. subst. simpl. eauto.
   Qed.
 
-  (* fmap-domm plumbing (per policy): domm reg0 = fset (ra :: map word_of_nat reg_list).
-     Same 12 keys on both sides, reordered. Used for the register_domm conjuncts. *)
   Lemma register_domm_reg0 : register_domm reg0.
   Proof.
     rewrite /register_domm.
@@ -2919,9 +2642,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     by [].
   Qed.
 
-  (* encoding/layout (per policy): the initial PC = first code address
-     (word_of_nat (size data)) points to the first encoded instruction
-     whenever the code is non-empty. *)
   Lemma initial_pc_pos : forall pr n,
       n < size (code pr) ->
       size (initial_memory (mt := mt) (prog_buffers pr)) + size (code pr) < 2 ^ (word_size mt) ->
@@ -2948,8 +2668,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exact: (encode_code_is_code Hwf Henc0).
   Qed.
 
-  (* Routing: a code cell in the initial memory comes from encode_code (the data segment
-     [initial_memory] holds no code cells). *)
   Lemma mem_code_encode : forall pr w d,
     is_code (taga d) ->
     (mem (initial_state (code pr) (prog_buffers pr) (prog_interface pr))) w = Some d ->
@@ -2961,12 +2679,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     - move=> Hinit. exfalso. have Hnc := initial_memory_not_code Hinit. rewrite Hnc in Hcd. discriminate.
   Qed.
 
-  (* Well-formedness postulate (per policy): entry tags are unique per procedure — each proc
-     has a single entry instruction, so two entry cells for the same proc are the same cell. *)
-  (* Restricted to the actual code prog'', AND requiring the same component [color t1 = color t2]:
-     Procedure.id is per-component, so without the color a proc-id shared by p and c' would be a
-     counterexample.  Same component + same proc-id ⇒ one entry instruction ⇒ same position. *)
-  (* Index-splitting of a prog''-cell into its p / c' part. *)
   Lemma prog''_cell_split : forall k i t,
     nth_error (code prog'') k = Some (i, t) ->
     (k < size (code p) /\ nth_error (code p) k = Some (i, t))
@@ -2992,24 +2704,24 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       by case: Hmergeable_ifaces => [[_ Hd] _].
     case: (prog''_cell_split H1) => [[Hk1 Hp1] | [Hk1 Hc1]];
       case: (prog''_cell_split H2) => [[Hk2 Hp2] | [Hk2 Hc2]].
-    - (* both in p *)
+    -
       have Ht12 : t1 = t2
         := low_entry_det A.lin_wf_p (nth_error_In _ _ Hp1) (nth_error_In _ _ Hp2) Hcol He1 He2 Hpe.
       have Hee : Some e1 = Some e2 by rewrite -He1 -He2 Ht12.
       case: Hee => Hee. rewrite -Hee in He2.
       exact: (wfprog_unique_entry_points Hwfp (Logic.eq_refl (color t1)) (esym Hcol)
                 He1 He2 Hp1 Hp2).
-    - (* p vs c': colour clash *)
+    -
       exfalso.
       have Hin1 : color t1 \in domm ip by apply: code_color_p; exact: (nth_error_In _ _ Hp1).
       have Hin2 : color t2 \in domm ic by apply: code_color_c'; exact: (nth_error_In _ _ Hc2).
       by move: (fdisjointP Hdis _ Hin1); rewrite Hcol Hin2.
-    - (* c' vs p: colour clash *)
+    -
       exfalso.
       have Hin1 : color t1 \in domm ic by apply: code_color_c'; exact: (nth_error_In _ _ Hc1).
       have Hin2 : color t2 \in domm ip by apply: code_color_p; exact: (nth_error_In _ _ Hp2).
       by move: (fdisjointP Hdis _ Hin2); rewrite -Hcol Hin1.
-    - (* both in c' *)
+    -
       have Ht12 : t1 = t2
         := low_entry_det A.lin_wf_c' (nth_error_In _ _ Hc1) (nth_error_In _ _ Hc2) Hcol He1 He2 Hpe.
       have Hee : Some e1 = Some e2 by rewrite -He1 -He2 Ht12.
@@ -3020,9 +2732,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       by lia.
   Qed.
 
-  (* The entry cell for a procedure of a component c ∈ domm ip sits in the SHARED code-p
-     prefix, hence at the SAME address in prog and prog''.  PROVEN: shared prefix +
-     entry_tag_unique + equal data segments (offset1 is 0). *)
   Lemma entry_addr_eq_left :
     forall c w w' (d d' : atom (mword mt) mem_tag) proc l l',
       c \in domm ip ->
@@ -3078,9 +2787,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite Hwk Hwk'' -Hkeq Hpc. reflexivity.
   Qed.
 
-  (* Right-side encoding leaf: the entry cell for a component c ∈ domm ic sits in the
-     shared code-c' SUFFIX, so its prog''-address = prog'-address + offset2 c (the uniform
-     suffix shift). Padding-justified, per policy. *)
   Lemma entry_addr_corresp_right :
     forall c w w' (d d' : atom (mword mt) mem_tag) proc l l' off,
       c \in domm ic ->
@@ -3103,7 +2809,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     have Hct'' : color t'' = c by rewrite -Htag''.
     have Hent_t : entry t = Some (proc, l) by rewrite -Htag.
     have Hent_t'' : entry t'' = Some (proc, l') by rewrite -Htag''.
-    (* d's cell sits in the shared c' suffix (else color t ∈ ip, contradicting c ∈ ic) *)
     have Hkp : size (code p') <= k.
     { case Hk: (size (code p') <= k); [done |].
       exfalso. move/negbT: Hk. rewrite -ltnNge => Hlt.
@@ -3122,23 +2827,18 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       move: Hcip. rewrite Hct'' => Hcip.
       pose proof Hmergeable_ifaces as [[_ Hdis] _].
       have := fdisjointP Hdis _ Hcip. by rewrite Hc. }
-    (* d's c'-suffix cell, viewed as a [code prog''] cell.  [seq.nth_error_app2] keeps everything
-       in ssrnat (the [List] version drops into coq_nat + [length] and makes the index arithmetic
-       intractable). *)
     have Hc'cell : nth_error (code c') (k - size (code p')) = Some (i, t).
     { move: Hnth_cde. rewrite /prog' /program_link /= nth_error_app2; [done | apply/leP; exact Hkp]. }
     have Hprog''_d : nth_error (code prog'') (size (code p) + (k - size (code p'))) = Some (i, t).
     { rewrite /prog'' /program_link /= nth_error_app2; last by apply/leP; exact: leq_addr.
       rewrite -Hc'cell. congr nth_error.
       have Hlen : length (code p) = size (code p) by []. rewrite Hlen. lia. }
-    (* entry_tag_unique pins both c'-entry cells to the same suffix position *)
     have Hk''eq : size (code p) + (k - size (code p')) = k''.
     { apply: (entry_tag_unique Hprog''_d Hnth_cde'').
       - by rewrite Hct Hct''.
       - exact Hent_t.
       - exact Hent_t''.
       - reflexivity. }
-    (* off = 0 (alignment), and w' = w: the suffix index matches and prefix/data sizes are equal *)
     have Hoff0 : off = ((ssrint.Posz (size (code p)) - ssrint.Posz (size (code p')))%R)
       by move: (offset2_val Hc); rewrite Hoff; move=> [->].
     rewrite Hoff0 Hwk Hwk'' -Hk''eq -align_data_size.
@@ -3149,9 +2849,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite /word_of_nat. exact (as_word_shiftAB _ _ _ _).
   Qed.
 
-  (* encoding/layout: two code entries for the same component c ∈ domm ip, with the same
-     entry point, in prog and prog'' (which share code p), sit at addresses related by
-     offset1 c — which is 0 on the Left (shared prefix, equal data). *)
   Lemma entry_points_offset_init :
     forall c w w' (d d' : atom (mword mt) mem_tag) proc l l',
       c \in domm ip ->
@@ -3175,8 +2872,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite Hww Hz. by rewrite as_word_encode_int_zero addw0.
   Qed.
 
-  (* Right-side companion of entry_points_offset_init: prog' and prog'' share code c';
-     entries for c ∈ domm ic are related by offset2 c (the suffix shift, generally ≠ 0). *)
   Lemma entry_points_offset_init' :
     forall c w w' (d d' : atom (mword mt) mem_tag) proc l l',
       c \in domm ic ->
@@ -3194,8 +2889,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     exact: (entry_addr_corresp_right Hc Hmem Hmem' Hcd Hcd' Hcol Hcol' Hent Hent' Hoff).
   Qed.
 
-  (* The initial PCs of prog' and prog'' (which share code c', with main ∈ domm ic in
-     the right case) are main's entry, related by offset2 main = word_of_nat_offset. *)
   Lemma same_pc_right_init :
     Component.main \in domm ic ->
     same_pc Right (initial_state (code prog') (prog_buffers prog') (prog_interface prog'))
@@ -3226,9 +2919,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       exact (as_word_shiftD _ _ _).
   Qed.
 
-  (* The pc of any initial state points at the main entry — [find]'s first colour-[main] code
-     cell — which [encode_code] lays down as a CODE cell coloured [Component.main] = [color_of].
-     So [pc_code_color] holds of each initial state.  Mirrors [initial_pc_pos]. *)
   Lemma initial_state_pc_cell : forall cde pb pi,
     has (fun '(_, tag) => color tag == Component.main) cde ->
     size (initial_memory (mt := mt) pb) + size cde < 2 ^ word_size mt ->
@@ -3413,7 +3103,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
     remember (prog_main p) as main.
     have Hce : common_equiv [] s1 s2 s3.
     { eapply common_equiv_def; eauto.
-      (* try (eapply common_equiv_def || econstructor); simpl. *)
       + unfold initial_state in init1. simpl in init1. destruct s1. inv init1. simpl. done.
       + unfold initial_state in init2. simpl in init2. destruct s2. inv init2. simpl. done.
       + unfold initial_state in init3. simpl in init3. destruct s3. inv init3. simpl. done.
@@ -3441,7 +3130,6 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
             case Henc1: (encode_code (code prog)
                            (size (initial_memory (prog_buffers prog))) w) => [v1 | ] /=.
             + move=> [] ?; subst.
-              (* rewrite Henc1. -- leftover; case/subst already consumed this subterm *)
               exact: (combined_codes_forward Hrel Hoff Hcode Henc1).
             + move=> Hinit.
               exfalso.
@@ -3652,9 +3340,9 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
             by apply size_domm_fmap.
           rewrite Hd1 Hd2 (addnC start'') (addnC start) /word_of_nat int_diffE.
           exact (as_word_shiftD _ _ _).
-      + (* color_of s1 = color_of s3 *)
+      +
         subst s1 s3. simpl. reflexivity.
-      + (* side_of (color_of s1) = Left *)
+      +
         subst s1. simpl. unfold side_of.
         have Hmain: Component.main \in domm ip.
         { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
@@ -3662,12 +3350,12 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact: HmacL1.
       + exact: HmacL3.
       + exact: HepoL.
-      + (* register_address_correctness Left s1 *)
+      +
         subst s1. apply: register_address_correctness_reg0; exact: erefl.
-      + (* register_address_correctness Left s3 *)
+      +
         subst s3. apply: register_address_correctness_reg0; exact: erefl.
       + exact: HmmL.
-      + (* registers_match Left [] s1 s3 *)
+      +
         unfold registers_match. intros w d.
         subst s1 s3. simpl. split.
         * intros Hd. exists d. split; [| exact Hd].
@@ -3684,11 +3372,11 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
             move: Hd; rewrite /reg0 !setmE;
             repeat (case: ifP => /= _; [move=> [] _ //= |]);
             by [].
-    - (* weak_equiv Right [] s2 s3 *)
+    -
       constructor.
-      + (* color_of s2 = color_of s3 *)
+      +
         subst s2 s3. simpl. reflexivity.
-      + (* side_of (color_of s2) = other_side Right = Left *)
+      +
         subst s2. simpl. unfold side_of.
         have Hmain: Component.main \in domm ip.
         { apply (wfprog_main_existence Hwfp). symmetry. exact Heqmain. }
@@ -3698,13 +3386,13 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact: HepoR.
       + exact: HmmR.
     - exact: Hce.
-    - (* weak_equiv Left for match_states_right *)
+    -
       constructor.
       + subst s1 s3. simpl. reflexivity.
-      + (* side_of (color_of s1) = other_side Left = Right *)
+      +
         subst s1. simpl. unfold side_of.
         case Hmain: (Component.main \in domm ip).
-        * (* Component.main ∈ domm ip, but prog_main p = false, contradiction *)
+        *
           exfalso.
           pose proof wfprog_main_existence Hwfp.
           rewrite -Heqmain in H. apply H in Hmain. congruence.
@@ -3713,7 +3401,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact: HmacL3.
       + exact: HepoL.
       + exact: HmmL.
-    - (* strong_equiv Right for match_states_right *)
+    -
       constructor.
       + have Hmain_ic : Component.main \in domm ic.
         { have Hpm := cprog_main_existence Hprog_is_closed.
@@ -3721,7 +3409,7 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
           apply (wfprog_main_existence Hwfc). exact Hpm. }
         subst s2 s3. exact: (same_pc_right_init Hmain_ic).
       + subst s2 s3. simpl. reflexivity.
-      + (* side_of (color_of s2) = Right *)
+      +
         subst s2. simpl. unfold side_of.
         case Hmain: (Component.main \in domm ip).
         * exfalso.
@@ -3731,12 +3419,12 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
       + exact: HmacR2.
       + exact: HmacR3.
       + exact: HepoR.
-      + (* register_address_correctness Right s2 *)
+      +
         subst s2. apply: register_address_correctness_reg0; exact: erefl.
-      + (* register_address_correctness Right s3 *)
+      +
         subst s3. apply: register_address_correctness_reg0; exact: erefl.
       + exact: HmmR.
-      + (* registers_match Right [] s2 s3 *)
+      +
         unfold registers_match. intros w d.
         subst s2 s3. simpl. split.
         * intros Hd. exists d. split; [| exact Hd].
@@ -3754,9 +3442,5 @@ Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
             repeat (case: ifP => /= _; [move=> [] _ //= |]);
             by [].
   Qed.
-
-  (* Print Assumptions match_initial_states.  -- clean: no Classical/proof_irrelevance;
-     only RecompositionContext params + recombination hyps + padding-alignment postulates
-     + bitwise/fmap/encoding leaves. *)
 
 End RecInit.

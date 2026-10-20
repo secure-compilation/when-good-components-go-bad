@@ -38,20 +38,10 @@ Import TraceBracket(jal_do_updates_result, jump_do_updates_result).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentStrong.
 
-(* The s2/RIGHT strong silent-step diagram square — the dual of [StepSilentStrong]'s
-   [step_silent_strong1].  Here s2 (= prog', L2) takes a silent step while RIGHT-matched
-   (s2 is the strongly-related side), and the recomposed run s3 (= prog'') takes a matching
-   Plus step. *)
-
 Module StepStrong2 (S: RecompositionContext).
 
-  (* Chain off StepStrong so the whole recomposition shares ONE Defs instance. *)
   Include StepStrong S.
 
-  (* Bridge used pervasively on the RIGHT side: from [color_in_memory] of a run's
-     memory + a cell at [w] whose colour is RIGHT-sided, derive membership in [ic]
-     (i.e. [is_relevant_comp Right]).  On the Left side this was free from [side_eq]
-     alone; on the Right one must rule out [domm ip] via the colour's validity. *)
   Lemma side_right_in_ic : forall (m: @memory mt) w d c,
       color_in_memory m -> m w = Some d -> color (taga d) = c ->
       side_of c = Right ->
@@ -64,15 +54,6 @@ Module StepStrong2 (S: RecompositionContext).
     - exact: HCm.
   Qed.
 
-  (* ===================================================================== *)
-  (*  RIGHT-side mirror of the four [preserves_equiv_left_*] lemmas from     *)
-  (*  [PreservationLemmas].  Convention here: the *strongly-matched /        *)
-  (*  stepping* run is [s1] (RIGHT-related), the *weak* run is [s2]          *)
-  (*  (LEFT-related); since [common_equiv]'s first argument is the           *)
-  (*  LEFT-related state, the common hypothesis is [common_equiv M s2 s1 s3] *)
-  (*  (weak [s2] first).  The strong run therefore sits in common-position 2 *)
-  (*  so its witness-set is [WS_S2] (was [WS_S1] on the Left).               *)
-  (* ===================================================================== *)
 
   Lemma preserves_equiv_right_pc_incr :
     forall s1 s2 s3 M s1' s3' pc1' tpc1' pc3' tpc3',
@@ -139,7 +120,7 @@ Module StepStrong2 (S: RecompositionContext).
     import_context.
 
     intros s1 s2 s3 M s1' s3' w v v' m1' m3' i equiv v_match v_color M_color no_entry v_relevant same_color no_code_w_s3 no_code_w_s1
-      i_is_pc code_i no_code_v no_code_v' capa_prop1 capa_prop3 correct_v correct_v' (* correct_v'' *) eq_m1 eq_m3 eq_s1' eq_s3'.
+      i_is_pc code_i no_code_v no_code_v' capa_prop1 capa_prop3 correct_v correct_v'  eq_m1 eq_m3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
     pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
     split; [|split].
@@ -232,7 +213,7 @@ Module StepStrong2 (S: RecompositionContext).
         remember (@eq_op _ w0 w) as cond. destruct cond; rewrite -?Heqcond /=.
         * split; intro eq; inv eq; eexists; split; first [exact v_match | reflexivity].
         * apply mem_match; auto.
-    - destruct weak as [? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off (* s'_reg_cor *) mem_match];
+    - destruct weak as [? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off  mem_match];
       econstructor; destruct s, s', pc0, pc1; subst; auto.
       + subst.
         rewrite /memory_address_correctness; simpl.
@@ -286,15 +267,6 @@ Module StepStrong2 (S: RecompositionContext).
         rewrite setmE in eqw''.
         unfold_match' eqw''; try convert_eq_op; try simplify_some; try contradiction.
         eapply (entry_off); eauto.
-      (* + subst. intros d w' deq. simpl. destruct d as [vd vt]. *)
-      (*   remember (@eq_op _ vd w) as cond. *)
-      (*   destruct vt; simpl; auto; rewrite setmE; simpl in *; try (rewrite <- Heqcond); destruct cond; convert_eq_op. *)
-      (*     all: try eapply (s'_reg_cor _ w' deq). *)
-      (*     all: try (eapply modusponens; [eapply (s'_reg_cor _ w' deq) | ]; simpl; intros [v'' [v''eq v''code]]; *)
-      (*               destruct no_code_w_s3 as [d' [d'eq d'code]]; rewrite d'eq in v''eq; simplify_some). *)
-      (*     all: eexists; split; [eauto |]; intro v_in_ic; exfalso; *)
-      (*       eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic) _ (color (Types.taga v))); *)
-      (*       inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto; rewrite v_color; eauto. *)
       + unfold memory_match in *. simpl.
         intros.
         rewrite setmE.
@@ -320,8 +292,6 @@ Module StepStrong2 (S: RecompositionContext).
               [mem_pref_cond_s3 [mem_pref_cond_s3' [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 [entry_code3 cvo3]]]]]]]]
               capa_cor2 capa_cor1 capa_cor3 code_right code_left Hcval wpcc2 wpcc1].
       eapply common_equiv_def with (n := n) (c := c0).
-      (* pc_code_color s2 (unchanged) closed by [wpcc2] via [try assumption]; pc_code_color s1'
-         is the last goal, discharged by the dedicated final bullet below. *)
       all: try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); assumption).
       all: try assumption.
       all: try (split; [|split; [|split; [|split; [|split; [|split; [|split; [| split]]]]]]]).
@@ -331,10 +301,6 @@ Module StepStrong2 (S: RecompositionContext).
         simpl in *.
         induction wfst; intros.
         * eapply wf_stack_empty; eauto.
-        (* RIGHT: common is [M s2 s1' s3'], so wf_stack m1=mem s2 (unchanged, points_to_comp_code',
-           auto-discharged by eauto), m2=mem s1' (MODIFIED), m3=mem s3' (MODIFIED).  Both modified
-           runs use the regular [points_to_comp_code] (only m1 uses the primed one), so the two
-           cons cases are identical and simpler than on the Left (no side_of reasoning). *)
         * eapply wf_stack_cons_left; eauto.
           -- rewrite eq_s1'. simpl.
              unfold points_to_comp_code. rewrite setmE.
@@ -432,7 +398,7 @@ Module StepStrong2 (S: RecompositionContext).
         rewrite eq_s1' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. rewrite no_entry in dent. inversion dent.
         * eapply entry_code1; eauto.
-      + (* code_vtag_other (mem s1'): the written cell [v] is non-code *)
+      +
         intros w' d deq dcode.
         rewrite eq_s1' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. exact: (no_code_v dcode).
@@ -501,7 +467,7 @@ Module StepStrong2 (S: RecompositionContext).
         * exfalso. convert_eq_op. simplify_some. destruct v, d. destruct v_match as [tag_eq ?]. rewrite <- tag_eq in dent.
           rewrite no_entry in dent. inversion dent.
         * eapply entry_code3; eauto.
-      + (* code_vtag_other (mem s3'): the written cell [v'] is non-code *)
+      +
         intros w' d deq dcode.
         rewrite eq_s3' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. exact: (no_code_v' dcode).
@@ -610,8 +576,7 @@ Module StepStrong2 (S: RecompositionContext).
              exfalso. subst w. destruct no_code_w_s3 as [? [eq1 ?]].
              rewrite H3 in eq1. simplify_some. rewrite H5 in H4. match goal with Hc : is_true (is_code ?t) |- _ => match goal with Hnc : ~ is_true (is_code t) |- _ => exact (Hnc Hc) end end.
              all: trivial.
-      + (* pc_code_color s1': the data write at [w] (non-code [v]) doesn't touch the code pc cell.
-           In this Right lemma the updated run is built from [s2] (eq_m1 / wpcc1 are about s2). *)
+      +
         rewrite eq_s1'. apply: (pc_code_color_write (s := s2) (w := w) (v := v));
           [ reflexivity | exact no_code_v | reflexivity | exact wpcc1 ].
   Qed.
@@ -635,7 +600,7 @@ Module StepStrong2 (S: RecompositionContext).
       /\ common_equiv M s2 s1' s3'.
   Proof.
     intros s1 s2 s3 M s1' s3' r v v' r1' r3' equiv v_match
-      capa_prop1 capa_prop3 correct_v correct_v' (* correct_v'' *) eq_r1 eq_r3 eq_s1' eq_s3'.
+      capa_prop1 capa_prop3 correct_v correct_v'  eq_r1 eq_r3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
     destruct common as [? ? ? ? n ? tag_pc2 tag_pc1 tag_pc3 wfst reg_domm2 reg_domm1 reg_domm3
                           [mem_pref_cond_s2 [code_pref_cond_s2 [alloc_mem_s2 [bnz_s2 [end_s2 [col_mem2 [entry_code2 cvo2]]]]]]]
@@ -664,16 +629,12 @@ Module StepStrong2 (S: RecompositionContext).
         case: eqP => [_ | _] /=.
         * split; intro eq; inv eq; eexists; split; first [exact v_match | reflexivity].
         * apply reg_match; auto.
-    - destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off (* s'_reg_cor *) mem_match].
+    - destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off  mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence.
       destruct s, s3, pc0, pc1. subst. simpl. auto.
       trivial.
-      (* + intros d r' deq. subst. rewrite setmE in deq. unfold_match' deq. *)
-      (*   simpl. convert_eq_op. simpl. simplify_some. trivial. *)
-      (*   eapply (s'_reg_cor d r' deq). *)
     - eapply common_equiv_def with (n := n) (c := c0);
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done.
-      (* pc_code_color s1': register write leaves mem and pc untouched (updated run from s2). *)
       all: try (match goal with |- pc_code_color _ =>
                   rewrite eq_s1'; apply: (pc_code_color_cong (s := s2));
                   first [ exact wpcc1 | reflexivity | done ] end).
@@ -740,19 +701,11 @@ Module StepStrong2 (S: RecompositionContext).
 
     intros s1 s2 s3 M s1' s3' equiv eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    (* ---- Peel [alloc_fun] on both sides with [obind_inv]: the post-state stays
-       inside [eq_s1']/[eq_s3'] as a hypothesis — never [destruct]ed nor [subst]ed
-       here — so no expanded block is baked into the proof term (that bake is what
-       made the old inversion-cascade peel hang at [Qed]).  We reproduce exactly the
-       hypothesis names the conjunct proof below relies on. ---- *)
     unfold alloc_fun in eq_s1', eq_s3'; cbv zeta in eq_s1', eq_s3'.
-    (* left (s1): keep ra as the atom [a1]; split size into [v'@Other] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (a1 & Heqa4 & eq_s1'); symmetry in Heqa4.
     apply obind_inv in eq_s1'; destruct eq_s1' as (wj1 & Hg & eq_s1');
       unfold is_jump in Hg; destruct (taga a1) eqn:Heqa7; try discriminate Hg;
       symmetry in Heqa7; clear Hg wj1.
-    (* ret_addr: mem-read at the RA value + the JAL-return check [is_code && colour] that
-       [alloc_fun] gained (the block these two peels cover was added after this lemma). *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (reta1 & Hreta1 & eq_s1'); symmetry in Hreta1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (uretchk1 & Hretchk1 & eq_s1');
       move: Hretchk1; case: ifP => Hretcol1; [ move=> _ | discriminate ]; clear uretchk1.
@@ -763,7 +716,6 @@ Module StepStrong2 (S: RecompositionContext).
       destruct (int_of_word (vala (v'@Other))) as [m1|] eqn:Heqa3; try rewrite Heqa3 in Hg; simpl in Hg;
         [ move: Hg => [= ?]; subst m1 | discriminate Hg ];
       cbn [vala] in Heqa3; symmetry in Heqa3.
-    (* peel the allocator's block-size check: [alloc_fun = Some] gives [n'+1 <= 2^(word-NC)] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (uchk1 & Hszchk1 & eq_s1').
     destruct (leq (n' + 1) (expn 2 (word_size mt - NC))) eqn:Hszbound1;
       [ clear uchk1 Hszchk1 | discriminate Hszchk1 ].
@@ -774,7 +726,6 @@ Module StepStrong2 (S: RecompositionContext).
       move: Hg => [= ?]; subst ad1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (rg1 & Hg & eq_s1');
       move: (updm_set Hg) => Hg2; subst rg1; clear Hg.
-    (* right (s3): split ra into [v@InternalJump]; keep size as the atom [a0] *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ra3 & Heqa & eq_s3'); destruct ra3 as [v tgr3].
     apply obind_inv in eq_s3'; destruct eq_s3' as (wj3 & Hg & eq_s3');
       unfold is_jump in Hg; destruct tgr3; try discriminate Hg; clear Hg wj3; symmetry in Heqa.
@@ -819,8 +770,6 @@ Module StepStrong2 (S: RecompositionContext).
     pose proof (erefl blk1) as Hblk1; unfold blk1 in Hblk1 at 2.
     try (pose proof (erefl blk3) as Hblk3; unfold blk3 in Hblk3 at 2).
     clearbody blk1; try clearbody blk3.
-    (* inject+subst onto the *block-abstracted* (hence compact) post-state: the
-       eq_rect the [subst] bakes now carries [blk1]/[blk3], not the expanded mkseq. *)
     move: eq_s1' => [= Hs1]; subst s1'.
     try (move: eq_s3' => [= Hs3]; subst s3').
     destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
@@ -833,7 +782,7 @@ Module StepStrong2 (S: RecompositionContext).
         eapply same_pc_normal.
         * split.
           -- rewrite ?unionmE; cbn [Symbolic.pc Types.vala]; rewrite eq /=; reflexivity.
-          -- (* the allocator's own return-cell check gives code-ness *)
+          --
              have Hic1 : is_code (taga reta1) by case/andP: Hretcol1 => Hicc _.
              move: Hreta1; rewrite eq => -[Hrx]. rewrite -Hrx. exact: Hic1.
         * match goal with |- get_offset _ (color_of ?st) = _ => rewrite (color_of_pc_tag st) end.
@@ -893,8 +842,7 @@ Module StepStrong2 (S: RecompositionContext).
           -- destruct (mem_match w d no_code rel) as [impl _].
              destruct (impl H) as [d' [d'match d'eq]].
              exists d'; split; [exact d'match | apply unionm_getL; exact d'eq].
-          -- (* d is the cell freshly allocated in s'; w is one of the fresh
-                addresses, so its mask is the block prefix. *)
+          --
              have w_prefix : andw w (@mask mt NC)
                              = @component_memory_prefix mt NC (ssrint.Posz (1 + c0)).
              { xblk Hfresh; clear -Hfresh Heqa9 tag_pc3 Hszbound1 Hszbound3.
@@ -905,8 +853,6 @@ Module StepStrong2 (S: RecompositionContext).
                eapply mask_range; [ by [exact Hszbound1 | exact Hszbound3] | exact Hstart | exact Hend | exact x_in_iota ]. }
              have Hcs : color_of s = c0 by rewrite (color_of_pc_tag s) tag_pc1.
              have side_c0 : side_of c0 = Right by rewrite -Hcs.
-             (* w is a fresh address, so it is not in the (pre-existing) memory of s:
-                a cell there would carry the new colour and contradict mem_match. *)
              have Hval : (c0 \in domm ip) || (c0 \in domm ic).
              { apply/orP; right.
                have Hcd : color (taga d) = c0.
@@ -924,9 +870,9 @@ Module StepStrong2 (S: RecompositionContext).
                have [d' [_ Hd'eq]] := proj2 (mem_match w a no_code_a Hrel) E.
                by rewrite Hs'None in Hd'eq. }
              exists d. split.
-             ++ (* both cells are the same zero/Other cell *)
+             ++
                 xblk Hfresh; move: Hfresh => /alloc_block_const_value ->. by repeat split.
-             ++ (* the two allocated blocks coincide at w *)
+             ++
                 abstract (
                   rewrite unionmE HsNone /=;
                   rewrite -Hfresh;
@@ -946,7 +892,7 @@ Module StepStrong2 (S: RecompositionContext).
           -- destruct (mem_match w d no_code rel) as [_ impl].
              destruct (impl H) as [d' [d'match d'eq]].
              exists d'; split; [exact d'match | apply unionm_getL; exact d'eq].
-          -- (* d is the cell freshly allocated in s (mirror of the s' case). *)
+          --
              have w_prefix : andw w (@mask mt NC)
                              = @component_memory_prefix mt NC (ssrint.Posz (1 + c0)).
              { xblk Hfresh; clear -Hfresh Heqa10 tag_pc1 Hszbound1 Hszbound3.
@@ -993,12 +939,8 @@ Module StepStrong2 (S: RecompositionContext).
                     | exact mem_match | exact mem_pref_cond_s1' | exact mem_pref_cond_s3' ]).
       + intros w d.
         cbn [Symbolic.regs].
-        (* register 16 holds the allocated base pointer, which coincides on both
-           sides because the allocations coincide (match_mem_pref_condition_filter_eq). *)
         have G : p1.1 = p2.1.
         { rewrite tag_pc1 in Heqa13; rewrite tag_pc3 in Heqa11.
-          (* RIGHT: [match_mem_pref_condition_filter_eq]'s side premise is [side_of c0 = Right]
-             (not is_relevant_comp), so it follows from [side_eq] directly — no validity bridge. *)
           have Hsc0 : side_of c0 = Right.
           { have Hc : color_of s = c0 by rewrite (color_of_pc_tag s) tag_pc1. by rewrite -Hc. }
           clear -Heqa11 Heqa13 mem_match Hsc0 Hcval mem_pref_cond_s1' mem_pref_cond_s3'.
@@ -1034,19 +976,11 @@ Module StepStrong2 (S: RecompositionContext).
 
     intros s1 s2 s3 M s1' s3' equiv eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    (* ---- Peel [alloc_fun] on both sides with [obind_inv]: the post-state stays
-       inside [eq_s1']/[eq_s3'] as a hypothesis — never [destruct]ed nor [subst]ed
-       here — so no expanded block is baked into the proof term (that bake is what
-       made the old inversion-cascade peel hang at [Qed]).  We reproduce exactly the
-       hypothesis names the conjunct proof below relies on. ---- *)
     unfold alloc_fun in eq_s1', eq_s3'; cbv zeta in eq_s1', eq_s3'.
-    (* left (s1): keep ra as the atom [a1]; split size into [v'@Other] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (a1 & Heqa4 & eq_s1'); symmetry in Heqa4.
     apply obind_inv in eq_s1'; destruct eq_s1' as (wj1 & Hg & eq_s1');
       unfold is_jump in Hg; destruct (taga a1) eqn:Heqa7; try discriminate Hg;
       symmetry in Heqa7; clear Hg wj1.
-    (* ret_addr: mem-read at the RA value + the JAL-return check [is_code && colour] that
-       [alloc_fun] gained (the block these two peels cover was added after this lemma). *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (reta1 & Hreta1 & eq_s1'); symmetry in Hreta1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (uretchk1 & Hretchk1 & eq_s1');
       move: Hretchk1; case: ifP => Hretcol1; [ move=> _ | discriminate ]; clear uretchk1.
@@ -1057,7 +991,6 @@ Module StepStrong2 (S: RecompositionContext).
       destruct (int_of_word (vala (v'@Other))) as [m1|] eqn:Heqa3; try rewrite Heqa3 in Hg; simpl in Hg;
         [ move: Hg => [= ?]; subst m1 | discriminate Hg ];
       cbn [vala] in Heqa3; symmetry in Heqa3.
-    (* peel the allocator's block-size check: [alloc_fun = Some] gives [n'+1 <= 2^(word-NC)] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (uchk1 & Hszchk1 & eq_s1').
     destruct (leq (n' + 1) (expn 2 (word_size mt - NC))) eqn:Hszbound1;
       [ clear uchk1 Hszchk1 | discriminate Hszchk1 ].
@@ -1068,7 +1001,6 @@ Module StepStrong2 (S: RecompositionContext).
       move: Hg => [= ?]; subst ad1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (rg1 & Hg & eq_s1');
       move: (updm_set Hg) => Hg2; subst rg1; clear Hg.
-    (* right (s3): split ra into [v@InternalJump]; keep size as the atom [a0] *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ra3 & Heqa & eq_s3'); destruct ra3 as [v tgr3].
     apply obind_inv in eq_s3'; destruct eq_s3' as (wj3 & Hg & eq_s3');
       unfold is_jump in Hg; destruct tgr3; try discriminate Hg; clear Hg wj3; symmetry in Heqa.
@@ -1113,11 +1045,9 @@ Module StepStrong2 (S: RecompositionContext).
     pose proof (erefl blk1) as Hblk1; unfold blk1 in Hblk1 at 2.
     try (pose proof (erefl blk3) as Hblk3; unfold blk3 in Hblk3 at 2).
     clearbody blk1; try clearbody blk3.
-    (* inject+subst onto the *block-abstracted* (hence compact) post-state: the
-       eq_rect the [subst] bakes now carries [blk1]/[blk3], not the expanded mkseq. *)
     move: eq_s1' => [= Hs1]; subst s1'.
     try (move: eq_s3' => [= Hs3]; subst s3').
-    destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off (* s'_reg_cor *) mem_match].
+    destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off  mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence; simpl; try done.
       + destruct s, s3, pc0, pc1. simpl. trivial.
       + intros d w rel d_eq.
@@ -1143,13 +1073,10 @@ Module StepStrong2 (S: RecompositionContext).
           -- destruct (mem_match w d no_code rel) as [impl _].
              destruct (impl H) as [d' [d'match d'eq]].
              exists d'; split; [exact d'match | exact d'eq].
-          -- (* the freshly-allocated cell carries the Right colour c0, so a
-                Left-relevance claim [rel] about it is impossible. *)
+          --
              exfalso.
              move: rel; xblk Hfresh; move: Hfresh => /alloc_block_const_value ->.
              rewrite /= tag_pc3 /is_relevant_comp => Hic.
-             (* RIGHT: [rel] claims [c0 \in ip], but [side_s'] gives [side_of c0 = Right] ⇒
-                [c0 \notin ip] — a direct contradiction (no validity bridge / fdisjoint needed). *)
              move: side_s'; rewrite /side_of (color_of_pc_tag s) tag_pc2 Hic //.
         * move=> H.
           destruct (mem_match w d no_code rel) as [_ impl].
@@ -1170,19 +1097,11 @@ Module StepStrong2 (S: RecompositionContext).
 
     intros s1 s2 s3 M s1' s3' equiv eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    (* ---- Peel [alloc_fun] on both sides with [obind_inv]: the post-state stays
-       inside [eq_s1']/[eq_s3'] as a hypothesis — never [destruct]ed nor [subst]ed
-       here — so no expanded block is baked into the proof term (that bake is what
-       made the old inversion-cascade peel hang at [Qed]).  We reproduce exactly the
-       hypothesis names the conjunct proof below relies on. ---- *)
     unfold alloc_fun in eq_s1', eq_s3'; cbv zeta in eq_s1', eq_s3'.
-    (* left (s1): keep ra as the atom [a1]; split size into [v'@Other] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (a1 & Heqa4 & eq_s1'); symmetry in Heqa4.
     apply obind_inv in eq_s1'; destruct eq_s1' as (wj1 & Hg & eq_s1');
       unfold is_jump in Hg; destruct (taga a1) eqn:Heqa7; try discriminate Hg;
       symmetry in Heqa7; clear Hg wj1.
-    (* ret_addr: mem-read at the RA value + the JAL-return check [is_code && colour] that
-       [alloc_fun] gained (the block these two peels cover was added after this lemma). *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (reta1 & Hreta1 & eq_s1'); symmetry in Hreta1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (uretchk1 & Hretchk1 & eq_s1');
       move: Hretchk1; case: ifP => Hretcol1; [ move=> _ | discriminate ]; clear uretchk1.
@@ -1193,7 +1112,6 @@ Module StepStrong2 (S: RecompositionContext).
       destruct (int_of_word (vala (v'@Other))) as [m1|] eqn:Heqa3; try rewrite Heqa3 in Hg; simpl in Hg;
         [ move: Hg => [= ?]; subst m1 | discriminate Hg ];
       cbn [vala] in Heqa3; symmetry in Heqa3.
-    (* peel the allocator's block-size check: [alloc_fun = Some] gives [n'+1 <= 2^(word-NC)] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (uchk1 & Hszchk1 & eq_s1').
     destruct (leq (n' + 1) (expn 2 (word_size mt - NC))) eqn:Hszbound1;
       [ clear uchk1 Hszchk1 | discriminate Hszchk1 ].
@@ -1204,7 +1122,6 @@ Module StepStrong2 (S: RecompositionContext).
       move: Hg => [= ?]; subst ad1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (rg1 & Hg & eq_s1');
       move: (updm_set Hg) => Hg2; subst rg1; clear Hg.
-    (* right (s3): split ra into [v@InternalJump]; keep size as the atom [a0] *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ra3 & Heqa & eq_s3'); destruct ra3 as [v tgr3].
     apply obind_inv in eq_s3'; destruct eq_s3' as (wj3 & Hg & eq_s3');
       unfold is_jump in Hg; destruct tgr3; try discriminate Hg; clear Hg wj3; symmetry in Heqa.
@@ -1249,27 +1166,14 @@ Module StepStrong2 (S: RecompositionContext).
     pose proof (erefl blk1) as Hblk1; unfold blk1 in Hblk1 at 2.
     try (pose proof (erefl blk3) as Hblk3; unfold blk3 in Hblk3 at 2).
     clearbody blk1; try clearbody blk3.
-    (* inject+subst onto the *block-abstracted* (hence compact) post-state: the
-       eq_rect the [subst] bakes now carries [blk1]/[blk3], not the expanded mkseq. *)
     move: eq_s1' => [= Hs1]; subst s1'.
     try (move: eq_s3' => [= Hs3]; subst s3').
-    (* The allocating component c0 (= color_of s1, the Right running component) is a valid
-       interface component, so 1+c0 < 2^NC (colors_bounded).  Derived here, before the
-       per-conjunct [clear]s, and threaded into the two memory_prefix_condition bullets that
-       need it to discharge the (now bounded) component_memory_prefix_succ_not_zero. *)
-    (* RIGHT: the running component c0 is valid by the new [common_equiv] invariant [Hcval];
-       feed it straight to [colors_bounded] (no side_of trick, which only gives [c0 \notin ip]). *)
     have Hbnd_c0 : 1 + c0 < 2 ^ NC by (apply: colors_bounded; exact Hcval).
     eapply common_equiv_def with (n := n) (c := c0).
-      (* pc_code_color s2 (unchanged, [wpcc2]) and pc_code_color s1' (the alloc result whose pc is
-         the running-coloured return address [reta1], a code cell by [Hretcol1]). *)
       all: try (match goal with |- pc_code_color _ =>
                   first [ exact wpcc2
                         | apply: (pc_code_color_alloc (s := s1) (a := vala a1) (ret := reta1));
                             [ reflexivity | exact (esym Hreta1) | reflexivity | reflexivity | exact Hretcol1 ] ] end).
-      (* Search-free dispatcher: close the cheap obligations (the three pc-tag
-         goals and the unchanged s2 invariants) explicitly, leaving exactly the
-         nine substantive goals for the bullets below.  No auto/congruence/done. *)
       all: try (cbn [Symbolic.pc Types.taga]; eassumption).
       all: try exact (conj mem_pref_cond_s2 (conj mem_pref_cond_s2' (conj code_pref_cond_s2
               (conj alloc_mem_s2 (conj bnz_s2 (conj end_s2 (conj col_mem2 (conj entry_code2 cvo2)))))))).
@@ -1280,31 +1184,19 @@ Module StepStrong2 (S: RecompositionContext).
         * eapply wf_stack_empty; eauto.
         * eapply wf_stack_cons_left; eauto.
           -- unfold points_to_comp_code in *. rewrite unionmE.
-             (* RIGHT alloc: m2=mem s1' / m3=mem s3' (both unionm'd); pick the matching PTS hyp
-                by the goal's memory lookup.  The fresh-block else-branch is vacuous: a stack
-                address lies in the pre-state, so its lookup is [Some]. *)
              first
                [ (move: PTS_CODE2; case: (mem s1 v2) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ])
                | (move: PTS_CODE3; case: (mem s3 v3) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ]) ].
           -- unfold points_to_comp_code in *. rewrite unionmE.
-             (* RIGHT alloc: m2=mem s1' / m3=mem s3' (both unionm'd); pick the matching PTS hyp
-                by the goal's memory lookup.  The fresh-block else-branch is vacuous: a stack
-                address lies in the pre-state, so its lookup is [Some]. *)
              first
                [ (move: PTS_CODE2; case: (mem s1 v2) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ])
                | (move: PTS_CODE3; case: (mem s3 v3) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ]) ].
         * eapply wf_stack_cons_right; eauto.
           -- unfold points_to_comp_code in *. rewrite unionmE.
-             (* RIGHT alloc: m2=mem s1' / m3=mem s3' (both unionm'd); pick the matching PTS hyp
-                by the goal's memory lookup.  The fresh-block else-branch is vacuous: a stack
-                address lies in the pre-state, so its lookup is [Some]. *)
              first
                [ (move: PTS_CODE2; case: (mem s1 v2) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ])
                | (move: PTS_CODE3; case: (mem s3 v3) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ]) ].
           -- unfold points_to_comp_code in *. rewrite unionmE.
-             (* RIGHT alloc: m2=mem s1' / m3=mem s3' (both unionm'd); pick the matching PTS hyp
-                by the goal's memory lookup.  The fresh-block else-branch is vacuous: a stack
-                address lies in the pre-state, so its lookup is [Some]. *)
              first
                [ (move: PTS_CODE2; case: (mem s1 v2) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ])
                | (move: PTS_CODE3; case: (mem s3 v3) => [d|]; [ move=> Hd; exact Hd | move=> Hf; case: Hf ]) ].
@@ -1408,8 +1300,6 @@ Module StepStrong2 (S: RecompositionContext).
               [by [exact Hszbound1 | exact Hszbound3] | eapply Hstart | eapply Hend | assumption]. }
           clear H1. subst w.
           pose proof mask_alloc_label as H.
-          (* assert (andw (word_of_nat alloc_label) (@mask mt NC) = 0%w). *)
-          (* { admit. } *)
           rewrite H in w_prefix.
           exfalso. move/eqP: w_prefix => w_prefix.
           apply (component_memory_prefix_succ_not_zero (NC := NC) c0 (ltnW NC_lt_word) Hbnd_c0).
@@ -1443,7 +1333,6 @@ Module StepStrong2 (S: RecompositionContext).
           -- xblk deq; move: deq => /mkfmap_Some /=.
              rewrite /mkseq; move=> /mapP [] x x_in_iota /= [] H1 H2.
              subst d. rewrite tag_pc1. simpl.
-             (* RIGHT: alloc cell coloured c0; c0 is valid (Hcval) and side=Right ⇒ c0∈ic. *)
              right; eapply Extra.In_in.
              case/orP: Hcval => [Hip | Hic]; last exact Hic.
              exfalso.
@@ -1459,7 +1348,7 @@ Module StepStrong2 (S: RecompositionContext).
                move=> /mapP [] x x_in_iota [] H -> //=.
                case: s1 tag_pc1 {H} => /= _ _ [] /= _ taga _ -> //=. }
              rewrite eq in dent. simpl in dent. inversion dent.
-        * (* code_vtag_other: old via cvo1; new cells [def_mem_tag _ false] non-code *)
+        *
           intros w d deq dcode. rewrite unionmE in deq. unfold_match' deq.
           -- eapply cvo1; eauto.
           -- exfalso.
@@ -1528,7 +1417,6 @@ Module StepStrong2 (S: RecompositionContext).
           move=> Hmkf; xblk Hmkf; move: Hmkf => /mkfmap_Some /=.
           rewrite /mkseq; move=> /mapP [] x x_in_iota /= [] H1 H2.
           move=> Hcode; rewrite H2 in Hcode; discriminate Hcode.
-        (* * rewrite alloc_mem_s3. simpl. admit. *)
         * rewrite alloc_mem_s3. simpl. try rewrite Hblk1; try rewrite Hblk3. rewrite tag_pc3.
           clear -Heqa9 tag_pc3 Hbnd_c0 Hszbound1 Hszbound3.
           destruct (mkfmap _ _) eqn:H; auto.
@@ -1555,8 +1443,6 @@ Module StepStrong2 (S: RecompositionContext).
               [by [exact Hszbound1 | exact Hszbound3] | eapply Hstart | eapply Hend | assumption]. }
           clear H1. subst w.
           pose proof mask_alloc_label as H.
-          (* assert (andw (word_of_nat alloc_label) (@mask mt NC) = 0%w). *)
-          (* { admit. } *)
           rewrite H in w_prefix.
           exfalso. move/eqP: w_prefix => w_prefix.
           apply (component_memory_prefix_succ_not_zero (NC := NC) c0 (ltnW NC_lt_word) Hbnd_c0).
@@ -1590,7 +1476,6 @@ Module StepStrong2 (S: RecompositionContext).
           -- xblk deq; move: deq => /mkfmap_Some /=.
              rewrite /mkseq; move=> /mapP [] x x_in_iota /= [] H1 H2.
              subst d. rewrite tag_pc3. simpl.
-             (* RIGHT: alloc cell coloured c0; c0 is valid (Hcval) and side=Right ⇒ c0∈ic. *)
              right; eapply Extra.In_in.
              case/orP: Hcval => [Hip | Hic]; last exact Hic.
              exfalso.
@@ -1606,7 +1491,7 @@ Module StepStrong2 (S: RecompositionContext).
                move=> /mapP [] x x_in_iota [] H -> //=.
                case: s3 tag_pc3 {H} => /= _ _ [] /= _ taga _ -> //=. }
              rewrite eq in dent. simpl in dent. inversion dent.
-        * (* code_vtag_other: old via cvo3; new cells [def_mem_tag _ false] non-code *)
+        *
           intros w d deq dcode. rewrite unionmE in deq. unfold_match' deq.
           -- eapply cvo3; eauto.
           -- exfalso.
@@ -1685,8 +1570,7 @@ Module StepStrong2 (S: RecompositionContext).
               move=> /mapP [] x x_in_iota [] H -> //=.
               case: s3 tag_pc3 {H} => /= _ _ [] /= _ taga _ -> -> //=. }
             destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
-      + (* combined_codes Left s2 s3': like the Right case, but the middle run
-           s2 is unchanged (no unionm on that side). *)
+      +
         intros w vd t off cc rel eq_off codet colt.
         split.
         * move=> Hmem.
@@ -1714,9 +1598,7 @@ Module StepStrong2 (S: RecompositionContext).
                | exact Hmem0
                | cbn [Symbolic.mem]; apply unionm_getL; exact Hmem'
                | exact Hcode | exact Htag | exact Hoff ].
-      + (* combined_codes Right s1' s3': the matched (code) cells are unchanged by
-           the alloc (fresh cells are non-code), and decode_match transports
-           through the unionm. *)
+      +
         intros w vd t off cc rel eq_off codet colt.
         split.
         * move=> Hmem; cbn [Symbolic.mem] in Hmem.
@@ -1768,16 +1650,7 @@ Module StepStrong2 (S: RecompositionContext).
     - exact (alloc_fun_common_r equiv eq_s1' eq_s3').
   Qed.
 
-  (* [deduce_equality]'s [combined_codes] branch (Definitions.v) needs a
-     [true = (c \in domm ic)] hypothesis on the RIGHT (the Left proof got
-     [true = (c \in domm ip)] for free from [side_eq]).  [mk_ic] synthesises it
-     from [Heqa4 : false = (c \in domm ip)] + a strong-run code cell + that run's
-     [color_in_memory], and [deduce_equality_r] wraps the original tactic with it. *)
   Ltac mk_ic :=
-    (* Pick a cell [Hpc] coloured [c] in a map [m] that [color_in_memory] knows.  [getm ?m ?w]
-       binds the *raw* map, forcing [Hcm] and [Hpc] to share it (pre-[subst] the only aligned
-       pair may be [col_mem3 + mem_s3], not [col_mem1 + PC]); [unify] filters cells whose tag
-       is a [mem_tag] coloured [c] (register cells fail the [color (taga d)] typing). *)
     match goal with
     | Hc4 : false = (?c \in domm ip),
       Hcm : color_in_memory ?m,
@@ -1790,22 +1663,12 @@ Module StepStrong2 (S: RecompositionContext).
           esym (side_right_in_ic Hcm Hpc (erefl _) Hside)
     end.
 
-  (* For a DATA cell (is_code false) [deduce_equality] takes its [memory_match] branch,
-     whose Left-specific side-condition discharge leaks an unclosed [c \in domm ic] goal
-     on the Right.  [mk_ic] has already put [Hic : true = (c \in domm ic)] in scope; close
-     any such stray with it. *)
-  (* [mk_ic] only matches when [Heqa3 : false = (c \in domm ip)] is present (the alt2 stray),
-     so it fails fast on ordinary goals; on the stray it adds [Hic], which closes the goal. *)
   Ltac close_ic :=
     mk_ic; match goal with H : true = (_ \in domm ic) |- _ => exact (esym H) end.
 
   Ltac deduce_equality_r s_eq := try mk_ic; deduce_equality s_eq; try close_ic.
 
   Local Opaque pc_code_color.
-  (* Discharge a [preserves_equiv_right_pc_incr] call's [pc_code_color s1'] obligation, mirroring
-     StepSilentStrong's [pcc_close]: [s1']'s mem is [mem s1] (PRE), its pc-value the step's new pc
-     ([congr addw] modulo word-notation), its pc-tag the running tag ([stt = ST]).  The LRC step is
-     [step_me_mp step_1] (the Merged step transferred to an LRC step). *)
   Ltac pcc_close2 stp stt :=
     apply: (PCCM.pc_incr_pcc stp);
     [ by []
@@ -1840,7 +1703,7 @@ Module StepStrong2 (S: RecompositionContext).
     intros mem0 reg pc0 tpc0 i ti0 extra mvec ST PC INST NEXT.
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       unfold_all; try unfold_match; unfold_all.
-      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *. (* eliminates many goals *)
+      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *.
       try (rewrite ST in PC_None; unfold color_of in PC_None; rewrite PC in PC_None; try (inversion PC_None; done || clear PC_None)).
       try (assert (tpc1 = tpc0) by (clear -Heqa2; unfold_match' Heqa2); subst tpc1).
       try (assert (ts0 = (ts (mvec None)) ) by
@@ -1859,20 +1722,12 @@ Module StepStrong2 (S: RecompositionContext).
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
       unfold check_belong, belong, reg_clear_list in *.
       simpl in *; unfold_all.
-      (* 7-8: (match (type of Heqa2) with *)
-      (*         (_ = match ?m ?w with _ => _ end) *)
-      (*         => eapply (@modusponens (exists res, m w = Some res /\ *)
-      (*                                          (LRC.color (taga res) \in domm ip -> *)
-      (*                                           is_code (taga res)))); *)
-      (*           [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2] *)
-      (*       end). *)
-      (* 11: remember (mem0 pc') as next_pc_content; destruct next_pc_content. *)
       try (match goal with
                   |- exists _ _, _ => repeat (unfold_all || unfold_match || rewrite orb_false_r in Heqa4, Heqa16) end).
       convert_eq_op.
       unfold is_jump in *; try (unfold_match; subst t1).
       unfold hshead in *; simpl in *.
-      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3. (* trick to keep an equality on s1 and s3 *)
+      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3.
       try (pose proof (esym Heqa3) as PC; clear Heqa3).
       try (match goal with c: Component.id |- _ => rename c into color end).
       try (destruct pc_s1_s3 as [? ? ? eq_none|s1 s3 ? ? _ eq_off pc_s1_s3];
@@ -1928,8 +1783,6 @@ Module StepStrong2 (S: RecompositionContext).
         -- unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
            unfold evi in *. simpl. unfold_bind.
            deduce_reg reg_match.
-           (* assert (mem3 (addw pc3_val onew) = mem0 (addw pc0 onew)). *)
-           (* eapply (etrans _ (esym Heqi')). *)
            rewrite eq_s3. simpl.
 
            rewrite eq_s3 in pc_s1_s3.
@@ -1984,7 +1837,7 @@ Module StepStrong2 (S: RecompositionContext).
     intros mem0 reg pc0 tpc0 i ti0 n0 r old told extra mvec ST PC INST OLD NEXT.
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       unfold_all; try unfold_match; unfold_all.
-      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *. (* eliminates many goals *)
+      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *.
       try (rewrite ST in PC_None; unfold color_of in PC_None; rewrite PC in PC_None; try (inversion PC_None; done || clear PC_None)).
       try (assert (tpc1 = tpc0) by (clear -Heqa2; unfold_match' Heqa2); subst tpc1).
       try (assert (ts0 = (ts (mvec None)) ) by
@@ -2003,20 +1856,12 @@ Module StepStrong2 (S: RecompositionContext).
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
       unfold check_belong, belong, reg_clear_list in *.
       simpl in *; unfold_all.
-      (* 7-8: (match (type of Heqa2) with *)
-      (*         (_ = match ?m ?w with _ => _ end) *)
-      (*         => eapply (@modusponens (exists res, m w = Some res /\ *)
-      (*                                          (LRC.color (taga res) \in domm ip -> *)
-      (*                                           is_code (taga res)))); *)
-      (*           [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2] *)
-      (*       end). *)
-      (* 11: remember (mem0 pc') as next_pc_content; destruct next_pc_content. *)
       try (match goal with
                   |- exists _ _, _ => repeat (unfold_all || unfold_match || rewrite orb_false_r in Heqa4, Heqa16) end).
       convert_eq_op.
       unfold is_jump in *; try (unfold_match; subst t1).
       unfold hshead in *; simpl in *.
-      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3. (* trick to keep an equality on s1 and s3 *)
+      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3.
       try (pose proof (esym Heqa3) as PC; clear Heqa3).
       try (match goal with c: Component.id |- _ => rename c into color end).
       try (destruct pc_s1_s3 as [? ? ? eq_none|s1 s3 ? ? _ eq_off pc_s1_s3];
@@ -2092,17 +1937,11 @@ Module StepStrong2 (S: RecompositionContext).
              | |- context [updm ?r ?w _] =>
                  assert (exists v, (r w = Some v)) as [v H]; [| unfold updm; rewrite H; clear H] end).
            { eauto. }
-           (* { subst. deduce_reg reg_match. eauto. } *)
            unfold check_belong, belong. rewrite eq_refl. simpl. reflexivity.
-      * (* equiv-conjunct (strong/weak/common preservation) for Const — GENUINE.
-           reg_write (the new value) then pc_incr, then discharge the 10 premises with the
-           `all: lazymatch` dispatcher below: capability/address = exact I (True for Other),
-           data_match = refl, same_pc via word_ac, updm via reg_match/Z, and the 2 reg-write
-           state-eqs via ST (s1 side) / eq_s3+tag_pc3+pc_s1_s3 (s3 side). No admit. *)
+      *
         eapply preserves_equiv_right_reg_write with (r := r) (v := (swcast n0)@Other) (v' := (swcast n0)@Other); auto.
         eapply (preserves_equiv_right_pc_incr) with (pc1' := (addw (vala (pc s1)) onew)) (tpc1' := (taga (pc s1)))
                                                    (pc3' := (addw (vala (pc s3)) onew)) (tpc3' := (taga (pc s3))); eauto; try (pcc_close2 (PCCM.step_me_mp step_1) ST).
-        (* discharge the 10 reg_write+pc_incr premises, NO admit (see close_reg_equiv note above) *)
         all: lazymatch goal with
              | |- capability_correctness' _ _ _ _ _ => exact I
              | |- address_correctness _ _ _ _ => exact I
@@ -2126,7 +1965,6 @@ Module StepStrong2 (S: RecompositionContext).
                                  rewrite eq_s3 in tag_pc3; simpl in tag_pc3; rewrite tag_pc3;
                                  rewrite ST; unfold color_of; simpl; reflexivity ] ]
              end.
-    (* ----- Mov opcode (un-commented, being converted) ----- *)
   Qed.
 
   Lemma step_silent_strong2_mov :
@@ -2157,7 +1995,7 @@ Module StepStrong2 (S: RecompositionContext).
     intros mem0 reg pc0 tpc0 i ti0 r1 w1 t1 r2 old told extra mvec ST PC INST R1W OLD NEXT.
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       unfold_all; try unfold_match; unfold_all.
-      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *. (* eliminates many goals *)
+      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *.
       try (rewrite ST in PC_None; unfold color_of in PC_None; rewrite PC in PC_None; try (inversion PC_None; done || clear PC_None)).
       try (assert (tpc1 = tpc0) by (clear -Heqa2; unfold_match' Heqa2); subst tpc1).
       try (assert (ts0 = (ts (mvec None)) ) by
@@ -2176,20 +2014,12 @@ Module StepStrong2 (S: RecompositionContext).
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
       unfold check_belong, belong, reg_clear_list in *.
       simpl in *; unfold_all.
-      (* 7-8: (match (type of Heqa2) with *)
-      (*         (_ = match ?m ?w with _ => _ end) *)
-      (*         => eapply (@modusponens (exists res, m w = Some res /\ *)
-      (*                                          (LRC.color (taga res) \in domm ip -> *)
-      (*                                           is_code (taga res)))); *)
-      (*           [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2] *)
-      (*       end). *)
-      (* 11: remember (mem0 pc') as next_pc_content; destruct next_pc_content. *)
       try (match goal with
                   |- exists _ _, _ => repeat (unfold_all || unfold_match || rewrite orb_false_r in Heqa4, Heqa16) end).
       convert_eq_op.
       unfold is_jump in *; try (unfold_match; subst t1).
       unfold hshead in *; simpl in *.
-      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3. (* trick to keep an equality on s1 and s3 *)
+      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3.
       try (pose proof (esym Heqa3) as PC; clear Heqa3).
       try (match goal with c: Component.id |- _ => rename c into color end).
       try (destruct pc_s1_s3 as [? ? ? eq_none|s1 s3 ? ? _ eq_off pc_s1_s3];
@@ -2277,13 +2107,10 @@ Module StepStrong2 (S: RecompositionContext).
           (s3 := @State mt lrc_tags _ (mem s3) (regs s3) ((addw (vala (pc s3)) onew)@(taga (pc s3))) tt).
         eapply (preserves_equiv_right_pc_incr) with (pc1' := (addw (vala (pc s1)) onew)) (tpc1' := (taga (pc s1)))
                                                    (pc3' := (addw (vala (pc s3)) onew)) (tpc3' := (taga (pc s3))); auto. eauto.
-        (* pass 1: resolve the reg_write/pc_incr state-eqs (reflexivity), instantiating the
-           nested pre-state evars ?s1/?s3 so the value premises below can reduce *)
         all: try (solve [ reflexivity | (rewrite ST; simpl; reflexivity) | (rewrite eq_s3; simpl; reflexivity)
                         | (rewrite eq_s3; simpl; rewrite eq_s3 in pc_s1_s3; simpl in pc_s1_s3; subst pc3_val;
                            rewrite eq_s3 in tag_pc3; simpl in tag_pc3; rewrite tag_pc3; rewrite ST; unfold color_of; simpl; reflexivity)
                         | done ]).
-        (* pass 2: the value premises, now with evars resolved *)
         all: try (lazymatch goal with
                   | |- pc_code_color _ => pcc_close2 (PCCM.step_me_mp step_1) ST
                   | |- same_pc _ _ _ =>
@@ -2305,27 +2132,12 @@ Module StepStrong2 (S: RecompositionContext).
                             | (subst; simpl; apply: address_correctness_moved; eapply (s_reg_cor _ _ R1W))
                             | (subst; simpl; apply: address_correctness_moved; eapply (s'_reg_cor _ _ vt_eq0)) ]
                   | |- capability_correctness' _ _ _ _ _ =>
-                      (* closes capability for new_t1 (Invalidated/Other ⇒ True) and non-Ret w1@t1;
-                         the 2 Ret-case w1@t1 / v1@t1 capability goals are left for the explicit
-                         capa_cor1/capa_cor3 closer below (they need the global uniqueness fact). *)
                       first [ exact I | solve [ destruct t1; try (rewrite Heqnew_t1); simpl; trivial ] ]
                   | |- data_match _ _ _ _ _ =>
                       solve [ (simpl; split; reflexivity)
                             | (split; auto; subst; destruct t1; simpl; auto; try (destruct vt_match0; auto))
                             | (destruct vt_match0; subst; unfold color_of in *; simpl in *; split; trivial) ]
                   end).
-        (* The two passes above close 17 of the 19 reg_write/pc_incr premises GENUINELY
-           (same_pc, all data_match, all address, all updm×4, both state-eqs, and the
-           new_t1 + non-Ret w1@t1 capabilities).  The 2 remaining are the Ret-case w1@t1 /
-           v1@t1 capability_correctness' premises (state = reg-write intermediate with r1
-           invalidated; mem unchanged).  Closed GENUINELY below by the global capability
-           uniqueness facts capa_cor1 (s1) / capa_cor3 (s3) from [inversion common]: r1 held
-           the unique Ret n0 capability (R1W / vt_eq0), so (A) no memory cell can hold it,
-           (B) no register OTHER than r1 holds it and r1 is now invalidated, (C) it is in the
-           stack metadata.  This is the original capa_cor1/capa_cor3 argument, made
-           order-independent (the only port issue was the hardcoded fresh [Heqa3] name, here
-           replaced by [case: eqP]/[case: ifP]). *)
-        (* goal 1 = WS_S1 (s1, w1, R1W, capa_cor1); goal 2 = WS_S3 (s3, v1, vt_eq0, capa_cor3) *)
         1:{ destruct t1 as [n0 | | |]; simpl; trivial.
             assert (RR : regs s1 r1 = Some (w1 @ (Ret n0))) by
                 (first [ exact R1W | (rewrite ST; exact R1W) | (rewrite ST in R1W; exact R1W)
@@ -2358,7 +2170,6 @@ Module StepStrong2 (S: RecompositionContext).
                 * move=> req; move: (unicity (inl r') v'' req) => Hr1r;
                   move: Hrr; rewrite Hr1r eqxx; discriminate.
               + exact is_in. }
-    (* ----- Binop opcode (un-commented, being converted) ----- *)
   Qed.
 
   Lemma step_silent_strong2_binop :
@@ -2390,7 +2201,7 @@ Module StepStrong2 (S: RecompositionContext).
     intros mem0 reg pc0 tpc0 i ti0 op0 r1 r2 r3 w1 w2 t1 t2 old told extra mvec ST PC INST R1W R2W OLD NEXT.
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       unfold_all; try unfold_match; unfold_all.
-      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *. (* eliminates many goals *)
+      all: try (clear -Heqa2; repeat unfold_match' Heqa2; done); simpl in *.
       try (rewrite ST in PC_None; unfold color_of in PC_None; rewrite PC in PC_None; try (inversion PC_None; done || clear PC_None)).
       try (assert (tpc1 = tpc0) by (clear -Heqa2; unfold_match' Heqa2); subst tpc1).
       try (assert (ts0 = (ts (mvec None)) ) by
@@ -2409,20 +2220,12 @@ Module StepStrong2 (S: RecompositionContext).
                   simpl in Heqi'; try (rewrite Heqi' in Heqa2; inversion Heqa2) ] ).
       unfold check_belong, belong, reg_clear_list in *.
       simpl in *; unfold_all.
-      (* 7-8: (match (type of Heqa2) with *)
-      (*         (_ = match ?m ?w with _ => _ end) *)
-      (*         => eapply (@modusponens (exists res, m w = Some res /\ *)
-      (*                                          (LRC.color (taga res) \in domm ip -> *)
-      (*                                           is_code (taga res)))); *)
-      (*           [|intros [res [res_eq res_code]]; rewrite res_eq in Heqa2] *)
-      (*       end). *)
-      (* 11: remember (mem0 pc') as next_pc_content; destruct next_pc_content. *)
       try (match goal with
                   |- exists _ _, _ => repeat (unfold_all || unfold_match || rewrite orb_false_r in Heqa4, Heqa16) end).
       convert_eq_op.
       unfold is_jump in *; try (unfold_match; subst t1).
       unfold hshead in *; simpl in *.
-      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3. (* trick to keep an equality on s1 and s3 *)
+      try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3.
       try (pose proof (esym Heqa3) as PC; clear Heqa3).
       try (match goal with c: Component.id |- _ => rename c into color end).
       try (destruct pc_s1_s3 as [? ? ? eq_none|s1 s3 ? ? _ eq_off pc_s1_s3];
@@ -2525,12 +2328,10 @@ Module StepStrong2 (S: RecompositionContext).
           (s3 := @State mt lrc_tags _ (mem s3) (regs s3) ((addw (vala (pc s3)) onew)@(taga (pc s3))) tt).
         eapply (preserves_equiv_right_pc_incr) with (pc1' := (addw (vala (pc s1)) onew)) (tpc1' := (taga (pc s1)))
                                                    (pc3' := (addw (vala (pc s3)) onew)) (tpc3' := (taga (pc s3))); auto. eauto.
-        (* pass 1: state-eqs (explicit states above make them first-order) *)
         all: try (solve [ reflexivity | (rewrite ST; simpl; reflexivity) | (rewrite eq_s3; simpl; reflexivity)
                         | (rewrite eq_s3; simpl; rewrite eq_s3 in pc_s1_s3; simpl in pc_s1_s3; subst pc3_val;
                            rewrite eq_s3 in tag_pc3; simpl in tag_pc3; rewrite tag_pc3; rewrite ST; unfold color_of; simpl; reflexivity)
                         | done ]).
-        (* pass 2: value premises (all @Other ⇒ capability/address = exact I, NO uniqueness) *)
         all: try (lazymatch goal with
                   | |- pc_code_color _ => pcc_close2 (PCCM.step_me_mp step_1) ST
                   | |- same_pc _ _ _ =>
@@ -2554,7 +2355,6 @@ Module StepStrong2 (S: RecompositionContext).
                       unfold updm; rewrite Hu; rewrite ?ST; rewrite ?eq_s3;
                       try (rewrite Heqnew_w); try (rewrite <- H1); simpl; reflexivity
                   end).
-    (* ===== Load opcode (ported from the reference body above) ===== *)
   Qed.
 
   Lemma step_silent_strong2_load :
@@ -2688,15 +2488,7 @@ Module StepStrong2 (S: RecompositionContext).
            all: first [ reflexivity
                       | (rewrite vt_eq1; simpl; reflexivity)
                       | (move/eqP: Hcond => r_eq; subst r2; simpl; reflexivity) ].
-      * (* Load STEP + EQUIV both GENUINE (no admit).  The EQUIV is a 4-level
-           reg_write(r2,_@vtag1) ∘ mem_write(w1,_@t2') ∘ reg_write(r1,w1@Other) ∘ pc_incr chain.
-           The post-chain residuals are discharged by the `all: lazymatch` dispatcher below using
-           TARGETED reductions (cbn [specific symbols] / rewrite /name), NOT `simpl`/`destruct;simpl`
-           (which time out >110s on the big load state).  The outermost reg_write(r2)'s
-           address_correctness premises for the loaded value (w2@vtag1 / v1@vtag1) are SHELVED by
-           eapply, so they are surfaced by `Unshelve` after the dispatcher and closed by two explicit
-           bullets (memory_address_correctness via s_mem_cor/s'_mem_cor — see below). *)
-        (* --- Load helpers (analogs of Store's; cell tag ct={vtag1;color;entry1;false}) --- *)
+      *
         have Hco : color_of s1 = color by (rewrite ST /color_of /=; reflexivity).
         have Ht0 : t0 = {| vtag := vtag1; color := color; entry := entry1; is_code := false |}
           by (move: vt_match0; rewrite /data_match' => -[H _]; exact (esym H)).
@@ -2720,9 +2512,6 @@ Module StepStrong2 (S: RecompositionContext).
         have Hrs3 : regs s3 = regs3 by (rewrite eq_s3; reflexivity).
         have Htpc1 : taga (pc s1) = Level n color by (rewrite ST /=; reflexivity).
         rewrite Hrs3 in vt_eq1.
-        (* Resolve the step's reads a/a0 (Heqa13 : Some a = mem s1 w1, Heqa12 : Some a0 = regs s1 r1)
-           into the loaded value w2 / address w1 — like region-A's line 840 — so the step's s1'
-           carries w2/w1 directly (not `vala a`/`vala a0`) and state-eq #30 becomes reflexive. *)
         rewrite MEM1s1 in Heqa13. rewrite R1Ws1 in Heqa12. do 2 simplify_some.
         remember (moved_tag vtag1) as new_t2.
         remember ({| vtag := new_t2; color := color; entry := entry1; is_code := false |}) as t2'.
@@ -2739,14 +2528,10 @@ Module StepStrong2 (S: RecompositionContext).
         all: subst new_t2.
         all: try (simpl; reflexivity).
         all: try exact I.
-        (* resolve updm goals FIRST (they instantiate the ?r1'0/?r3'/?m1' evars; rewrite refuses
-           on evar-containing goals, so the other cases need them resolved). *)
         all: try (cbn [mem regs]; unfold updm; rewrite ?MEM1s1 ?vt_eq0 ?R1Ws1 ?vt_eq /=; rewrite ?Hms3 ?Hrs3; reflexivity).
         all: try (cbn [regs]; unfold updm;
                   rewrite ?(setmE (regs s1) r1 (w1@Other) r2) ?(setmE regs3 r1 (w1@Other) r2) ?OLDs1 ?vt_eq1;
                   case: (r2 == r1) => /=; reflexivity).
-        (* data_match #23 (loaded value w2@vtag1): a separate pass — Hdm matches only this goal
-           (the w1@Other reg-write data_match fails the exact and is skipped). *)
         all: try (lazymatch goal with
                   | |- data_match Right ?cc ?m ?a ?b =>
                       have Hcst : cc = color by (rewrite ST /color_of /=; reflexivity);
@@ -2808,7 +2593,7 @@ Module StepStrong2 (S: RecompositionContext).
                    | (rewrite ST in side_eq; simpl in side_eq; exact side_eq)
                    | (rewrite Hco in side_eq; exact side_eq) ] ]));
                       first
-                        [ (* WS_S1: value w2, cell MEM1s1, mem s1 *)
+                        [
                           (move: (s_mem_cor (w2 @ {| vtag := vtag1; color := color; entry := entry1; is_code := false |}) w1 Hrel MEM1s1);
                            move: MEM1s1 Hrel; clear; case: vtag1 => [ n0 | | | ] MEM1s1 Hrel; rewrite /address_correctness /=;
                            [ (move=> [v' [Hmw' Hcode]]; rewrite (setmE (mem s1) w1 _ w2); case: ifP => [/eqP Heq | _];
@@ -2819,7 +2604,7 @@ Module StepStrong2 (S: RecompositionContext).
                                [ (exfalso; move: Hmw'; rewrite Heq MEM1s1 => -[<-]; move: (Hcode Hrel); rewrite /= => //)
                                | (exists v'; split; [exact Hmw' | exact Hcode]) ])
                            | exact I ])
-                        | (* WS_S3: value v1, cell vt_eq0, mem3 (bridge Hms3) *)
+                        |
                           (move: (s'_mem_cor (v1 @ {| vtag := vtag1; color := color; entry := entry1; is_code := false |}) w1 Hrel vt_eq0);
                            rewrite Hms3;
                            move: vt_eq0 Hrel Hms3; clear; case: vtag1 => [ n0 | | | ] vt_eq0 Hrel Hms3; rewrite /address_correctness /=;
@@ -2881,17 +2666,6 @@ Module StepStrong2 (S: RecompositionContext).
              | |- ?g => first [ (cbn [mem vala pc]; exact Hnpc)
                               | (cbn [mem regs pc internal vala]; rewrite Htpc1; reflexivity) ]
              end.
-        (* Second pass: the outermost reg_write(r2) spawns its address_correctness for the loaded
-           value (w2@vtag1 / v1@vtag1) AFTER the dispatcher enumerated goals, so re-run the same
-           memory-address closer (WS_S1: value w2, cell MEM1s1; WS_S3: value v1, cell vt_eq0). *)
-        (* The outermost reg_write(r2) address_correctness premise for the loaded value
-           (w2@vtag1 / v1@vtag1) is SHELVED by the eapply chain, so the `all:` dispatcher never
-           enumerates it.  `Unshelve` surfaces it; the memory-address closer then discharges each
-           (WS_S1: value w2 via s_mem_cor+MEM1s1, mem s1; WS_S3: value v1 via s'_mem_cor+vt_eq0,
-           mem3): for Other/Invalidated the obligation is trivially True; for Ret/InternalJump it is
-           `exists v, (setm … w1 …) w2 = Some v ∧ (is_relevant→is_code)`, closed at the loaded
-           address w2≠w1 by the cell's own address-correctness (s_mem_cor at w2), and at w2=w1 by
-           the re-tagged cell being non-code (is_relevant⇒is_code is then contradictory). *)
         Unshelve.
         all: try have Hrel : is_relevant_comp Right color
           by (rewrite /is_relevant_comp; (eapply side_right_in_ic;
@@ -2924,12 +2698,6 @@ Module StepStrong2 (S: RecompositionContext).
                 [ (exfalso; move: Hmw'; rewrite Heq -Hms3 vt_eq0 => -[= Ev]; subst v'; move: (Hcode Hrel); by rewrite /=)
                 | (exists v'; split; [exact Hmw' | exact Hcode]) ])
             | by move=> _ ]. }
-        (* Load EQUIV fully closed (no admit).  The loaded value came from MEMORY (MEM1s1: mem s1 w1=
-           Some w2@_, vt_eq0: mem s3 w1=Some v1@_), so capability_correctness' for vtag1=Ret uses the
-           capa_cor1/capa_cor3 *inr-w* (memory-location w1) uniqueness branch (NOT the inl-r2 register
-           branch), and address_correctness for the loaded value uses memory_address_correctness
-           (s_mem_cor/s'_mem_cor) — discharged in the two `Unshelve` bullets above. *)
-    (* ===== remaining opcodes: Store, Jump, Bnz, Jal, Jal2 (bodies in the reference comment above) ===== *)
   Qed.
 
   Lemma step_silent_strong2_store :
@@ -2959,16 +2727,10 @@ Module StepStrong2 (S: RecompositionContext).
     capa_cor2 capa_cor1 capa_cor3 code_right code_left Hcval wpcc2 wpcc1].
     subst s s' s0 s4 s5 m m0.
     intros mem0 reg pc0 i r1 r2 w1 w2 tpc0 ti0 t1 t2 old told extra mvec ST PC INST R1W R2W OLD NEXT.
-      (* Store *)
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       repeat (apply obind_inv in NEXT as [? [?HR NEXT]]).
       destruct (mem s1 (vala (pc s1) + 1)%w) as [ni|] eqn:NPC;
-        [| (* Store-as-last-instruction (no next cell). belong c None = true (LRC.v:103, "accepting
-              ni=None ⇒ monitor service/stopping") makes this a VALID step, NOT killed by NEXT=Some;
-              instead the recomposition invariant end_condition (Definitions.v:543: a non-Halt code
-              cell has a following code cell) contradicts mem(pc0+1)=None. We DON'T resolve s1' (the
-              None-branch peel diverges — x0 is a state not the (ov,ev) pair); we only need HE5 (peel
-              the transfer HR0) + ST, then exfalso. *)
+        [|
            exfalso;
            clear NEXT;
            cbn in HR0;
@@ -2998,7 +2760,6 @@ Module StepStrong2 (S: RecompositionContext).
               | H : (if ?b then _ else _) = Some _ |- _ => let E := fresh "HE" in destruct b eqn:E
               end).
       all: try discriminate.
-      (* resolve x0 (do_updates result) → s1' concrete *)
       injection HR3 as HR3; subst x0.
       injection H1 as H1; subst x3.
       injection H0 as H0; subst x2.
@@ -3007,19 +2768,6 @@ Module StepStrong2 (S: RecompositionContext).
       move: (updm_set H4) => Hx6; subst x6.
       move: (updm_set H2) => Hx4; subst x4.
       cbn [mem regs pc internal] in *.
-      (* STORE prologue PEELED + s1' RESOLVED & GREEN (2026-05-31).
-         s1' = {| mem := setm (mem s1) w1 (w2@s);
-                  regs := setm (setm (regs s1) r1 (w1@t1)) r2 (w2@(is_address t2 ? Invalidated : Other));
-                  pc := (vala (pc s1) + 1)%w@tpc0; internal := internal s1 |}
-         with s = (switch_val told t2).1 (the new stored-cell tag), vala x7=w1, vala x5=w2,
-         hshead (tr ov)=t1, trpc ov=tpc0, tr ov = [t1; (is_address t2?Inv:Other); s]
-         (ov resolvable via subst through HR0/HE/H7/HE0/H10 if needed). Transfer facts in ctx:
-         HE2 (is_code told=false), H13/H14 (check_belong ni at pc0+1 / told both pass),
-         H12 (is_other t1), HE4 (color ti0 = i0), HE5 (is_code ti0).
-         REMAINING (mechanical, mirrors Bnz): step_store on s3 (Symbolic.v:351; code_left fetch
-         + match_dec + R1W/R2W via reg_match + OLD via mem_match + NEXT forward-compute);
-         equiv = preserves_equiv_right_mem_write(w1,w2@s) (PreservationLemmas.v:127, ~20 stored-cell
-         premises = the new work) ∘ reg_write(r2) ∘ reg_write(r1) ∘ pc_incr, dispatched like Bnz. *)
       assert (Htpc0 : tpc0 = Level n color) by (move: tag_pc1; rewrite ST /=; done).
       assert (Hi0 : i0 = color) by (move: HE1; rewrite Htpc0 /= => [= _ <-]; reflexivity).
       assert (Hcti0 : LRC.color ti0 = color).
@@ -3074,15 +2822,7 @@ Module StepStrong2 (S: RecompositionContext).
         -- rewrite eq_s3 in VT31; simpl in VT31; exact VT31.
         -- rewrite eq_s3 in VT32; simpl in VT32; exact VT32.
         -- rewrite eq_s3 in OLD3; simpl in OLD3; exact OLD3.
-        -- (* NEXT: next_state_updates s3 (IVec STORE pc3_tag ti0 [hseq Other; td2; tdm])
-              [RegRead r1; RegRead r2; MemWrite w1 vd2] = Some (?s3', None). Forward-compute like
-              Bnz's NEXT: read mem3 (pc3_val+1) for the next-instr tni (code_left at pc'+1), evi s3
-              via reg_match, then the STORE transfer (is_code ti0 via HE5; color check via Hcti0 +
-              tag_pc3; is_other Other; check_belong next-instr; check_belong (Some tdm); is_code tdm
-              = false [from DMM : data_match' (old@told)(vdm@tdm) + HE2 is_code told=false]; switch_val
-              tdm td2), then do_updates over the 3 updates. Result s3' = State (setm mem3 w1 (vd2@s3))
-              (setm (setm regs3 r1 (w1@Other)) r2 (vd2@(is_address td2?Inv:Other))) ((pc3_val+1)@pc3_tag)
-              internal3, s3 = (switch_val tdm td2).1. *)
+        --
            move: DMM; rewrite /data_match' => -[Htoldtdm _]; subst tdm.
            destruct ni as [vni0 tni0].
            assert (Hic : is_code tni0).
@@ -3123,30 +2863,13 @@ Module StepStrong2 (S: RecompositionContext).
            rewrite Htpc3 /= Hcti0 eqxx /=.
            unfold check_belong. rewrite !(belong_eq color) Hcolni Hcoltold !eqxx /=.
            rewrite HE2 (surjective_pairing (switch_val told td2)) /=.
-           (* do_updates: if_Some lets obind reduce past the r1/r2 setm-aliasing while keeping
-              the `if r2==r1` as a value the eexists absorbs. *)
            have if_Some : forall (T:Type) (cc:bool) (xx yy:T), (if cc then Some xx else Some yy) = Some (if cc then xx else yy)
              by (move=> T cc xx yy; case: cc).
            rewrite VT31 /=. rewrite /updm VT31 /=.
            rewrite (setmE (regs s3) r1 (w1@Other) r2) VT32 if_Some /=.
            rewrite OLD3 /=.
            reflexivity.
-      * (* equiv: 4-level preserves_equiv_right_mem_write(w1, vd2@s3) (PreservationLemmas.v:127)
-           ∘ reg_write(r2, vd2@..) ∘ reg_write(r1, w1@Other) ∘ pc_incr, dispatched like Bnz. All
-           s3 reads resolved (VT31: regs3 r1=w1@Other, VT32: regs3 r2=vd2@td2, OLD3: mem3 w1=vdm@tdm);
-           color facts Hcti0/Hcoltold; DMM = data_match' for the stored cell (mem_write premises).
-           s1' = {mem:=setm(mem s1)w1 (w2@(switch_val told t2).1); regs:=setm(setm(regs s1)r1 (vala x7@Other))r2 (vala x5@(is_addr t2?Inv:Other)); pc:=(vala(pc s1)+1)@(trpc ov); internal s1};
-           s3' = {mem:=setm(mem s3)w1 (vd2@(switch_val tdm td2).1); regs:=setm(setm(regs s3)r1 w1@Other)r2 ((vala(if r2==r1 then w1@Other else vd2@td2))@(is_addr td2?Inv:Other)); pc:=(vala(pc s1)+1+as_word off)@pc3_tag; internal s3}.
-           Compose: mem_write(w1) ∘ reg_write(r2) ∘ reg_write(r1) ∘ pc_incr; the r2-value carries
-           `if r2==r1` (both sides — data_match relates them); mem_write's ~20 premises = data_match'
-           (VTM2-derived), no_code_w (HE2/DMM), color (Hcoltold), capability/address (Other/cap). *)
-        (* eapply preserves_equiv_right_mem_write with (w := w1) gives 21 premises (verified):
-           base equiv (→ reg_write(r2) ∘ reg_write(r1) ∘ pc_incr → strong/weak/common) + the
-           stored-value conditions: data_match' v v' (v=w2@(switch_val told t2).1,
-           v'=vd2@(switch_val tdm td2).1 — the HARD one, relate via VTM2+DMM and switch_val's
-           vtag:=value-tag/color:=cell-color form), color/entry/is_relevant of v, mem s1 pc = code,
-           ~is_code v/v' (HE2: is_code told=false ⇒ is_code (switch_val..)=is_code told=false),
-           capability/address (Other⇒I), updm×2 (via OLD-domm), state-eqs. *)
+      *
         assert (Hov : ov = OVec STORE tpc0 [hseq Other; (moved_tag t2); s])
           by (destruct x12 as [x12a x12b]; destruct o as [ot otr]; simpl in *; congruence).
         rewrite !Hov /=.
@@ -3310,12 +3033,11 @@ Module StepStrong2 (S: RecompositionContext).
     capa_cor2 capa_cor1 capa_cor3 code_right code_left Hcval wpcc2 wpcc1].
     subst s s' s0 s4 s5 m m0.
     intros mem0 reg pc0 i r w tpc0 ti0 t1 extra l rav rat mvec ST PC INST RW RA CLEAR NEXT.
-      (* JUMP (register-indirect): silent ⇒ intra (belong=true); registers UNCHANGED *)
       Local Opaque next_state_do_update next_state_do_updates.
       unfold next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       repeat (apply obind_inv in NEXT as [? [?HR NEXT]]).
       destruct (mem s1 w) as [ni|] eqn:NPC.
-      2: { (* None target: contradiction — reg r holds an InternalJump value, whose target must exist *)
+      2: {
            Local Transparent belong next_state_do_update next_state_do_updates.
            destruct x0 as [ov ev].
            have Htpc : tpc0 = Level n c0 by (move: tag_pc1; rewrite ST /=).
@@ -3356,7 +3078,7 @@ Module StepStrong2 (S: RecompositionContext).
       rewrite (hseq_eta l) (hseq_eta (hsbehead l)) in Hout.
       cbn in Hout.
       destruct (belong (match ti0 with | {| color := c |} => c end) (Some (taga ni))) eqn:Hbel.
-      * (* intra: belong = true ⇒ identity re-tag, regs unchanged (x0 = s1) *)
+      *
         rewrite Hbel in Hout; cbn in Hout.
         apply obind_inv in Hout as [[] [Hjmp Hout]].
         move: Hout => [= Hout]; subst out.
@@ -3434,7 +3156,7 @@ Module StepStrong2 (S: RecompositionContext).
           - exact Hr3.
           - exact Hra3.
           - exact Hl3.
-          - (* NEXT3: forward JUMP transfer for s3 — belong+is_jump ⇒ identity, regs unchanged *)
+          -
             have [arcom1 Hrc1] : exists a, regs s1 rcom = Some a
               by (move: HR; rewrite /evi; case: (regs s1 rcom) => [a _|//]; by exists a).
             have [arcom3 [_ Hrc3]] := proj2 (reg_match rcom arcom1) Hrc1.
@@ -3472,7 +3194,7 @@ Module StepStrong2 (S: RecompositionContext).
           - exact: (esym tag_pc1).
           - exact: (esym tag_pc3).
           - pcc_close2 (PCCM.step_me_mp step_1) ST. }
-      * (* cross: belong = false ⇒ RETURN, which emits an ERet event, contradicting the silent step *)
+      *
         rewrite Hbel in Hout; cbn in Hout.
         apply obind_inv in Hout as [[] [_ Hout]].
         apply obind_inv in Hout as [cc [_ Hout]].
@@ -3512,8 +3234,7 @@ Module StepStrong2 (S: RecompositionContext).
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       repeat (apply obind_inv in NEXT as [? [?HR NEXT]]).
       destruct (mem s1 pc') as [ni|] eqn:NPC;
-        [| (* None: the new pc always has a code cell (w=0 ⇒ fall-through/end_s1;
-              w≠0 ⇒ branch target/bnz_s1) ⇒ contradiction *)
+        [|
            exfalso;
            cbn in HR0;
            apply obind_inv in HR0 as [[] [Hic _]];
@@ -3530,39 +3251,19 @@ Module StepStrong2 (S: RecompositionContext).
       destruct x0 as [ov ev]. simpl in NEXT.
       repeat (apply obind_inv in NEXT as [? [?HR3 NEXT]]).
       move: NEXT => [= Hs1' Hev]. subst ev. subst s1'.
-      (* s3-side setup (try-wrapped lines are safe; the Heqa* refs no-op under obind_inv) *)
       try (inversion Heqa0); clear Heqs3'; revert ST eq_s3; subst; intros ST eq_s3.
       try (match goal with c: Component.id |- _ => rename c into color end).
       try (destruct pc_s1_s3 as [? ? ? eq_none|s1 s3 ? ? _ eq_off pc_s1_s3];
                 [exfalso; subst; simpl in *; rewrite (proj1 eq_none) in PC; done |]).
-      (* derive the s3 condition read from the s1 read RW via reg_match *)
       assert (RWs1 : regs s1 r = Some (w@t1)) by (rewrite ST; exact RW).
       pose proof (proj2 (reg_match r _) RWs1) as [d' [VTM VT3]].
-      (* VTM : data_match Right (color_of s1) M (w@t1) d' ; VT3 : regs s3 r = Some d' (the s3 condition read) *)
-      (* HR0 = the transfer equation (= Some(ov,None)); reduce its concrete-mvec match + peel is_other t1 *)
       cbn in HR0.
       repeat (match goal with
               | H : obind _ _ = Some _ |- _ => apply obind_inv in H as [? [? H]]
               | H : (let (_, _) := ?x in _) = Some _ |- _ => let E := fresh "HE" in destruct x eqn:E
               end).
       match goal with H : is_other t1 = Some _ |- _ => rename H into HISO end.
-      destruct t1; unfold is_other in HISO; simpl in HISO; try discriminate HISO.  (* t1 = Other *)
-      (* === BNZ: obind_inv prologue FAST + t1=Other extracted (validated 2026-05-31, green ~17s). The full
-           post-peel state (from rocq-mcp get_proof_state) gives every value to finish — NEXT (mechanical,
-           no hangs; iterate the exact injection/subst forms with MCP):
-           - resolve the witness chain so s1' is concrete:
-               H4 : Some({trpc:=tpc0; tr:=[hseq Other]},None) = Some x6  ⇒ x6
-               H2 : Some({trpc:=trpc0; tr:=tr0}, x6.2) = Some(o,o0)       ⇒ o, o0=None
-               HR0: Some({trpc o; tr o}, o0) = Some(ov,None)             ⇒ trpc ov=tpc0, tr ov=[hseq Other]
-               H  : Some{mem s1; regs:=x3; pc s1; internal s1} = Some x1, HR3: Some x1=Some x0 ⇒ x0
-               H1 : updm (regs s1) r (vala x2)@(hshead (tr ov)) = Some x3 ⇒ x3 = setm (regs s1) r (w@Other)
-                     (updm_set; hshead [hseq Other] = Other; H0+RWs1 ⇒ vala x2 = w)
-             ⇒ s1' = {| mem:=mem s1; regs:=setm (regs s1) r (w@Other); pc:=pc'@tpc0; internal:=internal s1 |},
-               pc' = (pc0 + (if w==0 then 1 else swcast n0))%w, tpc0 = taga(pc s1) = Level n color.
-           - then: eexists concrete s3' {mem3; setm regs3 r (w@Other); pc3'@(Level n color); tt} (pc3' = pc3_val
-             + (if w==0 then 1 else swcast n0)); eapply plus_one; eapply step_bnz + premises (s3 fetch via
-             code_left, s3 cond read VT3); then the simple equiv: reg_write r (w@Other) + pc_incr (orig ref 1908-1921),
-             pc'_eq via word_ac. Same obind_inv recipe ⇒ Jal/Store/Jump. === *)
+      destruct t1; unfold is_other in HISO; simpl in HISO; try discriminate HISO.
       move: (updm_set H1) => H1'. clear H1.
       rewrite RWs1 in H0.
       repeat (match goal with
@@ -3573,41 +3274,11 @@ Module StepStrong2 (S: RecompositionContext).
               | H : {| trpc := _; tr := _ |} = {| trpc := _; tr := _ |} |- _ => injection H as ? ?
               end); subst.
       cbn [mem regs pc internal hshead Types.taga Types.vala fst snd trpc tr] in *.
-      (* s1' resolved to {| mem:=mem0; regs:=setm reg r w@(hshead tr0); pc:=pc'@trpc0; internal:=extra |}.
-         LAST MILE: trpc0/tr0 (the BNZ ovec fields) are still abstract — the peel's `destruct` of the
-         ovec `let '{trpc:=trpc0; tr:=tr0} := out.1` ran BEFORE x6 was resolved, losing the connection
-         trpc0=tpc0 / tr0=[hseq Other]. FIX (next): in the t1=Other robust peel, only `destruct` the PAIR
-         lets (the (ov,ev) state pairs), NOT the ovec record let — let cbn reduce the latter after the
-         Some-eqs resolve x6; OR after this point assert (Htr: tr0 = [hseq Other]) (⇒ hshead tr0 = Other)
-         and (Htrpc: trpc0 = tpc0 = Level n color) [both hold by the BNZ rule output] and rewrite.
-         THEN: eexists concrete s3' {mem3; setm regs3 r (w@Other); pc3'@(Level n color); internal3}
-         (pc3' = pc3_val + (if w==0 then 1 else swcast n0)); eapply plus_one; eapply step_bnz + premises
-         (s3 fetch via code_left, s3 cond read = VT3); then equiv: reg_write r (w@Other) + pc_incr,
-         pc'_eq via word_ac (orig ref 1908-1921). Whole thing is FAST (obind_inv); no hangs. *)
       assert (Htr0 : tr0 = [hseq Other]) by congruence.
       assert (Htrpc0 : trpc0 = tpc0) by congruence.
       rewrite Htr0 Htrpc0. cbn [hshead] in *.
-      (* s1' = {| mem:=mem0; regs:=setm reg r w@Other; pc:=pc'@tpc0; internal:=extra |} (CONCRETE). *)
-      (* resolve d' = w@Other (data_match Other) *)
       destruct d' as [dv dt]. unfold data_match in VTM. destruct VTM as [Hdt Hdv]. subst dt. simpl in Hdv.
       rewrite <- Hdv in VT3. clear Hdv dv.
-      (* === PROLOGUE COMPLETE + s1' FULLY CONCRETE (validated 2026-05-31, green ~17s, obind_inv, NO hangs):
-           s1' = {| mem:=mem0; regs:=setm reg r w@Other; pc:=pc'@tpc0; internal:=extra |};
-           pc' (a let-var) = (pc0 + (if w==0 then 1 else swcast n0))%w; tpc0 = taga(pc s1) = Level n color;
-           VT3 : regs3 r = Some w@Other (s3 condition read); s3 = {mem3;regs3;pc3_val@pc3_tag;internal3};
-           pc_s1_s3 : pc3_val = pc0 + as_word off. ALL hyps available (PC/INST/RW/code_left/reg_match/...).
-         REMAINING = step + equiv (mechanical, no hangs; the SIMPLE all-Other equiv):
-           - grab the branch cond: `pc'` is a zeta let-var, so `match goal` can't see the `if`; use
-             `cbv zeta in *` (or reference pc'+as_word off); s3' = {mem3; setm regs3 r (w@Other);
-             (pc3_val + (if w==0 then 1 else swcast n0))%w @ pc3_tag; internal3}.
-           - s3 fetch: `edestruct (code_left pc0) as [X _]` (instantiate color/off/ti0; the 3rd code_left
-             premise wants the instr tag) then `specialize (X PC)` ⇒ match_dec + mem_s3.
-           - eexists s3' + `eapply plus_one; eapply step_bnz` + premises (fetch via mem_s3; decode via
-             match_dec+decode_instr_eq; cond read = VT3; NEXT = forward-compute, peel with obind_inv if slow).
-           - equiv: `eapply preserves_equiv_right_reg_write with (r:=r)(v:=w@Other)(v':=w@Other);
-             eapply preserves_equiv_right_pc_incr with (pc1':=pc')(tpc1':=tpc0)(pc3':=<s3 target>)(tpc3':=pc3_tag)`
-             then the all-Other dispatcher (exact I / split;reflexivity / same_pc via word_ac); pc'_eq:
-             <s3 target> = (pc' + as_word off)%w by word_ac. (orig ref 1908-1921.) NO huge Heqa2; all fast. === *)
       assert (Hcc : color_of {| mem := mem0; regs := reg; pc := pc0@tpc0; internal := extra |} = color)
         by (by rewrite /color_of/= tag_pc1).
       assert (Hi0 : i0 = color).
@@ -3637,31 +3308,9 @@ Module StepStrong2 (S: RecompositionContext).
         -- assert (Hvv : vpc = i) by (inversion match_dec; congruence).
            rewrite Hvv; exact INST.
         -- exact VT3.
-        -- (* NEXT (premise 5): next_state_updates_and_pc s3 (IVec BNZ pc3_tag ti0 [hseq Other])
-                [RegRead r] (pc3_val + (if w==0 then 1 else swcast n0)) = Some (?s3', None).
-              ?s3' is the evar; the forward computation determines it to
-                State mem3 (setm regs3 r w@Other) ((pc3_val+brnch)@pc3_tag) internal3.
-              RECIPE (mechanical, no hang — transfer is structurally identical to the s1 side,
-               same ti0 / same color (Hti) / tx = Other (VT3) / same target tag (taga ni)):
-               1. is_code (taga ni): from BNZ_correctness mem0 (with INST + H3) for the w<>0
-                  taken branch (target = pc0 + swcast n0); the w==0 fall-through (pc0+1)
-                  is is_code by code_prefix_condition (plumbing).
-               2. second code_left at the s1 branch target pc' (NPC : mem0 pc' = Some ni):
-                  edestruct (code_left pc') with premises [color | off | taga ni (=Hic) |
-                  color (taga ni) = color (from H7 check_belong success + Hti)] => gives
-                  mem_tgt : mem3 (pc' + as_word off) = Some vni@(taga ni).
-               3. Hpc3' : (pc3_val + brnch) = (pc' + as_word off) by (rewrite pc_s1_s3 /pc'; word_ac);
-                  rewrite Hpc3' so the mem read hits mem_tgt.
-               4. unfold next_state_updates_and_pc; rewrite mem_tgt; unfold next_state;
-                  rewrite (evi s3 = Some _); compute transfer (BNZ instr_rules): the color check
-                  color ti0 == color (Hti + tag_pc3), is_other Other, check_belong color (taga ni)
-                  (= H7 via Hti) all succeed => ov = OVec BNZ pc3_tag [hseq Other]; then
-                  next_state_do_updates applies RegRead r (reads VT3) => setm regs3 r w@Other. *)
+        --
            destruct ni as [vni0 tni0].
            assert (Hcode : is_code ti0) by (move: H3; case: (is_code ti0) => //).
-           (* Hic: branch target is code. w==0 fall-through (pc0+onew) via end_condition,
-              w<>0 taken branch (pc0+swcast n0) via BNZ_correctness. `case: ifP` reduces
-              the branch `if` WITHOUT simpl (avoids the swcast `=> /=` hang; 1%w = onew). *)
            assert (Hic : is_code tni0).
            { have Hvi : vala (i@ti0) = i by [].
              move: NPC; rewrite /pc'; case: ifP => Hw NPC.
@@ -3705,12 +3354,7 @@ Module StepStrong2 (S: RecompositionContext).
            unfold check_belong, belong. simpl. rewrite Hcolni eqxx /=.
            rewrite VT3 /=. rewrite /updm VT3 /=.
            reflexivity.
-      * (* equiv: s3' = State mem3 (setm regs3 r w@Other) ((pc3_val+brnch)@pc3_tag) internal3.
-           strong_equiv Right M s1' s3' /\ weak_equiv Left M s2 s3' /\ common_equiv M s2 s1' s3'
-           where s1' = State mem0 (setm reg r w@Other) (pc'@tpc0) extra (all-Other, both sides).
-           Via preserves_equiv_right_reg_write (r, w@Other) + preserves_equiv_right_pc_incr
-           (pc1':=pc', tpc1':=tpc0, pc3':=pc3_val+brnch, tpc3':=pc3_tag); pc'_eq by word_ac
-           (pc3_val+brnch = pc'+as_word off). orig ref 1922-1960. *)
+      *
         destruct extra; destruct internal3.
         have Hcode2 : is_code ti0 by (move: H3; case: (is_code ti0) => //).
         have Hic : is_code (taga ni).
@@ -3774,7 +3418,7 @@ Module StepStrong2 (S: RecompositionContext).
       unfold next_state_updates, next_state_updates_and_pc, next_state, transfer, instr_rules, LRC.instr_rules in *.
       repeat (apply obind_inv in NEXT as [? [?HR NEXT]]).
       destruct (mem s1 pc') as [ni|] eqn:NPC.
-      2: { (* None target: JAL to the empty alloc cell (imm = alloc_label); pcs coincide *)
+      2: {
            simpl in NEXT.
            repeat (apply obind_inv in NEXT as [? [?HR2 NEXT]]).
            destruct x0 as [ov ev]. simpl in NEXT.
@@ -3888,7 +3532,7 @@ Module StepStrong2 (S: RecompositionContext).
              - exact Hd2.
              - exact Hr3.
              - exact Hl3cl.
-             - (* NEXT3: forward JAL transfer for s3 with the empty (None) alloc target *)
+             -
                have [arcom1 Hrc1] : exists a, regs s1 rcom = Some a
                  by (move: HR; rewrite /evi; case: (regs s1 rcom) => [a _|//]; by exists a).
                have [arcom3 [_ Hrc3]] := proj2 (reg_match rcom arcom1) Hrc1.
@@ -3913,7 +3557,7 @@ Module StepStrong2 (S: RecompositionContext).
                rewrite (jal_do_updates_result Hra3 Hr3s Hl3cl').
                rewrite /next_state_do_update /= /updm Hr3s /=.
                rewrite eq_s3 /=. reflexivity. }
-           { (* equiv preserved: RA reg-write on top of the pc-increment; same_pc via the alloc rule *)
+           {
              eapply preserves_equiv_right_reg_write with
                (s1 := @State mt lrc_tags _ (mem s1) (regs s1) ((swcast (@word_of_nat (imm_size mt) alloc_label)) @ (Level n c0)) tt)
                (s3 := @State mt lrc_tags _ (mem s3) (regs s3) ((swcast (@word_of_nat (imm_size mt) alloc_label)) @ (Level n c0)) tt)
@@ -3928,7 +3572,7 @@ Module StepStrong2 (S: RecompositionContext).
                + exact: (conj strong (conj weak common)).
                + reflexivity.
                + reflexivity.
-               + (* same_pc_alloc: both pcs are the empty alloc cell *)
+               +
                  eapply same_pc_alloc; first reflexivity.
                  split; [exact HNPC' | exact HNPC3'].
                + exact: (esym tag_pc1).
@@ -4004,13 +3648,12 @@ Module StepStrong2 (S: RecompositionContext).
         specialize (Xf HPCs1) as [v' [match_dec mem_s3]].
         inversion match_dec as [Hn1 Hn2 Hvv | Hd1 Hd2 | jimm dd dd' Hdi Hdi' Hmd1 Hmd3 Hcd Htagdd Hreloc].
         { exfalso; exact: (Hn1 imm INST). }
-        { (* alloc JAL: contradiction — the jump target would be the (empty) alloc cell *)
+        {
           exfalso.
           have Hia : imm = @word_of_nat (imm_size mt) alloc_label by congruence.
           rewrite /pc' Hia swcast_word_of_nat_alloc_label in NPC.
           have Hae : mem s1 (word_of_nat alloc_label) = None by exact: alloc_mem_s1.
           rewrite Hae in NPC. discriminate NPC. }
-        (* main JAL case: dd = s3's immediate; relocation H *)
         have Hji : jimm = imm by congruence.
         subst jimm.
         have Hc0 : color ti0 = c0 by (apply/eqnP; move: Hcol; by case: (eqn (color ti0) c0)).
@@ -4075,7 +3718,7 @@ Module StepStrong2 (S: RecompositionContext).
           - exact Hmd1.
           - exact Hr3.
           - exact Hl3cl.
-          - (* NEXT3: forward JAL transfer for the s3 run *)
+          -
             have [arcom1 Hrc1] : exists a, regs s1 rcom = Some a
               by (move: HR; rewrite /evi; case: (regs s1 rcom) => [a _|//]; by exists a).
             have [arcom3 [_ Hrc3]] := proj2 (reg_match rcom arcom1) Hrc1.
@@ -4098,7 +3741,7 @@ Module StepStrong2 (S: RecompositionContext).
             rewrite (jal_do_updates_result Hra3 Hr3s Hl3cl').
             rewrite /next_state_do_update /= /updm Hr3s /=.
             rewrite eq_s3 /=. reflexivity. }
-        { (* equiv preserved: RA reg-write on top of the pc-increment *)
+        {
           eapply preserves_equiv_right_reg_write with
             (s1 := @State mt lrc_tags _ (mem s1) (regs s1) ((swcast imm) @ (Level n c0)) tt)
             (s3 := @State mt lrc_tags _ (mem s3) (regs s3) ((swcast dd) @ (Level n c0)) tt)
@@ -4106,14 +3749,14 @@ Module StepStrong2 (S: RecompositionContext).
             (v := (pc0 + 1)%w @ InternalJump) (v' := (pc3_val + 1)%w @ InternalJump)
             (r1' := setm (regs s1) (as_word (ssrint.Posz 4)) ((pc0 + 1)%w @ InternalJump))
             (r3' := setm (regs s3) (as_word (ssrint.Posz 4)) ((pc3_val + 1)%w @ InternalJump)).
-          - (* equiv triple, via the pc-increment lemma *)
+          -
             eapply preserves_equiv_right_pc_incr with
               (s1 := s1) (s3 := s3)
               (pc1' := swcast imm) (tpc1' := Level n c0) (pc3' := swcast dd) (tpc3' := Level n c0).
             + exact: (conj strong (conj weak common)).
             + reflexivity.
             + reflexivity.
-            + (* same_pc Right between the two jumped-to pcs *)
+            +
               eapply same_pc_normal.
               * split; [exact NPC | rewrite -Hdef; exact Htagdd].
               * exact Hoff.
@@ -4121,20 +3764,20 @@ Module StepStrong2 (S: RecompositionContext).
             + exact: (esym tag_pc1).
             + exact: (esym tag_pc3).
             + pcc_close2 (PCCM.step_me_mp step_1) ST.
-          - (* data_match for the RA cell (an InternalJump value) *)
+          -
             rewrite /data_match.
             have Hco' : color_of (@State mt lrc_tags _ (mem s1) (regs s1) ((swcast imm) @ (Level n c0)) tt) = c0 by reflexivity.
             rewrite Hco' Hoff /=.
             split; first reflexivity.
             rewrite Hpc3v. by word_ac.
-          - (* capability_correctness' WS_S1 (InternalJump tag) *) exact I.
-          - (* capability_correctness' WS_S3 (InternalJump tag) *) exact I.
-          - (* address_correctness Right, s1 side *) exact Haddr1.
-          - (* address_correctness Right, s3 side *) exact Haddr3.
-          - (* updm s1 *) by rewrite /updm Ha4' /=.
-          - (* updm s3 *) by rewrite /updm Hr3s /=.
-          - (* eq_s1' *) by case: (internal s1).
-          - (* eq_s3' *)
+          -  exact I.
+          -  exact I.
+          -  exact Haddr1.
+          -  exact Haddr3.
+          -  by rewrite /updm Ha4' /=.
+          -  by rewrite /updm Hr3s /=.
+          -  by case: (internal s1).
+          -
             have Eu : forall u : unit, u = tt by case.
             have Em : mem3 = mem s3 by rewrite eq_s3.
             have Er : regs3 = regs s3 by rewrite eq_s3.
@@ -4151,7 +3794,6 @@ Module StepStrong2 (S: RecompositionContext).
         { by move=> _ [=]. }
         { by move=> [=]. }
       Local Transparent belong check_belong is_other next_state_do_updates.
-    (* ===== syscall opcode (ported from reference body) — equiv is the genuine alloc_fun lemma ===== *)
   Qed.
 
   Lemma step_silent_strong2_syscall :
@@ -4177,7 +3819,6 @@ Module StepStrong2 (S: RecompositionContext).
     capa_cor2 capa_cor1 capa_cor3 code_right code_left Hcval wpcc2 wpcc1].
     subst s s' s0 s4 s5 m m0.
     intros mem0 reg pc0 sc tpc0 extra  ST PC GETCALL CALL.
-      (* syscall (alloc_fun): clean reconstruction — no unfold_all/simpl in * *)
       Local Opaque alloc_fun evi.
       have Hsem : Symbolic.sem sc = alloc_fun (NC := NC).
       { move: GETCALL. rewrite /Instance.table /Merged.table mkfmapE /=.
@@ -4208,7 +3849,6 @@ Module StepStrong2 (S: RecompositionContext).
         case: (proj2 (reg_match ra ra_val) Hra1) => d_ra [Hdm_ra Hra3].
         case: (proj2 (reg_match syscall_arg1 sz) Hsz1) => d_sz [Hdm_sz Hsz3].
         case: (proj2 (reg_match syscall_ret retv) Hret1) => d_ret [Hdm_ret Hret3].
-        (* tag/value facts that transfer the reads onto s3 *)
         have E_rat : taga ra_val = InternalJump
           by move: Hjmp1; rewrite /is_jump; case: (taga ra_val).
         have E_sat : taga sz = Other
@@ -4232,9 +3872,6 @@ Module StepStrong2 (S: RecompositionContext).
             | eauto | eauto | eauto ]. }
         have Hcc1 : (match taga (pc s1) with Level _ c => c end) = c0 by rewrite tag_pc1.
         have Hcc3 : (match taga (pc s3) with Level _ c => c end) = c0 by rewrite tag_pc3.
-        (* s3 return-addr check: the [&&] alloc-check forces s1's return cell to be running CODE,
-           so [code_left] (= combined_codes Right s1 s3) maps it to s3's return cell with the SAME
-           tag, discharging s3's check. *)
         move: (Hretcola1); rewrite Hcc1 => /andP [Hic1 /eqP Hcol1].
         have Hext : forall (a b : atom (mword mt) (tag_type lrc_tags R)),
             taga a = InternalJump -> data_match Right c0 M a b ->
@@ -4280,7 +3917,6 @@ Module StepStrong2 (S: RecompositionContext).
         rewrite Hupd3 obindE; cbn beta.
         by eexists. }
       Local Opaque alloc_fun.
-      (* s3 fires the same alloc syscall (shared entry pc), reaching s3' *)
       have Hpc0 : pc0 = word_of_nat alloc_label.
       { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=.
         by case: ifP => [/eqP|]. }
@@ -4318,9 +3954,6 @@ Module StepStrong2 (S: RecompositionContext).
   Proof.
     import_context.
     intros s1 s1' step_s1 s2 s3 M strong weak common. simpl in step_s1.
-    (* [sem'] steps via [step1] directly (no UB restriction): [step_s1] IS the [step_1] the
-       Left proof recovered from the [step_UB_disallowed] branch, and there is no UB
-       ([step_UB_allowed]) case to discharge on the Right. *)
     pose proof step_s1 as step_1.
     inversion step_1; unfold step1.
       all: [> eapply (step_silent_strong2_nop step_s1); eassumption

@@ -578,12 +578,6 @@ Definition prepare_procedures_initial_memory_aux (p: program) :=
        reserve_component_blocks p C Cmem (elementsm Cprocs))
     (domm (prog_interface p)).
 
-(* REMOVED 2026-08-02 (audit): [prepare_procedures_initial_memory_aux_equiv],
-   an [Admitted] conjecture that the new and old [..._aux] agree.  It had NO
-   users anywhere in the tree and, being [Admitted], read as an established
-   fact to anyone grepping.  The old version [..._aux'] is kept above for
-   reference only. *)
-
 (* Decompose the results of the auxiliary call, composed as a whole in the
    result of reserving component blocks, turning a map of triples into a triple
    of identically indexed maps *)
@@ -591,11 +585,6 @@ Definition prepare_procedures_initial_memory (p: program)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
   let m := prepare_procedures_initial_memory_aux p in
   (mapm (fun x => x.1.1) m, mapm (fun x => x.1.2) m, mapm snd m).
-
-(* REMOVED 2026-08-02 (audit): [prepare_procedures_initial_memory_equiv], an
-   [Admitted] conjecture relating [prepare_procedures_initial_memory] to
-   [prepare_procedures (prepare_initial_memory _)].  No users anywhere; same
-   reason as above.  If it is ever wanted, it may need well-formedness of [p]. *)
 
 (* initialization of a linked program *)
 

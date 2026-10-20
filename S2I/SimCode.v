@@ -1,11 +1,3 @@
-(* Code-layout layer for the S2I forward simulation (FCC).
-
-   [code_at G pc c] anchors a code fragment at a program point: the procedure
-   block that [pc] points into consists of a prefix (of length = the pc
-   offset), then [c], then a suffix. The per-instruction step lemmas and the
-   straight-line executors below let the simulation's diagram cases walk the
-   compiled fragments without re-deriving [executing] obligations by hand. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -29,8 +21,6 @@ Import Intermediate.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ==================== register-file facts ==================== *)
-
 Lemma register_to_nat_inj r1 r2 :
   Register.to_nat r1 = Register.to_nat r2 -> r1 = r2.
 Proof. by case: r1; case: r2. Qed.
@@ -47,8 +37,6 @@ Proof.
   case E: (Register.to_nat r == Register.to_nat r') => //.
   move/eqP: E => /register_to_nat_inj E. by case: Hne.
 Qed.
-
-(* ==================== code_at ==================== *)
 
 Definition code_at (G : global_env) (pc : Pointer.t) (c : code) : Prop :=
   exists C_procs P_code pre post,
@@ -91,8 +79,6 @@ Proof.
   exists C_procs, P_code, pre, (c2 ++ post).
   split=> //. by rewrite Hcode -catA.
 Qed.
-
-(* ==================== per-instruction step lemmas ==================== *)
 
 Section StepLemmas.
 
@@ -201,9 +187,6 @@ Lemma executing_halt pc c :
   code_at G pc (IHalt :: c) -> executing G pc IHalt.
 Proof. exact: code_at_head. Qed.
 
-(* ==================== straight-line executors ==================== *)
-
-(* [push r]: *R_SP := r ; R_SP += 1.  Two silent steps. *)
 Lemma exec_push gps mem regs pc r c C fb sp mem' :
   code_at G pc (push r ++ c) ->
   Register.get R_SP regs = Ptr (C, fb, sp) ->
@@ -224,7 +207,6 @@ Proof.
     by rewrite HSP HONE /= in Hb.
 Qed.
 
-(* [pop r]: R_SP -= 1 ; r := *R_SP.  Two silent steps. *)
 Lemma exec_pop gps mem regs pc r c C fb sp v :
   code_at G pc (pop r ++ c) ->
   Register.get R_SP regs = Ptr (C, fb, sp) ->
@@ -249,7 +231,6 @@ Proof.
       | exact: Hload].
 Qed.
 
-(* [load_arg buf r]: r := IPtr buf ; r := *r.  Two silent steps. *)
 Lemma exec_load_arg gps mem regs pc buf r c v :
   code_at G pc (load_arg buf r ++ c) ->
   Pointer.component buf = Pointer.component pc ->
@@ -269,10 +250,6 @@ Proof.
       | exact: Hload].
 Qed.
 
-(* [reload_sp buf]: R_AUX2 := IPtr buf ; R_SP := *R_AUX2.  Two silent steps.
-   Same shape as [exec_load_arg] but with the address staged through [R_AUX2],
-   so the resulting register file sets BOTH [R_AUX2] (to the address) and
-   [R_SP] (to the loaded value) rather than overwriting one register twice. *)
 Lemma exec_reload_sp gps mem regs pc buf c v :
   code_at G pc (reload_sp buf ++ c) ->
   Pointer.component buf = Pointer.component pc ->
@@ -292,7 +269,6 @@ Proof.
       | exact: Hload].
 Qed.
 
-(* [store_arg buf r rtemp]: rtemp := IPtr buf ; *rtemp := r.  Two silent steps. *)
 Lemma exec_store_arg gps mem regs pc buf r rtemp c mem' :
   code_at G pc (store_arg buf r rtemp ++ c) ->
   Pointer.component buf = Pointer.component pc ->
@@ -315,10 +291,6 @@ Qed.
 
 End StepLemmas.
 
-(* ==================== initial memories ==================== *)
-
-(* [reserve_blocks] (the code-block reservation pass over a component memory)
-   changes neither loads nor domm, and preserves the cursor invariant. *)
 Lemma reserve_blocks_load {m n m' bs} :
   ComponentMemoryExtra.reserve_blocks m n = (m', bs) ->
   forall b i, ComponentMemory.load m' b i = ComponentMemory.load m b i.
@@ -355,8 +327,6 @@ Proof.
   exact: (IH _ _ E).
 Qed.
 
-(* The compiled program's static buffers are exactly [gen_buffers] of the
-   source ones ([wrap_main] does not touch buffers). *)
 Lemma compilation_preserves_buffers {p tp} :
   compile_program p = Some tp ->
   Intermediate.prog_buffers tp = gen_buffers (Source.prog_buffers p).
@@ -368,8 +338,6 @@ Proof.
   by move=> [<-].
 Qed.
 
-(* Well-formed buffer values relate to THEMSELVES under the initial renaming
-   (they are integers, Undef, or pointers to a static block). *)
 Lemma static_value_inject (C0 : Component.id) v :
   Source.well_formed_buffer_value C0 v ->
   val_inject init_renaming v v.
@@ -381,7 +349,6 @@ Proof.
   - by constructor.
 Qed.
 
-(* helper: chunk membership through forallb *)
 Lemma nth_error_forallb {A : Type} (f : A -> bool) (l : list A) k v :
   List.nth_error l k = Some v -> List.forallb f l -> f v.
 Proof.
@@ -390,8 +357,6 @@ Proof.
   exact: (proj1 (List.forallb_forall f l) Hall _ HIn).
 Qed.
 
-(* The compiled program's initial memory, per component: the reserved-blocks
-   pass over the preallocated static buffers. *)
 Lemma prepare_procedures_memory_getm tp C :
   getm (Intermediate.prepare_procedures_memory tp) C =
   if C \in domm (Intermediate.prog_interface tp) then
@@ -411,8 +376,6 @@ Proof.
   by case E: (ComponentMemoryExtra.reserve_blocks _ _) => [m' bs] /=.
 Qed.
 
-(* THE initial-memory relation: the source buffers inject (via the initial,
-   static-blocks-only renaming) into the compiled program's initial memory. *)
 Lemma initial_mem_inject p tp :
   Source.well_formed_program p ->
   compile_program p = Some tp ->
@@ -431,7 +394,6 @@ Proof.
             /Intermediate.prepare_procedures_initial_memory_aux.
     rewrite domm_map domm_mkfmapf Hintf.
     exact: (Source.wfprog_defined_buffers Hwf). }
-  (* the two per-component source/target cells *)
   have Hgets : forall C, getm (Source.prepare_buffers p) C
       = omap (fun ib => ComponentMemory.prealloc (mkfmap [:: (0, ib)]))
              (getm (Source.prog_buffers p) C).
@@ -439,22 +401,22 @@ Proof.
   split.
   - exact: init_renaming_ok.
   - by rewrite Hdomms Hdommt.
-  - (* wf_s *)
+  -
     move=> C cm. rewrite Hgets.
     case: (getm (Source.prog_buffers p) C) => [ib|] //= [<-].
     exact: ComponentMemory.wf_prealloc.
-  - (* wf_t *)
+  -
     move=> C cm. rewrite prepare_procedures_memory_getm.
     case: (C \in domm (Intermediate.prog_interface tp)) => //= [[<-]].
     case E: (ComponentMemoryExtra.reserve_blocks _ _) => [m' bs] /=.
     apply: reserve_blocks_wf E _.
     exact: ComponentMemory.wf_prealloc.
-  - (* local_s *)
+  -
     move=> C cm. rewrite Hgets.
     case: (getm (Source.prog_buffers p) C) => [ib|] //= [<-].
     rewrite (ComponentMemory.domm_prealloc _ _ erefl).
     apply/dommP. exists ib. by rewrite /= setmE.
-  - (* local_t *)
+  -
     move=> C cm. rewrite prepare_procedures_memory_getm.
     case HC: (C \in domm (Intermediate.prog_interface tp)) => //=.
     move=> [<-].
@@ -466,13 +428,13 @@ Proof.
     rewrite (reserve_blocks_domm E)
             (ComponentMemory.domm_prealloc _ _ erefl).
     apply/dommP. exists ib. by rewrite /= setmE.
-  - (* dom: init_renaming has no non-local pairs *)
+  -
     move=> C b b'. rewrite /init_renaming.
     by case: (b =P Block.local) => [->|] //= _ [_].
-  - (* rng *)
+  -
     move=> C b b'. rewrite /init_renaming.
     by case: (b =P Block.local) => [_|] //= _ [_].
-  - (* loads *)
+  -
     move=> C b b' i. rewrite /init_renaming.
     case: (b =P Block.local) => [E|]; last by [].
     subst b. move=> [<-].
@@ -487,20 +449,16 @@ Proof.
     rewrite !ComponentMemory.load_prealloc.
     case: (0 <=? i)%Z => //=.
     rewrite Hbuf /gen_buffers mapmE Ebc /=.
-    (* both sides read the SAME [ib] at block 0 *)
     case: ib Ebc => [sz|chunk] Ebc /=.
-    + (* inl: Undef cells *)
+    +
       case: (i <? Z.of_nat sz)%Z => //=. by constructor.
-    + (* inr: literal chunk, values are static by wf *)
+    +
       case Ev: (List.nth_error chunk (Z.to_nat i)) => [v|] //=.
       apply: static_value_inject.
       exact: (nth_error_forallb _ _ _ _ Ev
                 (Source.wfprog_buffer_values Hwf Ebc)).
 Qed.
 
-(* ==================== label positions ==================== *)
-
-(* the labels DEFINED in a code fragment, in order *)
 Fixpoint labels_of (c : code) : seq label :=
   match c with
   | [::] => [::]
@@ -512,7 +470,6 @@ Lemma labels_of_cat c1 c2 :
   labels_of (c1 ++ c2) = labels_of c1 ++ labels_of c2.
 Proof. by elim: c1 => [|i c1 IH] //=; case: i => *; rewrite //= IH. Qed.
 
-(* an accumulator-explicit clone of GlobalEnv.find_label's local fixpoint *)
 Fixpoint find_label_aux (c : code) (l : label) (o : Z) : option Z :=
   match c with
   | [::] => None
@@ -529,7 +486,6 @@ Proof.
     rewrite -?IH; case: c {IH}.
 Qed.
 
-(* controlled one-step equations (no simpl: it mauls the Z arithmetic) *)
 Lemma find_label_aux_label c l l' o :
   find_label_aux (ILabel l' :: c) l o
   = if Nat.eqb l l' then Some o else find_label_aux c l (1 + o)%Z.
@@ -555,7 +511,6 @@ Proof.
       try by (move=> Hno;
               rewrite find_label_aux_skip // IH //;
               f_equal; rewrite [size (_ :: _)]/=; lia).
-    (* ILabel l' *)
     rewrite (labels_of_label l' pre) in_cons negb_or => /andP [Hne Hno'].
     rewrite find_label_aux_label.
     have -> : Nat.eqb l l' = false.
@@ -572,8 +527,6 @@ Proof.
   rewrite PeanoNat.Nat.eqb_refl. f_equal. lia.
 Qed.
 
-(* Resolution inside a fixed procedure block: the pc's block contains
-   [ILabel l] at position [size pre], and no earlier occurrence. *)
 Lemma find_label_in_procedure_at G pc l C_procs P_code pre post :
   getm (genv_procedures G) (Pointer.component pc) = Some C_procs ->
   getm C_procs (Pointer.block pc) = Some P_code ->
@@ -587,16 +540,11 @@ Proof.
   by rewrite (find_label_position _ _ _ Hnotin).
 Qed.
 
-(* ==================== compiled-code anchors ==================== *)
-
 Lemma iota_rcons a n : iota a n ++ [:: a + n] = iota a n.+1.
 Proof.
   by elim: n a => [|n IH] a /=; [rewrite addn0|rewrite -addSnnS IH].
 Qed.
 
-(* [reserve_blocks] returns the CONSECUTIVE cursor values — in particular the
-   reserved block ids are pairwise distinct, so the zip-built block-keyed code
-   map of [reserve_component_blocks] loses nothing. *)
 Lemma reserve_blocks_ids {m n m' bs} :
   ComponentMemoryExtra.reserve_blocks m n = (m', bs) ->
   ComponentMemory.next_block m' = ComponentMemory.next_block m + n
@@ -614,7 +562,6 @@ Proof.
     + by rewrite IH2 Eb1 IH1 iota_rcons.
 Qed.
 
-(* positional association-list lookups *)
 Lemma In_assoc_nth {K : eqType} {V : Type} (l : seq (K * V)) (P : K) (cd : V)
       (k0 : K) (v0 : V) :
   List.In (P, cd) l ->
@@ -671,7 +618,6 @@ Proof.
   - move=> Hi. right. exact: IH.
 Qed.
 
-(* converse zip-map lookup: any block of the zip-built code map is positional *)
 Lemma getm_zip_inv {V : Type} (bs : seq Block.id) (vs : seq V) b cd :
   size bs = size vs ->
   getm (mkfmap (zip bs vs)) b = Some cd ->
@@ -685,7 +631,6 @@ Proof.
   by exists i.
 Qed.
 
-(* per-component views of the compiled global environment *)
 Lemma genv_procedures_getm tp C :
   getm (genv_procedures (prepare_global_env tp)) C =
   if C \in domm (Intermediate.prog_interface tp) then
@@ -716,9 +661,6 @@ Proof.
   by case: (C \in domm (Intermediate.prog_interface tp)).
 Qed.
 
-(* THE anchor: every procedure of the compiled program lives, verbatim, in a
-   block of the global environment; if it is exported (or is main's main), the
-   entry-point table maps it to exactly that block. *)
 Lemma compiled_code_anchor tp C Cprocs P cd :
   C \in domm (Intermediate.prog_interface tp) ->
   getm (Intermediate.prog_procedures tp) C = Some Cprocs ->
@@ -768,7 +710,7 @@ Proof.
     + rewrite /unzip1 size_map. exact: Hi.
     + exact: Hibs.
     + rewrite Hnth1. exact: Hguard.
-  - (* any other block belongs to a DIFFERENT procedure *)
+  -
     move=> b' cd' Hb' Hne.
     have Hsz2 : size bs = size (unzip2 (elementsm Cprocs)).
     { rewrite /unzip2 size_map. move: Hlen.
@@ -792,10 +734,6 @@ Proof.
     + exact: In_elementsm_getm HInP0.
 Qed.
 
-(* ==================== per-procedure fold extraction ==================== *)
-
-(* mirror of Compiler.v's [compile_components_aux_untouched]/[_getC], one level
-   down: extract a single procedure's compilation run from the fold *)
 Lemma compile_procedures_aux_untouchedP C lbp scr plm
       (ps : list (Procedure.id * expr)) acc s out s' P :
   compile_procedures_aux C lbp scr plm acc ps s = Some (out, s') ->
@@ -831,12 +769,6 @@ Proof.
   - exact: IH Hrest Huniq HIn.
 Qed.
 
-(* ==================== source procedures ↦ compiled code ==================== *)
-
-(* Every source procedure's compiled code sits in [prog_procedures tp] at the
-   same (component, procedure) key, and is the output of a [compile_proc] run
-   (existentially quantified over the label-counter states).  [wrap_main] only
-   ADDS a fresh procedure to the main component, so source keys are unharmed. *)
 Lemma compile_prog_procedures_spec {p tp} :
   Source.well_formed_program p ->
   compile_program p = Some tp ->
@@ -859,7 +791,6 @@ Proof.
   have Huniq : uniq (unzip1 (elementsm (Source.prog_procedures p))).
   { exact: (sorted_uniq (@Ord.lt_trans _) (@Ord.ltxx _)
               (valP (Source.prog_procedures p))). }
-  (* the branch-independent core *)
   have Hcore : forall C Cprocs P e,
       getm (Source.prog_procedures p) C = Some Cprocs ->
       getm Cprocs P = Some e ->
@@ -883,7 +814,6 @@ Proof.
     split=> //.
     by rewrite mkfmapE.
   }
-  (* wrap_main REMOVED: prog_procedures tp = mkfmap code *)
   rewrite /Comp.ret /=.
   move=> [<-] /=. exists labels, cenv1. split; first by [].
   move=> C Cprocs P e HgetC HgetP.
@@ -893,9 +823,6 @@ Proof.
   by rewrite mkfmapE Hcode.
 Qed.
 
-(* ==================== label ranges and uniqueness ==================== *)
-
-(* the per-component fresh-label counter *)
 Definition cnt (s : comp_env) (C : Component.id) : nat :=
   odflt 0 (getm (next_label s) C).
 
@@ -907,7 +834,6 @@ Proof.
   by rewrite /cnt /= setmE eqxx /=.
 Qed.
 
-(* range/uniqueness algebra *)
 Definition in_window (a b : nat) (l : label) : bool := (a <= l) && (l < b).
 
 Lemma in_window_widen a a' b b' l :
@@ -958,7 +884,6 @@ Proof.
   move=> A H. apply: all_window_notin A _. rewrite /in_window. lia.
 Qed.
 
-(* the label multiset of a compiled E_if fragment, in emission order *)
 Lemma uniq_if_labels a0 a1 a2 a3 (l1 l3 l2 : seq label) lc le :
   a0 <= a1 -> a1 <= a2 -> a2 <= a3 ->
   all (in_window a0 a1) l1 ->
@@ -1015,8 +940,6 @@ Proof.
         -- rewrite in_cons orbF => /eqP ->. rewrite /in_window. lia.
 Qed.
 
-(* THE range spec: a compiled expression's labels lie inside the counter
-   window of its own compilation run, and are pairwise distinct. *)
 Lemma compile_expr_labels C lbp scr plm e s c s' :
   compile_expr C lbp scr plm e s = Some (c, s') ->
   [/\ cnt s C <= cnt s' C,
@@ -1025,16 +948,16 @@ Lemma compile_expr_labels C lbp scr plm e s c s' :
 Proof.
   elim: e s c s' => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
                     |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-  - (* E_val *)
+  -
     case: v Hc => [i|p|] Hc.
     + move: Hc => /= [<- <-]. by split=> //; exact: leqnn.
     + by move: Hc.
     + by move: Hc.
-  - (* E_arg *)
+  -
     move: Hc => /= [<- <-]. by split=> //; exact: leqnn.
-  - (* E_local *)
+  -
     move: Hc => /= [<- <-]. by split=> //; exact: leqnn.
-  - (* E_binop *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr C lbp scr plm e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
@@ -1049,7 +972,7 @@ Proof.
       * by apply: all_window_widen A1; lia.
       * by apply: all_window_widen A2; lia.
     + exact: all_window_uniq_cat A1 A2 U1 U2.
-  - (* E_seq *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr C lbp scr plm e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
@@ -1064,7 +987,7 @@ Proof.
       * by apply: all_window_widen A1; lia.
       * by apply: all_window_widen A2; lia.
     + exact: all_window_uniq_cat A1 A2 U1 U2.
-  - (* E_if *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr C lbp scr plm e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
@@ -1091,21 +1014,21 @@ Proof.
         => //; lia.
     + apply: (uniq_if_labels (cnt s C) (cnt s1 C) (cnt s2 C) (cnt s3 C))
         => //; lia.
-  - (* E_alloc *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr C lbp scr plm e s) => [[c0 s1]|]; last by [].
     rewrite /=. move=> [<- <-].
     have [M1 A1 U1] := IH _ _ _ E1.
     rewrite labels_of_cat /= ?cats0.
     by split.
-  - (* E_deref *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr C lbp scr plm e s) => [[c0 s1]|]; last by [].
     rewrite /=. move=> [<- <-].
     have [M1 A1 U1] := IH _ _ _ E1.
     rewrite labels_of_cat /= ?cats0.
     by split.
-  - (* E_assign *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr C lbp scr plm e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
@@ -1122,7 +1045,7 @@ Proof.
     + apply: uniq_cat_notin U2 U1 _ => x Hx.
       have /andP [Hxa Hxb] := allP A2 _ Hx.
       apply: notin_all_window A1 _. lia.
-  - (* E_call *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret /find_proc_label /Comp.lift.
     case E1: (compile_expr C lbp scr plm e s) => [[c1 s1]|]; last by [].
     rewrite /=.
@@ -1135,13 +1058,10 @@ Proof.
     + move=> [<- <-].
       rewrite /push /pop /store_arg /load_arg ?labels_of_cat /= ?labels_of_cat /= ?cats0.
       by split.
-  - (* E_exit *)
+  -
     move: Hc => /= [<- <-]. by split=> //; exact: leqnn.
 Qed.
 
-(* Procedure level: the compiled body's labels are the (earlier-generated)
-   entry label plus fresh ones from this run's counter window. *)
-(* main's conditional halt pad carries no labels *)
 Lemma labels_of_halt_pad b c :
   labels_of ((if b then [:: IHalt] else [::]) ++ c) = labels_of c.
 Proof. by case: b. Qed.
@@ -1164,7 +1084,7 @@ Proof.
   rewrite {1}/cnt /= !setmE !eqxx /= -/(cnt s C) in AE.
   rewrite !setmE !eqxx /= -/(cnt s C).
   case: (Component.eqb C Component.main && Procedure.eqb P Procedure.main).
-  - (* main's dual-context entry: labels lmain :: lreturn :: pl :: body *)
+  -
     rewrite labels_of_halt_pad /push /pop /load_arg /store_arg
             ?labels_of_cat /= ?labels_of_cat /= ?labels_of_cat /= ?cats0.
     split.
@@ -1192,7 +1112,7 @@ Proof.
       apply/andP. split.
       { apply: notin_all_window AE _. lia. }
       exact: UE.
-  - (* standard entry: labels pl :: body *)
+  -
     rewrite /push /pop /load_arg /store_arg
             ?labels_of_cat /= ?labels_of_cat /= ?labels_of_cat /= ?cats0.
     split.
@@ -1207,7 +1127,6 @@ Proof.
       * exact: UE.
 Qed.
 
-(* absent labels are not found *)
 Lemma find_label_aux_notin c l o :
   l \notin labels_of c ->
   find_label_aux c l o = None.
@@ -1215,7 +1134,6 @@ Proof.
   elim: c o => [|i c IH] o //=.
   case: i => [|l'|v r|r1 r2|op r1 r2 r3|r1 r2|r1 r2|r1 r2|r l0| |l0|C0 P0| |];
     try by (move=> Hno; rewrite IH).
-  (* ILabel l' *)
   rewrite in_cons negb_or => /andP [Hne Hno].
   have -> : Nat.eqb l l' = false.
   { apply/PeanoNat.Nat.eqb_neq => E. by rewrite E eqxx in Hne. }
@@ -1227,8 +1145,6 @@ Lemma find_label_notin c l :
   find_label c l = None.
 Proof. move=> H. by rewrite find_labelE find_label_aux_notin. Qed.
 
-(* Component-level label resolution: [pl] is defined at a KNOWN position of a
-   KNOWN block and in no other block of the component. *)
 Lemma find_label_in_component_at G pc pl C_procs bP cdP pre post :
   getm (genv_procedures G) (Pointer.component pc) = Some C_procs ->
   getm C_procs bP = Some cdP ->
@@ -1246,14 +1162,14 @@ Proof.
   { move=> b cd HIn. exact: In_elementsm_getm. }
   elim: (elementsm C_procs) HBin => [|[b0 cd0] rest IH] //= HBin Hget.
   case: HBin => [E|HIn].
-  - (* head is OUR block *)
+  -
     case: E => E1 E2. subst b0 cd0.
     rewrite /find_label_in_procedure /= HC HB Hcode.
     by rewrite (find_label_position _ _ _ Hpre).
-  - (* head is another block: no [pl] there *)
+  -
     have Hget0 : getm C_procs b0 = Some cd0 by apply: Hget; left.
     case Eb: (b0 == bP).
-    + (* same block id: contents coincide, still fine *)
+    +
       move/eqP: Eb => Eb. subst b0.
       have E0 : cd0 = cdP by move: Hget0; rewrite HB; case.
       subst cd0.
@@ -1267,9 +1183,6 @@ Proof.
       move=> b cd HIn'. apply: Hget. by right.
 Qed.
 
-(* ==================== entry-label values (phase 1) ==================== *)
-
-(* entry labels are INJECTIVE per component (distinct counter values) *)
 Lemma gen_component_labels_inj comp ps acc s m s' :
   gen_component_procedures_labels_aux comp acc ps s = Some (m, s') ->
   (forall P pl, getm acc P = Some pl -> pl < cnt s comp) ->
@@ -1329,8 +1242,6 @@ Proof.
     have := IH _ _ Hrest. lia.
 Qed.
 
-(* windowed variant of the per-procedure extraction: the run sits inside the
-   fold's counter interval *)
 Lemma compile_procedures_aux_getP_window C lbp scr plm
       (ps : list (Procedure.id * expr)) acc s out s' P e :
   compile_procedures_aux C lbp scr plm acc ps s = Some (out, s') ->
@@ -1357,9 +1268,6 @@ Proof.
     split=> //. lia.
 Qed.
 
-(* The compiled procedure's shape: an external entry (label-free unless main,
-   whose two labels are fresh, hence above any earlier-phase entry label),
-   then the internal entry label, then the rest. *)
 Lemma compile_proc_layout C lbp scr plm P e s cd s' pl :
   compile_proc C lbp scr plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -1374,7 +1282,7 @@ Proof.
   rewrite /=. move=> [<- _] [Epl]. subst pl0.
   rewrite !setmE !eqxx /= -/(cnt s C).
   case: (Component.eqb C Component.main && Procedure.eqb P Procedure.main).
-  - (* main: ext contains ILabel (cnt s C) and ILabel (1 + cnt s C) *)
+  -
     do 2 eexists.
     split.
     + rewrite catA. reflexivity.
@@ -1382,7 +1290,7 @@ Proof.
       apply/andP. split.
       * rewrite -[_ == _]negbK. apply/negPn/negP. move/eqP => E. lia.
       * rewrite -[_ == _]negbK. apply/negPn/negP. move/eqP => E. lia.
-  - (* standard: ext is label-free *)
+  -
     do 2 eexists.
     split.
     + reflexivity.
@@ -1391,9 +1299,6 @@ Qed.
 
 
 
-(* reverse enumeration of the procedure-compilation fold: everything in the
-   output (beyond the accumulator) is the compilation of a listed procedure,
-   run inside the fold's counter interval *)
 Lemma compile_procedures_aux_inv C lbp scr plm
       (ps : list (Procedure.id * expr)) acc s out s' P0 cd0 :
   compile_procedures_aux C lbp scr plm acc ps s = Some (out, s') ->
@@ -1423,8 +1328,6 @@ Proof.
       split=> //; first by right.
       lia.
 Qed.
-
-(* ============ the per-component label package for compiled programs ============ *)
 
 Theorem compiled_component_labels {p tp} :
   Source.well_formed_program p ->
@@ -1464,7 +1367,6 @@ Proof.
   have Eml0 : ml0 = labels /\ sl0 = cenv1.
   { move: El0. rewrite E1. by case. }
   case: Eml0 => ? ?. subst ml0 sl0.
-  (* branch-independent core *)
   have Hcore : forall C Cprocs,
       getm (Source.prog_procedures p) C = Some Cprocs ->
       exists plm lo cds,
@@ -1486,7 +1388,6 @@ Proof.
     have HIn := getm_In_elementsm HgetC.
     have HuniqP : uniq (unzip1 (elementsm Cprocs)).
     { exact: (sorted_uniq (@Ord.lt_trans _) (@Ord.ltxx _) (valP Cprocs)). }
-    (* phase 1: this component's label-generation run *)
     move: E1. rewrite /gen_all_procedures_labels => E1.
     have [sC [plm [sC' [Hth1 Hgen [Hml Hth2]]]]]
       := gen_all_labels_aux_getC _ _ _ _ _ _ _ E1 Huniq HIn.
@@ -1499,22 +1400,19 @@ Proof.
         getm (emptym : NMap label) P' = Some pl -> P = P'.
     { by move=> P P' pl; rewrite emptymE. }
     have [Hbnd Hinj] := gen_component_labels_inj _ _ _ _ _ _ Hgen Hbnd0 Hinj0.
-    (* phase 2: this component's compilation run *)
     move: E2. rewrite /compile_components => E2.
     have [plm2 [sC2 [cds [sC2' [Hpls Hth3 [Hcp Hout]]]]]]
       := compile_components_aux_getC _ _ _ _ _ _ _ _ _ E2 Huniq HIn.
     have Eplm : plm2 = plm. { move: Hpls. rewrite Hml. by case. }
     subst plm2.
-    (* the shared bound: the phase-1 end counter = the phase-2 start counter *)
     have Hlo2 : cnt sC2 C = cnt sC' C.
     { by rewrite /cnt Hth3 Hth2. }
-    (* the entry-label totality for this component *)
     have [plm' [Hml' Hdomlbl]] := HlIn0 _ _ HIn.
     have Eplm' : plm' = plm. { move: Hml'. rewrite Hml. by case. }
     subst plm'.
     exists plm, (cnt sC' C), cds.
     split=> //.
-    - (* forward *)
+    -
       move=> P e HgetP.
       have HInP := getm_In_elementsm HgetP.
       move: Hcp. rewrite /compile_procedures => Hcp'.
@@ -1522,7 +1420,7 @@ Proof.
         := compile_procedures_aux_getP_window _ _ _ _ _ _ _ _ _ _ _
              Hcp' HuniqP HInP.
       exists cd. by rewrite mkfmapE.
-    - (* reverse *)
+    -
       move=> P0 cd0. rewrite mkfmapE => Hcd0.
       move: Hcp. rewrite /compile_procedures => Hcp'.
       case: (compile_procedures_aux_inv _ _ _ _ _ _ _ _ _ _ _ Hcp' Hcd0)
@@ -1535,7 +1433,6 @@ Proof.
       exists e0, s1, s2, pl0.
       split=> //. by rewrite -Hlo2.
   }
-  (* wrap_main REMOVED: prog_procedures tp = mkfmap code *)
   rewrite /Comp.ret /=.
   move=> [<-] /=. exists labels, cenv1. split; first by [].
   move=> C Cprocs HgetC.
@@ -1546,11 +1443,6 @@ Proof.
   + move=> P0 cd0 Hcd0. right. exact: Hrev Hcd0.
 Qed.
 
-(* ============ THE label-resolution theorem for compiled programs ============ *)
-
-(* From any program point of component C, an IJal to a source procedure's
-   entry label resolves to that procedure's block, at the internal-entry
-   offset — the compiled program's labels collide nowhere. *)
 Theorem compiled_jal_resolution {p tp} :
   Source.well_formed_program p ->
   compile_program p = Some tp ->
@@ -1582,7 +1474,6 @@ Proof.
   have E : plm' = plm. { move: Hml'. rewrite Hml. by case. }
   subst plm'.
   have [cd Hcd] := Hfwd _ _ HgetP.
-  (* the target's own run and layout *)
   case: (Hrev _ _ Hcd) => [[Hnone _]|[e0 [s1 [s2 [pl0 [Hget0 Hpl0 Hrun Hw]]]]]].
   { by rewrite HgetP in Hnone. }
   have Ee : e0 = e. { move: Hget0. rewrite HgetP. by case. }
@@ -1593,7 +1484,6 @@ Proof.
   have [ext [rest [Ecd Hnotin]]]
     := compile_proc_layout _ _ _ _ _ _ _ _ _ _ Hrun Hpl.
   have Hnotin' := Hnotin Hpls1.
-  (* the anchored block and its neighbours *)
   have [bP [CprocsB [HgenvC HgetB Hentry Hothers]]]
     := compiled_code_anchor tp C Cprocs' P cd HCdom HCp Hcd.
   exists bP, cd, ext, rest, CprocsB.

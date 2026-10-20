@@ -18,8 +18,6 @@ Proof.
   destruct mx as [x|]; [destruct (my x) as [y|]|]; reflexivity.
 Qed.
 
-(* This notation breaks parsing of the "do" tactical, so it should be
-packaged in a module. *)
 Module DoNotation.
 
 Import ssrfun.
@@ -78,19 +76,7 @@ Definition memory_address_correctness c (s: state) :=
     mem s w = Some v ->
     address_correctness c (fst v) (snd v) (mem s).
 
-    (* (* necessary invariants for the JMP and JAL cases *) *)
-    (* Definition address_correctness i w t (mem: memory) := *)
-    (*   match t with *)
-    (*   | Ret _ | InternalJump => exists (v: atom (mword mt) _), *)
-    (*               mem w = Some v /\ (is_relevant_comp i (color (taga v)) -> is_code (taga v)) *)
-    (*   | Other | Invalidated => True *)
-    (*   end. *)
 
-    (* Definition memory_address_correctness (i: side) (s: state) := *)
-    (*   forall v w, *)
-    (*     is_relevant_comp i (color (taga v)) -> *)
-    (*      mem s w = Some v -> *)
-    (*      address_correctness i (vala v) (vtag (taga v)) (mem s). *)
 Axiom cm: nat -> nat.
 Axiom pref_filt: nat -> bool.
 Axiom domm: memory -> seq nat.
@@ -127,7 +113,6 @@ Definition alloc_fun (st : state) : option state :=
   else
   let bloc := mkseq (fun n => (max_addr + n + 1, atom)) length in
   let mem' := unionm (mem st) (mem_of_seq bloc) in
-  (* return *)
   do! addr <- (do! x <- ohead bloc;
                  Some (fst x));
   do! regs' <- updm (regs st) syscall_ret (addr, Other);
@@ -188,8 +173,6 @@ Definition alloc_fun (st : state) : option state :=
                                                                     simpl in H; try (inversion H; done)
     | H : (match ?cond as _ return _ with _ => _ end) _ = _  |- _ => try(remember cond as a; destruct a);
                                                                   simpl in H; try (inversion H; done)
-    (* | H : _ = ((match ?cond as _ return _ with _ => _ end) == _)  |- _ => try(remember cond as a; destruct a); *)
-    (*                                                                    simpl in H; try (inversion H; done) *)
     end.
   Ltac unfold_all :=
     repeat (simpl in *;(simplify_some || unfold_bind || destruct_unit || unfold_match_misc)).
@@ -212,13 +195,12 @@ Definition alloc_fun (st : state) : option state :=
     unfold is_jump, is_other in *.
     repeat (unfold_all || unfold_match).
     destruct p as [v tmp]. destruct p0 as [v' tmp']. simpl in *. subst tmp tmp'.
-    (* rename n0 into n'. *)
     simpl. destruct d as [vd td]. destruct td.
     destruct snd; simpl; auto.
     all: simpl in *; auto.
     all: rewrite unionmE; rewrite unionmE in d_eq; simpl in *.
     all: remember (mem s w) as cond; simpl in *.
-    all: (* rewrite <- Heqcond in d_eq; *) destruct cond; simpl in *.
+    all:  destruct cond; simpl in *.
     all: try (pose proof (s_mem_cor p w ); simplify_some; simpl in *;
               pose proof (H rel (esym Heqcond)) as [d' [d'eq d'cond]];
               rewrite d'eq; simpl; eauto).

@@ -1,13 +1,3 @@
-(** * T2M disc_inv: the per-pc stack-discipline static.
-
-    A per-component oracle map (seq sv aligned with the code) is
-    checked by the LOCAL relation [vstep].  Each [sv] records the
-    frame phase, per-slot classes, a pending push/pop, the aux-
-    register taints and the scratch custody; label joins and
-    fallthroughs compare under the LATTICE [sv_le].  [vstep] is
-    parametrized by the scratch pointer scr (flag cell at scr+1);
-    components instantiate (C, 1, 0). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 
@@ -27,13 +17,10 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* registers have no eqType; compare via to_nat *)
 Definition is_r (r1 r2 : register) : bool :=
   Nat.eqb (Intermediate.Register.to_nat r1)
           (Intermediate.Register.to_nat r2).
 
-(* prologue split: PProlA = entry (R_SP still parent), PProlB =
-   parked (after Mov R_SP R_AUX1).  Phases compare EXACTLY under sv_le. *)
 Inductive sphase := PProlA | PProlB | PBody | PPost | PTear.
 
 Definition ph_eqb (p1 p2 : sphase) : bool :=
@@ -43,7 +30,6 @@ Definition ph_eqb (p1 p2 : sphase) : bool :=
   | _, _ => false
   end.
 
-(* frame-slot classes: RA capability / parked SP / user value / saved arg *)
 Inductive class3 := CRa | CSp | CU | CArg.
 
 Definition c3_eqb (k1 k2 : class3) : bool :=
@@ -57,9 +43,6 @@ Proof. by case; case; constructor. Qed.
 
 HB.instance Definition _ := hasDecEq.Build class3 c3_eqbP.
 
-(* taint states for the aux registers: ASp = parked stack pointer;
-   AScr/AFlag = the literal scratch/flag address; AU = user value
-   (no frame block, not block 1); ADead = no claim, every read rejected *)
 Inductive taint := ASp | AScr | AFlag | AU | ADead.
 
 Definition t_eqb (t1 t2 : taint) : bool :=
@@ -73,9 +56,6 @@ Proof. by case; case; constructor. Qed.
 
 HB.instance Definition _ := hasDecEq.Build taint t_eqbP.
 
-(* scratch-cell custody: SCnone = untouched since entry, SCpark =
-   just parked own SP (call imminent), SCrest = restored inherited
-   value (teardown), SCused = no claim (top) *)
 Inductive scst := SCnone | SCpark | SCrest | SCused.
 
 Definition sc_eqb (x y : scst) : bool :=
@@ -92,18 +72,16 @@ HB.instance Definition _ := hasDecEq.Build scst sc_eqbP.
 
 Record sv := SV {
   sv_ph   : sphase;
-  sv_sig  : seq class3;        (* per-slot classes, bottom first *)
-  sv_pend : option class3;     (* mid push/pop macro *)
+  sv_sig  : seq class3;
+  sv_pend : option class3;
   sv_a1   : taint;
   sv_a2   : taint;
   sv_sc   : scst;
-  sv_one  : bool;              (* R_ONE known to hold Int 1 *)
+  sv_one  : bool;
   sv_ek   : bool;
   sv_arg  : bool
 }.
 
-(* the checker's comparisons are PLAIN FIXPOINTS (no eq_op) so
-   frag/comp_ok reduce briskly under simpl/cbv, no HB unfoldings *)
 Fixpoint cseq_eqb (s1 s2 : seq class3) : bool :=
   match s1, s2 with
   | [::], [::] => true
@@ -129,15 +107,10 @@ Definition sv_eqb (v w : sv) : bool :=
           t_eqb (sv_a2 v) (sv_a2 w)
         & sc_eqb (sv_sc v) (sv_sc w)]].
 
-(* the two entry values: [sv0] at the component HEADER (cross entry,
-   R_ONE killed), [sv0_one] at the inl procedure label (internal Jal,
-   R_ONE = Int 1 inherited) *)
 Definition sv0 : sv := SV PProlA [::] None ADead ADead SCnone false false false.
 Definition sv0_one : sv :=
   SV PProlA [::] None ADead ADead SCnone true true false.
 
-(* the taint/custody/one lattices: ADead / SCused / false are the
-   tops; joins compare with [sv_le] (inflow's claims must IMPLY the map's) *)
 Definition t_le (t1 t2 : taint) : bool := t_eqb t1 t2 || t_eqb t2 ADead.
 
 Definition sc_le (x y : scst) : bool := sc_eqb x y || sc_eqb y SCused.
@@ -264,7 +237,6 @@ by rewrite /sv_le /= ph_eqb_refl0 !o_le_refl Bool.eqb_reflx
    cseq_eqb_refl opt_eqb_refl H1 H2 H3.
 Qed.
 
-(* pointer literal comparison (components/blocks are nats) *)
 Definition ptr_eqb (p q : Pointer.t) : bool :=
   [&& Nat.eqb (Pointer.component p) (Pointer.component q),
       Nat.eqb (Pointer.block p) (Pointer.block q)
@@ -276,8 +248,6 @@ case: p => [[c b] o].
 by rewrite /ptr_eqb /= !PeanoNat.Nat.eqb_refl Z.eqb_refl.
 Qed.
 
-(* the taint carried by a register read; R_ONE reads as synced only
-   when the one-bit is live *)
 Definition rtaint (v : sv) (r : register) : taint :=
   if is_r r R_SP then ASp
   else if is_r r R_RA then ADead
@@ -287,7 +257,6 @@ Definition rtaint (v : sv) (r : register) : taint :=
   else if is_r r R_ARG then (if sv_arg v then AU else ADead)
   else AU.
 
-(* retaint a write target (only the aux registers carry taint) *)
 Definition wtaint (r : register) (t : taint) (v : sv) : sv :=
   if is_r r R_AUX1
   then SV (sv_ph v) (sv_sig v) (sv_pend v) t (sv_a2 v) (sv_sc v)
@@ -297,14 +266,12 @@ Definition wtaint (r : register) (t : taint) (v : sv) : sv :=
           (sv_one v) (sv_ek v) (sv_arg v)
   else v.
 
-(* R_ONE-knowledge updates: a write to R_ONE re-keys the bit *)
 Definition wone (r : register) (o : bool) (v : sv) : sv :=
   if is_r r R_ONE
   then SV (sv_ph v) (sv_sig v) (sv_pend v) (sv_a1 v) (sv_a2 v)
           (sv_sc v) o (sv_ek v) (sv_arg v)
   else v.
 
-(* R_ARG-knowledge updates: a synced write into R_ARG sets the bit *)
 Definition warg (b : bool) (v : sv) : sv :=
   SV (sv_ph v) (sv_sig v) (sv_pend v) (sv_a1 v) (sv_a2 v)
      (sv_sc v) (sv_one v) (sv_ek v) b.
@@ -312,24 +279,17 @@ Definition warg (b : bool) (v : sv) : sv :=
 Definition warg_w (r : register) (v : sv) : sv :=
   if is_r r R_ARG then warg true v else v.
 
-(* the bit a constant load establishes *)
 Definition cone (iv : imvalue) : bool :=
   match iv with IInt z => Z.eqb z 1 | IPtr _ => false end.
 
-(* a store consumes custody of an aux source *)
 Definition dead_src (r : register) (v : sv) : sv := wtaint r ADead v.
 
-(* at most one live RA slot: R_RA pushes only into CRa-free sigs *)
 Definition nocra (sg : seq class3) : bool :=
   ~~ has (fun k => c3_eqb k CRa) sg.
 
-(* at most one saved-ARG slot: dead-bit R_ARG pushes only into
-   CArg-free sigs *)
 Definition nocarg (sg : seq class3) : bool :=
   ~~ has (fun k => c3_eqb k CArg) sg.
 
-(* the body-baseline check: position 1 carries the prologue's CArg.
-   [simpl never] so the coherence proofs can rewrite it on abstract sigs *)
 Definition nth1carg (sg : seq class3) : bool :=
   opt_eqb (nth_error sg 1) (Some CArg).
 Arguments nth1carg : simpl never.
@@ -342,8 +302,6 @@ Lemma nth1cargI (sg : seq class3) :
   nth_error sg 1 = Some CArg -> nth1carg sg = true.
 Proof. rewrite /nth1carg => ->. exact: opt_eqb_refl. Qed.
 
-(* the class a pushed register carries: parked-SP slots come only
-   from R_AUX1 (never R_SP or a tainted R_AUX2) *)
 Definition pushclass (v : sv) (r : register) : option class3 :=
   if is_r r R_RA
   then (if nocra (sv_sig v)
@@ -363,13 +321,10 @@ Definition pushclass (v : sv) (r : register) : option class3 :=
        | _ => None
        end.
 
-(* Everything below is parametrized by the component's scratch-cell
-   address scr (flag cell at scr+1); components instantiate (C, 1, 0). *)
 Section WithScr.
 
 Variable scr : Pointer.t.
 
-(* the taint an immediate constant assigns *)
 Definition ctaint (iv : imvalue) : taint :=
   match iv with
   | IInt _ => AU
@@ -379,7 +334,6 @@ Definition ctaint (iv : imvalue) : taint :=
       else AU
   end.
 
-(* the generic (non-push/pop) binop transfer *)
 Definition vgeneric_binop (v : sv) (r1 r2 r3 : register) : option sv :=
   if is_r r3 R_SP || is_r r3 R_RA then None
   else match sv_pend v with
@@ -390,8 +344,6 @@ Definition vgeneric_binop (v : sv) (r1 r2 r3 : register) : option sv :=
            else None
        end.
 
-(* the fallthrough transfer; None = the instruction is rejected in
-   this state (the compiler never emits it there) *)
 Definition vstep (v : sv) (i : Transitional.instr) : option sv :=
   match i with
   | TrNop => Some v
@@ -615,16 +567,12 @@ Definition vstep (v : sv) (i : Transitional.instr) : option sv :=
   | TrHalt => Some v
   end.
 
-(* ================================================================== *)
-(* The per-component local check against an oracle map.               *)
-(* ================================================================== *)
 
 Section Check.
 
 Variable S : seq (Transitional.instr * mem_tag).
 Variable M : seq sv.
 
-(* position n holds the plain label l *)
 Definition lbl_at (n : nat) (l : label) : bool :=
   match nth_error S n with
   | Some (TrLabel (inl l'), _) => Nat.eqb l' l
@@ -634,7 +582,6 @@ Definition lbl_at (n : nat) (l : label) : bool :=
 Definition terminal (i : Transitional.instr) : bool :=
   match i with TrJump _ | TrHalt => true | _ => false end.
 
-(* some position of S carries label l with map value w satisfying p *)
 Definition lbl_ok (l : label) (p : sv -> bool) : bool :=
   has (fun m => lbl_at m l &&
                 match nth_error M m with
@@ -643,7 +590,6 @@ Definition lbl_ok (l : label) (p : sv -> bool) : bool :=
                 end)
       (iota 0 (size S)).
 
-(* the local condition at position n *)
 Definition vc_at (n : nat) : bool :=
   match nth_error S n, nth_error M n with
   | None, _ => true
@@ -666,24 +612,17 @@ Definition vc_at (n : nat) : bool :=
       end
   end.
 
-(* the whole component checks *)
 Definition comp_ok : bool :=
   (size M == size S) && all vc_at (iota 0 (size S)).
 
 End Check.
 
-(* ================================================================== *)
-(* Fragment-relative checking (for the compiler-coherence induction). *)
-(* ================================================================== *)
 
 Section Frag.
 Variable c : seq (Transitional.instr * mem_tag).
 Variable M : seq sv.
 Variable L : label -> option sv.
 
-(* Bnz targets resolve WITHIN the fragment or via a PROMISE;
-   TrJalNat targets are external and checked at component-assembly
-   time, so the fragment check SKIPS them. *)
 Definition frag_at (vout : sv) (n : nat) : bool :=
   match nth_error c n, nth_error M n with
   | None, _ => true
@@ -734,7 +673,6 @@ case/and5P => /cseq_eqb_eq -> /opt_eqb_eq -> /t_eqb_eq ->
 by [].
 Qed.
 
-(* sv_eqb is an equivalence-enough *)
 Lemma ph_eqb_refl (p : sphase) : ph_eqb p p.
 Proof. by case: p. Qed.
 
@@ -744,7 +682,6 @@ by rewrite /sv_eqb ph_eqb_refl !Bool.eqb_reflx cseq_eqb_refl
    opt_eqb_refl !t_eqb_refl sc_eqb_refl.
 Qed.
 
-(* nth_error over app, ssr-typed *)
 Lemma nth_error_cat1 (A : Type) (l1 l2 : seq A) (n : nat) :
   n < size l1 -> nth_error (l1 ++ l2) n = nth_error l1 n.
 Proof.
@@ -779,7 +716,6 @@ elim: n l => [|n IH] [|y l] //= Hn; first by exists y.
 exact: IH.
 Qed.
 
-(* lbl_ok transport into a concatenation *)
 Lemma lbl_at_cat1 (c1 c2 : seq (Transitional.instr * mem_tag))
     (m : nat) (l : label) :
   m < size c1 -> lbl_at (c1 ++ c2) m l = lbl_at c1 m l.
@@ -826,7 +762,6 @@ apply/hasP. exists (size c1 + m).
   exact: Hw.
 Qed.
 
-(* the composition lemma *)
 Lemma frag_cat (c1 c2 : seq (Transitional.instr * mem_tag))
     (M1 M2 : seq sv) (L : label -> option sv) (v0 v1 v2 : sv) :
   frag c1 M1 L v0 v1 -> frag c2 M2 L v1 v2 ->
@@ -918,7 +853,6 @@ Qed.
 Lemma frag_nil (L : label -> option sv) (v : sv) : frag [::] [::] L v v.
 Proof. by rewrite /frag /= sv_le_refl. Qed.
 
-(* weakening the exit value *)
 Lemma frag_wout (c : seq (Transitional.instr * mem_tag)) (M : seq sv)
     (L : label -> option sv) (vin vout vout' : sv) :
   sv_le vout vout' ->
@@ -953,7 +887,6 @@ case: (nth_error M m) Hw => [w|] // Hw.
 exact: Hpq.
 Qed.
 
-(* trade promises for actual in-fragment labels *)
 Lemma frag_promise (c : seq (Transitional.instr * mem_tag))
     (M : seq sv) (L L' : label -> option sv) (vin vout : sv) :
   (forall l w, L l = Some w ->
@@ -980,8 +913,6 @@ case: (HLL _ _ EL) => [->|Hint].
   by rewrite (lbl_ok_impl Himp Hint).
 Qed.
 
-(* ---- the push/pop macro fragments ---- *)
-
 Lemma frag_push (L : label -> option sv) (r : register)
     (tg1 tg2 : mem_tag) (sg : seq class3) (a1 a2 b1 b2 : taint)
     (sc : scst) (k : class3) (ag : bool) :
@@ -1002,9 +933,6 @@ rewrite /frag /= /frag_at /= Hk Hd /= Hb1 Hb2;
 by rewrite !sv_le_refl.
 Qed.
 
-(* the pop macro, one variant per emitted pop target:
-   user pops (R_COM/R_ARG/R_AUX1 at class CU), the RA restore,
-   the teardown SP restore, and the wrapper scratch restore *)
 Lemma frag_pop_u (L : label -> option sv) (r : register)
     (tg1 tg2 : mem_tag) (sg : seq class3) (a1 a2 : taint) (sc : scst)
     (ag : bool) (w : sv) :
@@ -1043,8 +971,6 @@ rewrite /frag /= /frag_at /= rev_rcons /= revK Ha1 Ha2;
 by rewrite !sv_le_refl.
 Qed.
 
-(* the canonical map for a fragment: thread vstep from the entry
-   (junk after a rejection — callers only use it where vstep runs) *)
 Fixpoint mkmap (v : sv) (c : seq (Transitional.instr * mem_tag))
   : seq sv :=
   match c with
@@ -1056,8 +982,6 @@ Fixpoint mkmap (v : sv) (c : seq (Transitional.instr * mem_tag))
            end
   end.
 
-(* the translated form of a compiled fragment (the component id only
-   picks tags, which the checker ignores) *)
 Definition trc (C : Component.id) (c : Machine.code)
   : seq (Transitional.instr * mem_tag) :=
   map (instr_to_transitional C) c.
@@ -1066,7 +990,6 @@ Lemma trc_cat (C : Component.id) (c1 c2 : Machine.code) :
   trc C (c1 ++ c2) = trc C c1 ++ trc C c2.
 Proof. exact: map_cat. Qed.
 
-(* a branch singleton, satisfied by a promise *)
 Lemma frag_bnz (L : label -> option sv) (r : register) (l : label)
     (tg : mem_tag) (sg : seq class3) (a1 a2 : taint) (sc : scst)
     (o ag : bool) :
@@ -1083,7 +1006,6 @@ rewrite /frag /= /frag_at /= !sv_le_refl /=.
 by rewrite HL.
 Qed.
 
-(* a plain-label singleton *)
 Lemma frag_lbl (L : label -> option sv) (l : label) (tg : mem_tag)
     (v : sv) :
   frag [:: (TrLabel (inl l), tg)] [:: v] L v v.
@@ -1091,7 +1013,6 @@ Proof.
 by rewrite /frag /= /frag_at /= !sv_le_refl.
 Qed.
 
-(* the in-place label witness for promise discharge *)
 Lemma lbl_ok_here (c1 c2 : seq (Transitional.instr * mem_tag))
     (M1 M2 : seq sv) (l : label) (tg : mem_tag) (v : sv)
     (p : sv -> bool) :
@@ -1110,7 +1031,6 @@ apply/hasP. exists (size c1).
   by rewrite nth_error_cat2 /=.
 Qed.
 
-(* a procedure-header singleton *)
 Lemma frag_hdr (L : label -> option sv)
     (cp : Component.id * Procedure.id) (tg : mem_tag) :
   frag [:: (TrLabel (inr cp), tg)] [:: sv0] L sv0 sv0.
@@ -1118,12 +1038,7 @@ Proof.
 by [].
 Qed.
 
-(* ================================================================== *)
-(* From a whole-component fragment to the component check.            *)
-(* ================================================================== *)
 
-(* the component's last instruction is terminal (compiled procedures
-   end with a jump) *)
 Definition ends_term (S : seq (Transitional.instr * mem_tag)) : bool :=
   match rev S with
   | (i, _) :: _ => terminal i
@@ -1182,7 +1097,6 @@ apply/andP; split.
   +    exact: Hjal EI.
 Qed.
 
-(* terminality composes *)
 Lemma ends_term_cat (c1 c2 : seq (Transitional.instr * mem_tag)) :
   ends_term c1 -> ends_term c2 -> ends_term (c1 ++ c2).
 Proof.
@@ -1201,7 +1115,6 @@ apply: ends_term_cat.
 - exact: IH (fun q Hq => Hall q (or_intror Hq)).
 Qed.
 
-(* a nonempty terminal tail decides the cat *)
 Lemma ends_term_catr (c1 c2 : seq (Transitional.instr * mem_tag)) :
   c2 <> [::] -> ends_term c2 -> ends_term (c1 ++ c2).
 Proof.
@@ -1210,7 +1123,6 @@ by case: c2 => [|y c2] //= _; rewrite rev_cons;
    case: (rev c2) => [|z r] //=.
 Qed.
 
-(* a nonempty terminal-ended tail absorbs a prepended header *)
 Lemma ends_term_cons (x : Transitional.instr * mem_tag)
     (c : seq (Transitional.instr * mem_tag)) :
   c <> [::] -> ends_term c -> ends_term (x :: c).
@@ -1236,7 +1148,6 @@ have : n < size S.
 by [].
 Qed.
 
-(* the per-position facts in usable form *)
 Lemma vc_at_inv (S : seq (Transitional.instr * mem_tag)) (M : seq sv)
     (n : nat) (i : Transitional.instr) (tg : mem_tag) :
   comp_ok S M ->

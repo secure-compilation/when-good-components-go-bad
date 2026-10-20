@@ -1,20 +1,3 @@
-(* LinearizeMerged: the ON-BUILD MP-program generator
-     [Transitional.intermediate_to_transitional] + [Merged.transitional_to_merged_gen]
-   (with the canonical label scheme of LabelScheme.v) produces RECOMPOSITION-READY programs:
-   its output satisfies [lin_output_wf] (Recomposition/Definitions.v), Merged-side
-   [well_formed_program], and the label-disjointness / cross-side-call facts of
-   [LinearizerFacts] — all under Intermediate-level well-formedness premises.
-
-   This file verifies STATIC well-formedness of the generator's output; it does NOT prove a
-   semantic Intermediate↔MP simulation (out of scope).
-
-   Structure:
-     1. findopt helpers (existence/None/nth characterizations)
-     2. provenance toolkit: cells of the merged output ↔ cells of the transitional map
-        ↔ (entry cell | translated Intermediate instruction) of some (component, procedure)
-     3. instr_translation / instr_to_transitional shape inversions
-     4. the [compiler] constructor + the emission theorems *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -45,10 +28,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ------------------------------------------------------------------ *)
-(* 1. findopt helpers ([Merged.findopt] is a RIGHT fold: it reports the
-      LAST matching index — suffix-priority, cf. RecInit's findopt_cat). *)
-(* ------------------------------------------------------------------ *)
 
 Lemma findopt_In_ex {A : Type} (pred : A -> bool) (l : seq A) x :
   List.In x l -> pred x = true -> exists m, findopt pred l = Some m.
@@ -88,11 +67,7 @@ Proof.
     by exists a.
 Qed.
 
-(* ------------------------------------------------------------------ *)
-(* 2. Provenance toolkit                                                *)
-(* ------------------------------------------------------------------ *)
 
-(* List.In through flatten-of-map. *)
 Lemma In_flatten_map {A B : Type} (f : A -> seq B) (l : seq A) (x : B) :
   List.In x (flatten (map f l)) <-> exists y, List.In y l /\ List.In x (f y).
 Proof.
@@ -107,7 +82,6 @@ Proof.
       * apply/List.in_app_iff. right. apply/(proj2 IH). by exists y.
 Qed.
 
-(* seq membership -> List.In (converse of BufferLayout's List_In_mem). *)
 Lemma mem_List_In {T : eqType} (l : seq T) x :
   x \in l -> List.In x l.
 Proof.
@@ -115,15 +89,12 @@ Proof.
   rewrite inE => /orP [/eqP ->|Hx]; [by left | by right; exact: IH].
 Qed.
 
-(* Assoc-list view of an fmap: [Maps.elementsm] is the underlying [fmval], so membership
-   is exactly [getm] (BufferLayout's getm_In / In_fmap_getm on the seq coercion). *)
 Lemma In_elementsm {A : Type} (m : NMap A) k v :
   List.In (k, v) (Maps.elementsm m) <-> m k = Some v.
 Proof.
   split; [exact: In_fmap_getm | exact: getm_In].
 Qed.
 
-(* Merged cells of the generalized flattening <-> transitional cells + translation. *)
 Lemma t2m_gen_In (make : proc_label -> nat) (upd : Component.id -> nat -> nat)
       (pb : NMap {fmap Block.id -> nat + seq value}) (cde : Transitional.code) i t :
   List.In (i, t) (transitional_to_merged_gen (mt := mt) make upd pb cde) <->
@@ -148,9 +119,6 @@ Proof.
         apply/(proj2 IH). by exists itr.
 Qed.
 
-(* getm through [compile_component_list].  Generalized over the joint
-   interface [PI] the entry tags are computed against (plan-t2me.md §3.8);
-   the whole-program forms are the [PI := prog_interface pr] instances. *)
 Lemma ccl_getm_def (PI : Program.interface) (pr : Intermediate.program)
       (l : seq (Component.id * NMap Machine.code)) cid :
   getm_def (compile_component_list_gen PI pr l) cid
@@ -168,7 +136,6 @@ Proof.
   by rewrite /intermediate_to_transitional_gen mkfmapE ccl_getm_def.
 Qed.
 
-(* Cells of a linearized component <-> cells of some procedure's linearization. *)
 Lemma lin_comp_In (PI : Program.interface) (pr : Intermediate.program) cid cell :
   List.In cell (linearize_component_gen PI pr cid) <->
   exists Cprocs Pid,
@@ -191,13 +158,11 @@ Proof.
     + by case: HCp.
 Qed.
 
-(* The procedure body used by [linearize_proc]. *)
 Definition proc_code (pr : Intermediate.program) (cid : Component.id) (Pid : Procedure.id)
   : Machine.code :=
   Option.default [::] (do map <- getm (Intermediate.prog_procedures pr) cid;
                        getm map Pid).
 
-(* Cells of a linearized procedure: the entry-label cell, or a translated body instruction. *)
 Lemma lin_proc_In (PI : Program.interface) (pr : Intermediate.program) cid Pid cell :
   List.In cell (linearize_proc_gen PI pr cid Pid) <->
   cell = (TrLabel (inr (cid, Pid)), head_tag_gen PI cid Pid)
@@ -215,11 +180,7 @@ Proof.
     + right. apply/List.in_map_iff. by exists mi; split; last by [].
 Qed.
 
-(* ------------------------------------------------------------------ *)
-(* 3. Shape inversions                                                  *)
-(* ------------------------------------------------------------------ *)
 
-(* Every translated Intermediate instruction carries the plain code tag. *)
 Lemma i2t_snd (cid : Component.id) (mi : Machine.instr) :
   (instr_to_transitional cid mi).2 = def_mem_tag cid true.
 Proof.
@@ -235,7 +196,6 @@ Lemma color_def_mem_tag (cid : Component.id) b :
   color (def_mem_tag cid b) = cid.
 Proof. by []. Qed.
 
-(* [MrLabel] sources: a body label (updated) or a procedure-entry label (made). *)
 Lemma it_label_inv (make : proc_label -> nat) (upd : nat -> nat)
       (msz : NMap (NMap nat)) (itr : Transitional.instr) m :
   List.In (@MrLabel Int32.mt m) (instr_translation make upd msz itr) ->
@@ -261,7 +221,6 @@ Proof.
   - by move=> [E|[]].
 Qed.
 
-(* [MrJal] sources: the allocator stub, a body-label jal, or a procedure call. *)
 Lemma it_jal_inv (make : proc_label -> nat) (upd : nat -> nat)
       (msz : NMap (NMap nat)) (itr : Transitional.instr) l :
   List.In (@MrJal Int32.mt l) (instr_translation make upd msz itr) ->
@@ -286,7 +245,6 @@ Proof.
   - by move=> [E|[]].
 Qed.
 
-(* [MrBnz] sources: exactly a translated [TrBnz] with an updated body label. *)
 Lemma it_bnz_inv (make : proc_label -> nat) (upd : nat -> nat)
       (msz : NMap (NMap nat)) (itr : Transitional.instr) r l :
   List.In (@MrBnz Int32.mt r l) (instr_translation make upd msz itr) ->
@@ -308,7 +266,6 @@ Proof.
   - by move=> [E|[]].
 Qed.
 
-(* Which Machine instruction produced a given transitional shape. *)
 Lemma m2t_label_inl (cid : Component.id) (mi : Machine.instr) l :
   (instr_to_transitional cid mi).1 = TrLabel (inl l) -> mi = ILabel l.
 Proof.
@@ -347,9 +304,6 @@ Proof.
   move=> c' P'. case: (Nat.eqb cid c') => -[<-] //.
 Qed.
 
-(* ------------------------------------------------------------------ *)
-(* 4. Master provenance for the generator output                        *)
-(* ------------------------------------------------------------------ *)
 
 Section Generator.
 
@@ -357,21 +311,8 @@ Variable pr : Intermediate.program.
 Variable make : proc_label -> nat.
 Variable upd : Component.id -> nat -> nat.
 
-(* The CANONICAL JOINT BUFFER MAP (T2M audit, plan-t2me.md §3.7, 2026-08-08).
-   [transitional_to_merged_gen]'s buffer argument is used ONLY for
-   [memory_lengths] — the (component, block) ↦ flat-base map baked into
-   [IConst (IPtr …)] immediates.  Passing the side's OWN buffers here made
-   every baked pointer immediate wrong under LINKING whenever component ids
-   interleave across the link: the linked machine's [initial_memory] lays
-   data out by the JOINT union layout.  Exactly like the canonical label
-   scheme ([make]/[upd] replacing the side-local legacy numbering),
-   separately-compiled sides must agree on the joint memory map [PB]
-   (⊇ the side's own buffers; only block SHAPES matter to
-   [memory_lengths]). *)
 Variable PB : NMap {fmap Block.id -> nat + seq value}.
 
-(* the canonical JOINT INTERFACE the entry tags are computed against
-   (plan-t2me.md §3.8) — same medicine as [PB] and the label scheme *)
 Variable PI : Program.interface.
 
 Let msz := memory_lengths PB.
@@ -379,8 +320,6 @@ Let msz := memory_lengths PB.
 Definition compiler_gen : @Merged.code Int32.mt :=
   transitional_to_merged_gen make upd PB (intermediate_to_transitional_gen PI pr).
 
-(* Every merged cell comes from a declared procedure of the tag's colour: either its
-   ENTRY cell (head_tag) or a TRANSLATED body instruction (def_mem_tag). *)
 Lemma compiler_gen_cell_inv i t :
   List.In (i, t) compiler_gen ->
   exists Cprocs Pid,
@@ -405,14 +344,14 @@ Proof.
   move/lin_comp_In: HIncl => [Cprocs' [Pid [HCp' [HPd Hcell]]]].
   rewrite Eproc in HCp'. case: HCp' => ?; subst Cprocs'.
   move/lin_proc_In: Hcell => [Hhd | [mi [HInmi Hcell]]].
-  - (* entry cell *)
+  -
     case: Hhd => Hitr Ht.
     have Hcol : color t = cid by rewrite Ht.
     exists Cprocs, Pid.
     rewrite Hcol Eproc. split=> //. split=> //.
     left. split; first exact: Ht.
     rewrite Hitr /= in HInt. exact: HInt.
-  - (* body cell *)
+  -
     have Ht : t = def_mem_tag cid true.
     { by rewrite -(i2t_snd cid mi) -Hcell. }
     have Hcol : color t = cid by rewrite Ht.
@@ -427,7 +366,6 @@ Proof.
     rewrite Hcol in HInt. rewrite -Hitr. exact: HInt.
 Qed.
 
-(* Construction: any cell of a declared procedure's linearization, translated, is in. *)
 Lemma compiler_gen_cell_intro cid Pid itr t i :
   Intermediate.prog_procedures pr cid <> None ->
   Pid \in domm (odflt emptym (Intermediate.prog_procedures pr cid)) ->
@@ -448,9 +386,6 @@ Qed.
 
 End Generator.
 
-(* ------------------------------------------------------------------ *)
-(* 5. More findopt / rcons plumbing                                     *)
-(* ------------------------------------------------------------------ *)
 
 Lemma findopt_notIn_None {A : Type} (pred : A -> bool) (l : seq A) :
   (forall x, List.In x l -> pred x = false) -> findopt pred l = None.
@@ -520,8 +455,6 @@ Proof.
   rewrite IH //. by move=> x Hx; apply: Hz; right.
 Qed.
 
-(* Sum over an assoc list with uniq keys, where only key [c0] may contribute (and
-   then at most 1): total is at most 1. *)
 Lemma sumn_le1_uniq_keys {K : eqType} {V : Type} (g : V -> nat) (s : seq (K * V)) (c0 : K) :
   uniq (unzip1 s) ->
   (forall k v, List.In (k, v) s -> g v <= if k == c0 then 1 else 0) ->
@@ -543,7 +476,6 @@ Proof.
     rewrite Hg0 add0n. apply: IH => // k' v' HIn. by apply: Hb; right.
 Qed.
 
-(* Positional uniqueness from a count bound. *)
 Lemma count_le1_nth_unique {A : Type} (pe : A -> bool) (l : seq A) :
   count pe l <= 1 ->
   forall n m x y,
@@ -570,7 +502,6 @@ Lemma elementsm_keys_uniq {A : Type} (m : NMap A) :
   uniq (unzip1 (Maps.elementsm m)).
 Proof. exact: (sorted_uniq (@Ord.lt_trans _) (@Ord.ltxx _) (valP m)). Qed.
 
-(* Counting a tag-level predicate through one translated transitional cell. *)
 Lemma count_map_tag (pe_t : mem_tag -> bool) (t : mem_tag)
       (li : seq (@Merged.instr Int32.mt)) :
   count (fun cell : Merged.instr * mem_tag => pe_t cell.2) [seq (i0, t) | i0 <- li]
@@ -580,8 +511,6 @@ Proof.
   rewrite IH. by case: (pe_t t).
 Qed.
 
-(* Counting through the generalized flattening: bounded by the transitional count,
-   provided matching cells translate to at most one instruction. *)
 Lemma t2m_count_le (pe_t : mem_tag -> bool) (make : proc_label -> nat)
       (upd : Component.id -> nat -> nat)
       (pb : NMap {fmap Block.id -> nat + seq value}) (cde : Transitional.code) :
@@ -602,26 +531,18 @@ Proof.
   - apply: IH => itr' t' HIn' Hp'. exact: (Hprem _ _ (or_intror HIn') Hp').
 Qed.
 
-(* The entry-cell predicate: colour c, entry tag exactly e. *)
 Definition entry_predt (c : Component.id) (e : Procedure.id * seq Component.id)
            (t : mem_tag) : bool :=
   (color t == c) && (entry t == Some e).
 
-(* ------------------------------------------------------------------ *)
-(* 6. The linearized side: canonical labels + trailing Halt             *)
-(* ------------------------------------------------------------------ *)
 
 Section LinSide.
 
-(* Strict bounds of the canonical label scheme (instantiated by the wrapper as
-   maxima+1 over the program quadruple). *)
 Variables L P C : nat.
 
 Definition can_make (pl : proc_label) : nat := mk_entry L P C pl.1 pl.2.
 Definition can_upd (cid : Component.id) (l : nat) : nat := mk_body L cid l.
 
-(* the canonical joint buffer map and joint interface
-   (see Section Generator's [PB]/[PI]) *)
 Variable PB : NMap {fmap Block.id -> nat + seq value}.
 Variable PI : Program.interface.
 
@@ -631,8 +552,6 @@ Hypothesis Hwf : Intermediate.well_formed_program pr.
 Definition compiler_body : @Merged.code Int32.mt :=
   compiler_gen pr can_make can_upd PB PI.
 
-(* Trailing Halt (the recomposition wf requires last-is-Halt), coloured like the
-   last body cell so [low_colors] extends. *)
 Definition compiler_code : @Merged.code Int32.mt :=
   match compiler_body with
   | [::] => [::]
@@ -644,8 +563,6 @@ Definition compiler : program :=
      code := compiler_code;
      prog_buffers := Intermediate.prog_buffers pr;
      prog_main := Component.main \in domm (Intermediate.prog_interface pr) |}.
-
-(* ---- body-cell facts ---- *)
 
 Lemma compiler_body_tags i t :
   List.In (i, t) compiler_body -> is_code t = true /\ vtag t = Other.
@@ -663,7 +580,6 @@ Proof.
   by apply/dommP; exists Cprocs.
 Qed.
 
-(* Every label of the body is canonical: a body label or an entry label. *)
 Lemma compiler_body_label_canonical l t :
   List.In (@MrLabel Int32.mt l, t) compiler_body ->
   (exists cid l0, l = mk_body L cid l0) \/ (exists cid p0, l = mk_entry L P C cid p0).
@@ -675,8 +591,6 @@ Proof.
     + left. by exists (color t), l0.
     + right. by exists pl.1, pl.2.
 Qed.
-
-(* ---- compiler_code cell characterization ---- *)
 
 Lemma compiler_code_In i t :
   List.In (i, t) compiler_code ->
@@ -690,8 +604,6 @@ Proof.
   - left. exact: HIn.
   - right. exists cell, rest. by split.
 Qed.
-
-(* ---- the easy lin_output_wf fields ---- *)
 
 Lemma lin_low_tags : forall i t,
   List.In (i, t) compiler_code -> is_code t = true /\ vtag t = Other.
@@ -724,8 +636,6 @@ Proof.
   - exact: mk_entry_neq_alloc (esym Hl).
 Qed.
 
-(* ---- body-to-code transport + construction ---- *)
-
 Lemma compiler_body_sub i t : List.In (i, t) compiler_body -> List.In (i, t) compiler_code.
 Proof.
   move=> HIn. rewrite /compiler_code.
@@ -733,7 +643,6 @@ Proof.
   apply/In_rcons. left. by rewrite -E.
 Qed.
 
-(* Any translated body instruction of a declared procedure is a compiler_body cell. *)
 Lemma compiler_body_intro cid Cprocs Pid Pcode mi i :
   Intermediate.prog_procedures pr cid = Some Cprocs ->
   Cprocs Pid = Some Pcode ->
@@ -754,7 +663,6 @@ Proof.
   - exact: HInt.
 Qed.
 
-(* A body label of a declared procedure is DEFINED in compiler_code (canonical form). *)
 Lemma lin_label_defined cid Cprocs Pid Pcode l0 :
   Intermediate.prog_procedures pr cid = Some Cprocs ->
   Cprocs Pid = Some Pcode ->
@@ -768,8 +676,6 @@ Proof.
   apply: (findopt_In_ex HInc).
   by rewrite /is_label_def /= eqxx.
 Qed.
-
-(* ---- low_bnz_resolved ---- *)
 
 Lemma lin_low_bnz_resolved : forall n r l t,
   List.nth_error compiler_code n = Some (@MrBnz Int32.mt r l, t) ->
@@ -799,9 +705,6 @@ Proof.
   by rewrite size_rcons subn1 /= nth_error_rcons_size.
 Qed.
 
-(* ---- entry determinism ---- *)
-
-(* Every entry-carrying cell IS the interface-determined head tag of its (colour, proc). *)
 Lemma lin_entry_head i t e :
   List.In (i, t) compiler_code -> entry t = Some e ->
   t = head_tag_gen PI (color t) e.1.
@@ -825,8 +728,6 @@ Proof.
   by rewrite Hcol Hp.
 Qed.
 
-(* ---- entry-cell construction ---- *)
-
 Lemma lin_entry_In cid Cprocs Pid :
   Intermediate.prog_procedures pr cid = Some Cprocs ->
   Pid \in domm Cprocs ->
@@ -840,8 +741,6 @@ Proof.
   - apply/lin_proc_In. by left.
   - by rewrite /=; left.
 Qed.
-
-(* ---- entry-cell counting: at most one cell per (colour, entry tag) ---- *)
 
 Lemma lin_proc_count (pe_t : mem_tag -> bool) c p :
   pe_t (def_mem_tag c true) = false ->
@@ -949,8 +848,6 @@ Proof.
   - by rewrite /entry_predt /= Hc' He' !eqxx.
 Qed.
 
-(* ---- Merged-side well-formedness of compiler ---- *)
-
 Hypothesis Hprocs_nonempty : forall cid Cprocs,
   Intermediate.prog_procedures pr cid = Some Cprocs ->
   exists Pid, Pid \in domm Cprocs.
@@ -991,8 +888,6 @@ Proof.
   by split.
 Qed.
 
-(* ---- the two record assemblies ---- *)
-
 Theorem compiler_output_wf : lin_output_wf compiler.
 Proof.
   constructor.
@@ -1016,8 +911,6 @@ Proof.
   - by [].
 Qed.
 
-(* ---- canonical label shapes (with bounds), for cross-program facts ---- *)
-
 Hypothesis HboundL : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pr cid = Some Cprocs ->
   Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -1026,8 +919,6 @@ Hypothesis HboundP : forall cid Cprocs Pid,
 Hypothesis HboundC : forall cid,
   cid \in domm (Intermediate.prog_interface pr) -> cid < C.
 
-(* Every label cell of compiler_code carries a canonical label of a DECLARED component:
-   a (bounded) body label, or a (bounded) entry label with the head tag. *)
 Lemma lin_label_cases l t :
   List.In (@MrLabel Int32.mt l, t) compiler_code ->
   (exists cid l0,
@@ -1040,7 +931,7 @@ Proof.
   move=> /compiler_code_In [HIn|[cell [rest [_ Heq]]]]; last by case: Heq.
   case/compiler_gen_cell_inv: HIn
     => [Cprocs [Pid [Hproc [HPd [[Ht HInt]|[mi [Pcode [Epc [Hmi [Ht HInt]]]]]]]]]].
-  - (* entry cell *)
+  -
     move: HInt => /= [E|[]].
     case: E => E.
     have Hdom : color t \in domm (Intermediate.prog_interface pr).
@@ -1052,7 +943,7 @@ Proof.
     + exact: HboundP Hproc HPd.
     + by rewrite -E.
     + exact: Ht.
-  - (* body cell *)
+  -
     move/it_label_inv: HInt => [[l0 [Hitr ->]]|[pl [Hitr _]]]; last first.
     { by case: (m2t_label_inr Hitr). }
     have ? : mi = ILabel l0 := m2t_label_inl Hitr. subst mi.
@@ -1066,8 +957,6 @@ Proof.
     + by [].
 Qed.
 
-(* Every JAL of compiler_code: the allocator stub, a locally-resolved body label, or a
-   CROSS-COMPONENT call to an imported procedure, carrying its canonical entry label. *)
 Lemma lin_jal_cases l t :
   List.In (@MrJal Int32.mt l, t) compiler_code ->
   l = alloc_label
@@ -1100,15 +989,10 @@ Qed.
 
 End LinSide.
 
-(* ------------------------------------------------------------------ *)
-(* 7. Cross-program facts: label disjointness + foreign-call resolution *)
-(* ------------------------------------------------------------------ *)
 
 Section TwoProgs.
 
 Variables L P C : nat.
-(* both sides compiled against the SAME canonical joint buffer map and
-   joint interface *)
 Variable PB : NMap {fmap Block.id -> nat + seq value}.
 Variable PI : Program.interface.
 Variables pr1 pr2 : Intermediate.program.
@@ -1131,7 +1015,6 @@ Hypothesis HboundC2 : forall cid,
 Hypothesis Hdis : fdisjoint (domm (Intermediate.prog_interface pr1))
                             (domm (Intermediate.prog_interface pr2)).
 
-(* Labels defined by [pr1]'s linearization are NOT defined by [pr2]'s. *)
 Lemma lin_labels_disjoint l :
   findopt (is_label_def l) (compiler_code L P C PB PI pr1) <> None ->
   findopt (is_label_def l) (compiler_code L P C PB PI pr2) = None.
@@ -1159,8 +1042,6 @@ Proof.
     move: (fdisjointP Hdis _ Hd1). by rewrite Ec Hd2.
 Qed.
 
-(* A FOREIGN (unresolved, non-alloc) JAL of [pr1]'s code resolves in [pr2]'s code
-   at its canonical entry cell — an entry-tagged label cell of [pr2]'s colour. *)
 Lemma lin_jal_foreign n l t :
   closed_interface (unionm (Intermediate.prog_interface pr1)
                            (Intermediate.prog_interface pr2)) ->
@@ -1180,7 +1061,7 @@ Proof.
   case: (lin_jal_cases Hwf1 HIn1) => [Ea|[Hloc|[C0 [P0 [Hl Himp Hneq]]]]].
   - by case: (Halloc Ea).
   - case: Hloc => m Hm. by rewrite Hnone in Hm.
-  - (* the callee is not pr1's: it would be locally resolved *)
+  -
     have HnotIn1 : C0 \notin domm (Intermediate.prog_interface pr1).
     { apply/negP => HIn0.
       have Hsound := Intermediate.wfprog_interface_soundness Hwf1.
@@ -1195,7 +1076,6 @@ Proof.
       have [m Hm] : exists m, findopt (is_label_def l) (compiler_code L P C PB PI pr1) = Some m.
       { apply: (findopt_In_ex HInc). by rewrite /is_label_def /= Hl eqxx. }
       by rewrite Hnone in Hm. }
-    (* closedness: the callee is exported by the union, hence by pr2 *)
     have Himp_u : imported_procedure (unionm (Intermediate.prog_interface pr1)
                                              (Intermediate.prog_interface pr2))
                                      (color t) C0 P0.

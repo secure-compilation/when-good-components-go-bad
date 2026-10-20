@@ -1,28 +1,3 @@
-(** * Stage 3/5 — [start_ok]: the initial bridge at T.
-
-    See plan-i2t-redo.md §4 (Stage 5) and §5 (Stage 3).
-
-    The T counterpart of `S2I/Simulation.v:5271`'s [start_bridge] — but where
-    the I development punts (its [match_states] carries an [MS_start]
-    constructor that relates the two initial states SYNTACTICALLY and defers
-    the work to the step diagram), T has no such constructor. `TSim.t_initial`
-    is instead STAR-CLOSED, so the target may run its whole entry sequence
-    before the relation has to hold, and this file runs it.
-
-    Two shapes, decided by [immediately_final] of main's body:
-
-    - **not immediately final** — the machine lands on main's procedure header,
-      steps past it, runs the wrapper ([TProlog.ef_main_entry_run], 21 steps),
-      the wrapper's [IJal], and the callee prologue ([TProlog.prologue_run],
-      9 steps), and arrives at main's compiled body in a full [expr_inv]. That
-      is [MS_expr].
-    - **immediately final** ([E_val v] or [E_exit]) — `compile_proc` emits main's
-      HALT PAD, so the cell right after the header is an [IHalt] and the target
-      halts in ONE step. That is [MS_halted], which is why its expression field
-      had to be generalised from [E_val v] to [immediately_final e]: [E_exit]
-      has no other constructor to fall into, [expr_inv] being unavailable
-      before a frame exists. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -78,21 +53,12 @@ Local Notation cde := (Transitional.intermediate_to_transitional tp).
 Local Notation m0 :=
   (Transitional.Memory.prepare_procedures_initial_memory tp).
 
-(** All four are STATIC facts about the program and its compilation — the same
-    premises `TStatic.v`'s whole-program lemmas take. The label-uniqueness one
-    is Stage 3's remaining item (`S2I/LabelUniq.v:834`'s
-    `compiled_labels_unique` is the component-wide statement it needs); it is a
-    premise here for exactly the reason `TSim.t_forward_simulation` takes
-    `entry_int`/`entry_ext` as premises. *)
 Hypothesis Hwf : Source.well_formed_program p.
 Hypothesis Hclosed : Source.closed_program p.
 Hypothesis Hcomp : compile_program p = Some tp.
 Hypothesis Hiface : domm iface = domm (Intermediate.prog_interface tp).
 Hypothesis Huniq : forall C0, TDrain.labels_uniq cde C0.
 
-(* ================================================================== *)
-(* The buffer facts, in the form [TStatic.initial_minj] wants          *)
-(* ================================================================== *)
 
 Lemma buf_shape C ib :
   getm (Source.prog_buffers p) C = Some ib ->
@@ -136,9 +102,6 @@ Proof.
   case/dommP: Hin => [ib Hib]. exists ib. exact: buf_shape Hib.
 Qed.
 
-(** The two cells main's wrapper reads: the scratch cell (`Undef`) and the FLAG
-    (`Int 0`, which is what makes the initial run take the fall-through branch
-    of the wrapper's `IBnz`). *)
 Lemma main_cells :
   Transitional.Memory.load m0 (Component.main, 1, 0%Z)
   = Some (MVal Other Undef, def_mem_tag Component.main false)
@@ -149,11 +112,7 @@ Proof.
   exact: (TStatic.initial_cells Hib main_dom).
 Qed.
 
-(* ================================================================== *)
-(* Main's compiled code                                                *)
-(* ================================================================== *)
 
-(** The header resolution and the compiled shape, shared by the two cases. *)
 Lemma main_code :
   exists mexpr CprocsT cd plmf plf pre post s s',
     [/\ Source.prog_main p = Some mexpr,
@@ -176,8 +135,6 @@ Proof.
   have [mexpr Hmain] : exists mexpr, Source.prog_main p = Some mexpr.
   { case E: (Source.prog_main p) => [m|]; first by exists m.
     by move: (Source.cprog_main_existence Hclosed); rewrite E. }
-  (* peeled in a [have] so the CONCLUSION's [Source.prog_main] stays folded —
-     [rewrite /Source.prog_main] would unfold it there too *)
   have [CprocsM [HgCm HgPm]] :
     exists CprocsM,
       getm (Source.prog_procedures p) Component.main = Some CprocsM
@@ -203,9 +160,6 @@ Proof.
   - by split.
 Qed.
 
-(** Every declared component's SCRATCH cell at startup — `scrs_ok`'s third and
-    fourth clauses, which quantify over the whole interface rather than over
-    main alone. *)
 Lemma scratch_cells C' :
   C' \in domm (Intermediate.prog_interface tp) ->
   Transitional.Memory.load m0 (C', 1, 0%Z)
@@ -217,15 +171,11 @@ Proof.
   by case: (TStatic.initial_cells (buf_shape Hib) HC').
 Qed.
 
-(** The guard `compile_proc`'s main branch tests. *)
 Lemma main_guard :
   Component.eqb Component.main Component.main
   && Procedure.eqb Procedure.main Procedure.main = true.
 Proof. by rewrite /Component.eqb /Procedure.eqb !PeanoNat.Nat.eqb_refl. Qed.
 
-(* ================================================================== *)
-(* ★ [start_ok]                                                        *)
-(* ================================================================== *)
 
 Theorem start_ok_proof : TSim.start_ok cde iface (labelsP p) p tp.
 Proof.
@@ -239,7 +189,7 @@ Proof.
     by exists pcW.
   have Hexec := TStatic.executing_header HgT HgTP Elin.
   case Hfin: (immediately_final mexpr).
-  - (* ---- main's body is immediately final: the HALT PAD ---- *)
+  -
     case: (compile_proc_shape_main_final _ _ _ _ _ _ _ _ Hcp Hplf main_guard
              Hfin) => [restH EcdH].
     have Hc1 : TMacros.code_at_I cde Component.main (Pointer.inc pcW)
@@ -255,19 +205,17 @@ Proof.
       split; first exact: Hbase. exact: star_one S1.
     + apply: TSim.MS_halted;
         [exact: minj0 | exact: (TMacros.code_at_I_head Hc1) | by [] | by []].
-  - (* ---- the ordinary case: wrapper, [IJal], prologue ---- *)
+  -
     case: (TStatic.entry_main_of_compiled HgT HgTP Hcp Hplf main_guard Hfin)
       => [pcW' [pcE [cbody [sA [sB [lmain [lreturn
          [Hfind' HcodeW EcE Hce HcodeE]]]]]]]].
     have EpcW : pcW' = pcW.
     { move: Hfind'. rewrite Hfind. by move=> [<-]. }
     rewrite EpcW in HcodeW.
-    (* --- 0. the header's own [ILabel] step --- *)
     have S1 : TS.step cde (m0, Transitional.Register.init, pcW, Level 0) E0
               (m0, Transitional.Register.init, Pointer.inc pcW, Level 0).
     { eapply TS.Label; first exact: Hexec.
       apply: PcFall. exact: (TMacros.code_at_I_head HcodeW). }
-    (* --- 1. the wrapper --- *)
     have [Hscr0 Hflag0] := main_cells.
     have HcompW : Pointer.component (Pointer.inc pcW) = Component.main
       by rewrite Pointer.inc_preserves_component.
@@ -289,7 +237,6 @@ Proof.
              [Hw0 Ht0 Hw1 Ht1 [Hw2 Ht2 Hw3 Ht3]]
              [Hpv Hpt EcF1 HcF1 [HONE1 HSP1 HCOM1]]
              [Htag1 Hflagv1 Hflagt1]]]]]].
-    (* the block-1 transports across the wrapper, used four times below *)
     have Hb1E : forall (C' : Component.id) (o : Z),
         Pointer.component ((C', 1, o) : Pointer.t) <> Component.main
         \/ Pointer.block ((C', 1, o) : Pointer.t) <> fbE
@@ -303,7 +250,6 @@ Proof.
     have Lt1 : forall C' : Component.id,
         TMem.tload m1 (C', 1, 0%Z) = TMem.tload m0 (C', 1, 0%Z)
       by move=> C'; exact: (Hpt _ (Hb1E C' 0%Z) (Hne01 C')).
-    (* --- 2. the [IJal] into the body --- *)
     have HcE0 : TMacros.code_at_I cde Component.main pcE
         ([::] ++ ILabel plf
          :: ([:: IMov R_SP R_AUX1;
@@ -326,7 +272,6 @@ Proof.
                  InternalJump rs1 in SJ *.
     have Htag2 : TInv.tag_inv [:: (TInv.CReg, InternalJump)] m1 rs2 (Level 0)
       by apply: (TInv.tag_inv_jal (Pointer.inc pcF1) _ Htag1); by [].
-    (* --- the body's code, as a cons --- *)
     have Hnn : cbody ++ pop R_ARG ++ pop R_SP ++ [:: IJump] <> [::]
       by apply: TDrain.cat_nonempty.
     have [nxtB [restB EB]] := TDrain.nonempty_cons Hnn.
@@ -336,7 +281,6 @@ Proof.
              IAlloc R_SP R_SP]
          ++ push R_AUX1 ++ push R_ARG ++ [:: IMov R_COM R_ARG]
          ++ nxtB :: restB) by rewrite -EB; exact: HcL.
-    (* --- 3. the callee prologue --- *)
     have HONE2 : Transitional.Register.get R_ONE rs2 = MVal Other (Int 1)
       by rewrite /rs2 TInv.get_set_neq //.
     have [wsc Hwsc] : exists w,
@@ -351,7 +295,6 @@ Proof.
       => [m2 [rs3 [fbN [pcF2
          [Sp [Hfresh2 Havoid2 Hmj2 Hcap2 Hpres2] [Hsl0 Hsl1]
               [HONE3 HSP3 HARG3 HCOM3 HRA3] [Htag3 EcF2 HcF2]]]]]].
-    (* --- 4. the two frames are distinct, and neither is the scratch block --- *)
     have HfbN1 : Component.main = Component.main -> fbN <> 1
       by move=> _ E; apply: (Hfresh2 0%Z wsc); rewrite E.
     have HfbN1' : fbN <> 1 by exact: HfbN1.
@@ -360,7 +303,6 @@ Proof.
       by case: (TMem.vload_load Hw0) => [w Hw]; exists w.
     have HneNE : fbN <> fbE
       by move=> E; apply: (Hfresh2 0%Z wE); rewrite E.
-    (* the transports across the prologue *)
     have Lv2 : forall q, Pointer.block q <> fbN ->
         TMem.vload m2 q = TMem.vload m1 q
       by move=> q Hq; rewrite /TMem.vload (Hpres2 q (or_intror _ Hq)).
@@ -373,7 +315,6 @@ Proof.
     have HbEN : forall o : Z,
         Pointer.block ((Component.main, fbE, o) : Pointer.t) <> fbN
       by move=> o /= E; apply: HneNE; rewrite E.
-    (* --- 5. the target state, and the relation --- *)
     exists (m2, rs3, pcF2, Level 0). split.
     + exists (m0, Transitional.Register.init, pcW, Level 0).
       split; first exact: Hbase.
@@ -393,7 +334,7 @@ Proof.
       * exact: Hplmf.
       * by rewrite Hiface; exact: main_dom.
       * exact: Hmj2.
-      * (* ---- [scrs_ok] ---- *)
+      *
         split.
         -- by move=> C' v; rewrite emptymE.
         -- split.
@@ -422,7 +363,7 @@ Proof.
       * rewrite /= maxn0 add0n. by lia.
       * apply/negP => /orP [/eqP Ex|] //.
         by apply: HneNE; move: (f_equal snd Ex) => /= ->.
-      * (* ---- [stack_match]: [SM_init] ---- *)
+      *
         apply: TSM.SM_init.
         -- rewrite /TMem.vload Hsl0 /= /rs2 TInv.get_set_neq //.
            by rewrite HSP1.
@@ -442,8 +383,7 @@ Proof.
         -- exact: (TMacros.code_at_I_tail HcF1).
         -- exact: HneNE.
       * by rewrite /TMatch.ledger_at /=; exact: Htag3.
-      * (* main's wrapper sits right after main's header — which is exactly the
-           code this very run just executed *)
+      *
         by exists pcW; eexists; split; [exact: Hfind | exact: HcodeW].
 Qed.
 

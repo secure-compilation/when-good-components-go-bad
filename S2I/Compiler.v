@@ -89,9 +89,6 @@ Notation lift := (Comp.lift comp_env).
 Notation fail := (Comp.fail comp_env).
 Notation run := (Comp.run comp_env).
 
-(* ==================== static-correctness toolkit ==================== *)
-(* Local assoc-list/fmap mini-lemmas. Deliberately NOT added to Common.Maps
-   (that would force a whole-repo recompile). *)
 
 Lemma getm_def_In {A : Type} {s : list (nat * A)} {k v} :
   getm_def s k = Some v -> List.In (k, v) s.
@@ -169,8 +166,6 @@ Lemma In_appr {A : Type} (x : A) (s1 s2 : list A) :
   List.In x s2 -> List.In x (s1 ++ s2).
 Proof. move=> H. apply/List.in_app_iff. by right. Qed.
 
-(* Discharge List.In-facts over literal instruction blocks whose elements all
-   MISMATCH the instruction shape in question. *)
 Ltac in_discr HIn :=
   repeat match type of HIn with
   | List.In _ (_ :: _) => destruct HIn as [HIn|HIn]; [discriminate HIn|]
@@ -198,9 +193,6 @@ Proof.
   by case: (getm (next_label s) comp) => [l|] /=; do 2 eexists.
 Qed.
 
-(* [fresh_label] as an equation: the fresh label is the component's counter (0 if
-   unset), and only that component's counter is bumped. The whole separate-compilation
-   argument rests on this per-component locality. *)
 Lemma fresh_labelE (comp : Component.id) (s : comp_env) :
   fresh_label comp s =
   Some (odflt 0 (getm (next_label s) comp),
@@ -214,25 +206,12 @@ Qed.
 
 (* code generation *)
 
-(* An expression that is a final source configuration all by itself (the source
-   [final_state] accepts a value at [Kstop]/empty stack, and [E_exit] anywhere).
-   If main's body is immediately final, the source INITIAL state is already
-   final, and the forward simulation's [match_final_states] (which allows no
-   target steps) forces the target initial pc to sit on an [IHalt]. [compile_proc]
-   therefore prepends one [IHalt] to main's external entry in that corner case;
-   the entry point is then only reached by the initial run (a closed program
-   whose main never calls out cannot have main called from outside). *)
 Definition immediately_final (e: expr) : bool :=
   match e with
   | E_val _ | E_exit => true
   | _ => false
   end.
 
-(* Static bound on the number of stack cells an expression's compiled code keeps
-   simultaneously live on the current frame (the pushes between sub-expression
-   evaluations). The frame allocated by [compile_proc] is sized from this bound —
-   a fixed frame size is a compiler-correctness bug (deeply nested expressions
-   overflow the frame and get stuck where the source program runs fine). *)
 Fixpoint stack_need (e: expr) : nat :=
   match e with
   | E_val _ | E_arg | E_local | E_exit => 0
@@ -241,9 +220,7 @@ Fixpoint stack_need (e: expr) : nat :=
   | E_if e1 e2 e3 => maxn (stack_need e1) (maxn (stack_need e2) (stack_need e3))
   | E_alloc e1 => stack_need e1
   | E_deref e1 => stack_need e1
-  (* value is evaluated first and pushed while the address is computed *)
   | E_assign e1 e2 => maxn (stack_need e2) (1 + stack_need e1)
-  (* R_RA (internal) resp. R_RA+R_ARG (external) stay pushed during the call *)
   | E_call C' P e1 => maxn (stack_need e1) 2
   end.
 
@@ -263,21 +240,6 @@ Definition store_arg (buf: Pointer.t) (r rtemp: register) : code :=
   [IConst (IPtr buf) rtemp;
    IStore rtemp r].
 
-(** Reload [R_SP] from the scratch cell after a cross-component call.
-
-    This is [load_arg buf R_SP] with the address staged through [R_AUX2] instead
-    of through [R_SP] itself.  Same length, same effect ([R_AUX2] is dead here —
-    it is [store_arg]'s temp and was invalidated by the [ICall]), but it keeps
-    two shapes apart for the micro-policies back-end:
-
-    - [IConst (IPtr _) R_SP] no longer occurs anywhere in the compiler, so
-      "[R_SP] only ever receives integers by [IConst]" holds by construction; and
-    - the only remaining [ILoad R_SP R_SP] is [pop R_SP], so a teardown pop is
-      no longer conflated with this reload.
-
-    Between the [ICall] and this instruction [R_SP] simply stays invalidated,
-    which makes every [R_SP]-keyed invariant vacuous across the window instead of
-    holding of a transiently-wrong pointer. *)
 Definition reload_sp (buf: Pointer.t) : code :=
   [IConst (IPtr buf) R_AUX2;
    ILoad R_AUX2 R_SP].
@@ -286,11 +248,6 @@ Section WithComponent.
 
 Variable C: Component.id. (* the current component *)
 Variable local_buf_ptr : Pointer.t. (* pointer to the local buffer for current component *)
-(* Pointer to the CALLING-CONVENTION scratch cell (saved SP / arg), a hidden block
-   DISJOINT from the source-visible local buffer. Historically this aliased
-   [local_buf_ptr] = (C,0,0), clobbering user data across external calls (the source
-   semantics threads memory unchanged through calls, and Definability's back-translation
-   uses slot (C,0,0) as its persistent counter) — a compiler-correctness bug. *)
 Variable scratch_buf_ptr : Pointer.t.
 Variable P_labels : NMap label.  (* map from procedure id's to start labels for current component *)
 
@@ -302,9 +259,6 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_val (Int i) =>
     ret [IConst (IInt i) R_COM]
   | E_val (Ptr p) =>
-    (* well-formed programs have no pointer literals ([values_are_integers]);
-       rejecting them here means every successfully compiled expression's
-       value leaves are integers — which the simulation's [val_inject] needs *)
     fail
   | E_val Undef => fail (* we don't compile undef *)
   | E_arg =>
@@ -345,10 +299,6 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     ret (c ++
          ILoad R_COM R_COM :: nil)
   | E_assign e1 e2 =>
-    (* The SOURCE evaluates the value e2 FIRST, then the address e1 (KS_Assign1/2).
-       Compiling the address first reordered side effects/events — a compiler-
-       correctness bug. Emit: value; push it; address; pop value; store; and put
-       the VALUE back in R_COM (the source result of an assignment is the value). *)
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
     ret (c2 ++
@@ -379,27 +329,8 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_exit => ret [IHalt]
   end.
 
-(* Pointer to the "program started" flag: cell 1 of the hidden block 1 (the cell 0
-   of that block is the SP-scratch [scratch_buf_ptr]). Only main's entry uses it. *)
 Definition flag_buf_ptr : Pointer.t := Pointer.add scratch_buf_ptr 1.
 
-(** The per-component scratch cell [scratch_buf_ptr = (C,1,0)] carries [R_SP]
-    across a cross-component call (registers are invalidated at [ICall]/[IReturn],
-    so it cannot live in one).  A re-entrant activation of [C] would clobber it,
-    so some activation must save the inherited value and restore it on exit.
-
-    That save/restore lives in the WRAPPER ([ext_entry]), not in the body.  It is
-    sound there because the cell only holds a live parked value between a park and
-    its matching reload — i.e. inside one [E_call] bracket, [store_arg …; ICall;
-    …; load_arg …], which contains nothing else.  A new activation of [C] can
-    therefore only begin during that window via a CROSS-component call into [C],
-    which necessarily enters through [C]'s wrapper; an intra-component [IJal] can
-    never occur inside the bracket.  So the body needs no save/restore at all.
-
-    Putting it in the wrapper also makes the restore linearly adjacent to the
-    [IReturn] it protects, and leaves the body's copy of the bit monotone — both
-    of which the MicroPolicies Pass-1 proof depends on (see
-    MicroPolicies/PASS1_RESTRUCTURE.md and the [scrinwin] scan in I2T_Static.v). *)
 Definition compile_proc (P: Procedure.id) (e: expr)
   : COMP code :=
   do proc_label <- find_proc_label P;
@@ -407,17 +338,6 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do lreturn <- fresh_label C;
   do proc_code <- compile_expr e;
   let stack_frame_size := Z.of_nat (4 + stack_need e) in
-  (* The machine's initial pc is (Component.main, block of Procedure.main, 0) —
-     i.e. the EXTERNAL entry of main itself; there is no separate startup stub the
-     initial state could target. That entry must therefore serve two contexts:
-       - the initial run: empty gps, R_COM = Undef; the source main runs with
-         arg = Int 0 and program termination must land ON an IHalt (an IReturn
-         with empty gps is stuck, never final);
-       - a genuine cross-component call to (main, Procedure.main): R_COM = Int arg,
-         standard IReturn protocol.
-     They are distinguished by a one-cell "started" flag at [flag_buf_ptr]
-     (initially Int 0, set to Int 1 on first activation — which is necessarily
-     the initial run). The context marker is saved on the frame across the body. *)
   let is_main := Component.eqb C Component.main && Procedure.eqb P Procedure.main in
   let halt_pad := if is_main && immediately_final e then [IHalt] else [] in
   let ext_entry :=
@@ -427,7 +347,6 @@ Definition compile_proc (P: Procedure.id) (e: expr)
        IConst (IInt stack_frame_size) R_SP;
        IAlloc R_SP R_SP] ++
        push R_AUX1 ++
-       (* SAVE the inherited scratch (see the note above [compile_proc]) *)
        load_arg scratch_buf_ptr R_AUX1 ++
        push R_AUX1 ++
        push R_RA ++
@@ -435,20 +354,18 @@ Definition compile_proc (P: Procedure.id) (e: expr)
        ILoad R_AUX1 R_AUX2] ++
        push R_AUX2 ++
       [IBnz R_AUX2 lmain;
-       IConst (IInt 0) R_COM;   (* initial run: main's argument is Int 0 *)
+       IConst (IInt 0) R_COM;
        ILabel lmain;
        IConst (IInt 1) R_AUX2;
-       IStore R_AUX1 R_AUX2;    (* flag := Int 1 *)
+       IStore R_AUX1 R_AUX2;
        IJal proc_label] ++
-       (* the context marker now lands in R_ARG: R_AUX1 is needed to carry the
-          inherited scratch back to the cell, and R_ARG is dead in this wrapper *)
-       pop R_ARG ++             (* context marker *)
+       pop R_ARG ++
        pop R_RA ++
-       pop R_AUX1 ++            (* RESTORE the inherited scratch *)
+       pop R_AUX1 ++
        store_arg scratch_buf_ptr R_AUX1 R_AUX2 ++
        pop R_SP ++
       [IBnz R_ARG lreturn;
-       IHalt;                   (* initial run terminates here *)
+       IHalt;
        ILabel lreturn;
        IReturn]
     else
@@ -495,16 +412,11 @@ Definition compile_procedures
   : COMP (list (Procedure.id * code)) :=
   compile_procedures_aux [] procs.
 
-(* ==================== emission-shape lemmas ==================== *)
-
 Section Shape.
 
-Variable procs : NMap (NMap expr).   (* the SOURCE procedure map *)
+Variable procs : NMap (NMap expr).
 Variable intf  : Program.interface.
 
-(* The per-instruction facts [well_formed_instruction] needs, phrased on an emitted
-   code block. The IBnz clause is block-local (E_if defines its labels in-block); the
-   IJal clause defers to the entry label of a DECLARED procedure of the same component. *)
 Definition code_shape (c : code) : Prop :=
   [/\ (forall r l, List.In (IBnz r l) c -> List.In (ILabel l) c),
       (forall l, List.In (IJal l) c ->
@@ -554,10 +466,6 @@ Lemma valid_calls_weaken (calls calls' : {fset Component.id * Procedure.id}) cur
   {subset calls <= calls'} ->
   Source.valid_calls procs intf cur calls' -> Source.valid_calls procs intf cur calls.
 Proof. move=> Hsub Hv C' P' HIn. apply: Hv. exact: Hsub. Qed.
-
-(* Cons-composition lemmas: the peeled goals are cons-normalized (literal blocks like
-   [push]/[pop]/[load_arg] fuse into conses), so we consume them instruction by
-   instruction. *)
 
 Lemma code_shape_cons_store r1 r2 c :
   code_shape c -> code_shape (IStore r1 r2 :: c).
@@ -683,7 +591,6 @@ Proof.
     case: E => <- _. by apply/Or44.
 Qed.
 
-(* Bnz with an in-block target: the label must be a member of the SAME code list. *)
 Lemma code_shape_cons_bnz r l c :
   List.In (ILabel l) c ->
   code_shape c -> code_shape (IBnz r l :: c).
@@ -720,7 +627,6 @@ Proof.
   - move=> v' r' HIn. destruct HIn as [E|HIn]; [discriminate E|exact: Vc HIn].
 Qed.
 
-(* One step of the cons-consumer for label-free instructions. *)
 Ltac shape_step :=
   first [ exact: code_shape_nil
         | apply: code_shape_cons_store
@@ -736,7 +642,6 @@ Ltac shape_step :=
         | apply: code_shape_cons_const_scratch
         | apply: code_shape_cons_const_flag ].
 
-(* THE master induction: every successful [compile_expr] run emits shape-correct code. *)
 Lemma compile_expr_shape :
   forall e s c s',
     compile_expr e s = Some (c, s') ->
@@ -746,16 +651,16 @@ Lemma compile_expr_shape :
 Proof.
   elim=> [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
          |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc Hvc Hvi.
-  - (* E_val *)
+  -
     case: v Hc Hvc Hvi => [i|p|] Hc _ Hvi.
     + move: Hc => /= [<- _]. exact: code_shape_int.
     + by move: Hvi.
     + by move: Hc => /=.
-  - (* E_arg *)
+  -
     move: Hc => /= [<- _]. exact: code_shape_mov1.
-  - (* E_local *)
+  -
     move: Hc => /= [<- _]. exact: code_shape_local.
-  - (* E_binop *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { apply: valid_calls_weaken Hvc => x Hx. by rewrite /= in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -770,7 +675,7 @@ Proof.
     do 2!shape_step.
     apply: code_shape_cat; first exact: (IH2 _ _ _ E2 Hvc2 Hvi2).
     by do 4!shape_step.
-  - (* E_seq *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { apply: valid_calls_weaken Hvc => x Hx. by rewrite /= in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -783,7 +688,7 @@ Proof.
     rewrite /=. move=> [<- _].
     apply: code_shape_cat; first exact: (IH1 _ _ _ E1 Hvc1 Hvi1).
     exact: (IH2 _ _ _ E2 Hvc2 Hvi2).
-  - (* E_if *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { apply: valid_calls_weaken Hvc => x Hx. by rewrite /= !in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -849,19 +754,19 @@ Proof.
       destruct HIn as [E|HIn]; first by discriminate E.
       move: HIn => /List.in_app_iff [HIn|HIn]; first exact: V2 HIn.
       destruct HIn as [E|HIn]; [discriminate E|by in_discr HIn].
-  - (* E_alloc *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e s) => [[c0 s1]|]; last by [].
     rewrite /=. move=> [<- _].
     apply: code_shape_cat; first exact: (IH _ _ _ E1 Hvc Hvi).
     by do 2!shape_step.
-  - (* E_deref *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e s) => [[c0 s1]|]; last by [].
     rewrite /=. move=> [<- _].
     apply: code_shape_cat; first exact: (IH _ _ _ E1 Hvc Hvi).
     by do 2!shape_step.
-  - (* E_assign *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { apply: valid_calls_weaken Hvc => x Hx. by rewrite /= in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -876,7 +781,7 @@ Proof.
     do 2!shape_step.
     apply: code_shape_cat; first exact: (IH1 _ _ _ E1 Hvc1 Hvi1).
     by do 5!shape_step.
-  - (* E_call *)
+  -
     have Hvce : Source.valid_calls procs intf C (called_procedures e).
     { apply: valid_calls_weaken Hvc => x Hx. by rewrite /= in_fsetU1 Hx orbT. }
     have Hcall : (C', P') \in called_procedures (E_call C' P' e).
@@ -888,7 +793,7 @@ Proof.
     rewrite /=.
     have Se := IH _ _ _ E1 Hvce Hvi.
     case Heqb: (Component.eqb C' C).
-    + (* intra-component: IJal *)
+    +
       have EC : C' = C by apply/Nat.eqb_eq.
       subst C'.
       move: Hvcall. rewrite eqxx => Hfind.
@@ -898,7 +803,7 @@ Proof.
       do 2!shape_step.
       apply: code_shape_cons_jal; first by exists P'.
       by do 3!shape_step.
-    + (* cross-component: ICall *)
+    +
       have HneC : C <> C'.
       { move=> E. rewrite -E /Component.eqb Nat.eqb_refl in Heqb. discriminate Heqb. }
       have HneqOp : (C' == C) = false.
@@ -909,7 +814,7 @@ Proof.
       do 6!shape_step.
       apply: code_shape_cons_call => //.
       by do 8!shape_step.
-  - (* E_exit *)
+  -
     move: Hc => /= [<- _]. exact: code_shape_halt1.
 Qed.
 
@@ -923,7 +828,6 @@ Proof.
   - move=> v' r' HIn. destruct HIn as [E|HIn]; [discriminate E|exact: Vc HIn].
 Qed.
 
-(* A compiled procedure: shape-correct, and its entry label is DEFINED in its body. *)
 Lemma compile_proc_shape :
   forall P e s c s',
     compile_proc P e s = Some (c, s') ->
@@ -945,7 +849,7 @@ Proof.
   rewrite /=. move=> [<- _].
   have Se := compile_expr_shape _ _ _ _ E4 Hvc Hvi.
   case: (Component.eqb C Component.main && Procedure.eqb P Procedure.main).
-  - (* main's dual-context entry; the halt pad shifts everything by one *)
+  -
     case: (immediately_final e) => /=.
     + split.
       * repeat shape_step.
@@ -983,7 +887,7 @@ Proof.
         by repeat shape_step.
       * exists pl. split; first by [].
         rewrite /=. do 36![right]. by left.
-  - (* standard entry *)
+  -
     split.
     + repeat shape_step.
       apply: code_shape_cons_jal; first by exists P.
@@ -996,8 +900,6 @@ Proof.
       rewrite /=. do 22![right]. by left.
 Qed.
 
-(* Fold over a component's procedures: keys preserved; each compiled body is
-   shape-correct and defines its own entry label. *)
 Lemma compile_procedures_aux_shape :
   forall (ps : list (Procedure.id * expr)) acc s cds s',
     compile_procedures_aux acc ps s = Some (cds, s') ->
@@ -1057,12 +959,7 @@ Qed.
 
 End Shape.
 
-(* ==================== per-component state locality ==================== *)
-(* The compilation state is ONLY the per-component fresh-label counter map, and a
-   component's compilation reads/writes only its own counter. These two facts make
-   separate compilation agree with linked compilation. *)
 
-(* Frame: compiling inside [C] leaves every other component's counter untouched. *)
 Lemma compile_expr_frame :
   forall C' , C' <> C ->
   forall e s c s',
@@ -1080,21 +977,21 @@ Proof.
     + by move: Hc => /=.
   - by move: Hc => /= [_ <-].
   - by move: Hc => /= [_ <-].
-  - (* E_binop *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
     case E2: (compile_expr e2 s1) => [[c2 s2]|]; last by [].
     rewrite /=. move=> [_ <-].
     by rewrite (IH2 _ _ _ E2) (IH1 _ _ _ E1).
-  - (* E_seq *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
     case E2: (compile_expr e2 s1) => [[c2 s2]|]; last by [].
     rewrite /=. move=> [_ <-].
     by rewrite (IH2 _ _ _ E2) (IH1 _ _ _ E1).
-  - (* E_if *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
@@ -1104,24 +1001,24 @@ Proof.
     rewrite /= !fresh_labelE /=. move=> [_ <-].
     rewrite /= !setmE HneqE.
     by rewrite (IH3 _ _ _ E3) (IH2 _ _ _ E2) (IH1 _ _ _ E1).
-  - (* E_alloc *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e s) => [[c1 s1]|]; last by [].
     rewrite /=. move=> [_ <-].
     exact: IH E1.
-  - (* E_deref *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e s) => [[c1 s1]|]; last by [].
     rewrite /=. move=> [_ <-].
     exact: IH E1.
-  - (* E_assign *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret.
     case E1: (compile_expr e1 s) => [[c1 s1]|]; last by [].
     rewrite /=.
     case E2: (compile_expr e2 s1) => [[c2 s2]|]; last by [].
     rewrite /=. move=> [_ <-].
     by rewrite (IH2 _ _ _ E2) (IH1 _ _ _ E1).
-  - (* E_call *)
+  -
     move: Hc; rewrite /= /Comp.bind /Comp.ret /find_proc_label /Comp.lift.
     case E1: (compile_expr e s) => [[carg s1]|]; last by [].
     rewrite /=.
@@ -1134,8 +1031,6 @@ Proof.
   - by move: Hc => /= [_ <-].
 Qed.
 
-(* Agreement: two runs whose [C]-counters agree produce the SAME code and keep
-   agreeing. (All other inputs are parameters, fixed by the section.) *)
 Lemma compile_expr_agree :
   forall e s1 s2 c1 c2 s1' s2',
     getm (next_label s1) C = getm (next_label s2) C ->
@@ -1151,7 +1046,7 @@ Proof.
     + by move: Hc1 => /=.
   - move: Hc1 Hc2 => /= [<- <-] [<- <-]. by split.
   - move: Hc1 Hc2 => /= [<- <-] [<- <-]. by split.
-  - (* E_binop *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret.
     case E1a: (compile_expr e1 s1) => [[c1a s1a]|]; last by [].
     rewrite /=.
@@ -1165,7 +1060,7 @@ Proof.
     have [Ec1 Hag1] := IH1 _ _ _ _ _ _ Hag E1a E1b.
     have [Ec2 Hag2] := IH2 _ _ _ _ _ _ Hag1 E2a E2b.
     subst c1b c2b. by split.
-  - (* E_seq *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret.
     case E1a: (compile_expr e1 s1) => [[c1a s1a]|]; last by [].
     rewrite /=.
@@ -1179,7 +1074,7 @@ Proof.
     have [Ec1 Hag1] := IH1 _ _ _ _ _ _ Hag E1a E1b.
     have [Ec2 Hag2] := IH2 _ _ _ _ _ _ Hag1 E2a E2b.
     subst c1b c2b. by split.
-  - (* E_if *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret.
     case E1a: (compile_expr e1 s1) => [[c1a s1a]|]; last by [].
     rewrite /=.
@@ -1200,7 +1095,7 @@ Proof.
     subst c1b c2b c3b.
     rewrite !setmE !eqxx /= Hag3.
     by split.
-  - (* E_alloc *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret.
     case E1a: (compile_expr e s1) => [[c1a s1a]|]; last by [].
     rewrite /=. move=> [<- <-].
@@ -1209,7 +1104,7 @@ Proof.
     rewrite /=. move=> [<- <-].
     have [Ec1 Hag1] := IH _ _ _ _ _ _ Hag E1a E1b.
     subst c1b. by split.
-  - (* E_deref *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret.
     case E1a: (compile_expr e s1) => [[c1a s1a]|]; last by [].
     rewrite /=. move=> [<- <-].
@@ -1218,7 +1113,7 @@ Proof.
     rewrite /=. move=> [<- <-].
     have [Ec1 Hag1] := IH _ _ _ _ _ _ Hag E1a E1b.
     subst c1b. by split.
-  - (* E_assign *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret.
     case E1a: (compile_expr e1 s1) => [[c1a s1a]|]; last by [].
     rewrite /=.
@@ -1232,7 +1127,7 @@ Proof.
     have [Ec1 Hag1] := IH1 _ _ _ _ _ _ Hag E1a E1b.
     have [Ec2 Hag2] := IH2 _ _ _ _ _ _ Hag1 E2a E2b.
     subst c1b c2b. by split.
-  - (* E_call *)
+  -
     move: Hc1; rewrite /= /Comp.bind /Comp.ret /find_proc_label /Comp.lift.
     case E1a: (compile_expr e s1) => [[carga s1a]|]; last by [].
     rewrite /=.
@@ -1293,8 +1188,6 @@ Proof.
   { by rewrite /= !setmE !eqxx /= Hag. }
   have [Ec Hag4] := compile_expr_agree _ _ _ _ _ _ _ Hag2 E4a E4b.
   subst pcodeb. split; last exact: Hag4.
-  (* the [lmain]/[lreturn] labels now occur in the emitted code; their two
-     runs' values coincide by counter agreement *)
   by rewrite !setmE !eqxx /= Hag.
 Qed.
 
@@ -1334,8 +1227,6 @@ Qed.
 
 End WithComponent.
 
-(* ==================== totality (for well_formed_compilable) ==================== *)
-
 Lemma compile_expr_total :
   forall (C : Component.id) (lbp scr : Pointer.t) (P_labels : NMap label)
          (procs : NMap (NMap expr)) (intf : Program.interface) e,
@@ -1347,14 +1238,14 @@ Proof.
   move=> C lbp scr P_labels procs intf.
   elim=> [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
          |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] Hvc Hvi Hlab s.
-  - (* E_val *)
+  -
     case: v Hvc Hvi => [i|p|] _ Hvi.
     + by do 2 eexists.
     + by move: Hvi.
     + by move: Hvi.
   - by do 2 eexists.
   - by do 2 eexists.
-  - (* E_binop *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { move=> x P0 Hx. apply: Hvc. by rewrite /= in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -1364,7 +1255,7 @@ Proof.
     have [c2 [s2 E2]] := IH2 Hvc2 Hvi2 Hlab s1.
     do 2 eexists.
     rewrite /= /Comp.bind E1 /= E2 /=. reflexivity.
-  - (* E_seq *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { move=> x P0 Hx. apply: Hvc. by rewrite /= in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -1374,7 +1265,7 @@ Proof.
     have [c2 [s2 E2]] := IH2 Hvc2 Hvi2 Hlab s1.
     do 2 eexists.
     rewrite /= /Comp.bind E1 /= E2 /=. reflexivity.
-  - (* E_if *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { move=> x P0 Hx. apply: Hvc. by rewrite /= !in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -1389,15 +1280,15 @@ Proof.
     have [l5 [s5 E5]] := fresh_label_total C s4.
     do 2 eexists.
     rewrite /= /Comp.bind E1 /= E2 /= E3 /= E4 /= E5 /=. reflexivity.
-  - (* E_alloc *)
+  -
     have [c1 [s1 E1]] := IH Hvc Hvi Hlab s.
     do 2 eexists.
     rewrite /= /Comp.bind E1 /=. reflexivity.
-  - (* E_deref *)
+  -
     have [c1 [s1 E1]] := IH Hvc Hvi Hlab s.
     do 2 eexists.
     rewrite /= /Comp.bind E1 /=. reflexivity.
-  - (* E_assign *)
+  -
     have Hvc1 : Source.valid_calls procs intf C (called_procedures e1).
     { move=> x P0 Hx. apply: Hvc. by rewrite /= in_fsetU Hx. }
     have Hvc2 : Source.valid_calls procs intf C (called_procedures e2).
@@ -1407,7 +1298,7 @@ Proof.
     have [c2 [s2 E2]] := IH2 Hvc2 Hvi2 Hlab s1.
     do 2 eexists.
     rewrite /= /Comp.bind E1 /= E2 /=. reflexivity.
-  - (* E_call *)
+  -
     have Hvce : Source.valid_calls procs intf C (called_procedures e).
     { move=> x P0 Hx. apply: Hvc. by rewrite /= in_fsetU1 Hx orbT. }
     have Hcall : (C', P') \in called_procedures (E_call C' P' e).
@@ -1416,7 +1307,7 @@ Proof.
     move: Hvi => /= Hvi.
     have [carg [s1 E1]] := IH Hvce Hvi Hlab s.
     case Heqb: (Component.eqb C' C).
-    + (* intra: the target label exists *)
+    +
       have EC : C' = C by apply/Nat.eqb_eq.
       subst C'.
       move: Hvcall. rewrite eqxx => Hfind.
@@ -1474,8 +1365,6 @@ Proof.
     rewrite /Comp.bind E1 /=. exact: E'.
 Qed.
 
-(* The accumulator folds are TOP-LEVEL fixpoints (not local [fix]es) so the
-   static-correctness proofs below can state accumulator-generalized invariants. *)
 Fixpoint gen_component_procedures_labels_aux
          (comp: Component.id) (acc: NMap label) (procs: list (Procedure.id * expr))
   : COMP (NMap label) :=
@@ -1505,10 +1394,6 @@ Definition gen_all_procedures_labels
          (procs: list (Component.id * NMap expr))
   : COMP (NMap (NMap label)) :=
   gen_all_procedures_labels_aux emptym procs.
-
-(* Label generation is TOTAL and covers exactly the input procedure/component ids. *)
-
-(* ==================== fold-level locality (separate compilation) ==================== *)
 
 Lemma gen_component_labels_aux_frame :
   forall comp C', C' <> comp ->
@@ -1546,7 +1431,6 @@ Proof.
     exact: IH Hag' Hrest1 Hrest2.
 Qed.
 
-(* Untouched keys of the accumulated label map survive the fold. *)
 Lemma gen_all_labels_aux_untouched :
   forall (cs : list (Component.id * NMap expr)) acc s ml s' K,
     gen_all_procedures_labels_aux acc cs s = Some (ml, s') ->
@@ -1564,7 +1448,6 @@ Proof.
     by rewrite (negbTE HneqK).
 Qed.
 
-(* The label-generation fold does not touch counters of components outside the list. *)
 Lemma gen_all_labels_aux_frame :
   forall (cs : list (Component.id * NMap expr)) acc s ml s' C',
     gen_all_procedures_labels_aux acc cs s = Some (ml, s') ->
@@ -1584,9 +1467,6 @@ Proof.
     exact: (gen_component_labels_aux_frame _ _ HneC0 _ _ _ _ _ Eg).
 Qed.
 
-(* Per-key extraction: the label map at a listed component is the output of its OWN
-   generation run, launched with the initial C-counter; the fold's final C-counter is
-   that run's post-counter. *)
 Lemma gen_all_labels_aux_getC :
   forall (cs : list (Component.id * NMap expr)) acc s ml s' C Cprocs,
     gen_all_procedures_labels_aux acc cs s = Some (ml, s') ->
@@ -1696,13 +1576,6 @@ Proof.
   by rewrite Hdom emptymE orbF.
 Qed.
 
-(* Block 0: the SOURCE-VISIBLE local buffer (same addresses as at Source level).
-   Block 1: a hidden two-cell block for the calling convention — deliberately
-   DISJOINT from block 0 so the convention never clobbers source-visible data:
-     cell 0 = the SP-scratch cell (see [scratch_buf_ptr]), initially Undef;
-     cell 1 = the "program started" flag (see [flag_buf_ptr]), initially Int 0
-              (main's entry point Bnz-tests it to tell the initial run apart
-              from a genuine cross-component call — it must start as an Int). *)
 Definition gen_buffers
          (bufs: {fmap Component.id -> nat + list value})
   : NMap {fmap Block.id -> nat + list value} :=
@@ -1711,7 +1584,6 @@ Definition gen_buffers
 Lemma gen_buffers_domm bufs : domm (gen_buffers bufs) = domm bufs.
 Proof. exact: domm_map. Qed.
 
-(* Every generated per-component buffer map declares block 0 (the user buffer)... *)
 Lemma gen_buffers_block0 bufs Cid bs :
   getm (gen_buffers bufs) Cid = Some bs -> List.In 0 (map fst bs).
 Proof.
@@ -1723,7 +1595,6 @@ Proof.
   exact: (List.in_map fst).
 Qed.
 
-(* ... and block 1 (the calling-convention scratch/flag block). *)
 Lemma gen_buffers_block1 bufs Cid bs :
   getm (gen_buffers bufs) Cid = Some bs -> List.In 1 (map fst bs).
 Proof.
@@ -1763,9 +1634,6 @@ Definition compile_components
   : COMP (list (Component.id * NMap code)) :=
   compile_components_aux local_buffers procs_labels [] comps.
 
-(* Fold over the components: keys preserved; each compiled component map has the
-   source procedure ids as its domain and shape-correct, entry-labelled bodies. *)
-(* Same two facts for the code-generation fold. *)
 Lemma compile_components_aux_untouched :
   forall lb pls (cs : list (Component.id * NMap expr)) acc s out s' K,
     compile_components_aux lb pls acc cs s = Some (out, s') ->
@@ -2019,18 +1887,9 @@ Definition compile_program
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
     do code <- compile_components local_buffers procs_labels comps;
-    (* [wrap_main] REMOVED (2026-07-23): the stub procedure it installed
-       ([IConst 1 R_ONE; IJal main; IHalt]) was dead code — the initial pc is
-       [EntryPoint.get Component.main Procedure.main], i.e. Procedure.main's
-       own block (whose head is the ext_entry code); the stub was unexported,
-       unlabeled and never called — and it falsified the Pass-1 static facts
-       ([jal_sigma_nonempty], [genv_phase]'s IJal clause). *)
     ret {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
            Intermediate.prog_buffers := local_buffers;
-           (* NOT unconditionally true: mainless programs (contexts) must compile.
-              [isSome] written explicitly — the coercion previously hid a bug here
-              ([Some Procedure.main] elaborated to [true] for EVERY program). *)
            Intermediate.prog_main := isSome (Source.prog_main p) |}).
 
 Lemma compilation_preserves_interface:
@@ -2069,7 +1928,6 @@ Qed.
 
 (* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).
    Try to get rid of unnecessary clutter in statement and propagate. *)
-(* The compiled main flag is exactly "the source has a main". *)
 Lemma compilation_preserves_main_flag:
   forall p p_compiled,
     compile_program p = Some p_compiled ->
@@ -2145,11 +2003,6 @@ Proof.
   exact: iff_refl.
 Qed.
 
-(* ==================== separate compilation ==================== *)
-
-(* Two compilations that contain the same component (same procedures) and start with
-   agreeing counters produce THE SAME label map and THE SAME compiled code at that
-   component — regardless of what other components accompany it. *)
 Lemma compile_per_key :
   forall (csA csB : list (Component.id * NMap expr)) K Kprocs
          gbA gbB labelsA labelsB sA sB s1A s1B outA outB s2A s2B,
@@ -2164,7 +2017,6 @@ Lemma compile_per_key :
 Proof.
   move=> csA csB K Kprocs gbA gbB labelsA labelsB sA sB s1A s1B outA outB s2A s2B.
   move=> HuA HuB HInA HInB HlabA HlabB Hag0 HcompA HcompB.
-  (* labels phase, per key *)
   have [sKA [mA [sKA' [HagA HgA HmlA HfinA]]]]
     := gen_all_labels_aux_getC _ _ _ _ _ _ _ HlabA HuA HInA.
   have [sKB [mB [sKB' [HagB HgB HmlB HfinB]]]]
@@ -2176,7 +2028,6 @@ Proof.
   have Hlabels_eq : getm labelsA K = getm labelsB K.
   { by rewrite HmlA HmlB. }
   split; first exact: Hlabels_eq.
-  (* code phase, per key *)
   have [plmA [sCA [cdsA [sCA' [HplsA HagCA HgCA HoutA]]]]]
     := compile_components_aux_getC _ _ _ _ _ _ _ _ _ HcompA HuA HInA.
   have [plmB [sCB [cdsB [sCB' [HplsB HagCB HgCB HoutB]]]]]
@@ -2193,7 +2044,6 @@ Proof.
   by rewrite HoutA HoutB.
 Qed.
 
-(* [gen_buffers] distributes over disjoint union. *)
 Lemma gen_buffers_union bp bc :
   gen_buffers (unionm bp bc) = unionm (gen_buffers bp) (gen_buffers bc).
 Proof.
@@ -2202,8 +2052,6 @@ Proof.
   by case: (getm bp k) => [v|] /=.
 Qed.
 
-(* The source main flag of a link is the disjunction of the sides' flags
-   (under disjoint procedure maps). *)
 Lemma prog_main_link_flag (p c : Source.program) :
   fdisjoint (domm (Source.prog_procedures p)) (domm (Source.prog_procedures c)) ->
   isSome (Source.prog_main (Source.program_link p c))
@@ -2231,9 +2079,6 @@ Qed.
 (*     compile_program (Source.program_link p c) *)
 (*     = Some (Intermediate.program_link p_comp c_comp). *)
 
-(* STRONG separate compilation: compiling a link IS linking the compilations.
-   True because the compilation state is a per-component label counter, and each
-   component's output depends only on its own procedures and its own counter. *)
 Theorem separate_compilation:
   forall p c p_comp c_comp pc_comp,
     Source.well_formed_program p ->
@@ -2274,7 +2119,6 @@ Proof.
                                                  (Source.prog_procedures c))))
     := sorted_uniq (@Ord.lt_trans _) (@Ord.ltxx _)
          (valP (unionm (Source.prog_procedures p) (Source.prog_procedures c))).
-  (* --- peel the three compilations --- *)
   move: Hcl. rewrite {1}/compile_program /Comp.run /= /Comp.bind /=.
   case ElabL: (gen_all_procedures_labels
                  (elementsm (Source.prog_procedures (Source.program_link p c))) init_env)
@@ -2294,7 +2138,6 @@ Proof.
   rewrite /=.
   case EcompC: (compile_components _ labelsC _ cenvC1) => [[codeC cenvC2]|]; last by [].
   rewrite /=.
-  (* --- key-set facts for the three compiled code lists --- *)
   have Hcs_of : forall (x : Source.program),
       Source.well_formed_program x ->
       forall Cid Cprocs,
@@ -2327,12 +2170,11 @@ Proof.
   have HdomC : forall K, isSome (getm (mkfmap codeC) K)
                   = (K \in domm (Source.prog_procedures c)).
   { move=> K. by rewrite mkfmapE getm_def_isSome HkeysC unzip1_elementsm_domm. }
-  (* --- pre-wrap per-key equality of procedures, and labels at main --- *)
   have Hkey : forall K, getm (mkfmap codeL) K
                  = getm (unionm (mkfmap codeP) (mkfmap codeC)) K.
   { move=> K. rewrite unionmE.
     case EKp: (getm (Source.prog_procedures p) K) => [Kprocs|].
-    - (* p side *)
+    -
       have HInP : List.In (K, Kprocs) (elementsm (Source.prog_procedures p))
         := getm_In_elementsm EKp.
       have EKl : getm (unionm (Source.prog_procedures p) (Source.prog_procedures c)) K
@@ -2350,7 +2192,7 @@ Proof.
       have HPk : isSome (getm (mkfmap codeP) K) = true.
       { by rewrite HdomP mem_domm EKp. }
       by case: (getm (mkfmap codeP) K) HPk.
-    - (* not on p: c side or undeclared *)
+    -
       have HPnone : getm (mkfmap codeP) K = None.
       { have := HdomP K. rewrite mem_domm EKp /=.
         by case: (getm (mkfmap codeP) K). }
@@ -2398,7 +2240,6 @@ Proof.
           Huniq_l Huniq_c HInL HInC ElabL ElabC erefl EcompL EcompC.
         exact: Hlab_eq.
       + left.
-        (* main undeclared anywhere: both label maps have no entry *)
         have H1 : getm labelsL Component.main = None.
         { have [ml [sl [El [Hd _]]]] := gen_all_procedures_labels_spec
             (elementsm (unionm (Source.prog_procedures p) (Source.prog_procedures c)))
@@ -2415,13 +2256,10 @@ Proof.
           rewrite unzip1_elementsm_domm mem_domm EKp /=.
           by case: (getm labelsP Component.main). }
         by rewrite H1 H2. }
-  (* --- the main flags --- *)
   have Hflag : isSome (Source.prog_main (Source.program_link p c))
                = isSome (Source.prog_main p) || isSome (Source.prog_main c)
     := prog_main_link_flag _ _ Hdisj_procs.
   rewrite Hflag.
-  (* wrap_main REMOVED: all four main-flag branches collapse to the plain
-     record equation (the former no-main branch). *)
   move=> [<-] [<-] [<-].
   rewrite /Intermediate.program_link /=.
   congr Intermediate.mkProg.
@@ -2429,135 +2267,6 @@ Proof.
   + exact: gen_buffers_union.
 Qed.
 
-(* DEAD wrap_main-era branches, kept for reference:
-  case Efp: (isSome (Source.prog_main p)); case Efc: (isSome (Source.prog_main c)).
-  - (* both mains: impossible *)
-    have: False by apply: Hexcl; rewrite ?Efp ?Efc.
-    by [].
-  - (* main on p; premise order in the goal is c → p → linked *)
-    rewrite /wrap_main /= /Comp.bind /Comp.lift /Comp.ret /=.
-    move=> [<-].
-    case EprocsP: (getm (mkfmap codeP) Component.main) => [mainprocsP|]; last by [].
-    rewrite /=.
-    case ElabsP: (getm labelsP Component.main) => [mainlabelsP|]; last by [].
-    rewrite /=.
-    case Elab3P: (getm mainlabelsP Procedure.main) => [mainlabP|]; last by [].
-    rewrite /=. move=> [<-].
-    case EprocsL: (getm (mkfmap codeL) Component.main) => [mainprocsL|]; last by [].
-    rewrite /=.
-    case ElabsL: (getm labelsL Component.main) => [mainlabelsL|]; last by [].
-    rewrite /=.
-    case Elab3L: (getm mainlabelsL Procedure.main) => [mainlabL|]; last by [].
-    rewrite /=. move=> [<-].
-    (* align the main-side data *)
-    have EmpL : mainprocsL = mainprocsP.
-    { have := Hkey Component.main.
-      rewrite EprocsL unionmE EprocsP /=. by case. }
-    have ElabPmain : getm labelsL Component.main = getm labelsP Component.main.
-    { case: Hlab_main => // Hc'.
-      (* main cannot be on c's side: flag fc is false, but main \in domm cp would...
-         actually main IS on p's side since fp holds *)
-      move: Efp. rewrite /Source.prog_main /Source.find_procedure.
-      case Ep: (getm (Source.prog_procedures p) Component.main) => [mp|] //= _.
-      (* labelsC main = None since main not in c's procedures *)
-      have HmainNotC : Component.main \notin domm (Source.prog_procedures c).
-      { apply: (fdisjointP Hdisj_procs). by rewrite mem_domm Ep. }
-      have HlabelsCnone : getm labelsC Component.main = None.
-      { have [ml [sl [El [Hd _]]]] := gen_all_procedures_labels_spec
-          (elementsm (Source.prog_procedures c)) init_env Huniq_c.
-        rewrite El in ElabC. case: ElabC => ? ?; subst ml sl.
-        have := Hd Component.main.
-        rewrite unzip1_elementsm_domm (negbTE HmainNotC).
-        by case: (getm labelsC Component.main). }
-      move: Hc'. rewrite HlabelsCnone ElabsL. by []. }
-    have EmlL : mainlabelsL = mainlabelsP.
-    { move: ElabPmain. rewrite ElabsL ElabsP. by case. }
-    have ElabmainL : mainlabL = mainlabP.
-    { move: Elab3L. rewrite EmlL Elab3P. by case. }
-    subst mainprocsP mainlabelsP mainlabP.
-    have EPfresh : generate_fresh_procedure_id Component.main (mkfmap codeL)
-                   = generate_fresh_procedure_id Component.main (mkfmap codeP).
-    { apply: generate_fresh_procedure_id_ext.
-      by rewrite EprocsL EprocsP. }
-    rewrite /Intermediate.program_link /=.
-    congr Intermediate.mkProg.
-    + (* procedures *)
-      apply/eq_fmap => K.
-      rewrite EPfresh unionmE !setmE.
-      case EKmain: (K == Component.main) => /=.
-      * by [].
-      * have := Hkey K. rewrite unionmE.
-        case EvP: (getm (mkfmap codeP) K) => [v|] /=; first by [].
-        by [].
-    + (* buffers *)
-      exact: gen_buffers_union.
-    (* main flag: closed by congr (true ≡ true || false by conversion) *)
-  - (* main on c: mirror; premise order is c → p → linked *)
-    rewrite /wrap_main /= /Comp.bind /Comp.lift /Comp.ret /=.
-    case EprocsC: (getm (mkfmap codeC) Component.main) => [mainprocsC|]; last by [].
-    rewrite /=.
-    case ElabsC: (getm labelsC Component.main) => [mainlabelsC|]; last by [].
-    rewrite /=.
-    case Elab3C: (getm mainlabelsC Procedure.main) => [mainlabC|]; last by [].
-    rewrite /=. move=> [<-].
-    move=> [<-].
-    case EprocsL: (getm (mkfmap codeL) Component.main) => [mainprocsL|]; last by [].
-    rewrite /=.
-    case ElabsL: (getm labelsL Component.main) => [mainlabelsL|]; last by [].
-    rewrite /=.
-    case Elab3L: (getm mainlabelsL Procedure.main) => [mainlabL|]; last by [].
-    rewrite /=. move=> [<-].
-    have HmainNotP : Component.main \notin domm (Source.prog_procedures p).
-    { move: Efc. rewrite /Source.prog_main /Source.find_procedure.
-      case Ec: (getm (Source.prog_procedures c) Component.main) => [mc|] //= _.
-      have Hmc : Component.main \in domm (Source.prog_procedures c)
-        by rewrite mem_domm Ec.
-      rewrite fdisjointC in Hdisj_procs.
-      exact: (fdisjointP Hdisj_procs) Hmc. }
-    have EmainPnone : getm (mkfmap codeP) Component.main = None.
-    { have := HdomP Component.main. rewrite (negbTE HmainNotP).
-      by case: (getm (mkfmap codeP) Component.main). }
-    have EmpL : mainprocsL = mainprocsC.
-    { have := Hkey Component.main.
-      rewrite EprocsL unionmE EmainPnone EprocsC /=. by case. }
-    have ElabCmain : getm labelsL Component.main = getm labelsC Component.main.
-    { case: Hlab_main => // Hp'.
-      have HlabelsPnone : getm labelsP Component.main = None.
-      { have [ml [sl [El [Hd _]]]] := gen_all_procedures_labels_spec
-          (elementsm (Source.prog_procedures p)) init_env Huniq_p.
-        rewrite El in ElabP. case: ElabP => ? ?; subst ml sl.
-        have := Hd Component.main.
-        rewrite unzip1_elementsm_domm (negbTE HmainNotP).
-        by case: (getm labelsP Component.main). }
-      move: Hp'. rewrite HlabelsPnone ElabsL. by []. }
-    have EmlL : mainlabelsL = mainlabelsC.
-    { move: ElabCmain. rewrite ElabsL ElabsC. by case. }
-    have ElabmainL : mainlabL = mainlabC.
-    { move: Elab3L. rewrite EmlL Elab3C. by case. }
-    subst mainprocsC mainlabelsC mainlabC.
-    have EPfresh : generate_fresh_procedure_id Component.main (mkfmap codeL)
-                   = generate_fresh_procedure_id Component.main (mkfmap codeC).
-    { apply: generate_fresh_procedure_id_ext.
-      by rewrite EprocsL EprocsC. }
-    rewrite /Intermediate.program_link /=.
-    congr Intermediate.mkProg.
-    + apply/eq_fmap => K.
-      rewrite EPfresh unionmE !setmE.
-      case EKmain: (K == Component.main) => /=.
-      * by rewrite (eqP EKmain) EmainPnone.
-      * have := Hkey K. rewrite unionmE.
-        case EvP: (getm (mkfmap codeP) K) => [v|] /=; first by [].
-        by [].
-    + exact: gen_buffers_union.
-  - (* no main anywhere: wrap_main is the identity on all three *)
-    rewrite /wrap_main /=. move=> [<-] [<-] [<-].
-    rewrite /Intermediate.program_link /=.
-    congr Intermediate.mkProg.
-    + apply/eq_fmap => K. exact: Hkey.
-    + exact: gen_buffers_union.
-Qed-of-dead-branches *)
-
-(* The behavioural corollary, with the historical name and statement. *)
 Lemma separate_compilation_weaker:
   forall p c pc_comp p_comp c_comp,
     Source.well_formed_program p ->
@@ -2595,7 +2304,6 @@ Proof.
                  (elementsm (Source.prog_procedures p)) cenv1) => [[code cenv2]|];
     last by [].
   rewrite /=.
-  (* ---- branch-independent facts about the compiled artifacts ---- *)
   have Huniq : uniq (unzip1 (elementsm (Source.prog_procedures p))).
   { exact: (sorted_uniq (@Ord.lt_trans _) (@Ord.ltxx _)
               (valP (Source.prog_procedures p))). }
@@ -2634,7 +2342,6 @@ Proof.
   { move=> Cid cmap Hget.
     move: Hget. rewrite mkfmapE => /getm_def_In HIn.
     exact: HcellsC _ _ HIn. }
-  (* ---- the instruction-wf core, parameterized by the FINAL program record ---- *)
   have Hwfi_core : forall (pcF : Intermediate.program),
       Intermediate.prog_interface pcF = Source.prog_interface p ->
       Intermediate.prog_buffers pcF = gen_buffers (Source.prog_buffers p) ->
@@ -2651,7 +2358,7 @@ Proof.
     have [Hshape _] := Hcells4 _ _ HgetP.
     case: Hshape => [Bs Js Ks Vs].
     case: i HIni => [|l|v r|r1 r2|bop r1 r2 r3|r1 r2|r1 r2|r1 r2|r l| |l|C' P'| |] HIni //.
-    - (* IConst *)
+    -
       case: v HIni => [z|ptr] HIni //.
       have Hv := Vs _ _ HIni.
       have HCdom : Cid \in domm (gen_buffers (Source.prog_buffers p)).
@@ -2664,15 +2371,15 @@ Proof.
       + rewrite Eptr /= HFbuf.
         exists bs. split; first exact: Hbs.
         exact: gen_buffers_block1 Hbs.
-      + (* flag pointer: same hidden block 1, offset 1 *)
+      +
         rewrite Eptr /= HFbuf.
         exists bs. split; first exact: Hbs.
         exact: gen_buffers_block1 Hbs.
-    - (* IBnz *)
+    -
       have Hlab := Bs _ _ HIni.
       have [cmapF [HgF HgFP]] := HFemb _ _ _ _ Hget HgetP.
       by exists cmapF, Pcode.
-    - (* IJal *)
+    -
       have [P'0 [Hpl Hfind0]] := Js _ HIni.
       move: Hfind0. rewrite /Source.find_procedure HpsS.
       case Ee: (getm CprocsS P'0) => [e0|] // _.
@@ -2684,12 +2391,11 @@ Proof.
       subst pl0.
       have [cmapF [HgF HgFP']] := HFemb _ _ _ _ Hget Ec.
       by exists cmapF, P'0, P'code.
-    - (* ICall *)
+    -
       have [Hne Himp] := Ks _ _ HIni.
       split; first exact: Hne.
       by rewrite HFintf.
   }
-  (* ---- wrap_main REMOVED: build the record directly ---- *)
   rewrite /Comp.ret. move=> [<-].
   set pcF := {| Intermediate.prog_interface := Source.prog_interface p;
                 Intermediate.prog_procedures := mkfmap code;
@@ -2721,7 +2427,7 @@ Proof.
     { move=> Cid cmap0 P0 Pc0 Hg1 Hg2. exists cmap0. by split. }
     exact: (Hwfi_core pcF erefl erefl HFemb _ _ _ _ HgetC HgetP _ HIni).
   + by rewrite Hdefb gen_buffers_domm.
-  + (* main existence: the main flag means Procedure.main is a real procedure *)
+  +
     rewrite /pcF /= /Source.prog_main /Source.find_procedure.
     case Eps: (Source.prog_procedures p Component.main) => [CprocsS|] //.
     case Ee: (getm CprocsS Procedure.main) => [e|] // _.
@@ -2734,164 +2440,10 @@ Proof.
     subst CprocsS'.
     exists cmap. split; first by [].
     by rewrite mem_domm Hkeys' mem_domm Ee.
-  + (* main component iff: verbatim the source-side clause *)
+  +
     exact: Hmain_iff.
 Qed.
 
-(* DEAD wrap_main-era branches, kept for reference:
-  rewrite /wrap_main /=.
-  case Emain: (isSome (Source.prog_main p)).
-  - (* main present: the wrapper procedure is added *)
-    rewrite /Comp.bind /Comp.lift /=.
-    case Eprocs: (getm (mkfmap code) Component.main) => [mainprocs|]; last by [].
-    rewrite /=.
-    case Elabs2: (getm labels Component.main) => [mainlabels|]; last by [].
-    rewrite /=.
-    case Elab3: (getm mainlabels Procedure.main) => [mainlab|]; last by [].
-    rewrite /= /Comp.ret. move=> [<-].
-    set P' := generate_fresh_procedure_id Component.main (mkfmap code).
-    set wcode := [:: IConst (IInt 1) R_ONE; IJal mainlab; IHalt].
-    set procs' := setm mainprocs P' wcode.
-    have Hfresh : (P' \in domm mainprocs) = false
-      := generate_fresh_procedure_id_fresh _ _ _ Eprocs.
-    (* Procedure.main is a real procedure of Component.main *)
-    have [CprocsM [plmM [HpsM HplmM HkeysM HcellsM]]] := Hcell _ _ Eprocs.
-    have EplmM : plmM = mainlabels.
-    { move: HplmM. rewrite Elabs2. by case. }
-    subst plmM.
-    have HmainP : isSome (getm mainprocs Procedure.main).
-    { rewrite HkeysM.
-      have [plm' [Hplm' Hplmdom]] := HlIn _ _ (getm_In_elementsm HpsM).
-      move: Hplm'. rewrite Elabs2. case=> ?; subst plm'.
-      by rewrite -Hplmdom Elab3. }
-    case EmainC: (getm mainprocs Procedure.main) HmainP => [maincode|] // _.
-    have [_ [plX [HplX HInX]]] := HcellsM _ _ EmainC.
-    have EplX : plX = mainlab.
-    { move: HplX. rewrite Elab3. by case. }
-    subst plX.
-    have HneqPm : (Procedure.main == P') = false.
-    { apply: negbTE. apply/negP => /eqP E.
-      move: Hfresh. rewrite -E mem_domm EmainC. by []. }
-    (* the embedding into the wrapped map *)
-    have HFemb : forall Cid cmap0 P0 Pc0,
-        getm (mkfmap code) Cid = Some cmap0 -> getm cmap0 P0 = Some Pc0 ->
-        exists cmapF,
-          getm (setm (mkfmap code) Component.main procs') Cid = Some cmapF
-          /\ getm cmapF P0 = Some Pc0.
-    { move=> Cid cmap0 P0 Pc0 Hg1 Hg2.
-      rewrite setmE. case EC: (Cid == Component.main).
-      - rewrite (eqP EC) Eprocs in Hg1. case: Hg1 => ?; subst cmap0.
-        exists procs'. split=> //.
-        rewrite /procs' setmE. case EP: (P0 == P').
-        + exfalso. move: Hfresh. rewrite -(eqP EP) mem_domm Hg2. by [].
-        + exact: Hg2.
-      - exists cmap0. by split. }
-    set pcF := {| Intermediate.prog_interface := Source.prog_interface p;
-                  Intermediate.prog_procedures := setm (mkfmap code) Component.main procs';
-                  Intermediate.prog_buffers := gen_buffers (Source.prog_buffers p);
-                  Intermediate.prog_main := true |}.
-    split=> /=.
-    + (* interface soundness *) exact: Hsound.
-    + (* defined procedures *)
-      rewrite Hdefp -Hdomm_code.
-      apply: esym. apply: domm_pointwise => k.
-      rewrite setmE. case Ek: (k == Component.main) => //=.
-      by rewrite (eqP Ek) Eprocs.
-    + (* exported procedures exist *)
-      move=> C CI HCI P Hexp.
-      have Hfp := Hexpe _ _ (ex_intro _ CI (conj HCI Hexp)).
-      move: Hfp. rewrite /Source.find_procedure.
-      case Eps: (Source.prog_procedures p C) => [CprocsS|] //.
-      case Ee: (getm CprocsS P) => [e|] // _.
-      have HCc : isSome (getm (mkfmap code) C).
-      { by rewrite -mem_domm Hdomm_code mem_domm Eps. }
-      case Ecm: (getm (mkfmap code) C) HCc => [cmap|] // _.
-      have [CprocsS' [plm' [HpsS' _ Hkeys' _]]] := Hcell _ _ Ecm.
-      have E : CprocsS' = CprocsS.
-      { move: HpsS'. rewrite Eps. by case. }
-      subst CprocsS'.
-      have HPk : isSome (getm cmap P).
-      { rewrite Hkeys' mem_domm Ee. by []. }
-      case Ecp: (getm cmap P) HPk => [Pcode|] HPk'; last by discriminate HPk'.
-      rewrite setmE. case EC: (C == Component.main).
-      * case EP: (P == P').
-        { exists procs', wcode. split=> //.
-          by rewrite /procs' setmE EP. }
-        { rewrite (eqP EC) Eprocs in Ecm. case: Ecm => ?; subst cmap.
-          exists procs', Pcode. split=> //.
-          by rewrite /procs' setmE EP. }
-      * exists cmap, Pcode. by split.
-    + (* instructions *)
-      move=> C Cprocs0 HgetC P Pcode HgetP i HIni.
-      move: HgetC. rewrite setmE. case EC: (C == Component.main).
-      * (* Component.main: either the wrapper or an original procedure *)
-        case=> ?; subst Cprocs0.
-        move: HgetP. rewrite /procs' setmE. case EP: (P == P').
-        { (* the wrapper procedure *)
-          case=> ?; subst Pcode.
-          case: HIni => [<-|[<-|[<-|[]]]] //=.
-          (* IJal mainlab *)
-          exists procs', Procedure.main, maincode.
-          rewrite setmE EC. split=> //.
-          rewrite /procs' setmE HneqPm. by split. }
-        { (* original main procedure *)
-          move=> HgetP.
-          rewrite (eqP EC).
-          exact: (Hwfi_core pcF erefl erefl HFemb _ _ _ _ Eprocs HgetP _ HIni). }
-      * (* other component: unchanged *)
-        move=> HgetC.
-        exact: (Hwfi_core pcF erefl erefl HFemb _ _ _ _ HgetC HgetP _ HIni).
-    + (* defined buffers *)
-      by rewrite Hdefb gen_buffers_domm.
-    + (* main existence *)
-      move=> _.
-      exists procs'. rewrite setmE eqxx. split=> //.
-      by rewrite /procs' mem_domm setmE HneqPm EmainC.
-    + (* main component iff *)
-      split; first by [].
-      move=> _. apply: (proj2 Hmain_iff). by rewrite Emain.
-  - (* no main: the record is used as built *)
-    rewrite /Comp.ret. move=> [<-].
-    set pcF := {| Intermediate.prog_interface := Source.prog_interface p;
-                  Intermediate.prog_procedures := mkfmap code;
-                  Intermediate.prog_buffers := gen_buffers (Source.prog_buffers p);
-                  Intermediate.prog_main := false |}.
-    split=> /=.
-    + exact: Hsound.
-    + by rewrite Hdefp -Hdomm_code.
-    + move=> C CI HCI P Hexp.
-      have Hfp := Hexpe _ _ (ex_intro _ CI (conj HCI Hexp)).
-      move: Hfp. rewrite /Source.find_procedure.
-      case Eps: (Source.prog_procedures p C) => [CprocsS|] //.
-      case Ee: (getm CprocsS P) => [e|] // _.
-      have HCc : isSome (getm (mkfmap code) C).
-      { by rewrite -mem_domm Hdomm_code mem_domm Eps. }
-      case Ecm: (getm (mkfmap code) C) HCc => [cmap|] // _.
-      have [CprocsS' [plm' [HpsS' _ Hkeys' _]]] := Hcell _ _ Ecm.
-      have E : CprocsS' = CprocsS.
-      { move: HpsS'. rewrite Eps. by case. }
-      subst CprocsS'.
-      have HPk : isSome (getm cmap P).
-      { rewrite Hkeys' mem_domm Ee. by []. }
-      case Ecp: (getm cmap P) HPk => [Pcode|] HPk'; last by discriminate HPk'.
-      exists cmap, Pcode. by split.
-    + move=> C Cprocs0 HgetC P Pcode HgetP i HIni.
-      have HFemb : forall Cid cmap0 P0 Pc0,
-          getm (mkfmap code) Cid = Some cmap0 -> getm cmap0 P0 = Some Pc0 ->
-          exists cmapF, getm (mkfmap code) Cid = Some cmapF /\ getm cmapF P0 = Some Pc0.
-      { move=> Cid cmap0 P0 Pc0 Hg1 Hg2. exists cmap0. by split. }
-      exact: (Hwfi_core pcF erefl erefl HFemb _ _ _ _ HgetC HgetP _ HIni).
-    + by rewrite Hdefb gen_buffers_domm.
-    + (* main existence: prog_main is false *)
-      by [].
-    + (* main component iff *)
-      rewrite /pcF /=.
-      split=> [Hd|F]; last by discriminate F.
-      have HF := (proj1 Hmain_iff) Hd.
-      rewrite Emain in HF. exact: HF.
-Qed-of-dead-branches *)
-
-(* FCC *)
 Theorem well_formed_compilable :
   forall p,
     Source.well_formed_program p ->
@@ -2941,59 +2493,9 @@ Proof.
          _ _ _ [::] s1 Hcs.
   have Ecomp' : compile_components (gen_buffers (Source.prog_buffers p)) labels
                   (elementsm (Source.prog_procedures p)) s1 = Some (code, s2) := Ecomp.
-  (* wrap_main REMOVED: compile_program succeeds as soon as labels+code do *)
   eexists.
   rewrite /compile_program /Comp.run /= /Comp.bind /= Elab /=.
   rewrite Ecomp' /=.
   reflexivity.
 Qed.
-
-(* DEAD wrap_main-era branches, kept for reference:
-  case Emain: (isSome (Source.prog_main p)).
-  - (* main present: wrap_main's lifts all succeed *)
-    have HmainSome : Source.prog_main p by rewrite Emain.
-    have Hmd : Component.main \in domm (Source.prog_procedures p).
-    { have Hmi := (proj2 Hmain_iff) HmainSome. by rewrite -Hdefp. }
-    have Hcs2 : forall Cid Cprocs,
-        List.In (Cid, Cprocs) (elementsm (Source.prog_procedures p)) ->
-        Source.prog_procedures p Cid = Some Cprocs
-        /\ (forall P e, getm Cprocs P = Some e ->
-              Source.valid_calls (Source.prog_procedures p) (Source.prog_interface p)
-                Cid (called_procedures e)
-              /\ Source.values_are_integers e).
-    { move=> Cid Cp HIn. have [H1 _ _ _ H5] := Hcs _ _ HIn. by split. }
-    have [HkeysC HcellsC]
-      := compile_components_shape (Source.prog_procedures p) (Source.prog_interface p)
-           _ _ _ _ _ _ Ecomp' Hcs2.
-    have HmainC : isSome (getm (mkfmap code) Component.main).
-    { rewrite mkfmapE getm_def_isSome HkeysC unzip1_elementsm_domm. exact: Hmd. }
-    case EprocsM: (getm (mkfmap code) Component.main) HmainC => [mainprocs|] HmainC;
-      last by discriminate HmainC.
-    have HlabelsM : isSome (getm labels Component.main).
-    { rewrite Hldom unzip1_elementsm_domm. exact: Hmd. }
-    case ElabsM: (getm labels Component.main) HlabelsM => [mainlabels|] HlabelsM;
-      last by discriminate HlabelsM.
-    case/dommP: Hmd => CprocsM EpsM.
-    have HPmain : isSome (getm CprocsM Procedure.main).
-    { move: HmainSome. by rewrite /Source.prog_main /Source.find_procedure EpsM. }
-    have [plm [Hplm Hplmdom]] := HlIn _ _ (getm_In_elementsm EpsM).
-    have Eplm : plm = mainlabels.
-    { move: Hplm. rewrite ElabsM. by case. }
-    subst plm.
-    have HlabPm : isSome (getm mainlabels Procedure.main).
-    { rewrite Hplmdom mem_domm.
-      by case: (getm CprocsM Procedure.main) HPmain. }
-    case Elab3M: (getm mainlabels Procedure.main) HlabPm => [mainlab|] HlabPm;
-      last by discriminate HlabPm.
-    eexists.
-    rewrite /compile_program /Comp.run /= /Comp.bind /= Elab /=.
-    rewrite Ecomp' /= /wrap_main /= Emain /Comp.bind /Comp.lift /=.
-    rewrite EprocsM /= ElabsM /= Elab3M /=.
-    reflexivity.
-  - (* no main: wrap_main is the identity *)
-    eexists.
-    rewrite /compile_program /Comp.run /= /Comp.bind /= Elab /=.
-    rewrite Ecomp' /= /wrap_main /= Emain /=.
-    reflexivity.
-Qed-of-dead-branches *)
 

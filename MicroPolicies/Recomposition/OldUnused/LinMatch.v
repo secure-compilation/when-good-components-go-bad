@@ -1,15 +1,3 @@
-(* Task #14 (I→Merged correctness): the MEMORY RELATION of the simulation.
-
-   The match relation carries a block-address map [addr_map] (component ->
-   block -> flat base): static buffers at BufferLayout's [bl_base], dynamic
-   blocks wherever [alloc_fun] placed them.  Values relate pointwise
-   ([val_rel_b]; Undef is free — note the gps-based Intermediate machine
-   CLOBBERS R_RA at IJal, so the compiled convention's stack cells hold
-   Undef on the I side and the whole stack-content correspondence is
-   absorbed here).  [mem_rel] packages the load correspondence with the
-   address map's injectivity and word-fit; [mem_rel_store] is the STORE
-   step's preservation lemma. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -40,15 +28,12 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* the block-address map: component -> block -> flat base address *)
 Definition addr_map := NMap (NMap nat).
 
 Definition amap_get (bmap : addr_map) (C : Component.id) (b : Block.id)
   : option nat :=
   obind (fun m => getm m b) (getm bmap C).
 
-(* value relation, address-map parameterized (pointers may target dynamic
-   blocks); Undef relates to anything *)
 Definition val_rel_b (bmap : addr_map) (v : value) (w : mword mt) : Prop :=
   match v with
   | Undef => True
@@ -66,7 +51,6 @@ Definition val_rel_b (bmap : addr_map) (v : value) (w : mword mt) : Prop :=
 Definition loadable (imem : Memory.t) (p : Pointer.t) : Prop :=
   exists v, Memory.load imem p = Some v.
 
-(* THE memory relation *)
 Record mem_rel (bmap : addr_map) (imem : Memory.t)
     (mmem : {fmap mword mt -> matom}) : Prop := MemRel {
   mr_load : forall (C : Component.id) (b : Block.id) (off : Z) (v : value),
@@ -92,8 +76,6 @@ Record mem_rel (bmap : addr_map) (imem : Memory.t)
       (C, b, off) <> (C', b', off') ->
       base + Z.to_nat off <> base' + Z.to_nat off'
 }.
-
-(* ==================== store preservation ==================== *)
 
 Lemma Memory_store_loadable (imem : Memory.t) (p : Pointer.t) (v : value)
     (imem' : Memory.t) :
@@ -126,8 +108,6 @@ split.
   + exists v'. by rewrite (Memory.load_after_store _ _ _ _ _ Hst) Ep.
 Qed.
 
-(* an Intermediate store is matched by the corresponding me-memory update
-   (any colour-C non-code tag — the machine's [switch_val] preserves both) *)
 Lemma mem_rel_store (bmap : addr_map) (imem : Memory.t)
     (mmem : {fmap mword mt -> matom}) (C : Component.id) (b : Block.id)
     (off : Z) (v : value) (imem' : Memory.t) (base : nat) (w : mword mt)
@@ -145,17 +125,17 @@ Proof.
 move=> [ML MF MI] Hst Hb Hv Hcol Hcode.
 have Hldt : loadable imem (C, b, off) := Memory_store_loadable Hst.
 constructor.
-- (* load correspondence *)
+-
   move=> C0 b0 off0 v0.
   rewrite (Memory.load_after_store _ _ _ _ _ Hst).
   case Ep: ((C0, b0, off0) == (C, b, off)).
-  + (* the stored cell *)
+  +
     move/eqP: Ep => Ep. case: Ep => ? ? ?; subst C0 b0 off0.
     move=> [<-].
     exists base, (Atom w tg).
     rewrite setmE eqxx.
     by split.
-  + (* any other cell: untouched on both sides *)
+  +
     move=> Hl0.
     have [base0 [a0 [H1 H2 H3 H4 H5]]] := ML _ _ _ _ Hl0.
     exists base0, a0.
@@ -173,18 +153,16 @@ constructor.
       { move=> E. by rewrite E eqxx in Ep. }
       exact: (MI _ _ _ _ _ _ _ _ (ex_intro _ v0 Hl0) Hldt H1 Hb Hneq Hnat).
     * by split.
-- (* fit *)
+-
   move=> C0 b0 off0 base0 Hld Hb0.
   apply: MF Hb0.
   exact: (proj1 (loadable_after_store _ Hst) Hld).
-- (* injectivity *)
+-
   move=> C0 b0 off0 C1 b1 off1 base0 base1 Hld0 Hld1 Hb0 Hb1 Hne.
   apply: (MI _ _ _ _ _ _ _ _ _ _ Hb0 Hb1 Hne).
   + exact: (proj1 (loadable_after_store _ Hst) Hld0).
   + exact: (proj1 (loadable_after_store _ Hst) Hld1).
 Qed.
-
-(* ==================== registers, address-map parameterized ==================== *)
 
 Definition regs_rel_b (bmap : addr_map)
     (iregs : Intermediate.Register.t)
@@ -206,9 +184,6 @@ split=> //.
 by rewrite init_get_Undef.
 Qed.
 
-(* ==================== the INITIAL memory relation ==================== *)
-
-(* the static address map: declared blocks at BufferLayout's [bl_base] *)
 Definition static_amap (pb : NMap {fmap Block.id -> nat + seq value})
   : addr_map :=
   mapim (fun C bm => mkfmapf (fun b => bl_base pb C b) (domm bm)) pb.
@@ -238,7 +213,6 @@ move=> [<-].
 by exists bm.
 Qed.
 
-(* a loadable initial cell is a declared, in-range buffer cell *)
 Lemma initial_loadable_key (p : Intermediate.program)
     (C : Component.id) (b : Block.id) (off : Z) :
   loadable (Intermediate.prepare_procedures_memory p) (C, b, off) ->
@@ -258,7 +232,7 @@ case Epb: (Intermediate.prog_buffers p C) => [bm|]; last first.
 { by []. }
 rewrite /=.
 case Eb: (bm b) => [[sz|chunk]|] //.
-- (* inl: Undef-filled *)
+-
   case Hlt: (off <? Z.of_nat sz)%Z => // _.
   move/Z.ltb_lt: Hlt => Hlt.
   split=> //.
@@ -271,7 +245,7 @@ case Eb: (bm b) => [[sz|chunk]|] //.
     by lia.
   + exists bm. split=> //.
     by rewrite mem_domm Eb.
-- (* inr: explicit contents *)
+-
   move=> Hnth.
   split=> //.
   + apply/linearize_bufs_key.
@@ -285,9 +259,6 @@ case Eb: (bm b) => [[sz|chunk]|] //.
     by rewrite mem_domm Eb.
 Qed.
 
-(* THE initial memory relation: the I machine's prepared memory relates to
-   the me machine's initial memory (code segment unioned on top), through
-   the static address map *)
 Lemma initial_mem_rel (p : Intermediate.program) (cde : @Merged.code mt) :
   size (linearize_bufs (Intermediate.prog_buffers p)) + size cde
     < 2 ^ word_size mt ->
@@ -308,7 +279,7 @@ move=> Hbound Hptr.
 have Hb1 : size (linearize_bufs (Intermediate.prog_buffers p))
            < 2 ^ word_size mt by lia.
 constructor.
-- (* mr_load *)
+-
   move=> C b off v Hl.
   have Hld : loadable (Intermediate.prepare_procedures_memory p) (C, b, off)
     by exists v.
@@ -329,7 +300,7 @@ constructor.
     exact Hval.
   + by rewrite Htag.
   + by rewrite Htag.
-- (* mr_fit *)
+-
   move=> C b off base Hld Hb.
   have [Hoff Hkey _] := initial_loadable_key Hld.
   have [bm [Epb Hbm Ebase]] := static_amap_inv Hb.
@@ -340,7 +311,7 @@ constructor.
   { by rewrite /nat_addr addnC. }
   rewrite Eaddr.
   by lia.
-- (* mr_inj *)
+-
   move=> C b off C' b' off' base base' Hld Hld' Hb Hb' Hne.
   have [Hoff Hkey _] := initial_loadable_key Hld.
   have [Hoff' Hkey' _] := initial_loadable_key Hld'.
@@ -360,8 +331,6 @@ constructor.
   have Eoff : off = off' by lia.
   by rewrite E1 E2 Eoff.
 Qed.
-
-(* ==================== extending the address map (alloc) ==================== *)
 
 Definition amap_set (bmap : addr_map) (C : Component.id) (b : Block.id)
     (base : nat) : addr_map :=
@@ -390,12 +359,6 @@ case Eb: (b' == b).
 - by case: (getm bmap C).
 Qed.
 
-(* ==================== the allocator's post-state shape ==================== *)
-
-(* single-run characterization of [alloc_fun]: the me memory gains a fresh
-   [len]-cell block right after [max] (the last used address of the
-   component's prefix region), zero-filled and colour-tagged; syscall_ret
-   receives the first address; the pc returns through ra *)
 Lemma alloc_fun_shape (N : nat)
     (s s' : @Symbolic.state mt LRC.lrc_tags unit) :
   LRC.alloc_fun (NC := N) s = Some s' ->
@@ -427,13 +390,11 @@ case Hpf: (~~ _) => // H.
 case: (obind_inv H) => addr [Haddr {}H].
 case: (obind_inv H) => regs' [Hregs' {}H].
 move: H => [= HSt]. subst s'.
-(* the block is non-empty and addr is its first address *)
 case: len Hlen Hbnd Hpf Haddr => [|k] Hlen Hbnd Hpf Haddr.
 { by case: (obind_inv Haddr) => hd [Hhd _]. }
 case: (obind_inv Haddr) => hd [Hhd Hfst].
 move: Hhd => /= [= Ehd]. subst hd.
 move: Hfst => [= Eaddr]. subst addr.
-(* the bound check *)
 move: Hbnd. case: ifP => // Hle _.
 eexists _, k.+1, _, rav, regs'.
 split.

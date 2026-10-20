@@ -1,25 +1,3 @@
-(** * Stage 4, part 13 — [match_states] and the step diagram at T.
-
-    See plan-i2t-redo.md §4 (Stage 4).
-
-    Port of `S2I/Simulation.v:482` (`match_states`), `:5760` (`val_consume`),
-    `:6044` (`step_diagram_expr`) and `:6190` (`step_diagram`). This is the
-    ROUTING layer: every case is "read off which source rule fired, hand the
-    matching diagram its invariant, and repackage the result". No new content
-    about the machine — all of that is in `TDiagram`.
-
-    Two things differ from the I version, and both are inherited rather than
-    new:
-
-    - the target state is `(mem, regs, pc, pct)` — there is no `gps`, the call
-      stack having been replaced by the spilled chain `Sl` inside the
-      invariant;
-    - `rtag` is pinned to `InternalJump` throughout (a procedure BODY is always
-      entered by an `IJal`), so the constructors do not quantify over it.
-
-    `measure` and the `measure_descend_*` arithmetic are reused verbatim from
-    `S2I/Simulation.v`: they are statements about SOURCE states only. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -73,9 +51,6 @@ Variable labelsP : NMap (NMap label).
 Local Notation expr_inv := (TMatch.expr_inv cde iface labelsP).
 Local Notation val_inv := (TMatch.val_inv cde iface labelsP).
 
-(** The relation. `MS_start` is deliberately absent: the initial state needs
-    the COMPILED program (Stage 5's job), and everything below is stated over
-    the abstract `cde`/`iface`/`labelsP` triple. *)
 Variant match_states : S.CS.state -> TS.state -> Prop :=
 | MS_expr : forall a scrs C stk mem k e arg ret Sl tmem tregs pct pc fb prot
                    temps plm c rest s1 s2 cap,
@@ -93,27 +68,15 @@ Variant match_states : S.CS.state -> TS.state -> Prop :=
     TInject.minj a mem tmem ->
     Transitional.executing cde pc i tni (Pointer.component pc) ->
     i = Transitional.TrHalt ->
-    (* ★ [E_val v] OR [E_exit]. Both are stuck at the source and both make
-       [compile_proc] emit main's HALT PAD, so both are matched by a target
-       sitting on an [IHalt] — and [E_exit] has no other constructor to fall
-       into, [expr_inv] being unavailable before the frame exists. *)
     immediately_final e = true ->
     match_states (S.CS.State C [::] mem Kstop e arg)
                  (tmem, tregs, pc, pct).
 
-(* ================================================================== *)
-(* Stage 3's interface: where a call lands                             *)
-(* ================================================================== *)
 
 Variable p : Source.program.
 
 Local Notation G := (Source.GlobalEnv.prepare_global_env p).
 
-(** The two entry-resolution facts the call diagrams consume, gathered as
-    named predicates so the routing lemmas can take them as ordinary premises.
-    Stage 3 discharges both by computation on compiled programs; they are the
-    T analogues of `S2I/SimCode.v:1637` (`compiled_jal_resolution`) and of the
-    entry-point lemmas behind it. *)
 Definition entry_int : Prop :=
   forall C P P_expr plm tl,
     Source.find_procedure (Source.GlobalEnv.genv_procedures G) C P
@@ -130,11 +93,6 @@ Definition entry_int : Prop :=
              ++ push R_AUX1 ++ push R_ARG ++ [:: IMov R_COM R_ARG]
              ++ cbody ++ pop R_ARG ++ pop R_SP ++ [:: IJump])].
 
-(** ★ The IMPORT premise is not decoration: `entry_ext`'s conclusion carries
-    the LRC `check_pc_call` — "C is allowed to call Cf.P" — and no amount of
-    well-formedness turns "Cf has a procedure P" into that. The fact is
-    available wherever this is used: `Source/CS.v`'s `KS_ExternalCall` carries
-    it as a premise of the source step. *)
 Definition entry_ext : Prop :=
   forall C Cf P P_expr,
     C <> Cf ->
@@ -148,7 +106,6 @@ Definition entry_ext : Prop :=
                 (Transitional.TrLabel (inr (Cf, P))) tniW Cf,
               Transitional.check_pc_call C tniW P
             & getm labelsP Cf = Some plmf],
-          (* ★ EITHER wrapper: `(main, main)` gets `compile_proc`'s DUAL entry *)
           (TMacros.code_at_I cde Cf (Pointer.inc pcW)
              (IConst (IInt 1) R_ONE
               :: [:: IMov R_SP R_AUX1;
@@ -192,10 +149,6 @@ Definition entry_ext : Prop :=
              ++ push R_AUX1 ++ push R_ARG ++ [:: IMov R_COM R_ARG]
              ++ cbody ++ pop R_ARG ++ pop R_SP ++ [:: IJump])].
 
-(** The two bridges into [MS_halted]: an invariant sitting on a FINAL source
-    state is matched by a target run onto main's `IHalt`. `diagram_halt` does
-    the running; these just repackage it, and the expression-side one first
-    spends the leaf's `IConst`. *)
 Lemma halted_of_val a scrs C mem v arg ret Sl tmem tregs pct pc fb prot
       temps plm rest cap :
   val_inv a scrs C [::] mem Kstop v arg ret InternalJump Sl tmem tregs pct pc
@@ -226,9 +179,6 @@ Proof.
     [exact: S0 | exact: (plus_star Ph) | by []].
 Qed.
 
-(* ================================================================== *)
-(* Consuming a value: the ten-way dispatch on the continuation         *)
-(* ================================================================== *)
 
 Lemma val_consume a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb prot
       temps plm rest cap t s1' :
@@ -237,9 +187,6 @@ Lemma val_consume a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb prot
   S.CS.kstep G (S.CS.State C stk mem k (E_val v) arg) t s1' ->
   val_inv a scrs C stk mem k v arg ret InternalJump Sl tmem tregs pct pc fb
           prot temps plm rest cap ->
-  (* the RESULT is not a halted state — the only states this routing layer
-     does not cover, and the ones `MS_halted` is for. Discharged at the top
-     level by main's halt pad. *)
   (forall v0, S.CS.s_expr s1' = E_val v0 -> S.CS.s_cont s1' = Kstop ->
      S.CS.s_stack s1' <> [::]) ->
   (exists ts', plus TS.step cde (tmem, tregs, pc, pct) t ts'
@@ -250,17 +197,17 @@ Lemma val_consume a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb prot
 Proof.
   move=> Hei Hee Hdomm Hstep HI Hnf.
   inversion Hstep; subst.
-  - (* KS_Binop2 : Kbinop1 -> Kbinop2 *)
+  -
     case: (TDiagram.diagram_binop2 HI)
       => [pcF [tmem' [tregs' [cd [rest' [sA [sB [Pl Hinv]]]]]]]].
     left. exists (tmem', tregs', pcF, pct). split; first exact: Pl.
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* KS_BinopEval : Kbinop2 -> the value *)
+  -
     case: (TDiagram.diagram_binop_eval HI)
       => [tmem' [tregs' [pcF [rest' [temps' [Pl Hinv]]]]]].
     left. exists (tmem', tregs', pcF, pct). split; first exact: Pl.
     apply: MS_val Hinv _. exact: (Hnf _ erefl).
-  - (* KS_Seq2 : Kseq -> the second expression *)
+  -
     case: (TDiagram.diagram_seq2 HI)
       => [pc' [c2 [rest' [sA [sB [Sd Hor Hinv]]]]]].
     case: Hor => [Epc|Pl].
@@ -270,10 +217,7 @@ Proof.
       * rewrite -Epc. by apply: MS_expr Hinv _; exact: Hnf.
     + left. exists (tmem, tregs, pc', pct). split; first exact: Pl.
       by apply: MS_expr Hinv _; exact: Hnf.
-  - (* KS_If2 : Kif -> the branch the source took.
-       [case: ifP] rather than a hand-written [i != 0]: the [Z] eqType
-       instance that makes `Source/CS.v`'s notation elaborate is not in scope
-       here, but the term already in the goal carries it. *)
+  -
     move: Hnf; case: ifP => Hib Hnf.
     + case: (TDiagram.diagram_if2 (e := e2) HI
                (or_introl (conj (ltac:(by move: Hib => /eqP) : i <> 0%Z)
@@ -287,9 +231,7 @@ Proof.
         => [pcF [cd [rest' [sA [sB [Pl Hinv]]]]]].
       left. exists (tmem, tregs, pcF, pct). split; first exact: Pl.
       by apply: MS_expr Hinv _; exact: Hnf.
-  - (* KS_AllocEval. [Memory.alloc] always hands back offset 0 in the
-       component it was asked for; the source rule keeps its [ptr] abstract,
-       so the shape has to be read back off the definition. *)
+  -
     have Ha : Common.Memory.Memory.alloc mem C (Z.to_nat size)
             = Some (mem', ptr) by eassumption.
     have [bs Eptr] : exists bs, ptr = (C, bs, 0%Z).
@@ -302,22 +244,22 @@ Proof.
       => [a' [tmem' [tregs' [pcF [rest' [Pl Hinv]]]]]].
     left. exists (tmem', tregs', pcF, pct). split; first exact: Pl.
     apply: MS_val Hinv _. exact: (Hnf _ erefl).
-  - (* KS_DerefEval *)
+  -
     case: (TDiagram.diagram_deref_eval HI ltac:(eassumption))
       => [tmem' [tregs' [pcF [rest' [Pl Hinv]]]]].
     left. exists (tmem', tregs', pcF, pct). split; first exact: Pl.
     apply: MS_val Hinv _. exact: (Hnf _ erefl).
-  - (* KS_Assign2 : Kassign1 -> the address expression *)
+  -
     case: (TDiagram.diagram_assign2 HI)
       => [pcF [tmem' [tregs' [cd [rest' [sA [sB [Pl Hinv]]]]]]]].
     left. exists (tmem', tregs', pcF, pct). split; first exact: Pl.
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* KS_AssignEval *)
+  -
     case: (TDiagram.diagram_assign_eval HI ltac:(eassumption))
       => [tmem' [tregs' [pcF [rest' [temps' [Pl Hinv]]]]]].
     left. exists (tmem', tregs', pcF, pct). split; first exact: Pl.
     apply: MS_val Hinv _. exact: (Hnf _ erefl).
-  - (* KS_InternalCall — the callee's body, on a fresh frame *)
+  -
     case: (TDiagram.diagram_call_int HI
              (fun tl Htl =>
                 Hei _ _ _ _ tl ltac:(eassumption) (TMatch.vi_plm HI) Htl))
@@ -325,7 +267,7 @@ Proof.
          [Pl Hinv]]]]]]]]]]].
     left. exists (tmem5, tregs5, pcF, pct). split; first exact: Pl.
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* KS_ExternalCall — the callee's WRAPPER, then its body *)
+  -
     have HneC : C <> C' by eassumption.
     case: (Hee _ _ _ _ HneC ltac:(eassumption) ltac:(eassumption))
       => [HdomF Hres].
@@ -335,13 +277,13 @@ Proof.
     left. exists (tmem5, tregs5, pcF, inc_pc_tag pct).
     split; first exact: Pl.
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* KS_InternalReturn *)
+  -
     case: (TDiagram.diagram_return_int HI)
       => [tmem1 [tregs1 [pcF [rest' [temps' [fb' [prot' [cap' [ret'
          [Sl' [Pl Hinv]]]]]]]]]]].
     left. exists (tmem1, tregs1, pcF, pct). split; first exact: Pl.
     apply: MS_val Hinv _. exact: (Hnf _ erefl).
-  - (* KS_ExternalReturn *)
+  -
     have Huniq : TDrain.labels_uniq cde C
       by move=> l0 C_code Hg; exact: (TMatch.vi_uniq HI l0 Hg).
     have HneR : C <> C' by eassumption.
@@ -353,17 +295,7 @@ Proof.
     apply: MS_val Hinv _. exact: (Hnf _ erefl).
 Qed.
 
-(* ================================================================== *)
-(* Evaluating an expression: the eleven-way dispatch                   *)
-(* ================================================================== *)
 
-(** The mirror of [val_consume], on the expression side. Three shapes:
-
-    - the LEAVES ([E_val] / [E_arg] / [E_local]) take one target step and hand
-      over — [E_val] to [val_consume], the other two straight to [MS_val];
-    - the COMPOUNDS descend, and the target does nothing at all: those are the
-      stutter branches, paid for by [measure];
-    - [E_exit] has no source step, so the case is vacuous. *)
 Lemma step_diagram_expr a scrs C stk mem k e arg ret Sl tmem tregs pct pc fb
       prot temps plm c rest s1 s2 cap t s1' :
   entry_int -> entry_ext ->
@@ -381,7 +313,7 @@ Proof.
   move=> Hei Hee Hdomm Hstep HI Hnf.
   case: e HI Hstep
     => [v|| |op e1 e2|e1 e2|e1 e2 e3|e1|e1|e1 e2|C' P' e1|] HI Hstep.
-  - (* E_val — one [IConst], then consume the value *)
+  -
     case: (TLeaf.leaf_val_run HI) => [i [Ev S0 Hval]].
     case: (val_consume Hei Hee Hdomm Hstep Hval Hnf)
       => [[ts' [P2 Hm2]]|[Hme Ht Hm2]].
@@ -390,65 +322,56 @@ Proof.
         [exact: S0 | exact: (plus_star P2) | by []].
     + left. eexists. split; last exact: Hm2.
       rewrite Ht. exact: plus_one S0.
-  - (* E_arg *)
+  -
     case: (TLeaf.leaf_arg_run HI) => [S0 Hval].
     inversion Hstep; subst.
     left. eexists. split; first exact: plus_one S0.
     apply: MS_val Hval _. exact: (Hnf _ erefl).
-  - (* E_local *)
+  -
     case: (TLeaf.leaf_local_run HI) => [S0 Hval].
     inversion Hstep; subst.
     left. eexists. split; first exact: plus_one S0.
     apply: MS_val Hval _. exact: (Hnf _ erefl).
-  - (* E_binop — descend into [e1] *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_binop HI) => [c1 [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_seq *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_seq HI) => [c1 [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_if *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_if HI) => [c1 [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_alloc *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_alloc HI) => [c1 [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_deref *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_deref HI) => [c1 [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_assign — the VALUE is evaluated first *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_assign HI) => [c2 [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_call *)
+  -
     inversion Hstep; subst.
     case: (TDiagram.descend_call HI) => [ce [rest' [sA [sB Hinv]]]].
     right. split; [by rewrite /measure /=; lia | by [] | ].
     by apply: MS_expr Hinv _; exact: Hnf.
-  - (* E_exit — the source is stuck *)
+  -
     by inversion Hstep.
 Qed.
 
-(* ================================================================== *)
-(* The step diagram                                                    *)
-(* ================================================================== *)
 
-(** Source steps map to target `plus` steps, except for the administrative
-    descends, which stutter against a decreasing `measure` — the shape
-    `forward_simulation_star` wants.
-
-    `MS_halted` needs no case: its source state is a value under `Kstop` with
-    an empty stack, and no source rule fires there. *)
 Lemma step_diagram s1 t s1' :
   entry_int -> entry_ext ->
   (forall C0 plm0, getm labelsP C0 = Some plm0 -> C0 \in domm iface) ->
@@ -461,29 +384,20 @@ Lemma step_diagram s1 t s1' :
 Proof.
   move=> Hei Hee Hdomm Hstep ts Hmatch.
   move: Hstep. case: s1 ts / Hmatch.
-  - (* MS_expr *)
+  -
     move=> a scrs C stk mem k e arg ret Sl tmem tregs pct pc fb prot temps plm
            c0 rest0 sA0 sB0 cap Hinv _ Hstep Hnf.
     exact: (step_diagram_expr Hei Hee Hdomm Hstep Hinv Hnf).
-  - (* MS_val *)
+  -
     move=> a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb prot temps plm
            rest0 cap Hinv _ Hstep Hnf.
     exact: (val_consume Hei Hee Hdomm Hstep Hinv Hnf).
-  - (* MS_halted — the source is stuck *)
+  -
     move=> a C mem e arg tmem tregs pct pc i tni _ _ _ Hif Hstep _.
     by move: Hstep; case: e Hif => [v||||||||||] //= _ Hstep; inversion Hstep.
 Qed.
 
-(* ================================================================== *)
-(* Landing on a final state                                            *)
-(* ================================================================== *)
 
-(** The dispatch for the one case `step_diagram` cannot cover: the source step
-    lands on a FINAL state, so the target must not stop at the matching
-    invariant but run on to main's `IHalt`. Most rules are vacuous here — a
-    result whose continuation is `Kbinop2`, or whose stack has just gained a
-    frame, is not final — and the rest hand their invariant to one of the two
-    bridges. *)
 Lemma halt_of_val_step a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb
       prot temps plm rest cap t s1' :
   (forall C0 plm0, getm labelsP C0 = Some plm0 -> C0 \in domm iface) ->
@@ -497,8 +411,8 @@ Lemma halt_of_val_step a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb
 Proof.
   move=> Hdomm Hstep HI Hfin.
   inversion Hstep; subst.
-  - (* KS_Binop2 *) by case: Hfin => [vf [_ [E _]]].
-  - (* KS_BinopEval *)
+  -  by case: Hfin => [vf [_ [E _]]].
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     case: (TDiagram.diagram_binop_eval HI)
       => [tmem' [tregs' [pcF [rest' [temps' [Pl Hinv]]]]]].
@@ -506,7 +420,7 @@ Proof.
     exists ts'. split; last exact: Hm.
     eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pl | | by []].
     exact: Ph.
-  - (* KS_Seq2 *)
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     case: (TDiagram.diagram_seq2 HI)
       => [pc' [c2 [rest' [sA [sB [Sd _ Hinv]]]]]].
@@ -514,7 +428,7 @@ Proof.
     exists ts'. split; last exact: Hm.
     eapply star_plus_trans with (t1 := E0) (t2 := E0);
       [exact: Sd | exact: Ph | by []].
-  - (* KS_If2 *)
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     move: HI Ev; case: ifP => Hib HI Ev.
     + case: (TDiagram.diagram_if2 (e := e2) HI
@@ -535,7 +449,7 @@ Proof.
       exists ts'. split; last exact: Hm.
       eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pl | | by []].
       exact: Ph.
-  - (* KS_AllocEval *)
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     have Ha : Common.Memory.Memory.alloc mem C (Z.to_nat size)
             = Some (mem', ptr) by eassumption.
@@ -551,7 +465,7 @@ Proof.
     exists ts'. split; last exact: Hm.
     eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pl | | by []].
     exact: Ph.
-  - (* KS_DerefEval *)
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     case: (TDiagram.diagram_deref_eval HI ltac:(eassumption))
       => [tmem' [tregs' [pcF [rest' [Pl Hinv]]]]].
@@ -559,8 +473,8 @@ Proof.
     exists ts'. split; last exact: Hm.
     eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pl | | by []].
     exact: Ph.
-  - (* KS_Assign2 *) by case: Hfin => [vf [_ [E _]]].
-  - (* KS_AssignEval *)
+  -  by case: Hfin => [vf [_ [E _]]].
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     case: (TDiagram.diagram_assign_eval HI ltac:(eassumption))
       => [tmem' [tregs' [pcF [rest' [temps' [Pl Hinv]]]]]].
@@ -568,10 +482,10 @@ Proof.
     exists ts'. split; last exact: Hm.
     eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pl | | by []].
     exact: Ph.
-  - (* KS_InternalCall — the stack GAINS a frame *)
+  -
     by case: Hfin => [vf [_ [_ E]]].
-  - (* KS_ExternalCall *) by case: Hfin => [vf [_ [_ E]]].
-  - (* KS_InternalReturn *)
+  -  by case: Hfin => [vf [_ [_ E]]].
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     case: (TDiagram.diagram_return_int HI)
       => [tmem1 [tregs1 [pcF [rest' [temps' [fb' [prot' [cap' [ret'
@@ -580,7 +494,7 @@ Proof.
     exists ts'. split; last exact: Hm.
     eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pl | | by []].
     exact: Ph.
-  - (* KS_ExternalReturn *)
+  -
     case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
     have Huniq : TDrain.labels_uniq cde C
       by move=> l0 C_code Hg; exact: (TMatch.vi_uniq HI l0 Hg).
@@ -594,15 +508,9 @@ Proof.
       [exact: Pl | exact: Ph | by rewrite E0_right].
 Qed.
 
-(* ================================================================== *)
-(* Stage 5 — the semantics record, and the forward simulation          *)
-(* ================================================================== *)
 
 Variable tp : Intermediate.program.
 
-(** The T machine as a CompCert `semantics`. Initial states are STAR-CLOSED —
-    the base state up to silent setup steps — which is the standard way to let
-    the target run its entry sequence before the relation has to hold. *)
 Definition t_initial_base (S : TS.state) : Prop :=
   exists pc,
     Transitional.find_plabel_in_code cde Component.main Procedure.main
@@ -621,12 +529,6 @@ Definition t_final (S : TS.state) : Prop :=
 Definition t_sem : semantics :=
   @Semantics_gen TS.state Transitional.code TS.step t_initial t_final cde.
 
-(** The two facts Stage 5 still owes, named so the packaging can be proved
-    against them: the INITIAL bridge (the target's setup run reaches a state
-    matching the source's initial one) and the HALT case (a source step that
-    lands on a final state is matched by a target run onto main's `IHalt`).
-    Both are about the compiled program specifically, which is why they are
-    not part of Stage 4's abstract development. *)
 Definition start_ok : Prop :=
   forall s1, S.CS.initial_state p s1 ->
     exists s2, t_initial s2 /\ match_states s1 s2.
@@ -643,18 +545,18 @@ Theorem halt_ok_proof :
   halt_ok.
 Proof.
   move=> Hdomm s1 t s1' Hstep ts Hm. move: Hstep. case: s1 ts / Hm.
-  - (* MS_expr *)
+  -
     move=> a scrs C stk mem k e arg ret Sl tmem tregs pct pc fb prot temps plm
            c0 rest0 sA0 sB0 cap Hinv Hnf0 Hstep Hfin.
     move: Hnf0. case: e Hinv Hstep
       => [v|| |op e1 e2|e1 e2|e1 e2 e3|e1|e1|e1 e2|C' P' e1|] Hinv Hstep _.
-    + (* E_val — spend the leaf, then dispatch *)
+    +
       case: (TLeaf.leaf_val_run Hinv) => [i [Ev S0 Hval]].
       case: (halt_of_val_step Hdomm Hstep Hval Hfin) => [ts' [Ph Hm']].
       exists ts'. split; last exact: Hm'.
       eapply plus_left with (t1 := E0) (t2 := t);
         [exact: S0 | exact: (plus_star Ph) | by []].
-    + (* E_arg *)
+    +
       case: (TLeaf.leaf_arg_run Hinv) => [S0 Hval].
       inversion Hstep; subst.
       case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
@@ -662,7 +564,7 @@ Proof.
       exists ts'. split; last exact: Hm'.
       eapply plus_left with (t1 := E0) (t2 := E0);
         [exact: S0 | exact: (plus_star Ph) | by []].
-    + (* E_local *)
+    +
       case: (TLeaf.leaf_local_run Hinv) => [S0 Hval].
       inversion Hstep; subst.
       case: Hfin => [vf [Ev [Ek Es]]]. move: Ev Ek Es => /= Ev Ek Es. subst.
@@ -670,7 +572,6 @@ Proof.
       exists ts'. split; last exact: Hm'.
       eapply plus_left with (t1 := E0) (t2 := E0);
         [exact: S0 | exact: (plus_star Ph) | by []].
-    (* every descend leaves a non-[Kstop] continuation *)
     + by inversion Hstep; subst; case: Hfin => [vf [_ [E _]]].
     + by inversion Hstep; subst; case: Hfin => [vf [_ [E _]]].
     + by inversion Hstep; subst; case: Hfin => [vf [_ [E _]]].
@@ -679,18 +580,16 @@ Proof.
     + by inversion Hstep; subst; case: Hfin => [vf [_ [E _]]].
     + by inversion Hstep; subst; case: Hfin => [vf [_ [E _]]].
     + by inversion Hstep.
-  - (* MS_val *)
+  -
     move=> a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb prot temps plm
            rest0 cap Hinv Hnf0 Hstep Hfin.
     exact: (halt_of_val_step Hdomm Hstep Hinv Hfin).
-  - (* MS_halted — the source is stuck *)
+  -
     move=> a C mem e arg tmem tregs pct pc i tni _ _ _ Hif Hstep _.
     by move: Hstep; case: e Hif => [v||||||||||] //= _ Hstep; inversion Hstep.
 Qed.
 
 
-(** A source state either IS about to be final or provably is not — no
-    classical reasoning needed, the shape is decidable by inspection. *)
 Lemma final_or_not (s : S.CS.state) :
   (exists v0, S.CS.s_expr s = E_val v0 /\ S.CS.s_cont s = Kstop
               /\ S.CS.s_stack s = [::])
@@ -713,25 +612,25 @@ Proof.
   move=> Hei Hee Hdomm Hstart.
   have Hhalt := halt_ok_proof Hdomm.
   apply: (@forward_simulation_star (S.CS.sem p) t_sem match_states _ _ measure).
-  - (* initial states *)
+  -
     exact: Hstart.
-  - (* final states *)
+  -
     move=> s1 s2 Hm. case: s1 s2 / Hm.
-    + (* MS_expr *)
+    +
       move=> a scrs C stk mem k e arg ret Sl tmem tregs pct pc fb prot temps
              plm c0 rest0 sA0 sB0 cap Hinv Hnf0 /= Hfin.
       case: Hfin => [Ee|[v0 [Ee [Ek Es]]]]; last by case: (Hnf0 v0 Ee Ek).
       move: (TMatch.ei_comp Hinv) (TMatch.ei_code Hinv); rewrite Ee /=
         /Comp.ret => -[<- _] Hcode.
       by do 2!eexists; exact: (TMacros.code_at_I_head Hcode).
-    + (* MS_val *)
+    +
       move=> a scrs C stk mem k v arg ret Sl tmem tregs pct pc fb prot temps
              plm rest0 cap Hinv Hnf0 /= Hfin.
       by case: Hfin => [//|[v0 [_ [Ek Es]]]]; case: (Hnf0 Ek).
-    + (* MS_halted *)
+    +
       move=> a C mem e arg tmem tregs pct pc i tni Hmem Hex Ei _ _.
       by do 2!eexists; rewrite -Ei; exact: Hex.
-  - (* the diagram *)
+  -
     move=> s1 t s1' Hstep s2 Hm.
     case: (final_or_not s1') => [Hfin|Hnfin].
     + left. exact: (Hhalt _ _ _ Hstep _ Hm Hfin).

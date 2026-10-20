@@ -38,8 +38,6 @@ Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBra
 Import TraceWF(ndsu1_mem_noM, ndsu_mem_noM, table_sem_alloc, no_mw_reg_clear_read, no_mr_reg_clear_read, jal_head_tret, mem_unchanged_jal).
 Import TraceBracket(reg_index_neq, jal_do_updates_result, jump_do_updates_result, nsu_silent_extract, mkfmap_const_val, check_belong_color, store_transfer, load_transfer, load_guard, switch_val_color, switch_val_iscode, switch_val_entry, switch_val_vtag).
 
-(* Keep the bitwise/word layer opaque: simpl/auto/done must not unfold or compute it
-   (recurring explosion source); proofs use the admitted bitwise lemmas instead. *)
 Opaque andw shlw as_word word_of_nat.
 
 Module Preservation (S: RecompositionContext).
@@ -48,16 +46,6 @@ Module Preservation (S: RecompositionContext).
   Include S. Include M.
   (* Import S. Export M. *)
 
-  (* ============================================================================
-     OPAQUE monadic / tag reduction lemmas (shared by every Step file).
-
-     Rewriting with these (all closed by [by []]) lets the kernel treat each
-     bind/tag/if reduction as a BLACK BOX, so at [Qed] time it never re-normalises
-     the word-op-laden [alloc_fun]/[next_state_*] bodies.  Doing the same reductions
-     with [simpl]/[cbn]/[/=] instead bakes a conversion the kernel must re-run, which
-     is pathologically slow on the opaque word ops (the 42min->24s syscall fix).
-     Reduce a [do! x <- Some v; ...] with:  rewrite Hread obindE; cbn beta.
-     ([cbn beta] is the ONLY reduction tactic that is safe here.) *)
   Lemma obindE A B (f : A -> option B) a : obind f (Some a) = f a.
   Proof. by []. Qed.
   Lemma is_jumpE : is_jump InternalJump = Some tt.
@@ -65,10 +53,6 @@ Module Preservation (S: RecompositionContext).
   Lemma is_otherE : is_other Other = Some tt.
   Proof. by []. Qed.
 
-  (* [data_match] always equates the two tags; for an [Other] cell it also equates the
-     values.  Used by the syscall (alloc_fun) case to transfer the [s1] register reads
-     onto [s3]: the jump register's value is offset-mapped, but its tag — and the size
-     register's full value — are preserved. *)
   Lemma data_match_taga i cc m d d' :
     data_match i cc m d d' -> taga d = taga d'.
   Proof. by case: d => v t; case: d' => v' t' => -[-> _]. Qed.
@@ -107,10 +91,6 @@ Module Preservation (S: RecompositionContext).
    pose proof Hprog_is_closed as Hprog_is_closed;
    pose proof Hprog_is_closed' as Hprog_is_closed'.
 
-(*** pc_code_color congruences (the pc CODE cell is never touched by a data write / an alloc, so
-     pc_code_color survives those; the pc-CHANGING steps establish it from the step's [check_belong]
-     and feed it in as an input). ***)
-
 Lemma color_of_pc_eq : forall (s s' : state), pc s' = pc s -> color_of s' = color_of s.
 Proof. by move=> [? ? [? ?] ?] [? ? [? ?] ?] /= [= _ ->]. Qed.
 
@@ -140,8 +120,6 @@ Proof.
   rewrite Hm Hpc => Hd Hcode. rewrite Hcol. exact: (Hpcc d Hd Hcode).
 Qed.
 
-(* alloc result: pc lands on the return address [a]; its cell [ret] survives the union (the new
-   block is disjoint), and the new alloc check guarantees a code [ret] is running-coloured. *)
 Lemma pc_code_color_alloc : forall (s s' : state) blk (a : mword mt) ret,
     mem s' = unionm (mem s) blk -> mem s a = Some ret ->
     vala (pc s') = a -> taga (pc s') = taga (pc s) ->
@@ -155,11 +133,6 @@ Proof.
   by rewrite Hcol (color_ofE s).
 Qed.
 
-(* Every silent (ev = None) LRC opcode runs [check_belong current tni] (directly for
-   nop/const/mov/binop/load/store/bnz, or as the [if belong current tni] silent branch for
-   jump/jal), where [tni] is the tag of the NEW-pc cell.  So a successful silent transfer forces
-   that cell's colour to equal the running (pc-tag) colour.  ([current] = the instruction-cell
-   colour, but the leading [current == current'] guard makes it the pc-tag colour.) *)
 Lemma silent_transfer_belong :
   forall (op : opcode) tpc ti (ts : hseq (tag_type lrc_tags) (inputs op)) tni evi (ov : ovec lrc_tags op),
     LRC.transfer (IVec (OP op) tpc ti ts tni) evi = Some (ov, None) ->
@@ -174,29 +147,28 @@ Proof.
       by (move=> u'; rewrite /check_belong; case: (belong cur tni));
     cbn -[check_belong belong is_other is_jump get_tni_color check_ret] in Hrest.
   all: try by [].
-  - (* NOP *) rewrite (hseq0 ts) /= in Hrest.
+  -  rewrite (hseq0 ts) /= in Hrest.
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* CONST *) case: ts Hrest => t0 ts Hrest; rewrite (hseq0 ts) /= in Hrest.
+  -  case: ts Hrest => t0 ts Hrest; rewrite (hseq0 ts) /= in Hrest.
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* MOV *) case: ts Hrest => t0 [t1 ts] Hrest; rewrite (hseq0 ts) /= in Hrest.
+  -  case: ts Hrest => t0 [t1 ts] Hrest; rewrite (hseq0 ts) /= in Hrest.
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* BINOP *) case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
+  -  case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* LOAD *) case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
+  -  case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
     case: (obind_inv Hrest) => ? [_ {}Hrest].
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* STORE *) case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
+  -  case: ts Hrest => t0 [t1 [t2 ts]] Hrest; rewrite (hseq0 ts) /= in Hrest.
     case: (obind_inv Hrest) => ? [_ {}Hrest].
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* JUMP: silent => intra (belong); the cross/ret branch emits ev = Some (ERet ..) <> None *)
+  -
     case: ts Hrest => tra [tp [trcom next]] Hrest.
     move: Hrest; case Hb: (belong cur tni) => Hrest; first by [].
     exfalso; case: (obind_inv Hrest) => ? [_ {}Hrest]; case: (obind_inv Hrest) => ? [_ {}Hrest].
     case: (obind_inv Hrest) => ? [_ {}Hrest]; by move: Hrest => [= _].
-  - (* BNZ *) case: ts Hrest => t0 ts Hrest; rewrite (hseq0 ts) /= in Hrest.
+  -  case: ts Hrest => t0 ts Hrest; rewrite (hseq0 ts) /= in Hrest.
     by case: (obind_inv Hrest) => u' [Hcb _]; exact: (cbE _ Hcb).
-  - (* JAL: silent => intra; the cross/call branch needs check_entry, which forces an entry tag,
-       so get_proc_name succeeds and ev = Some (ECall ..) <> None *)
+  -
     case: ts Hrest => tnext [tra [trcom next]] Hrest.
     case: (obind_inv Hrest) => ? [_ {}Hrest].
     move: Hrest; case Hb: (belong cur tni) => Hrest; first by [].
@@ -229,7 +201,7 @@ Proof.
   split; [|split].
   - destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
     econstructor; destruct s, s', pc0, pc1; try (subst; intros; auto; done); try congruence.
-  - destruct weak as [? ? ? color_eq side_s' (* s_mem_cor *) s'_mem_cor entry_off s'_reg_cor mem_match].
+  - destruct weak as [? ? ? color_eq side_s'  s'_mem_cor entry_off s'_reg_cor mem_match].
     econstructor; try (rewrite eq_s3'; simpl; auto; done); try (subst; intros; auto; done); try congruence.
     subst. destruct s, s', pc0, pc1. simpl in *. trivial.
   - destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
@@ -240,7 +212,6 @@ Proof.
       try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done.
     + rewrite eq_s1'. rewrite pc1_tag. simpl. exact tag_pc1.
     + rewrite eq_s3'. rewrite pc3_tag. simpl. exact tag_pc3.
-    (* pc_code_color s1' (= [Hpcc1']) and pc_code_color s2 (= [wpcc2]) auto-closed by [try done]. *)
 Qed.
 
   Definition capability_correctness' ws (s: state) m v t :=
@@ -283,7 +254,6 @@ Qed.
       capability_correctness' WS_S3 s3 M (vala v') (vtag (taga v')) ->
       address_correctness Left (vala v) (vtag (taga v)) (mem s1) ->
       address_correctness Left (vala v') (vtag (taga v')) (mem s3) ->
-      (* address_correctness Right (vala v') (vtag (taga v')) (mem s3) -> *)
       updm (mem s1) w v = Some m1' ->
       updm (mem s3) w v' = Some m3' ->
       s1' = State _ _ m1' (regs s1) (pc s1) tt ->
@@ -295,7 +265,7 @@ Qed.
     import_context.
 
     intros s1 s2 s3 M s1' s3' w v v' m1' m3' i equiv v_match v_color M_color no_entry v_relevant same_color no_code_w_s3 no_code_w_s1
-      i_is_pc code_i no_code_v no_code_v' capa_prop1 capa_prop3 correct_v correct_v' (* correct_v'' *) eq_m1 eq_m3 eq_s1' eq_s3'.
+      i_is_pc code_i no_code_v no_code_v' capa_prop1 capa_prop3 correct_v correct_v'  eq_m1 eq_m3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
     pose proof (updm_set eq_m1). pose proof (updm_set eq_m3). subst m1' m3'.
     split; [|split].
@@ -388,7 +358,7 @@ Qed.
         remember (@eq_op _ w0 w) as cond. destruct cond; rewrite -?Heqcond /=.
         * split; intro eq; inv eq; eexists; split; first [exact v_match | reflexivity].
         * apply mem_match; auto.
-    - destruct weak as [? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off (* s'_reg_cor *) mem_match];
+    - destruct weak as [? ? ? color_eq side_s' s_mem_cor s'_mem_cor entry_off  mem_match];
       econstructor; destruct s, s', pc0, pc1; subst; auto.
       + subst.
         rewrite /memory_address_correctness; simpl.
@@ -446,15 +416,6 @@ Qed.
         rewrite setmE in eqw''.
         unfold_match' eqw''; try convert_eq_op; try simplify_some; try contradiction.
         eapply (entry_off); eauto.
-      (* + subst. intros d w' deq. simpl. destruct d as [vd vt]. *)
-      (*   remember (@eq_op _ vd w) as cond. *)
-      (*   destruct vt; simpl; auto; rewrite setmE; simpl in *; try (rewrite <- Heqcond); destruct cond; convert_eq_op. *)
-      (*     all: try eapply (s'_reg_cor _ w' deq). *)
-      (*     all: try (eapply modusponens; [eapply (s'_reg_cor _ w' deq) | ]; simpl; intros [v'' [v''eq v''code]]; *)
-      (*               destruct no_code_w_s3 as [d' [d'eq d'code]]; rewrite d'eq in v''eq; simplify_some). *)
-      (*     all: eexists; split; [eauto |]; intro v_in_ic; exfalso; *)
-      (*       eapply (@Machine.Intermediate.fdisjoint_partition_notinboth _ (domm ip) (domm ic) _ (color (Types.taga v))); *)
-      (*       inversion Hmergeable_ifaces as [[_ fdisj] _]; eauto; rewrite v_color; eauto. *)
       + unfold memory_match in *. simpl.
         intros.
         rewrite setmE.
@@ -480,7 +441,6 @@ Qed.
               [mem_pref_cond_s3 [mem_pref_cond_s3' [code_pref_cond_s3 [alloc_mem_s3 [bnz_s3 [end_s3 [col_mem3 [entry_code3 cvo3]]]]]]]]
               capa_cor1 capa_cor2 capa_cor3 code_left code_right Hcval wpcc1 wpcc2].
       eapply common_equiv_def with (n := n) (c := c0).
-      (* pc_code_color s1': the data write at [w] (non-code [v]) doesn't touch the code pc cell *)
       all: try (match goal with |- pc_code_color _ =>
                   rewrite eq_s1'; apply: (pc_code_color_write (s := s1) (w := w) (v := v));
                   first [ exact no_code_v | exact wpcc1 | reflexivity | done ] end).
@@ -598,7 +558,7 @@ Qed.
         rewrite eq_s1' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. rewrite no_entry in dent. inversion dent.
         * eapply entry_code1; eauto.
-      + (* code_vtag_other (mem s1'): the written cell [v] is non-code *)
+      +
         intros w' d deq dcode.
         rewrite eq_s1' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. exact: (no_code_v dcode).
@@ -667,7 +627,7 @@ Qed.
         * exfalso. convert_eq_op. simplify_some. destruct v, d. destruct v_match as [tag_eq ?]. rewrite <- tag_eq in dent.
           rewrite no_entry in dent. inversion dent.
         * eapply entry_code3; eauto.
-      + (* code_vtag_other (mem s3'): the written cell [v'] is non-code *)
+      +
         intros w' d deq dcode.
         rewrite eq_s3' in deq. rewrite setmE in deq. unfold_match' deq.
         * exfalso. convert_eq_op. simplify_some. exact: (no_code_v' dcode).
@@ -788,7 +748,6 @@ Qed.
       capability_correctness' WS_S3 s3 M (vala v') (taga v') ->
       address_correctness Left (vala v) (taga v) (mem s1) ->
       address_correctness Left (vala v') (taga v') (mem s3) ->
-      (* address_correctness Right (vala v') (taga v') (mem s3) -> *)
       updm (regs s1) r v = Some r1' ->
       updm (regs s3) r v' = Some r3' ->
       s1' = State _ _ (mem s1) r1' (pc s1) tt ->
@@ -798,7 +757,7 @@ Qed.
       /\ common_equiv M s1' s2 s3'.
   Proof.
     intros s1 s2 s3 M s1' s3' r v v' r1' r3' equiv v_match
-      capa_prop1 capa_prop3 correct_v correct_v' (* correct_v'' *) eq_r1 eq_r3 eq_s1' eq_s3'.
+      capa_prop1 capa_prop3 correct_v correct_v'  eq_r1 eq_r3 eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
     destruct common as [? ? ? ? n ? tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
                           [mem_pref_cond_s1 [code_pref_cond_s1 [alloc_mem_s1 [bnz_s1 [end_s1 [col_mem1 [entry_code1 cvo1]]]]]]]
@@ -827,16 +786,12 @@ Qed.
         case: eqP => [_ | _] /=.
         * split; intro eq; inv eq; eexists; split; first [exact v_match | reflexivity].
         * apply reg_match; auto.
-    - destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off (* s'_reg_cor *) mem_match].
+    - destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off  mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence.
       destruct s, s3, pc0, pc1. subst. simpl. auto.
       trivial.
-      (* + intros d r' deq. subst. rewrite setmE in deq. unfold_match' deq. *)
-      (*   simpl. convert_eq_op. simpl. simplify_some. trivial. *)
-      (*   eapply (s'_reg_cor d r' deq). *)
     - eapply common_equiv_def with (n := n) (c := c0);
         try ((rewrite eq_s1' eq_s3' || rewrite eq_s1' || rewrite eq_s3'); simpl; auto; done); try congruence; try done.
-      (* pc_code_color s1': register write leaves mem and pc untouched *)
       all: try (match goal with |- pc_code_color _ =>
                   rewrite eq_s1'; apply: (pc_code_color_cong (s := s1));
                   first [ exact wpcc1 | reflexivity | done ] end).
@@ -891,10 +846,6 @@ Qed.
   Qed.
 
 
-  (* A RegRead "update" that writes a register back with its OWN current tag is a NO-OP.
-     This is the heart of the JUMP/JAL register-clear: reg_clear_list reads each register's
-     tag, and next_state_do_updates writes (vala a)@(taga a) = a back ⇒ regs unchanged.
-     Keeps the register key abstract (no `as_word` opacity issue). *)
   Lemma reg_read_update_id :
     forall (st : state) (k : reg mt) (a : atom (mword mt) (tag_type ttypes R)),
       regs st k = Some a ->
@@ -906,9 +857,6 @@ Qed.
     rewrite Es; clear Hk Es; by case: st.
   Qed.
 
-  (* The whole reg_clear fold is the identity on the state: every register is written back
-     with its own tag (reg_clear_list reads them) ⇒ all no-ops.  By induction on the list,
-     reusing reg_read_update_id.  Register keys stay abstract — no `as_word` opacity issue. *)
   Local Opaque next_state_do_update.
   Lemma reg_clear_do_updates_id :
     forall (l : seq nat) (st : state) (k0 : reg mt)
@@ -928,8 +876,6 @@ Qed.
       exact: (IH st (as_word (ssrint.Posz e)) ve l'' Hve Hl'').
   Qed.
 
-  (* Memory analog of reg_read_update_id: a MemRead update writing the cell back with its own
-     tag is a no-op.  Used for the JAL prologue's MemRead (pc+1) step. *)
   Local Transparent next_state_do_update.
   Lemma mem_read_update_id :
     forall (st : state) (w : mword mt) (a : atom (mword mt) (tag_type ttypes M)),
@@ -942,13 +888,9 @@ Qed.
     rewrite Es; clear Hw Es; by case: st.
   Qed.
 
-  (* The allowed size-bound admit: the register-index field is wide enough for indices < 20.
-     (reg_field_size mt = 5 ⇒ 2^5 = 32 > 20; admitted to avoid Local Transparent reg_field_size.) *)
   Lemma register_index_bound : (20 < 2 ^ reg_field_size mt)%nat.
   Proof. by rewrite reg_field_size_mt. Qed.
 
-  (* reg_clear_list_aux only reads registers in l; a setm at a key k ∉ {as_word n | n ∈ l}
-     (e.g. the JAL ra-write at reg 4, with l = reg_list ∌ 4) doesn't change its result. *)
   Lemma reg_clear_list_aux_setm_irrel :
     forall (l : seq nat) (rs : {fmap reg mt -> atom (mword mt) (tag_type ttypes R)})
            (k : reg mt) (v : atom (mword mt) (tag_type ttypes R)) (top : tag_type ttypes R),
@@ -964,7 +906,6 @@ Qed.
 
   Local Transparent next_state_do_update.
 
-  (* One-step unfolding of the do_updates fold over an explicit hseq-cons head. *)
   Lemma ndsu_cons :
     forall (st : state) (tk : tag_kind) (tks : seq tag_kind)
            (t : tag_type ttypes tk) (tags : hseq (tag_type ttypes) tks)
@@ -974,7 +915,6 @@ Qed.
               (next_state_do_update st t u).
   Proof. by []. Qed.
 
-  (* One-step unfolding of reg_clear_list_aux over a cons. *)
   Lemma reg_clear_list_aux_cons :
     forall (e : nat) (l' : seq nat)
            (rs : {fmap reg mt -> atom (mword mt) (tag_type ttypes R)})
@@ -987,7 +927,6 @@ Qed.
 
   Local Transparent next_state_do_updates reg_clear_list_aux.
 
-  (* The head tag of reg_clear_list rs t is t itself (the top_reg_tag). *)
   Lemma reg_clear_list_head :
     forall (rs : {fmap reg mt -> atom (mword mt) (tag_type ttypes R)}) t l,
       reg_clear_list rs t = Some l -> hshead l = t.
@@ -1000,7 +939,6 @@ Qed.
   Qed.
   Local Transparent reg_clear_list_aux.
 
-  (* reg_clear_list_aux succeeds whenever every register it reads is in the map. *)
   Lemma reg_clear_list_aux_total :
     forall (l : seq nat) (rs : {fmap reg mt -> atom (mword mt) (tag_type ttypes R)})
            (t : tag_type ttypes R),
@@ -1019,7 +957,6 @@ Qed.
       by rewrite Hll /=; exists (HSeqCons t ll).
   Qed.
 
-  (* register_domm ⇒ reg_clear_list is defined (the JAL s3-side CLEAR premise). *)
   Lemma reg_clear_list_total :
     forall (rs : {fmap reg mt -> atom (mword mt) (tag_type ttypes R)}) (t : tag_type ttypes R),
       domm rs = fset (ra :: [seq word_of_nat i | i <- reg_list]) ->
@@ -1063,9 +1000,6 @@ Qed.
       + eauto.
   Qed.
 
-  (* For a *valid* component [c] (running on one of the two sides), the side [i] it is matched
-     against is determined by [side_of]: Left ⟺ [c ∈ ip], and Right ⟺ [c ∉ ip] hence [c ∈ ic]
-     (using validity).  This bridges call sites that only know [side_of c = i]. *)
   Lemma is_relevant_comp_of_side i c :
     (c \in domm ip) || (c \in domm ic) -> side_of c = i -> is_relevant_comp i c.
   Proof.
@@ -1074,10 +1008,6 @@ Qed.
     by move=> _; move: Hval; rewrite Hp orFb.
   Qed.
 
-  (* The set of addresses carrying component [c]'s prefix is the same in [s] and [s']: by
-     [memory_prefix_condition'] those are exactly the non-code colour-[c] cells, which
-     [memory_match] preserves at the SAME address.  [domm] is a sorted dup-free list, so equal
-     element sets give equal filtered lists ([irr_sorted_eq]). *)
   Lemma match_mem_pref_condition_filter_eq i m s s' c:
     is_relevant_comp i c ->
     memory_match i m s s' ->
@@ -1128,10 +1058,6 @@ Qed.
       | apply: (leq_trans alloc_label_lt_word_NC); rewrite leq_exp2l //; exact: leq_subr ].
   Qed.
 
-  (* The JAL immediate for the alloc syscall (alloc_label = 2^14) survives the
-     immediate->word sign-cast unchanged.  Stated/proved once here (where mt etc.
-     are still transparent so [simpl] can compute the cast) and reused by the
-     alloc-jump cases. *)
   Lemma swcast_word_of_nat_alloc_label :
     @swcast _ (word_size mt) (@word_of_nat (imm_size mt) alloc_label) = word_of_nat alloc_label.
   Proof.
@@ -1146,14 +1072,7 @@ Qed.
   Global Opaque imm_size.
 
   Strategy opaque [mt word_size reg_field_size imm_size].
-  (* { word_size : nat; *)
-  (*   word_size_lb : is_true (6 < word_size); *)
-  (*   reg_field_size : nat; *)
-  (*   imm_size : nat } *)
 
-  (* color_of pattern-matches on the State constructor, so it is stuck on a
-     variable state but reduces on an explicit record. This characterization
-     lets us relate [color_of s] (stuck) to [color_of {record}] (reduced). *)
   Lemma color_of_pc_tag : forall st, color_of st = match taga (pc st) with Level _ c => c end.
   Proof. by case=> ? ? [? ?] ?. Qed.
 
@@ -1161,9 +1080,6 @@ Qed.
     a = a' -> b = b' -> f a b = f a' b'.
   Proof. by move=> -> ->. Qed.
 
-  (* A [unionm] lookup either hits the left map or (left missing) the right map.
-     Proven in a small context so the match-on-option reduction is cheap; lets the
-     big alloc proofs avoid [simpl in *] over the freshly-allocated block. *)
   Lemma unionm_get {T : ordType} {S : Type} (m1 m2 : {fmap T -> S}) k v :
     unionm m1 m2 k = Some v -> m1 k = Some v \/ (m1 k = None /\ m2 k = Some v).
   Proof.
@@ -1176,8 +1092,6 @@ Qed.
     m1 k = Some v -> unionm m1 m2 k = Some v.
   Proof. move=> H; rewrite unionmE H //. Qed.
 
-  (* Every cell of the freshly-allocated block carries the same constant atom,
-     so any lookup that succeeds returns exactly that atom. *)
   Lemma alloc_block_const_value {T : ordType} {S : eqType}
         (f : nat -> T) (a : S) (k : nat) (w : T) (d : S) :
     mkfmap (mkseq (fun n => (f n, a)) k) w = Some d -> d = a.
@@ -1185,63 +1099,19 @@ Qed.
     move=> H; move/mkfmap_Some: H; rewrite /mkseq => /mapP[x _ [= _ ->]] //.
   Qed.
 
-  (* component_memory_prefix of color 0 is the zero word (proved while the bitwise
-     layer is still transparent, so the alloc proof needn't [unfold]+[simpl] it). *)
   Lemma component_memory_prefix_zero :
     @component_memory_prefix mt NC (ssrint.Posz 0) = (0%w : word (word_size mt)).
   Proof. rewrite /component_memory_prefix. apply shlw_zero. Qed.
 
-  (* Keep the bitwise layer atomic across the (huge) alloc proof: [simpl]/[simpl in *]
-     would otherwise expand [mask]/[component_memory_prefix] into enormous bit-vector
-     terms, which is what made the proof's [Qed] hang (and crashes interactive provers).
-     Explicit [unfold] still works through [Opaque], so the few sites that genuinely need
-     the body are unaffected. *)
   Opaque mask component_memory_prefix.
-  (* Also freeze the finite-map operations so [simpl] can't traverse/expand the
-     freshly-built block; lemma rewrites ([unionmE], [setmE], [mkfmap_Some], …)
-     match syntactically and are unaffected by [Opaque]. *)
   Opaque unionm setm mkfmap mkfmapfp.
 
-  (* The allocation setup abstracts both freshly-built blocks into kernel-opaque
-     local variables [blk1]/[blk3] (so [Qed] does not re-derive them), keeping
-     their bodies in [Hblk1]/[Hblk3].  [xblk H] re-exposes whichever block [H]
-     mentions; [xblkc H] additionally reads off the constant cell value. *)
   Ltac xblk H :=
     try (match goal with
          | Hb : ?b = mkfmap (mkseq _ _) |- _ =>
              match type of H with context[b] => rewrite Hb in H end
          end).
   Ltac xblkc H := xblk H; move/alloc_block_const_value in H.
-
-  (* ---------------------------------------------------------------------------
-     [preserves_equiv_left_alloc_fun] is split into one lemma per conjunct
-     ([alloc_fun_strong]/[alloc_fun_weak]/[alloc_fun_common]); the combined lemma
-     at the end just applies the three.
-
-     STATUS: the three conjunct proofs below are COMPLETE and end in genuine [Qed]
-     (the whole file compiles in ~14s).  The only [admit]s left are the policy-
-     allowed bitwise/plumbing lemmas [match_mem_pref_condition_filter_eq],
-     [mask_alloc_label], [convert_int_of_word_inj].
-
-     HISTORY — why the peel below looks the way it does.  The old prologue
-     [unfold alloc_fun in *; repeat (unfold_all || unfold_match)] peeled the
-     [do!]-chain of [alloc_fun] with a [remember]/[destruct]/[simplify_some]
-     inversion-cascade.  Two things baked the *whole expanded post-state* into the
-     proof term — [destruct]/[remember] on the huge block-derived values, and the
-     final [simplify_some]'s [inversion (Some bigState = Some s1'); subst s1'] — so
-     the kernel re-checked an enormous [eq_rect] at [Qed] and never terminated.
-
-     THE FIX (combination of two ideas).  (1) Peel each [do!] with [obind_inv]
-     instead of [destruct]/[remember]: that yields [v = Some a'] as a *hypothesis*
-     and its proof term is a plain function application — the huge [v] is never a
-     [match] scrutinee, so nothing big is baked.  (2) Keep [s1']/[s3'] inside
-     [eq_s1']/[eq_s3'] as un-[subst]ed hypotheses through the whole peel; only at
-     the end, AFTER [set blk1/blk3] has abstracted the block, do we inject and
-     [subst] — so the [eq_rect] the [subst] bakes carries the opaque [blk1]/[blk3],
-     not the expanded [mkseq].  The conjunct proofs (and the [xblk]/[xblkc] block
-     groundwork) are unchanged: the peel reproduces exactly the hypothesis names
-     ([a1], [v'], [n'], [p2], [Heqa..Heqa13], …) they depend on.
-     --------------------------------------------------------------------------- *)
 
   Lemma alloc_fun_strong:
     forall s1 s2 s3 M s1' s3',
@@ -1256,18 +1126,11 @@ Qed.
 
     intros s1 s2 s3 M s1' s3' equiv eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    (* ---- Peel [alloc_fun] on both sides with [obind_inv]: the post-state stays
-       inside [eq_s1']/[eq_s3'] as a hypothesis — never [destruct]ed nor [subst]ed
-       here — so no expanded block is baked into the proof term (that bake is what
-       made the old inversion-cascade peel hang at [Qed]).  We reproduce exactly the
-       hypothesis names the conjunct proof below relies on. ---- *)
     unfold alloc_fun in eq_s1', eq_s3'; cbv zeta in eq_s1', eq_s3'.
-    (* left (s1): keep ra as the atom [a1]; split size into [v'@Other] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (a1 & Heqa4 & eq_s1'); symmetry in Heqa4.
     apply obind_inv in eq_s1'; destruct eq_s1' as (wj1 & Hg & eq_s1');
       unfold is_jump in Hg; destruct (taga a1) eqn:Heqa7; try discriminate Hg;
       symmetry in Heqa7; clear Hg wj1.
-    (* NEW: the return-address read + running-colour check (s1) *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (ret1 & Hret1 & eq_s1').
     apply obind_inv in eq_s1'; destruct eq_s1' as (uret1 & Hretchk1 & eq_s1');
       move: Hretchk1; case: ifP => Hretcol1 Hretchk1; last by []; clear uret1 Hretchk1.
@@ -1278,7 +1141,6 @@ Qed.
       destruct (int_of_word (vala (v'@Other))) as [m1|] eqn:Heqa3; try rewrite Heqa3 in Hg; simpl in Hg;
         [ move: Hg => [= ?]; subst m1 | discriminate Hg ];
       cbn [vala] in Heqa3; symmetry in Heqa3.
-    (* peel the allocator's block-size check: [alloc_fun = Some] gives [n'+1 <= 2^(word-NC)] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (uchk1 & Hszchk1 & eq_s1').
     destruct (leq (n' + 1) (expn 2 (word_size mt - NC))) eqn:Hszbound1;
       [ clear uchk1 Hszchk1 | discriminate Hszchk1 ].
@@ -1289,11 +1151,9 @@ Qed.
       move: Hg => [= ?]; subst ad1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (rg1 & Hg & eq_s1');
       move: (updm_set Hg) => Hg2; subst rg1; clear Hg.
-    (* right (s3): split ra into [v@InternalJump]; keep size as the atom [a0] *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ra3 & Heqa & eq_s3'); destruct ra3 as [v tgr3].
     apply obind_inv in eq_s3'; destruct eq_s3' as (wj3 & Hg & eq_s3');
       unfold is_jump in Hg; destruct tgr3; try discriminate Hg; clear Hg wj3; symmetry in Heqa.
-    (* NEW: the return-address read + running-colour check (s3) *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ret3 & Hret3 & eq_s3').
     apply obind_inv in eq_s3'; destruct eq_s3' as (uret3 & Hretchk3 & eq_s3');
       move: Hretchk3; case: ifP => Hretcol3 Hretchk3; last by []; clear uret3 Hretchk3.
@@ -1335,8 +1195,6 @@ Qed.
     pose proof (erefl blk1) as Hblk1; unfold blk1 in Hblk1 at 2.
     try (pose proof (erefl blk3) as Hblk3; unfold blk3 in Hblk3 at 2).
     clearbody blk1; try clearbody blk3.
-    (* inject+subst onto the *block-abstracted* (hence compact) post-state: the
-       eq_rect the [subst] bakes now carries [blk1]/[blk3], not the expanded mkseq. *)
     move: eq_s1' => [= Hs1]; subst s1'.
     try (move: eq_s3' => [= Hs3]; subst s3').
     destruct strong as [? ? ? pc_s1_s3 color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
@@ -1349,7 +1207,7 @@ Qed.
         eapply same_pc_normal.
         * split.
           -- rewrite ?unionmE; cbn [Symbolic.pc Types.vala]; rewrite eq /=; reflexivity.
-          -- (* the allocator's own return-cell check gives code-ness *)
+          --
              have Hic1 : is_code (taga ret1) by case/andP: Hretcol1 => Hic _.
              rewrite eq in Hret1. case: Hret1 => ->. exact: Hic1.
         * match goal with |- get_offset _ (color_of ?st) = _ => rewrite (color_of_pc_tag st) end.
@@ -1409,8 +1267,7 @@ Qed.
           -- destruct (mem_match w d no_code rel) as [impl _].
              destruct (impl H) as [d' [d'match d'eq]].
              exists d'; split; [exact d'match | apply unionm_getL; exact d'eq].
-          -- (* d is the cell freshly allocated in s'; w is one of the fresh
-                addresses, so its mask is the block prefix. *)
+          --
              have w_prefix : andw w (@mask mt NC)
                              = @component_memory_prefix mt NC (ssrint.Posz (1 + c0)).
              { xblk Hfresh; clear -Hfresh Heqa9 tag_pc3 Hszbound1 Hszbound3.
@@ -1421,8 +1278,6 @@ Qed.
                eapply mask_range; [ by [exact Hszbound1 | exact Hszbound3] | exact Hstart | exact Hend | exact x_in_iota ]. }
              have Hcs : color_of s = c0 by rewrite (color_of_pc_tag s) tag_pc1.
              have side_c0 : side_of c0 = Left by rewrite -Hcs.
-             (* w is a fresh address, so it is not in the (pre-existing) memory of s:
-                a cell there would carry the new colour and contradict mem_match. *)
              have HsNone : mem s w = None.
              { clear -w_prefix mem_pref_cond_s1' mem_match Hs'None side_c0.
                case E: (mem s w) => [a|]; last by []. exfalso.
@@ -1438,9 +1293,9 @@ Qed.
                have [d' [_ Hd'eq]] := proj2 (mem_match w a no_code_a Hrel) E.
                by rewrite Hs'None in Hd'eq. }
              exists d. split.
-             ++ (* both cells are the same zero/Other cell *)
+             ++
                 xblk Hfresh; move: Hfresh => /alloc_block_const_value ->. by repeat split.
-             ++ (* the two allocated blocks coincide at w *)
+             ++
                 abstract (
                   rewrite unionmE HsNone /=;
                   rewrite -Hfresh;
@@ -1460,7 +1315,7 @@ Qed.
           -- destruct (mem_match w d no_code rel) as [_ impl].
              destruct (impl H) as [d' [d'match d'eq]].
              exists d'; split; [exact d'match | apply unionm_getL; exact d'eq].
-          -- (* d is the cell freshly allocated in s (mirror of the s' case). *)
+          --
              have w_prefix : andw w (@mask mt NC)
                              = @component_memory_prefix mt NC (ssrint.Posz (1 + c0)).
              { xblk Hfresh; clear -Hfresh Heqa10 tag_pc1 Hszbound1 Hszbound3.
@@ -1505,8 +1360,6 @@ Qed.
                     | exact mem_match | exact mem_pref_cond_s1' | exact mem_pref_cond_s3' ]).
       + intros w d.
         cbn [Symbolic.regs].
-        (* register 16 holds the allocated base pointer, which coincides on both
-           sides because the allocations coincide (match_mem_pref_condition_filter_eq). *)
         have G : p1.1 = p2.1.
         { rewrite tag_pc1 in Heqa13; rewrite tag_pc3 in Heqa11.
           have c0_Left : is_relevant_comp Left c0.
@@ -1547,18 +1400,11 @@ Qed.
 
     intros s1 s2 s3 M s1' s3' equiv eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    (* ---- Peel [alloc_fun] on both sides with [obind_inv]: the post-state stays
-       inside [eq_s1']/[eq_s3'] as a hypothesis — never [destruct]ed nor [subst]ed
-       here — so no expanded block is baked into the proof term (that bake is what
-       made the old inversion-cascade peel hang at [Qed]).  We reproduce exactly the
-       hypothesis names the conjunct proof below relies on. ---- *)
     unfold alloc_fun in eq_s1', eq_s3'; cbv zeta in eq_s1', eq_s3'.
-    (* left (s1): keep ra as the atom [a1]; split size into [v'@Other] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (a1 & Heqa4 & eq_s1'); symmetry in Heqa4.
     apply obind_inv in eq_s1'; destruct eq_s1' as (wj1 & Hg & eq_s1');
       unfold is_jump in Hg; destruct (taga a1) eqn:Heqa7; try discriminate Hg;
       symmetry in Heqa7; clear Hg wj1.
-    (* NEW: the return-address read + running-colour check (s1) *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (ret1 & Hret1 & eq_s1').
     apply obind_inv in eq_s1'; destruct eq_s1' as (uret1 & Hretchk1 & eq_s1');
       move: Hretchk1; case: ifP => Hretcol1 Hretchk1; last by []; clear uret1 Hretchk1.
@@ -1569,7 +1415,6 @@ Qed.
       destruct (int_of_word (vala (v'@Other))) as [m1|] eqn:Heqa3; try rewrite Heqa3 in Hg; simpl in Hg;
         [ move: Hg => [= ?]; subst m1 | discriminate Hg ];
       cbn [vala] in Heqa3; symmetry in Heqa3.
-    (* peel the allocator's block-size check: [alloc_fun = Some] gives [n'+1 <= 2^(word-NC)] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (uchk1 & Hszchk1 & eq_s1').
     destruct (leq (n' + 1) (expn 2 (word_size mt - NC))) eqn:Hszbound1;
       [ clear uchk1 Hszchk1 | discriminate Hszchk1 ].
@@ -1580,11 +1425,9 @@ Qed.
       move: Hg => [= ?]; subst ad1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (rg1 & Hg & eq_s1');
       move: (updm_set Hg) => Hg2; subst rg1; clear Hg.
-    (* right (s3): split ra into [v@InternalJump]; keep size as the atom [a0] *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ra3 & Heqa & eq_s3'); destruct ra3 as [v tgr3].
     apply obind_inv in eq_s3'; destruct eq_s3' as (wj3 & Hg & eq_s3');
       unfold is_jump in Hg; destruct tgr3; try discriminate Hg; clear Hg wj3; symmetry in Heqa.
-    (* NEW: the return-address read + running-colour check (s3) *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ret3 & Hret3 & eq_s3').
     apply obind_inv in eq_s3'; destruct eq_s3' as (uret3 & Hretchk3 & eq_s3');
       move: Hretchk3; case: ifP => Hretcol3 Hretchk3; last by []; clear uret3 Hretchk3.
@@ -1626,11 +1469,9 @@ Qed.
     pose proof (erefl blk1) as Hblk1; unfold blk1 in Hblk1 at 2.
     try (pose proof (erefl blk3) as Hblk3; unfold blk3 in Hblk3 at 2).
     clearbody blk1; try clearbody blk3.
-    (* inject+subst onto the *block-abstracted* (hence compact) post-state: the
-       eq_rect the [subst] bakes now carries [blk1]/[blk3], not the expanded mkseq. *)
     move: eq_s1' => [= Hs1]; subst s1'.
     try (move: eq_s3' => [= Hs3]; subst s3').
-    destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off (* s'_reg_cor *) mem_match].
+    destruct weak as [? ? s3 color_eq side_s' s_mem_cor s'_mem_cor entry_off  mem_match].
       econstructor; try (rewrite eq_s3'; simpl; auto; done); try congruence; simpl; try done.
       + destruct s, s3, pc0, pc1. simpl. trivial.
       + intros d w rel d_eq.
@@ -1656,8 +1497,7 @@ Qed.
           -- destruct (mem_match w d no_code rel) as [impl _].
              destruct (impl H) as [d' [d'match d'eq]].
              exists d'; split; [exact d'match | exact d'eq].
-          -- (* the freshly-allocated cell carries the Left colour c0, so a
-                Right-relevance claim [rel] about it is impossible. *)
+          --
              exfalso.
              move: rel; xblk Hfresh; move: Hfresh => /alloc_block_const_value ->.
              rewrite /= tag_pc3 /is_relevant_comp => Hic.
@@ -1686,18 +1526,11 @@ Qed.
 
     intros s1 s2 s3 M s1' s3' equiv eq_s1' eq_s3'.
     destruct equiv as [strong [weak common]].
-    (* ---- Peel [alloc_fun] on both sides with [obind_inv]: the post-state stays
-       inside [eq_s1']/[eq_s3'] as a hypothesis — never [destruct]ed nor [subst]ed
-       here — so no expanded block is baked into the proof term (that bake is what
-       made the old inversion-cascade peel hang at [Qed]).  We reproduce exactly the
-       hypothesis names the conjunct proof below relies on. ---- *)
     unfold alloc_fun in eq_s1', eq_s3'; cbv zeta in eq_s1', eq_s3'.
-    (* left (s1): keep ra as the atom [a1]; split size into [v'@Other] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (a1 & Heqa4 & eq_s1'); symmetry in Heqa4.
     apply obind_inv in eq_s1'; destruct eq_s1' as (wj1 & Hg & eq_s1');
       unfold is_jump in Hg; destruct (taga a1) eqn:Heqa7; try discriminate Hg;
       symmetry in Heqa7; clear Hg wj1.
-    (* NEW: the return-address read + running-colour check (s1) *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (ret1 & Hret1 & eq_s1').
     apply obind_inv in eq_s1'; destruct eq_s1' as (uret1 & Hretchk1 & eq_s1');
       move: Hretchk1; case: ifP => Hretcol1 Hretchk1; last by []; clear uret1 Hretchk1.
@@ -1708,7 +1541,6 @@ Qed.
       destruct (int_of_word (vala (v'@Other))) as [m1|] eqn:Heqa3; try rewrite Heqa3 in Hg; simpl in Hg;
         [ move: Hg => [= ?]; subst m1 | discriminate Hg ];
       cbn [vala] in Heqa3; symmetry in Heqa3.
-    (* peel the allocator's block-size check: [alloc_fun = Some] gives [n'+1 <= 2^(word-NC)] *)
     apply obind_inv in eq_s1'; destruct eq_s1' as (uchk1 & Hszchk1 & eq_s1').
     destruct (leq (n' + 1) (expn 2 (word_size mt - NC))) eqn:Hszbound1;
       [ clear uchk1 Hszchk1 | discriminate Hszchk1 ].
@@ -1719,11 +1551,9 @@ Qed.
       move: Hg => [= ?]; subst ad1.
     apply obind_inv in eq_s1'; destruct eq_s1' as (rg1 & Hg & eq_s1');
       move: (updm_set Hg) => Hg2; subst rg1; clear Hg.
-    (* right (s3): split ra into [v@InternalJump]; keep size as the atom [a0] *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ra3 & Heqa & eq_s3'); destruct ra3 as [v tgr3].
     apply obind_inv in eq_s3'; destruct eq_s3' as (wj3 & Hg & eq_s3');
       unfold is_jump in Hg; destruct tgr3; try discriminate Hg; clear Hg wj3; symmetry in Heqa.
-    (* NEW: the return-address read + running-colour check (s3) *)
     apply obind_inv in eq_s3'; destruct eq_s3' as (ret3 & Hret3 & eq_s3').
     apply obind_inv in eq_s3'; destruct eq_s3' as (uret3 & Hretchk3 & eq_s3');
       move: Hretchk3; case: ifP => Hretcol3 Hretchk3; last by []; clear uret3 Hretchk3.
@@ -1765,14 +1595,8 @@ Qed.
     pose proof (erefl blk1) as Hblk1; unfold blk1 in Hblk1 at 2.
     try (pose proof (erefl blk3) as Hblk3; unfold blk3 in Hblk3 at 2).
     clearbody blk1; try clearbody blk3.
-    (* inject+subst onto the *block-abstracted* (hence compact) post-state: the
-       eq_rect the [subst] bakes now carries [blk1]/[blk3], not the expanded mkseq. *)
     move: eq_s1' => [= Hs1]; subst s1'.
     try (move: eq_s3' => [= Hs3]; subst s3').
-    (* The allocating component c0 (= color_of s1, the Left running component) is a valid
-       interface component, so 1+c0 < 2^NC (colors_bounded).  Derived here, before the
-       per-conjunct [clear]s, and threaded into the two memory_prefix_condition bullets that
-       need it to discharge the (now bounded) component_memory_prefix_succ_not_zero. *)
     have Hside_s1 : side_of (color_of s1) = Left by inversion strong.
     have Hc0_dom : c0 \in domm ip.
     { move: Hside_s1; rewrite (color_of_pc_tag s1) tag_pc1 /side_of /=.
@@ -1781,14 +1605,9 @@ Qed.
     have Hbnd_c0 : 1 + c0 < 2 ^ NC.
     { apply: colors_bounded. apply/orP. by left. }
     eapply common_equiv_def with (n := n) (c := c0).
-      (* pc_code_color s2 (goal 18, unchanged) and pc_code_color s1' (goal 17, the alloc result whose
-         pc is the running-coloured return address — new block disjoint so the return cell survives). *)
       18: exact wpcc2.
       17: { apply: (pc_code_color_alloc (s := s1) (a := vala a1) (ret := ret1));
               [ reflexivity | exact Hret1 | reflexivity | reflexivity | exact Hretcol1 ]. }
-      (* Search-free dispatcher: close the cheap obligations (the three pc-tag
-         goals and the unchanged s2 invariants) explicitly, leaving exactly the
-         nine substantive goals for the bullets below.  No auto/congruence/done. *)
       all: try (cbn [Symbolic.pc Types.taga]; eassumption).
       all: try exact (conj mem_pref_cond_s2 (conj mem_pref_cond_s2' (conj code_pref_cond_s2
               (conj alloc_mem_s2 (conj bnz_s2 (conj end_s2 (conj col_mem2 (conj entry_code2 cvo2)))))))).
@@ -1957,7 +1776,7 @@ Qed.
                move=> /mapP [] x x_in_iota [] H -> //=.
                case: s1 tag_pc1 {H} => /= _ _ [] /= _ taga _ -> //=. }
              rewrite eq in dent. simpl in dent. inversion dent.
-        * (* code_vtag_other: old cells via cvo1; new cells are [def_mem_tag _ false] (non-code) *)
+        *
           intros w d deq dcode. rewrite unionmE in deq. unfold_match' deq.
           -- eapply cvo1; eauto.
           -- exfalso.
@@ -2103,7 +1922,7 @@ Qed.
                move=> /mapP [] x x_in_iota [] H -> //=.
                case: s3 tag_pc3 {H} => /= _ _ [] /= _ taga _ -> //=. }
              rewrite eq in dent. simpl in dent. inversion dent.
-        * (* code_vtag_other: old cells via cvo3; new cells are [def_mem_tag _ false] (non-code) *)
+        *
           intros w d deq dcode. rewrite unionmE in deq. unfold_match' deq.
           -- eapply cvo3; eauto.
           -- exfalso.
@@ -2182,9 +2001,7 @@ Qed.
               move=> /mapP [] x x_in_iota [] H -> //=.
               case: s3 tag_pc3 {H} => /= _ _ [] /= _ taga _ -> -> //=. }
             destruct t. simpl in tcapa. rewrite tcapa in eq. inv eq. } }
-      + (* combined_codes Left s1' s3': the matched (code) cells are unchanged by
-           the alloc (fresh cells are non-code), and decode_match transports
-           through the unionm. *)
+      +
         intros w vd t off cc rel eq_off codet colt.
         split.
         * move=> Hmem; cbn [Symbolic.mem] in Hmem.
@@ -2215,8 +2032,7 @@ Qed.
                | cbn [Symbolic.mem]; apply unionm_getL; exact Hmem
                | cbn [Symbolic.mem]; apply unionm_getL; exact Hmem'
                | exact Hcode | exact Htag | exact Hoff ].
-      + (* combined_codes Right s2 s3': like the Left case, but the middle run
-           s2 is unchanged (no unionm on that side). *)
+      +
         intros w vd t off cc rel eq_off codet colt.
         split.
         * move=> Hmem.
@@ -2273,12 +2089,10 @@ Qed.
       as_word (k := reg_field_size mt) (ssrint.Posz x) == as_word (ssrint.Posz y) = false.
   Proof.
     clear.
-    (* Local Transparent reg_field_size mt. *)
     intros.
     apply /idP => C.
     move: C => /eqP C.
     eapply H1.
-    (* Local Opaque reg_field_size mt. *)
     rewrite <- (as_wordK (k := 5) (n := x)).
     rewrite <- (as_wordK (k := 5) (n := y)).
     f_equal. f_equal. auto.
@@ -2288,14 +2102,7 @@ Qed.
 
   Module PCCM.
 
-  (* These copied step-machinery lemmas compute through [next_state_do_update]/[..updates]
-     (peeling [obind]s, reducing [updm]/[switch_val]); in their home file StepSilentWeak.v
-     these definitions are transparent (the [Local Opaque] in this file does not export across
-     [Require]).  Re-enable transparency here exactly as this file already does at its lines
-     932 / 975 / 1020 / 1027 for the same compute-through-the-fold proofs. *)
   Local Transparent next_state_do_update next_state_do_updates reg_clear_list_aux.
-
-  (* ===== STEP A: copied low-level step-machinery from StepSilentWeak.v (verbatim). ===== *)
 
   Lemma op_silent_trpc :
     forall (op : opcode) (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
@@ -2309,25 +2116,25 @@ Qed.
     rewrite /LRC.transfer /LRC.instr_rules_mp.
     case: tpc => level current'.
     move: ts ov; case: op => [|||b||||||||||] ts ov; cbv zeta; move=> H Hev; subst ev.
-    - (* NOP *)
+    -
       rewrite (hseq0 ts) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H => [= <-].
       exact: erefl.
-    - (* CONST *)
+    -
       rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H => [= <-]; exact: erefl.
-    - (* MOV *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq0 (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H => [= <-]; exact: erefl.
-    - (* BINOP *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H => [= <-]; exact: erefl.
-    - (* LOAD *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -2335,7 +2142,7 @@ Qed.
       move: H. case: ifP => // _ H.
       move: H. case E: (switch_val _ _) => [a c] /=.
       move=> [= <-]; exact: erefl.
-    - (* STORE *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts)))
               (hseq0 (hsbehead (hsbehead (hsbehead ts)))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -2343,18 +2150,18 @@ Qed.
       move: H. case: ifP => // _ H.
       move: H. case E: (switch_val _ _) => [a c] /=.
       move=> [= <-]; exact: erefl.
-    - (* JUMP *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H].
       move: H. case: ifP => _ H.
       + case: (obind_inv H) => u1 [_ {}H]. move: H => [= <-]; exact: erefl.
       + case: (obind_inv H) => u1 [_ {}H]. case: (obind_inv H) => u2 [_ {}H].
         case: (obind_inv H) => u3 [_ {}H]. by move: H => [=].
-    - (* BNZ *)
+    -
       rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H => [= <-]; exact: erefl.
-    - (* JAL *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H. case: ifP => _ H.
@@ -2368,11 +2175,11 @@ Qed.
         case: etg => [[pp ll]|] /=.
         * by move=> _ _ Hev2; discriminate Hev2.
         * by move=> _ Hce' _; discriminate Hce'.
-    - (* JUMPEPC *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* ADDRULE *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* GETTAG *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* PUTTAG *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
-    - (* HALT *) by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
+    -  by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
+    -  by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
+    -  by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
+    -  by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
+    -  by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
   Qed.
 
   Lemma updm_domm (T : ordType) (S : Type) (m m' : {fmap T -> S}) k v :
@@ -2397,7 +2204,6 @@ Qed.
     by case: (obind_inv H) => s0 [Hs0] [= <-].
   Qed.
 
-  (* Any transfer: if [run_syscall] succeeds, the syscall semantics produced the post-state. *)
   Lemma run_syscall_sem_gen : forall (tf : _) sc (s s' : state) ev,
     @run_syscall _ _ lrc_tags tf unit sc s = Some (s', ev) -> Symbolic.sem sc s = Some s'.
   Proof.
@@ -2406,13 +2212,6 @@ Qed.
     by case Es: (Symbolic.sem sc s) => [s0|] //= [= <- _].
   Qed.
 
-  (* The syscall case of [silent_step_pc_code_color]: a fired allocator lands the pc on the
-     return address [vala ra_val], whose cell [ret_addr] survives the union with the fresh block
-     and (by the allocator's running-colour check, [Hretcol]) is running-coloured if it is code.
-     So [pc_code_color] holds of the post-state.  Peels [alloc_fun] exactly as [alloc_fun_common]
-     does on its Left run (LRC.alloc_fun's return-address read + colour check), then closes with
-     [pc_code_color_alloc].  (The verbatim [alloc_fun_effect] from StepSilentWeak.v is stale — it
-     predates the return-address check now in LRC.alloc_fun — so the alloc case is done directly.) *)
   Lemma alloc_pc_code_color : forall (s s' : state),
     alloc_fun (NC:=NC) s = Some s' -> pc_code_color s'.
   Proof.
@@ -2563,14 +2362,6 @@ Qed.
     repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
     by (case: Hin || exact: (no_mr_reg_clear_read w Hin)).
 
-  (* ===== STEP B: the new helpers + the main lemma. ===== *)
-
-  (* From a successful SILENT opcode step (NEXT in [_and_pc] form), read off both
-       (i)  the post-pc is [pc'] retagged with the (preserved) pc-tag [tpc], and
-       (ii) the cell at [pc'] BELONGS to the running (pc-tag) colour
-            (every silent LRC rule runs [check_belong current tni], via [silent_transfer_belong]).
-     Peels [next_state_updates_and_pc]/[next_state] once, keeping the transfer [Htr], then
-     [op_silent_trpc] gives the pc-tag and [silent_transfer_belong] gives the membership. *)
   Lemma silent_next_pc_belong :
     forall (st s' : state) op tpc ti (ts : hseq (tag_type lrc_tags) (inputs op)) updts pc',
       @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit st
@@ -2592,11 +2383,6 @@ Qed.
         split; by [ rewrite -Hs /= Htrpc | exact: Hbel ] ).
   Qed.
 
-  (* Master combinator: with the post-pc = [pc']@[tpc] (from [silent_next_pc_belong]), the cell at
-     [pc'] belonging to [tpc]'s colour, and a per-opcode relation [Hrel] saying every CODE cell of
-     [mem s'] (in particular the new-pc cell) corresponds to a same-colour code cell of [mpre]
-     ([:= mem s]) — conclude [pc_code_color s'].  The colour chain: [color (taga d)] = [color (taga d0)]
-     (Hrel) = [tpc]-colour (Hbel) = [color_of s'] (from [pc s' = pc'@tpc]). *)
   Lemma pc_code_color_combine : forall (s' : state)
       (mpre : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)}) pc' tpc,
     pc s' = pc'@tpc ->
@@ -2614,16 +2400,11 @@ Qed.
     by rewrite Hcol Hbel Hcol0.
   Qed.
 
-  (* The main lemma: a SILENT LRC step lands the pc on a cell whose colour, if it is code, is the
-     running (post-pc-tag) colour.  Per opcode: the new-pc cell BELONGS to the running colour
-     ([silent_next_pc_belong]); for nop/const/mov/binop/jump/bnz/jal memory is unchanged so that
-     cell is its own [mem s] cell; LOAD/STORE re-tag ONE cell keeping colour/is_code (or non-code,
-     for STORE); SYSCALL(alloc) lands on the running-coloured return address ([alloc_pc_code_color]). *)
   Lemma silent_step_pc_code_color :
     forall (s s' : state), step_mp (NC := NC) s s' None -> pc_code_color s'.
   Proof.
     move=> s s' Hstep. inversion Hstep.
-    - (* 1  nop *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -2631,7 +2412,7 @@ Qed.
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 2  const *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -2639,7 +2420,7 @@ Qed.
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 3  mov *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -2647,7 +2428,7 @@ Qed.
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 4  binop *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -2655,7 +2436,7 @@ Qed.
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 5  load — re-tag of the loaded cell keeps colour and is_code *)
+    -
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have [Hw0 [Hmem' [Htag Hguard]]] := weak_load_facts ST MEM1 NEXT.
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd.
@@ -2665,7 +2446,7 @@ Qed.
         split; [ reflexivity | ]. move: Hcode; rewrite -Hdeq /= switch_val_color switch_val_iscode => Hcode.
         by split.
       + move=> Hd. by exists d.
-    - (* 6  store — the written cell is non-code, so the running-pc cell at [pc'] is a [mem s] cell *)
+    -
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have [vnew [oldd [Hw0 [Hmem' [Htag [_ [_ [Hncv _]]]]]]]] := weak_store_facts ST OLD NEXT.
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd.
@@ -2673,7 +2454,7 @@ Qed.
       move: Hd; case: eqP => [Heq | Hne].
       + move=> [= Hdeq]. subst d. by move: Hcode; rewrite (introF idP Hncv).
       + move=> Hd. by exists d.
-    - (* 7  jump  (NEXT in _and_pc form) — memory unchanged (RegReads only) *)
+    -
       unfold mvec in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -2681,7 +2462,7 @@ Qed.
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 8  bnz   (NEXT in _and_pc form) — memory unchanged (one RegRead) *)
+    -
       unfold mvec, pc' in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -2689,8 +2470,7 @@ Qed.
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 9  jal   (NEXT in _and_pc form) — memory unchanged (identity MemRead + reg writes).
-         Inlined (cf. StepSilentWeak case 9): applying [jal_step_mem] to the let-bound [mvec] hangs. *)
+    -
       unfold mvec, pc' in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -2712,14 +2492,11 @@ Qed.
                   repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ] ). }
       apply: (pc_code_color_combine Hpc _ Hbel) => d Hd Hcode.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 10  syscall (alloc) — pc lands on the running-coloured return address *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       exact: (alloc_pc_code_color Halloc).
   Qed.
 
-  (* A silent LRC step preserves the pc-tag (every rule keeps [trpc]=[tpc], the alloc lands on the
-     return address keeping [taga (pc st)]) — hence the running colour.  Mirrors the case split of
-     [silent_step_pc_code_color]; for the OP opcodes [silent_next_pc_belong] gives [pc s' = pc'@tpc]. *)
   Lemma silent_step_color_preserved : forall (s s' : state),
     step_mp (NC := NC) s s' None -> color_of s' = color_of s.
   Proof.
@@ -2730,12 +2507,12 @@ Qed.
     - rewrite /next_state_updates in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
     - rewrite /next_state_updates in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
     - rewrite /next_state_updates in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
-    - have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.       (* load *)
-    - have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.       (* store *)
-    - unfold mvec in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.   (* jump *)
-    - unfold mvec, pc' in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST. (* bnz *)
-    - unfold mvec, pc' in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST. (* jal *)
-    - (* alloc: the post-pc tag is [taga (pc s)] by construction *)
+    - have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
+    - have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
+    - unfold mvec in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
+    - unfold mvec, pc' in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
+    - unfold mvec, pc' in NEXT. have [Hpc _] := silent_next_pc_belong NEXT. by rewrite Hpc /= ST.
+    -
       have Halloc := run_syscall_alloc GETCALL CALL. move: Halloc.
       rewrite /alloc_fun. cbv zeta. move=> H.
       case: (obind_inv H) => ra_val [Hra {}H].
@@ -2753,12 +2530,6 @@ Qed.
       by move: H => [= <-].
   Qed.
 
-  (* PRE-mem variant: the new-pc cell IN THE PRE-STEP memory [mem s] is running-coloured-if-code.
-     The [pc_incr] master reconstructs its [s1'] with mem = [mem s1] (the PRE mem; any data write is a
-     SEPARATE master), so THIS — not [silent_step_pc_code_color] (POST mem) — is what its
-     [pc_code_color] obligation needs.  For the machine opcodes the step's own [check_belong]
-     ([silent_next_pc_belong]) is on the PRE-mem new-pc cell; for alloc it's the new return-address
-     check. *)
   Lemma belong_some_eq : forall c (t : tag_type lrc_tags Symbolic.M),
     belong c (Some t) -> c = color t.
   Proof. by move=> c t; case: t => vt ct et bt /= /eqP. Qed.
@@ -2787,17 +2558,17 @@ Qed.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
     - rewrite /next_state_updates in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
-    - have [Hpc Hbel] := silent_next_pc_belong NEXT.                                  (* load *)
+    - have [Hpc Hbel] := silent_next_pc_belong NEXT.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
-    - have [Hpc Hbel] := silent_next_pc_belong NEXT.                                  (* store *)
+    - have [Hpc Hbel] := silent_next_pc_belong NEXT.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
-    - unfold mvec in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.             (* jump *)
+    - unfold mvec in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
-    - unfold mvec, pc' in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.        (* bnz *)
+    - unfold mvec, pc' in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
-    - unfold mvec, pc' in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.        (* jal *)
+    - unfold mvec, pc' in NEXT. have [Hpc Hbel] := silent_next_pc_belong NEXT.
       move=> Hd _; apply: (close _ _ Hpc _ Hbel Hd); by rewrite ST.
-    - (* alloc: new pc = return addr [vala ra_val]; cell [ret_addr] is running-coloured-if-code *)
+    -
       move=> Hd Hcode. have Halloc := run_syscall_alloc GETCALL CALL. move: Halloc.
       rewrite /alloc_fun. cbv zeta. move=> H.
       case: (obind_inv H) => ra_val [Hra {}H].
@@ -2818,10 +2589,6 @@ Qed.
       by rewrite Hc (color_ofE s).
   Qed.
 
-  (* The [pc_incr] master's [pc_code_color s1'] obligation: [s1']'s mem is the PRE mem [mem s], its
-     pc-value the step's new pc, its pc-tag the running tag — so [pc_code_color] follows from
-     [silent_step_pre_pcc].  The three side eqs are syntactic at the call sites (mem/taga are
-     [mem s1]/[taga (pc s1)]; the pc-value is closed by [congr addw]). *)
   Lemma pc_incr_pcc : forall (s sfull s' : state),
     step_mp (NC := NC) s sfull None ->
     mem s' = mem s -> vala (pc s') = vala (pc sfull) -> taga (pc s') = taga (pc s) ->
@@ -2833,10 +2600,6 @@ Qed.
     exact: (silent_step_pre_pcc Hstep Hd Hcode).
   Qed.
 
-  (* BRIDGE: a [step_me] (Merged.transfer) step IS a [step_mp] (LRC.transfer) step — [Merged.transfer]
-     = (two extra is_code guards) >>= [LRC.instr_rules], so success transfers identically.  Lets the
-     [sem']/Right run (which steps via [step_me]) reuse [silent_step_pc_code_color].  (Copies of the
-     same-named StepSilentWeak2 lemmas; namespaced under PCCM so no clash on its downstream [Include].) *)
   Lemma merged_transfer_lrc :
     forall (iv : ivec lrc_tags) (i : ev_inputs)
            (r : vovec lrc_tags (op iv) * option event),

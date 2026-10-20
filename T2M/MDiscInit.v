@@ -1,6 +1,3 @@
-(** * T2M — [dinv_initial]: the discipline invariant at [TSim.t_initial_base],
-    from the initial-memory layout facts. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.

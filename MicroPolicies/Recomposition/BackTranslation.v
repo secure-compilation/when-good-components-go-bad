@@ -1,8 +1,3 @@
-(* The source half of the back-translation package [H_bt]:
-   [bt_source_half_shapes] back-translates a finite prefix of a linked
-   compiler output into source programs + compiled images ([bt_source_pack]).
-   The remaining, trace-dependent demands of [bt_package] live in [bt_fits]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -53,8 +48,6 @@ Import Symbolic.
 
 Local Notation state := (@Symbolic.state mt LRC.lrc_tags unit).
 
-(* ==================== rub prefixes are star-realizable ==================== *)
-
 Lemma rub_single_events : forall (NCv : nat) pI cI (W : program),
   single_events (rub_sem NCv pI cI W).
 Proof.
@@ -87,9 +80,6 @@ Proof.
       (erefl (Merged.initial_state (code W) (prog_buffers W) (prog_interface W))).
 Qed.
 
-(* ==================== S2I buffer-shape routing ==================== *)
-
-(* the compiled buffer map is exactly [gen_buffers] of the source one *)
 Lemma compilation_buffers :
   forall p pc, compile_program p = Some pc ->
     Intermediate.prog_buffers pc = gen_buffers (Source.prog_buffers p).
@@ -112,15 +102,10 @@ Qed.
 Lemma size_lengthE (T : Type) (l : seq T) : length l = size l.
 Proof. by elim: l => //= x l ->. Qed.
 
-(* per-component block-0 sizes of an Intermediate buffer map — the
-   prescription the back-translation adopts *)
 Definition block0_sizes
     (bufs : NMap {fmap Values.Block.id -> nat + seq Values.value}) : NMap nat :=
   mapm (fun bm => odflt 1 (omap bsize (getm bm (0 : Values.Block.id)))) bufs.
 
-(* ==================== the canonical back-translation ==================== *)
-
-(* deterministic in (a, b, t) *)
 Definition bt_bufsz (a b : Intermediate.program) : NMap nat :=
   unionm (block0_sizes (Intermediate.prog_buffers a))
          (block0_sizes (Intermediate.prog_buffers b)).
@@ -139,7 +124,6 @@ Definition bt_Csc (a b : Intermediate.program) (t : Events.trace)
     : Source.program :=
   Source.program_unlink (domm (Intermediate.prog_interface b)) (bt_back a b t).
 
-(* linearizability at given label-scheme bounds *)
 Definition lin_ok_at (L0 P0 C0 : nat) (x : Intermediate.program) : Prop :=
   [/\ (forall cid Cprocs,
          Intermediate.prog_procedures x cid = Some Cprocs ->
@@ -156,11 +140,6 @@ Definition lin_ok_at (L0 P0 C0 : nat) (x : Intermediate.program) : Prop :=
     & (forall cid,
          cid \in domm (Intermediate.prog_interface x) -> cid < C0)].
 
-(* ==================== the source half, packaged ==================== *)
-
-(* Everything the source half of the back-translation establishes about
-   the observed pair (a, b) and prefix m0: the back-translated sources,
-   their compiled images, and their static relationships. *)
 Record bt_source_pack (a b : Intermediate.program) (m0 : finpref_behavior)
     (P' Cs : Source.program) (ip' ic' : Intermediate.program) : Prop := {
   btsp_wfP    : Source.well_formed_program P';

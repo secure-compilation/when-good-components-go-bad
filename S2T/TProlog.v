@@ -1,20 +1,3 @@
-(** * Stage 4, part 6 — the callee prologue at T.
-
-    See plan-i2t-redo.md §4 (Stage 4).
-
-    `S2I/Simulation.v:2698`'s `internal_prologue_run` executes the whole body
-    prologue in one lemma. Here it is split at the allocation, because that is
-    where the content is:
-
-        ILabel plf ; IMov R_SP R_AUX1 ; IConst (4+ne) R_SP ; IAlloc R_SP R_SP
-        ------------------------------------------------- prologue_alloc_run
-        push R_AUX1 ; push R_ARG ; IMov R_COM R_ARG
-        ------------------------------------------------- (next)
-
-    The first half is where the four alloc lemmas land — `tag_inv_alloc`,
-    `minj_alloc`, `alloc_frame_cap`, `alloc_fresh_outside` — each of which had
-    to be added first, and three of which did not exist a few increments ago. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -56,12 +39,6 @@ Section WithCode.
 
 Variable cde : Transitional.code.
 
-(** ★ The prologue up to and including the frame allocation.
-
-    Register discipline: only [R_SP] and [R_AUX1] move ([R_AUX1] receives the
-    caller's [R_SP], which the first push will spill), so everything else —
-    crucially [R_RA], carrying the activation's return capability — is
-    untouched. That is stated as one clause rather than four. *)
 Lemma prologue_alloc_run Cf ne nxt rest a mem tmemIn regsIn pct pc0 L :
   TMacros.code_at_I cde Cf pc0
     ([:: IMov R_SP R_AUX1;
@@ -79,9 +56,6 @@ Lemma prologue_alloc_run Cf ne nxt rest a mem tmemIn regsIn pct pc0 L :
         [/\ (forall (o : Z) w,
                Transitional.Memory.load tmemIn (Cf, fbN, o) = Some w -> False),
             (forall b0, a Cf b0 <> Some fbN),
-            (* no ledger site is in the fresh frame — the premise the pushes
-               need, and already proved here for [tag_inv_alloc] — together
-               with the fact that nothing OUTSIDE the fresh frame moved *)
             ((forall o : Z, ~ List.In (TInv.CMem (Cf, fbN, o)) (TInv.sites L))
              /\ (forall q, Pointer.component q <> Cf \/ Pointer.block q <> fbN ->
                     Transitional.Memory.load tmem1 q
@@ -99,11 +73,9 @@ Lemma prologue_alloc_run Cf ne nxt rest a mem tmemIn regsIn pct pc0 L :
       & TInv.tag_inv L tmem1 regs3 pct].
 Proof.
   move=> Hcode Hcomp HSPt [cm HcmF] HI Htag.
-  (* --- the four code cells --- *)
   have Hc0 := Hcode.
   have Hc1 := TMacros.code_at_I_tail Hc0.
   have Hc2 := TMacros.code_at_I_tail Hc1.
-  (* --- the allocation succeeds, and its size is the frame size --- *)
   have Hsz : (Z.of_nat (4 + ne) > 0)%Z by lia.
   have Ento : Z.to_nat (Z.of_nat (4 + ne)) = 4 + ne by rewrite Nat2Z.id.
   have [tmem1 [fbN Halloc]] :
@@ -112,11 +84,9 @@ Proof.
       = Some (tmem1, (Cf, fbN, 0%Z)).
   { rewrite /Transitional.Memory.alloc HcmF /=.
     by eexists; eexists. }
-  (* the fresh block is unloadable in the OLD memory — used twice below *)
   have Hfresh : forall (o : Z) w,
       Transitional.Memory.load tmemIn (Cf, fbN, o) = Some w -> False.
   { move=> o w. exact: (TStack.alloc_fresh_unloadable HI Halloc). }
-  (* …hence no ledger entry lives there: entries are loadable *)
   have Hnoblk : forall q t, List.In (TInv.CMem q, t) L ->
       Pointer.component q <> Cf \/ Pointer.block q <> fbN.
   { move=> q t Hin.
@@ -140,7 +110,7 @@ Proof.
              (Transitional.val (Transitional.Register.get R_SP regsIn))
              (tvtag (Transitional.Register.get R_SP regsIn)) regsIn)))), fbN.
   split.
-  - (* --- the three steps --- *)
+  -
     eapply star_step with (t1 := E0) (t2 := E0); [| | by []].
     { eapply TS.Mov; [exact: (TMacros.code_at_I_head Hc0)
                      | exact: (TMacros.check_pc_at_I Hc0)]. }
@@ -156,7 +126,7 @@ Proof.
       - exact: Hsz.
       - rewrite !Pointer.inc_preserves_component Hcomp. exact: Halloc. }
     exact: star_refl.
-  - (* --- the memory facts --- *)
+  -
     split.
     + exact: Hfresh.
     + move=> b0. exact: (TInject.alloc_fresh_outside HI Halloc).
@@ -164,14 +134,14 @@ Proof.
       move=> q Hne. exact: (TStack.load_alloc_other Halloc Hne).
     + exact: (TStack.minj_alloc HI Halloc).
     + rewrite -Ento. exact: (TStack.alloc_frame_cap Halloc).
-  - (* --- the register facts --- *)
+  -
     split.
     + by rewrite TInv.get_set_eq.
     + rewrite TInv.get_set_neq // TInv.get_set_neq // TInv.get_set_neq //.
       by rewrite TInv.get_set_eq HSPt.
     + move=> r H1 H2.
       by rewrite !TInv.get_set_neq //.
-  - (* --- tag_inv --- *)
+  -
     rewrite HSPt /=.
     apply: TInv.tag_inv_setreg; first by [].
     apply: TInv.tag_inv_setreg; first by [].
@@ -182,19 +152,7 @@ Qed.
 
 
 
-(** ★ One data push, with its output state described by FACTS rather than by
-    the explicit nest of [Register.set]s that [push_data_macro] returns.
-
-    This is the same move [prologue_alloc_run] makes, and for the same reason:
-    a diagram that chains four macros otherwise carries a four-deep [set] term
-    through every subsequent rewrite. It also absorbs two obligations the
-    caller would otherwise repeat at every push — that the target cell is
-    storable (from [frame_cap]) and that the injection survives (from
-    [minj_store_outside]). *)
 Lemma push_data_run C fb sp r cap a mem m rs pc pct L tl :
-  (* the tail is an arbitrary NONEMPTY list, not a literal cons: a diagram has
-     it as [cd ++ pop R_AUX1 ++ …] with [cd] a variable, which would not unify
-     with [nxt :: rest] *)
   TMacros.code_at_I cde C pc (push r ++ tl) ->
   tl <> [::] ->
   Pointer.component pc = C ->
@@ -216,8 +174,6 @@ Lemma push_data_run C fb sp r cap a mem m rs pc pct L tl :
                          is_code := false |}),
             (forall q w, Transitional.Memory.load m q = Some w ->
                q <> (C, fb, sp) -> Transitional.Memory.load m' q = Some w),
-            (* the store itself, so the caller can use the store-shaped
-               transport lemmas ([scrs_ok_store], [stack_match_store], …) *)
             Transitional.Memory.store m (C, fb, sp)
               (Transitional.Register.get r rs,
                {| vtag := Other; color := C; entry := None;
@@ -237,7 +193,6 @@ Proof.
          Htag.
   case: tl Hcode Htl => [|nxt rest] Hcode _ //.
   have HrSP : r <> R_SP by move=> E; apply: HSPr; rewrite E.
-  (* the cell is in the frame, hence loadable, hence storable *)
   have [w Hw] : exists w, Transitional.Memory.load m (C, fb, sp) = Some w
     by case: (Hcap sp Hsp) => [v Hv]; exact: (TMem.vload_load Hv).
   case: (TMem.store_after_load
@@ -265,15 +220,6 @@ Proof.
   - exact: Htag'.
 Qed.
 
-(** ★ One CAPABILITY push — the caller spilling its own return address before
-    an [IJal]. The mirror of [pop_ra_run], and the only push whose ledger entry
-    MOVES: `(CReg, t)` becomes `(CMem (C, fb, sp), t)`, and [R_RA] is left
-    [Invalidated] so the capability is not duplicated.
-
-    That duplication check is the whole point of the ledger: `ti_uniq` would be
-    violated if the rule kept [R_RA] live, and the machine's [Store] rule is
-    what enforces it — the register write-back is part of the rule, not of the
-    invariant. *)
 Lemma push_ra_run C fb sp cap a mem m rs pc pct L tl t :
   TMacros.code_at_I cde C pc (push R_RA ++ tl) ->
   tl <> [::] ->
@@ -338,19 +284,6 @@ Proof.
   - exact: Htag'.
 Qed.
 
-(** ★ [store_arg (scr C) R_SP R_AUX2] — the caller PARKING its stack pointer in
-    the scratch cell across a cross-component call.
-
-    [ICall] invalidates the register file, so [R_SP] cannot survive in a
-    register; the per-component scratch cell is where it goes, and
-    [icall_resume_run] is what takes it back out. Two steps, and the only
-    obligation beyond the store is that the cell is not a ledger site: it takes
-    DATA, and [ti_data] would otherwise have to explain a live capability
-    appearing where the ledger has none.
-
-    Note the [Store] rule ALSO writes the source register back, retagged. For
-    an [Other] operand that is the identity — the same observation that makes
-    the data pops free. *)
 Lemma store_sp_run C fb sp a mem m rs pc pct L tl mscr :
   TMacros.code_at_I cde C pc (store_arg (scr C) R_SP R_AUX2 ++ tl) ->
   tl <> [::] ->
@@ -433,21 +366,6 @@ Proof.
     by rewrite /= HSPA.
 Qed.
 
-(** ★ One data pop, the mirror of [push_data_run].
-
-    The T-specific fact that makes this cheap: for a DATA pop the write-back is
-    **observationally invisible**. The rule rewrites the cell with
-    `{| val := val v.1; tvtag := if is_address (tvtag v.1) … |}`, which for
-    `tvtag v.1 = Other` has the SAME value and the SAME tag as what was there;
-    only the cell's `mem_tag` changes, and no clause of the invariant reads a
-    `mem_tag` (everything goes through `TMem.vload` / `TMem.tload`, both
-    projections of the tvalue — Stage 2 part 1's design decision, paying off
-    again).
-
-    So the memory outputs are equalities `vload m' q = vload m q` and
-    `tload m' q = tload m q` at EVERY `q`, which is the strongest form a caller
-    could want; the store equation is handed back too, for the store-shaped
-    transport lemmas that need it ([stack_match_store]). *)
 Lemma pop_data_run C fb sp r cap a mem m rs pc pct L tl v :
   TMacros.code_at_I cde C pc (pop r ++ tl) ->
   tl <> [::] ->
@@ -490,7 +408,6 @@ Proof.
            Hld) => [m' Hst].
   case: (TMacros.pop_data_macro (TMacros.code_at_I_pop Hcomp Hcode)
            Hcomp HrRA HSP HONE Ev Hnosite Hld Hst Htag) => [Pp Htag'].
-  (* the write-back preserves the tvalue outright, hence both projections *)
   have Hv' : forall q, TMem.vload m' q = TMem.vload m q.
   { move=> q. apply: (TMem.vload_store_same Hld _ Hst q). by []. }
   have Ht' : forall q, TMem.tload m' q = TMem.tload m q.
@@ -506,14 +423,6 @@ Proof.
   - exact: Htag'.
 Qed.
 
-(** ★ The pop INTO [R_SP] — the epilogue's frame-pointer restore.
-
-    [pop_data_run] cannot serve: its register-output clause says "every register
-    other than [R_SP] and [r] is unchanged", which is vacuous when [r] IS
-    [R_SP], and the caller needs to know what [R_SP] ends up holding. Note that
-    the underlying [exec_pop] needs no adjustment at all — unlike [exec_push] it
-    never assumed the target differs from [R_SP], because the [Load] writes the
-    target AFTER the decrement. *)
 Lemma pop_sp_run C fb sp cap a mem m rs pc pct L tl v :
   TMacros.code_at_I cde C pc (pop R_SP ++ tl) ->
   tl <> [::] ->
@@ -567,16 +476,6 @@ Proof.
   - exact: Htag'.
 Qed.
 
-(** ★ The pop that MOVES A CAPABILITY: the caller's `pop R_RA`, restoring the
-    return capability it spilled before the call.
-
-    Unlike every other pop this one is NOT invisible: the write-back leaves
-    `Invalidated` where a live capability was, so `tload` changes AT THE POPPED
-    CELL (its value does not). That is why the outputs separate the two — `vload`
-    everywhere, `tload` only away from the slot — and why the injection needs
-    `frame_priv` rather than value-preservation: the cell is in the frame, which
-    is outside the injection's range, so `minj_store_outside` applies where
-    `minj_store_same` would not (the tag moved). *)
 Lemma pop_ra_run C fb sp cap a mem m rs pc pct L tl v :
   TMacros.code_at_I cde C pc (pop R_RA ++ tl) ->
   tl <> [::] ->
@@ -635,16 +534,6 @@ Proof.
   - exact: Htag'.
 Qed.
 
-(** ★ [push R_RA] of a NON-capability — main's INITIAL activation, entered by
-    the machine with [Register.init] in the register file, so [R_RA] holds
-    [tUndef] rather than a return address.
-
-    The mirror of [pop_junk_ra_run], and the counterpart of [push_ra_run] with
-    the liveness premise replaced by an [Other] tag: no ledger entry appears,
-    because no capability is being spilled. The [Store] rule's write-back
-    leaves [R_RA] [Other] (it only invalidates ADDRESSES), which is why the
-    register side is [tag_inv_setra] rather than [tag_inv_setreg] — the latter
-    refuses [R_RA] outright. *)
 Lemma push_junk_ra_run C fb sp cap a mem m rs pc pct L tl :
   TMacros.code_at_I cde C pc (push R_RA ++ tl) ->
   tl <> [::] ->
@@ -718,15 +607,6 @@ Proof.
     by rewrite /= Et.
 Qed.
 
-(** ★ [pop R_RA] of a NON-capability — main's initial activation, whose
-    wrapper slot 2 holds junk rather than a return capability (the machine
-    entered `main` directly; it leaves through the wrapper's `IHalt`, not
-    through an `IReturn`).
-
-    The mirror of [pop_ra_run] with the liveness premise NEGATED: no ledger
-    entry appears, because none was spent. [ti_regs] never constrains [R_RA],
-    so a dead value landing there is invisible to the invariant — which is the
-    formal content of "main's activation has no return capability". *)
 Lemma pop_junk_ra_run C fb sp cap a mem m rs pc pct L tl v told :
   TMacros.code_at_I cde C pc (pop R_RA ++ tl) ->
   tl <> [::] ->
@@ -790,20 +670,6 @@ Proof.
     by rewrite /= TInv.is_ret_moved.
 Qed.
 
-(** ★ The [Kstop] epilogue: pop the saved argument, pop the caller's frame
-    pointer, and RETURN through [R_RA].
-
-    Five steps, and the last of them is the one the whole capability apparatus
-    exists for: `TS.Jump` fires only if `R_RA` holds `MVal InternalJump (Ptr
-    ret)`. At the I level the corresponding `IJump` reads the `gps` stack and
-    `R_RA` is `Undef` throughout; here the return address and its tag must BE in
-    the register, which is `ei_ra`.
-
-    That the tag is `InternalJump` (rather than a `Ret n`) is a premise here and
-    an invariant of the stack shape: a procedure BODY is always entered by the
-    wrapper's `IJal`, never by a cross-component call — the `Ret n` of an
-    external call is spilled in the wrapper's own frame. So the same value
-    serves all three `stack_match` constructors. *)
 Lemma epilogue_run C fb cap a mem m rs pc pct L ret v0 v1 :
   TMacros.code_at_I cde C pc (pop R_ARG ++ pop R_SP ++ [:: IJump]) ->
   Pointer.component pc = C ->
@@ -812,7 +678,6 @@ Lemma epilogue_run C fb cap a mem m rs pc pct L ret v0 v1 :
   Transitional.Register.get R_RA rs = MVal InternalJump (Ptr ret) ->
   Pointer.component ret = C ->
   (exists i tni, Transitional.executing cde ret i tni C) ->
-  (* the frame's two linkage slots, from the stack relation *)
   Transitional.Memory.load m (C, fb, 1%Z) = Some v1 ->
   tvtag v1.1 = Other ->
   Transitional.Memory.load m (C, fb, 0%Z) = Some v0 ->
@@ -825,9 +690,6 @@ Lemma epilogue_run C fb cap a mem m rs pc pct L ret v0 v1 :
     [/\ plus TS.step cde (m, rs, pc, pct) E0 (m', rs', ret, pct),
         [/\ (forall q, TMem.vload m' q = TMem.vload m q),
             (forall q, TMem.tload m' q = TMem.tload m q),
-            (* the two write-backs touch only this frame's linkage slots, so
-               cells elsewhere keep their MEM_TAG too, not just their
-               projections *)
             (forall q, q <> (C, fb, 1%Z) -> q <> (C, fb, 0%Z) ->
                Transitional.Memory.load m' q = Transitional.Memory.load m q),
             TStack.frame_cap m' C fb cap
@@ -843,7 +705,6 @@ Lemma epilogue_run C fb cap a mem m rs pc pct L ret v0 v1 :
 Proof.
   move=> Hcode Hcomp HSP HONE HRA Hret [ir [tnir Hexr]]
          Hl1 Et1 Hl0 Et0 Hnosite Hcap HI Htag.
-  (* --- pop R_ARG: the saved argument, at offset 1 --- *)
   have Hc1 : TMacros.code_at_I cde C pc
       (pop R_ARG ++ pop R_SP ++ [:: IJump]) by exact: Hcode.
   have Htl1 : pop R_SP ++ [:: IJump] <> [::] by [].
@@ -855,7 +716,6 @@ Proof.
            (ltac:(by []) : R_ONE <> R_ARG)
            HSP HONE Hl1' Et1 (Hnosite (2 - 1)%Z) Hcap HI Htag)
     => [m1 [rs1 [Pp1 [Hst1 Hv1 Ht1 Hcap1 Hmj1] [HSP1 HARG1 Hoth1] Htag1]]].
-  (* --- pop R_SP: the caller's frame pointer, at offset 0 --- *)
   set pc2 := Pointer.inc (Pointer.inc pc).
   have Hcomp2 : Pointer.component pc2 = C
     by rewrite /pc2 !Pointer.inc_preserves_component.
@@ -866,7 +726,6 @@ Proof.
              = MVal Other (Ptr (C, fb, (2 - 1)%Z)) by exact: HSP1.
   have HONE1 : Transitional.Register.get R_ONE rs1 = MVal Other (Int 1)
     by rewrite Hoth1.
-  (* the untouched linkage slot travels across the first pop's write-back *)
   have Hl0' : Transitional.Memory.load m1 (C, fb, ((2 - 1) - 1)%Z) = Some v0.
   { have Hne : ((C, fb, 0%Z) : Pointer.t) <> (C, fb, (2 - 1)%Z)
       by move=> E; move: (f_equal Pointer.offset E) => /=; lia.
@@ -874,7 +733,6 @@ Proof.
   case: (pop_sp_run Hc2 Htl2 Hcomp2 HSP1' HONE1 Hl0' Et0
            (Hnosite ((2 - 1) - 1)%Z) Hcap1 Hmj1 Htag1)
     => [m2 [rs2 [Pp2 [Hst2 Hv2 Ht2 Hcap2 Hmj2] [HSP2 Hoth2] Htag2]]].
-  (* --- the [IJump]: the capability in [R_RA] is what makes it fire --- *)
   set pc4 := Pointer.inc (Pointer.inc pc2).
   have Hc4 : TMacros.code_at_I cde C pc4 [:: IJump]
     by exact: (TMacros.code_at_I_tail (TMacros.code_at_I_tail Hc2)).
@@ -910,22 +768,6 @@ Proof.
   - exact: Htag2.
 Qed.
 
-(** ★ The WRAPPER's cross-component return — nine steps ending in the `IReturn`
-    that emits the `ERet` event:
-
-        pop R_RA ; pop R_AUX1 ; store_arg (scr C) R_AUX1 R_AUX2 ;
-        pop R_SP ; IReturn
-
-    This is the only place in the campaign where `pc_tag` MOVES:
-
-      - `TS.JumpRet` fires only if `value_to_pc_tag (tvtag R_RA) = Some pct`,
-        i.e. the capability is `Ret n` and the pc is at `Level n.+1` — the
-        premise `TSM.ext_level_max` supplies from the stack shape;
-      - it lands at `dec_pc_tag pct = Level n`, with `TS.invalidate_ret` killing
-        the spent capability (plan §3.6 — without that fix a spent `Ret n`
-        survives at `Level n`, exactly what the Stage-0 harness caught);
-      - `TInv.tag_inv_return` retires the ledger's `Ret n` entry, and `ti_lvl`'s
-        multiset shrinks by one. *)
 Lemma ef_restore_run C fbE cap a mem m rs pc pct L n pc' vRA vscr vSP mscr
       tailc :
   TMacros.code_at_I cde C pc
@@ -958,8 +800,6 @@ Lemma ef_restore_run C fbE cap a mem m rs pc pct L n pc' vRA vscr vSP mscr
         [/\ Pointer.component pcF = C,
             TMacros.code_at_I cde C pcF tailc,
             TInject.minj a mem m',
-            (* what the wrapper touched: its own frame, and the scratch cell,
-               which it restores to the value it inherited *)
             (forall q, (Pointer.component q <> C \/ Pointer.block q <> fbE) ->
                q <> ((C, 1, 0%Z) : Pointer.t) ->
                Transitional.Memory.load m' q = Transitional.Memory.load m q)
@@ -977,7 +817,6 @@ Lemma ef_restore_run C fbE cap a mem m rs pc pct L n pc' vRA vscr vSP mscr
 Proof.
   move=> Hcode Htailc Hcomp Epct HSP HONE HlRA EtRA EvRA Hlsc Etsc HlSP EtSP
          Hmscr HfbE1 Hpriv HnotReg Hnosite Hnoscr Hscrp Hcap HI Htag.
-  (* --- 1. pop R_RA: the wrapper's own capability --- *)
   have Htl1 : pop R_AUX1 ++ store_arg (scr C) R_AUX1 R_AUX2
               ++ pop R_SP ++ tailc <> [::] by [].
   have HlRA' : Transitional.Memory.load m (C, fbE, (3 - 1)%Z) = Some vRA
@@ -989,8 +828,6 @@ Proof.
            (ltac:(by rewrite EtRA) : TInv.is_live (tvtag vRA.1))
            HnotReg Hpriv Hcap HI Htagd)
     => [m1 [rs1 [Pp1 [Hst1 Hv1 Ht1 Hcap1 Hmj1] [HSP1 HRA1 Hoth1] Htag1]]].
-  (* the ledger now carries the capability in [CReg]; a [CMem] site is never
-     that head, so the freshness premises lift verbatim *)
   have Hnosite1 : forall o : Z,
       ~ List.In (TInv.CMem (C, fbE, o))
                 (TInv.sites ((TInv.CReg, tvtag vRA.1) :: L)).
@@ -998,7 +835,6 @@ Proof.
   have Hnoscr1 : ~ List.In (TInv.CMem (C, 1, 0%Z))
                    (TInv.sites ((TInv.CReg, tvtag vRA.1) :: L)).
   { move=> /= [E|Hin]; [by [] | exact: Hnoscr Hin]. }
-  (* --- 2. pop R_AUX1: the inherited scratch value --- *)
   set pc2 := Pointer.inc (Pointer.inc pc).
   have Hcomp2 : Pointer.component pc2 = C
     by rewrite /pc2 !Pointer.inc_preserves_component.
@@ -1022,7 +858,6 @@ Proof.
            (ltac:(by []) : R_ONE <> R_AUX1)
            HSP1' HONE1 Hlsc1 Etsc (Hnosite1 ((3 - 1) - 1)%Z) Hcap1 Hmj1 Htag1)
     => [m2 [rs2 [Pp2 [Hst2 Hv2 Ht2 Hcap2 Hmj2] [HSP2 HA12 Hoth2] Htag2]]].
-  (* --- 3. store_arg: put the inherited scratch back --- *)
   set pc4 := Pointer.inc (Pointer.inc pc2).
   have Hcomp4 : Pointer.component pc4 = C
     by rewrite /pc4 /pc2 !Pointer.inc_preserves_component.
@@ -1041,7 +876,6 @@ Proof.
     eapply TS.Const; [exact: (TMacros.code_at_I_head Hc4a)
                      | exact: (TMacros.check_pc_at_I Hc4a)]. }
   set rsA := (Transitional.Register.set R_AUX2 (Ptr (scr C)) Other rs2) in SC *.
-  (* the scratch cell is still there, and still storable *)
   have Hmscr2 : Transitional.Memory.load m2 (C, 1, 0%Z) = Some mscr.
   { have Hne1 : ((C, 1, 0%Z) : Pointer.t) <> (C, fbE, (3 - 1)%Z)
       by move=> E; apply: HfbE1; move: (f_equal Pointer.block E) => /= ->.
@@ -1078,7 +912,6 @@ Proof.
   { apply: TInv.tag_inv_setreg; first by [].
     apply: (TInv.tag_inv_store_data Hnoscr1 _ Hst3 HtagA).
     by rewrite /= HA1A. }
-  (* --- 4. pop R_SP: the caller's frame pointer --- *)
   set pc6 := Pointer.inc (Pointer.inc pc4).
   have Hcomp6 : Pointer.component pc6 = C
     by rewrite /pc6 !Pointer.inc_preserves_component.
@@ -1108,7 +941,6 @@ Proof.
   case: (pop_sp_run Hc6 Htl6 Hcomp6 HSPB HONEB HlSP3 EtSP
            (Hnosite1 (((3 - 1) - 1) - 1)%Z) Hcap3 Hmj3 HtagB)
     => [m4 [rs4 [Pp4 [Hst4 Hv4 Ht4 Hcap4 Hmj4] [HSP4 Hoth4] Htag4]]].
-  (* --- the state just before the flavour-specific tail --- *)
   set pc8 := Pointer.inc (Pointer.inc pc6).
   have Hc8 : TMacros.code_at_I cde C pc8 tailc
     by exact: (TMacros.code_at_I_tail (TMacros.code_at_I_tail Hc6)).
@@ -1126,7 +958,7 @@ Proof.
     + by rewrite /pc8 /pc6 /pc4 /pc2 !Pointer.inc_preserves_component.
     + exact: Hc8.
     + exact: Hmj4.
-    + (* the four writes are all in [fbE] or the scratch cell *)
+    +
       move=> q Hq1 Hq2.
       have Hne : forall o : Z, q <> ((C, fbE, o) : Pointer.t)
         by move=> o E; case: Hq1 => H; apply: H; rewrite E.
@@ -1135,7 +967,7 @@ Proof.
               (TMem.load_store_neq Hst2 (Hne _))
               (TMem.load_store_neq Hst1 (Hne _)).
       by [].
-    + (* the scratch cell holds what [store_arg] put there *)
+    +
       have Hne4 : ((C, 1, 0%Z) : Pointer.t) <> (C, fbE, (((3 - 1) - 1) - 1)%Z)
         by move=> E; apply: HfbE1; move: (f_equal Pointer.block E) => /= ->.
       split.
@@ -1154,10 +986,6 @@ Proof.
   - by move: Htag4; rewrite EtRA.
 Qed.
 
-(** ★ The EF_std flavour, finished: the restore, then the `IReturn` that emits
-    the `ERet` and steps the level down. Two lines of assembly on top of
-    [ef_restore_run] — which is the point of the split, since the EF_main
-    flavour reuses the same restore under a longer tail. *)
 Lemma ef_cross_run C fbE cap a mem m rs pc pct L n pc' vRA vscr vSP mscr
       rcom :
   TMacros.code_at_I cde C pc
@@ -1228,15 +1056,6 @@ Proof.
     by move: Htag4; rewrite Epct.
 Qed.
 
-(** ★ The EF_main flavour: `main`'s wrapper carries an extra CONTEXT MARKER in
-    slot 3, so it pops that first and then branches on it — a nonzero marker
-    means "entered from a genuine cross-component call", and the wrapper
-    returns; zero would mean the machine entered `main` directly and it halts.
-
-    The whole middle is [ef_restore_run] again; only the extra `pop R_ARG` and
-    the `IBnz`/`ILabel` detour to the same `IReturn` are new. The branch
-    resolves its label through the flattened component array, so this is the
-    second consumer of `TLabel`'s component-wide uniqueness premise. *)
 Lemma ef_cross_run_main C fbE cap a mem m rs pc pct L n pc' lret vM vRA vscr
       vSP mscr rcom z :
   TMacros.code_at_I cde C pc
@@ -1247,7 +1066,6 @@ Lemma ef_cross_run_main C fbE cap a mem m rs pc pct L n pc' lret vM vRA vscr
   Transitional.Register.get R_SP rs = MVal Other (Ptr (C, fbE, 4%Z)) ->
   Transitional.Register.get R_ONE rs = MVal Other (Int 1) ->
   Transitional.val (Transitional.Register.get R_COM rs) = Int rcom ->
-  (* slot 3: the context marker *)
   Transitional.Memory.load m (C, fbE, 3%Z) = Some vM ->
   tvtag vM.1 = Other ->
   Transitional.val vM.1 = Int z ->
@@ -1291,7 +1109,6 @@ Proof.
   move=> Hcode Hcomp Epct HSP HONE Hrcom HlM EtM EvM Hz HlRA EtRA EvRA Hlsc
          Etsc HlSP EtSP Hmscr HfbE1 Hnec Hex Hpriv HnotReg Hnosite Hnoscr
          Hscrp Huniq Hcap HI Htag.
-  (* --- the extra pop: the context marker --- *)
   have Htl0 : pop R_RA ++ pop R_AUX1 ++ store_arg (scr C) R_AUX1 R_AUX2
               ++ pop R_SP ++ [:: IBnz R_ARG lret; IHalt; ILabel lret; IReturn]
               <> [::] by [].
@@ -1313,7 +1130,6 @@ Proof.
            (ltac:(by []) : R_ONE <> R_ARG)
            HSP HONE HlM' EtM HnosM Hcap HI Htag)
     => [m1 [rs1 [Pp0 [Hst0 Hv0 Ht0 Hcap0 Hmj0] [HSP0 HARG0 Hoth0] Htag0]]].
-  (* --- the shared restore --- *)
   set pc2 := Pointer.inc (Pointer.inc pc).
   have Hcomp2 : Pointer.component pc2 = C
     by rewrite /pc2 !Pointer.inc_preserves_component.
@@ -1326,7 +1142,6 @@ Proof.
     by rewrite HSP0 (_ : (4 - 1)%Z = 3%Z).
   have HONE0 : Transitional.Register.get R_ONE rs1 = MVal Other (Int 1)
     by rewrite Hoth0.
-  (* the three slots survive the marker's write-back: it is at offset 3 *)
   have Hlift : forall (o : Z) w, (o < 3)%Z ->
       Transitional.Memory.load m (C, fbE, o) = Some w ->
       Transitional.Memory.load m1 (C, fbE, o) = Some w.
@@ -1347,7 +1162,6 @@ Proof.
            Hmscr1 HfbE1 Hpriv HnotReg Hnosite Hnoscr Hscrp Hcap0 Hmj0 Htag0)
     => [m4 [rs4 [pcF [Pr [EcF HcF Hmj4 Hraw4 [Hscr4 Htsc4]]
                        [HRA4 HSP4 HONE4 Hoth4] Htag4]]]].
-  (* --- the branch on the marker, then the [IReturn] --- *)
   have HARG4 : Transitional.Register.get R_ARG rs4
              = MVal Other (Transitional.val vM.1)
     by rewrite Hoth4 // HARG0.
@@ -1395,7 +1209,7 @@ Proof.
     + case: Hex => [i0 [tni0 Hex0]]. apply: PcJump; first exact: Hex0. by [].
   - split.
     + exact: Hmj4.
-    + (* compose with the marker pop's write-back, which is also in [fbE] *)
+    +
       move=> q Hq1 Hq2. rewrite (Hraw4 q Hq1 Hq2).
       have Hne : q <> ((C, fbE, (4 - 1)%Z) : Pointer.t)
         by move=> E; case: Hq1 => H; apply: H; rewrite E.
@@ -1408,18 +1222,6 @@ Proof.
     by move: Htag4; rewrite Epct.
 Qed.
 
-(** ★ MAIN's exit. The same wrapper epilogue as [ef_cross_run_main], but for
-    the activation the MACHINE entered rather than a caller: the context marker
-    in slot 3 is `Int 0`, so the closing `IBnz` is NOT taken and control falls
-    through to the `IHalt`.
-
-    Two things distinguish it from every other epilogue in the file, and both
-    come from the same fact — main's initial activation has no caller:
-
-    - slot 2 holds JUNK rather than a return capability ([pop_junk_ra_run]),
-      and the body's own [InternalJump] is simply dropped from the ledger;
-    - the run ends at an instruction rather than at a jump target, so what it
-      exports is an [executing … TrHalt], which is exactly `t_final`. *)
 Lemma ef_halt_run C fbE cap a mem m rs pc pct L lret vM vRA vscr vSP mscr
       told :
   TMacros.code_at_I cde C pc
@@ -1462,7 +1264,6 @@ Proof.
   have Hnoscr1 : ~ List.In (TInv.CMem (C, 1, 0%Z))
                    (TInv.sites ((TInv.CReg, told) :: L))
     by move=> /= [E|Hin]; [ | exact: Hnoscr Hin].
-  (* --- 1. pop R_ARG: the context marker --- *)
   have Htl0 : pop R_RA ++ pop R_AUX1 ++ store_arg (scr C) R_AUX1 R_AUX2
               ++ pop R_SP ++ [:: IBnz R_ARG lret; IHalt; ILabel lret; IReturn]
               <> [::] by [].
@@ -1485,7 +1286,6 @@ Proof.
   { have Hne : ((C, 1, 0%Z) : Pointer.t) <> (C, fbE, (4 - 1)%Z)
       by move=> E; apply: HfbE1; move: (f_equal Pointer.block E) => /= ->.
     by rewrite (TMem.load_store_neq Hst0 Hne). }
-  (* --- 2. pop R_RA: the JUNK where a caller would have left a capability *)
   set pc2 := Pointer.inc (Pointer.inc pc).
   have Hcomp2 : Pointer.component pc2 = C
     by rewrite /pc2 !Pointer.inc_preserves_component.
@@ -1509,7 +1309,6 @@ Proof.
             : ~ List.In (TInv.CMem (C, fbE, (3 - 1)%Z)) (TInv.sites L))
            Hpriv Hret Hcap0 Hmj0 Htag0)
     => [m2 [rs2 [Pp1 [Hv1 Hraw1 Hcap1 Hmj1] [HSP1 Hoth1] Htag1]]].
-  (* --- 3. pop R_AUX1: the inherited scratch value --- *)
   set pc4 := Pointer.inc (Pointer.inc pc2).
   have Hcomp4 : Pointer.component pc4 = C
     by rewrite /pc4 /pc2 !Pointer.inc_preserves_component.
@@ -1536,7 +1335,6 @@ Proof.
            (ltac:(by []) : R_ONE <> R_AUX1)
            HSP1' HONE1 Hlsc2 Etsc (Hnosite ((3 - 1) - 1)%Z) Hcap1 Hmj1 Htag1)
     => [m3 [rs3 [Pp2 [Hst2 Hv2 Ht2 Hcap2 Hmj2] [HSP2 HA12 Hoth2] Htag2]]].
-  (* --- 4. store_arg: hand the inherited scratch back --- *)
   set pc6 := Pointer.inc (Pointer.inc pc4).
   have Hcomp6 : Pointer.component pc6 = C
     by rewrite /pc6 /pc4 /pc2 !Pointer.inc_preserves_component.
@@ -1592,7 +1390,6 @@ Proof.
     by apply: (TInject.minj_store_outside _ Hst3 Hmj2) => b0; exact: Hscrp b0.
   have Hcap4 : TStack.frame_cap m4 C fbE cap
     by exact: (TStack.frame_cap_store Hst3 Hcap2).
-  (* --- 5. pop R_SP: the caller's frame pointer --- *)
   set pc8 := Pointer.inc (Pointer.inc pc6).
   have Hcomp8 : Pointer.component pc8 = C
     by rewrite /pc8 /pc6 /pc4 /pc2 !Pointer.inc_preserves_component.
@@ -1621,7 +1418,6 @@ Proof.
            Hcomp8 HSPB HONEB HlSP4 EtSP (Hnosite (((3 - 1) - 1) - 1)%Z)
            Hcap4 Hmj4 HtagB)
     => [m5 [rs5 [Pp4 [Hst4 Hv4 Ht4 Hcap5 Hmj5] [HSP4 Hoth4] Htag4]]].
-  (* --- 6. the branch is NOT taken: control falls through to [IHalt] --- *)
   set pc10 := Pointer.inc (Pointer.inc pc8).
   have Hc10 : TMacros.code_at_I cde C pc10
       (IBnz R_ARG lret :: IHalt :: [:: ILabel lret; IReturn])
@@ -1651,11 +1447,6 @@ Proof.
   - by do 2!eexists; exact: (TMacros.code_at_I_head HcH).
 Qed.
 
-(** ★ Either flavour, from the relation rather than the slots: the diagram has
-    an `ext_frame_match`, not a pile of `vload`s, so this is the interface it
-    actually wants. Casing on the two constructors dispatches to
-    [ef_cross_run] / [ef_cross_run_main]; both `spE` values (3 and 4) come out
-    of the relation, so the caller never has to know which wrapper it has. *)
 Lemma ef_cross_any C fbE spE sE cap a mem m rs pc pct L n pc' mscr rcom :
   TSM.ext_frame_match cde m C fbE pc spE sE ->
   TStack.ra_tag sE = Ret n ->
@@ -1697,7 +1488,6 @@ Lemma ef_cross_any C fbE spE sE cap a mem m rs pc pct L n pc' mscr rcom :
 Proof.
   move=> Hef EtagE EretE Hcomp Epct HSP HONE Hrcom Hmscr HfbE1 Hnec Hex Hpriv
          HnotReg Hnosite Hnoscr Hscrp Huniq Hcap HI Htag.
-  (* the capability slot's contents, from the chain fact the relation carries *)
   have Hslot : TStack.slots_ok m [:: sE]
     by case: (TSM.ext_frame_slot Hef).
   case: (Hslot sE (or_introl erefl)) => [Hvs [Hts _]].
@@ -1713,7 +1503,7 @@ Proof.
   case: (TSM.ext_frame_cases Hef)
     => [[v0 [v1 [Esp Hcode [L0 L1] [T0 T1]]]]
        |[lret [v0 [v1 [z [Esp Hcode [L0 [L1 L3]] [T0 [T1 T3]] Hz]]]]]].
-  - (* EF_std: [spE = 3] *)
+  -
     have [w0 Hl0] := TMem.vload_load L0.
     have [w1 Hl1] := TMem.vload_load L1.
     move: HSP; rewrite Esp => HSP.
@@ -1726,7 +1516,7 @@ Proof.
     split; [exact: Hmj | exact: Hraw
            | by move: L1; rewrite /TMem.vload Hl1
            | by split; last split].
-  - (* EF_main: [spE = 4], with the context marker in slot 3 *)
+  -
     have [w0 Hl0] := TMem.vload_load L0.
     have [w1 Hl1] := TMem.vload_load L1.
     have [w3 Hl3] := TMem.vload_load L3.
@@ -1748,22 +1538,6 @@ Proof.
            | by split; last split].
 Qed.
 
-(** ★ The CALLER's resumption after its own `ICall`:
-
-        IConst 1 R_ONE ; reload_sp (scr C) ; pop R_ARG ; pop R_RA
-
-    `ICall` invalidates the register file, so the caller reconstructs itself:
-    `R_ONE` by a constant, `R_SP` from the scratch cell it saved before the
-    call, then the two spilled values. The last is `pop_ra_run` — the caller's
-    own `InternalJump` capability coming back out of memory.
-
-    Note the third step is an `ILoad`, so it WRITES THE SCRATCH CELL BACK. That
-    is harmless here for the usual reason (an `Other`-tagged cell is rewritten
-    with the same tvalue), but it is why `tvtag mscr.1 = Other` is a premise:
-    the load copies the cell's tag into `R_SP`, and `ti_regs` requires `Other`.
-    This is the fifth place the machine forces a tag to be pinned, and the
-    invariant clause that will discharge it — a tag clause on `scrs_ok` — is the
-    one remaining strengthening of the same family. *)
 Lemma icall_resume_run C fb cap a mem m rs pc pct L (temps : seq value)
       mscr vARG vRA nxt rest :
   TMacros.code_at_I cde C pc
@@ -1823,7 +1597,6 @@ Proof.
   have Hc1 := TMacros.code_at_I_tail Hc0.
   have Hc2 := TMacros.code_at_I_tail Hc1.
   have Hc3 := TMacros.code_at_I_tail Hc2.
-  (* --- 1/2. the two constants --- *)
   have S1 : TS.step cde (m, rs, pc, pct) E0
             (m, Transitional.Register.set R_ONE (Int 1) Other rs,
              Pointer.inc pc, pct).
@@ -1838,7 +1611,6 @@ Proof.
     eapply TS.Const; [exact: (TMacros.code_at_I_head Hc1)
                      | exact: (TMacros.check_pc_at_I Hc1)]. }
   set rs2 := (Transitional.Register.set R_AUX2 (Ptr (scr C)) Other rs1) in S2 *.
-  (* --- 3. reload R_SP from the scratch cell --- *)
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val mscr.1; tvtag := Other |},
             {| vtag := Other; color := C; entry := None; is_code := false |})
@@ -1864,7 +1636,6 @@ Proof.
     - exact: Hstr1. }
   set rs3 := (Transitional.Register.set R_SP (Transitional.val mscr.1)
                 (tvtag mscr.1) rs2) in S3 *.
-  (* the reload is invisible: the cell keeps its tvalue *)
   have Hv1 : forall q, TMem.vload m1 q = TMem.vload m q.
   { move=> q. apply: (TMem.vload_store_same Hmscr _ Hst1 q). by []. }
   have Ht1 : forall q, TMem.tload m1 q = TMem.tload m q.
@@ -1889,7 +1660,6 @@ Proof.
       have Ep : ((C, 1, 0%Z) : Pointer.t)
               = (C, fb, Z.of_nat (2 + size temps)) by congruence.
       have Eb : 1 = fb := f_equal Pointer.block Ep. by rewrite Eb. }
-  (* --- 4. pop R_ARG --- *)
   set pc3 := Pointer.inc (Pointer.inc (Pointer.inc pc)).
   have Hcomp3 : Pointer.component pc3 = C
     by rewrite /pc3 !Pointer.inc_preserves_component.
@@ -1909,13 +1679,11 @@ Proof.
     by move=> j Hj; rewrite Hv1; exact: Hcap Hj.
   have Hmj1 : TInject.minj a mem m1.
   { apply: (TInject.minj_store_outside _ Hst1 HI) => b0. exact: Hscrp b0. }
-  (* the ARG slot is one ABOVE the capability's, so it is not that site *)
   have HnosA : ~ List.In
       (TInv.CMem (C, fb, (Z.of_nat (2 + size temps + 2) - 1)%Z))
       (TInv.sites ((TInv.CMem (C, fb, Z.of_nat (2 + size temps)),
                     tvtag vRA.1) :: L)).
   { rewrite Eoff1 /TInv.sites => -[E|Hin]; last exact: Hnosite Hin.
-    (* project the offset straight out of the [capsite] equation *)
     have Eo : Z.of_nat (2 + size temps) = Z.of_nat (2 + size temps + 1)
       := f_equal (fun s => match s with
                            | TInv.CMem q => Pointer.offset q
@@ -1928,7 +1696,6 @@ Proof.
            (ltac:(by []) : R_ONE <> R_ARG)
            HSP3 HONE3 HlA1 EtA HnosA Hcap1 Hmj1 Htag3)
     => [m2 [rs4 [Pp4 [Hst4 Hv4 Ht4 Hcap4 Hmj4] [HSP4 HARG4 Hoth4] Htag4]]].
-  (* --- 5. pop R_RA: the caller's own capability --- *)
   set pc5 := Pointer.inc (Pointer.inc pc3).
   have Hcomp5 : Pointer.component pc5 = C
     by rewrite /pc5 !Pointer.inc_preserves_component.
@@ -1987,27 +1754,6 @@ Proof.
   - exact: Htag5.
 Qed.
 
-(** ★ The WRAPPER's entry — the mirror of [ef_restore_run], and the piece
-    `diagram_call_ext` needs between the [ICall] and the body's own prologue:
-
-        IConst 1 R_ONE ; IMov R_SP R_AUX1 ; IConst sfs R_SP ; IAlloc R_SP R_SP ;
-        push R_AUX1 ; load_arg (scr C) R_AUX1 ; push R_AUX1 ; push R_RA
-
-    Twelve steps that build the wrapper activation's frame:
-
-      - slot 0 — the CALLER's [R_SP], which arrived in [R_AUX1] via [IMov];
-      - slot 1 — the INHERITED scratch value, read out before this activation
-        overwrites the cell (a re-entrant activation of [C] would otherwise
-        lose the outer one's parked stack pointer);
-      - slot 2 — the [Ret n] capability [ICall] put in [R_RA]. This is the only
-        capability push on the entry side, and where the ledger entry moves
-        from [CReg] to [CMem (C, fbE, 2)] — exactly what `SM_external` records
-        and what `ef_cross_any` consumes on the way out.
-
-    The [load_arg] in the middle is an [ILoad], so it WRITES THE CELL BACK.
-    Harmless for the usual reason: the parked value is [Other]-tagged data, so
-    the write-back is the identity on [vload]/[tload] — which is why
-    [tvtag mscr.1 = Other] is a premise. *)
 Lemma ef_entry_run C ne a mem m rs pc pct L n mscr tailc :
   TMacros.code_at_I cde C pc
     (IConst (IInt 1) R_ONE
@@ -2058,7 +1804,6 @@ Lemma ef_entry_run C ne a mem m rs pc pct L n mscr tailc :
       & TInv.tag_inv ((TInv.CMem (C, fbE, 2%Z), Ret n) :: L) m' rs' pct].
 Proof.
   move=> Hcode Htailc Hcomp Hrt Hmscr Etm HcmF Hnoscr Hscrp HI Htag.
-  (* --- 1. IConst 1 R_ONE --- *)
   have Hc0 := Hcode.
   have S1 : TS.step cde (m, rs, pc, pct) E0
             (m, Transitional.Register.set R_ONE (Int 1) Other rs,
@@ -2080,7 +1825,6 @@ Proof.
               :: load_arg (scr C) R_AUX1 ++ push R_AUX1 ++ push R_RA
                  ++ tailc))
     by exact: (TMacros.code_at_I_tail Hc0).
-  (* --- 2-4. the wrapper's own frame --- *)
   case: (prologue_alloc_run Hc1 Hcomp1
            (TInv.ti_regs Htag1 (r := R_SP) (ltac:(by []))) HcmF HI Htag1)
     => [m1 [rs2 [fbE [Sal [Hfresh Havoid [Hnosite Hpres] Hmj1 Hcap1]
@@ -2099,7 +1843,6 @@ Proof.
        ++ tailc).
   { apply: TMacros.code_at_I_tail. apply: TMacros.code_at_I_tail.
     apply: TMacros.code_at_I_tail. exact: Hc1. }
-  (* --- 5-6. push R_AUX1: the caller's [R_SP] into slot 0 --- *)
   have HONE2 : Transitional.Register.get R_ONE rs2 = MVal Other (Int 1)
     by rewrite Hoth2 // /rs1 TInv.get_set_eq.
   have Hsp0 : (0 <= 0 < Z.of_nat (4 + ne))%Z by split; lia.
@@ -2115,7 +1858,6 @@ Proof.
     by move=> E; apply: HfbE1; move: (f_equal Pointer.block E) => /= ->.
   have Hmscr2 : Transitional.Memory.load m2 (C, 1, 0%Z) = Some mscr
     by rewrite (TMem.load_store_neq Hst0 Hne0).
-  (* --- 7-8. load_arg: the INHERITED scratch value into [R_AUX1] --- *)
   set pc6 := Pointer.inc (Pointer.inc pc4).
   have Hcomp6 : Pointer.component pc6 = C
     by rewrite /pc6 !Pointer.inc_preserves_component.
@@ -2153,7 +1895,6 @@ Proof.
     - by rewrite /= Pointer.inc_preserves_component Hcomp6; exact: Hst3. }
   set rs5 := (Transitional.Register.set R_AUX1
                 (Transitional.val mscr.1) (tvtag mscr.1) rs4) in S8 *.
-  (* the reload is invisible: the parked value is data *)
   have Hv3 : forall q, TMem.vload m3 q = TMem.vload m2 q.
   { move=> q. apply: (TMem.vload_store_same Hmscr2 _ Hst3 q). by []. }
   have Ht3 : forall q, TMem.tload m3 q = TMem.tload m2 q.
@@ -2174,7 +1915,6 @@ Proof.
     apply: TInv.tag_inv_setreg; first by [].
     apply: (TInv.tag_inv_store_data Hnoscr1 _ Hst3 Htag3).
     by rewrite /= Etm. }
-  (* --- 9-10. push R_AUX1: the inherited scratch into slot 1 --- *)
   set pc8 := Pointer.inc (Pointer.inc pc6).
   have Hcomp8 : Pointer.component pc8 = C
     by rewrite /pc8 /pc6 !Pointer.inc_preserves_component.
@@ -2195,7 +1935,6 @@ Proof.
            (ltac:(by []) : R_ONE <> R_AUX1)
            HSP5 HONE5 Hsp1 Hcap3 (Hnosite (0 + 1)%Z) Havoid Hmj3 Htag5)
     => [m4 [rs6 [Sp1 [Hsl1 Hpres1 Hst1 Hcap4 Hmj4] [HSP6 HA16 Hoth6] Htag6]]].
-  (* --- 11-12. push R_RA: the [Ret n] capability into slot 2 --- *)
   set pc10 := Pointer.inc (Pointer.inc pc8).
   have Hcomp10 : Pointer.component pc10 = C
     by rewrite /pc10 /pc8 /pc6 !Pointer.inc_preserves_component.
@@ -2220,7 +1959,6 @@ Proof.
            (ltac:(by []) : TInv.is_live (Ret n))
            Hsp2 Hcap4 Hnos2 Havoid Hmj4 Htag6)
     => [m5 [rs7 [Sp2 [Hsl2 Hpres2 Hst2 Hcap5 Hmj5] [HSP7 HRA7 Hoth7] Htag7]]].
-  (* --- assembled --- *)
   have E1 : (0 + 1)%Z = 1%Z by [].
   have E2 : (0 + 1 + 1)%Z = 2%Z by [].
   have E3 : (0 + 1 + 1 + 1)%Z = 3%Z by [].
@@ -2241,7 +1979,7 @@ Proof.
     + exact: HfbE1.
     + exact: Hmj5.
     + exact: Hcap5.
-  - (* the three slots *)
+  -
     have Hsl0' : Transitional.Memory.load m5 (C, fbE, 0%Z)
                = Some (Transitional.Register.get R_AUX1 rs2,
                        {| vtag := Other; color := C; entry := None;
@@ -2305,25 +2043,6 @@ Proof.
   - by move: Htag7; rewrite E2.
 Qed.
 
-(** ★ MAIN's FLAG PROTOCOL, on the branch-TAKEN path.
-
-        IConst (IPtr flag) R_AUX1 ; ILoad R_AUX1 R_AUX2 ; push R_AUX2 ;
-        IBnz R_AUX2 lmain ; IConst 0 R_COM ; ILabel lmain ;
-        IConst 1 R_AUX2 ; IStore R_AUX1 R_AUX2
-
-    Main's dual entry serves TWO callers: the machine, on the initial run, and
-    a genuine cross-component `ICall` to `(main, main)` afterwards. The flag
-    cell tells them apart — `Int 0` on the initial run, `Int 1` ever after —
-    and `ef_main_entry_run` covers the first. This lemma covers the second, and
-    is the piece that was missing: without it `entry_ext` at `(main, main)` is
-    not just unproved but FALSE, since main's wrapper is not the standard one.
-
-    The two paths differ by exactly two steps — taken, the `IBnz` jumps over
-    `IConst 0 R_COM` and lands ON the `ILabel lmain` cell, so the incoming
-    `R_COM` (the caller's argument) survives instead of being overwritten by
-    main's initial `Int 0`. Everything else is shared, which is why this is a
-    segment lemma rather than a second copy of `ef_main_entry_run`: the prefix
-    it sits on is `ef_entry_run`'s, verbatim. *)
 Lemma flag_protocol_taken_run C ne fbE a mem m rs pc pct L lmain mflag tailc :
   TMacros.code_at_I cde C pc
     ([:: IConst (IPtr (flag_buf_ptr (scr C))) R_AUX1; ILoad R_AUX1 R_AUX2]
@@ -2372,9 +2091,6 @@ Lemma flag_protocol_taken_run C ne fbE a mem m rs pc pct L lmain mflag tailc :
 Proof.
   move=> Hcode Htailc Hcomp Hmflag Etf Evf HSP HONE HfbE1 Havoid Hscrp Hnosite3
          Huniq Hcap HI Htag.
-  (* the flag cell is not a ledger site: a site's tag is LIVE, and this one is
-     [Other]. Derived rather than assumed — the caller has no easy handle on
-     it, whereas here [Etf] is right there. *)
   have Hnoflag : ~ List.In (TInv.CMem ((C, 1, 1%Z) : Pointer.t))
                    (TInv.sites L).
   { move=> /List.in_map_iff [[s t] [/= Es Hin]].
@@ -2382,11 +2098,9 @@ Proof.
     move: (TInv.ti_site Htag Hin) (TInv.ti_live Htag Hin).
     rewrite /TInv.tagat /TMem.tload Hmflag /= => -[Et] Hlive.
     by move: Hlive; rewrite -Et Etf. }
-  (* the [check_pc] of the last [IStore] needs a cell after it *)
   case: tailc Hcode Htailc => [|nxt rest] Hcode Htailc;
     first by exfalso; apply: Htailc.
   have Eflag : flag_buf_ptr (scr C) = ((C, 1, 1%Z) : Pointer.t) by [].
-  (* --- 1. IConst (IPtr flag) R_AUX1 --- *)
   have Hc0 := Hcode.
   have S1 : TS.step cde (m, rs, pc, pct) E0
             (m, Transitional.Register.set R_AUX1
@@ -2400,7 +2114,6 @@ Proof.
   have Htag1 : TInv.tag_inv L m rs1 pct
     by apply: TInv.tag_inv_setreg; [by [] | exact: Htag].
   have Hc1 := TMacros.code_at_I_tail Hc0.
-  (* --- 2. ILoad R_AUX1 R_AUX2: the flag, with its write-back --- *)
   case: (TMem.store_after_load
            ({| Transitional.val := Transitional.val mflag.1;
                tvtag := moved_tag (tvtag mflag.1) |},
@@ -2437,7 +2150,6 @@ Proof.
   { rewrite /rs2 Etf. apply: TInv.tag_inv_setreg; first by [].
     apply: (TInv.tag_inv_store_data Hnoflag _ Hst1 Htag1).
     by rewrite /= Etf. }
-  (* --- 3-4. push R_AUX2: the CONTEXT MARKER into slot 3 --- *)
   set pc2 := Pointer.inc (Pointer.inc pc).
   have Hcomp2 : Pointer.component pc2 = C
     by rewrite /pc2 !Pointer.inc_preserves_component.
@@ -2470,7 +2182,6 @@ Proof.
                           is_code := false |}).
   { rewrite (TMem.load_store_neq Hst3 Hne3) (TMem.load_store_eq Hst1).
     by rewrite /= Etf /= Evf. }
-  (* --- 5. the IBnz: TAKEN --- *)
   set pc4 := Pointer.inc (Pointer.inc pc2).
   have Hcomp4 : Pointer.component pc4 = C
     by rewrite /pc4 /pc2 !Pointer.inc_preserves_component.
@@ -2493,13 +2204,11 @@ Proof.
     - by rewrite Hcomp4; exact: HfindL.
     - apply: PcJump; first exact: (TMacros.code_at_I_head HcL).
       by rewrite EcL Hcomp4. }
-  (* --- 6. the ILabel it landed on --- *)
   have Hc6 := TMacros.code_at_I_tail HcL.
   have S6 : TS.step cde (m2, rs3, pcL, pct) E0
             (m2, rs3, Pointer.inc pcL, pct)
     by eapply TS.Label; [exact: (TMacros.code_at_I_head HcL)
                         | exact: (TMacros.check_pc_at_I HcL)].
-  (* --- 7. IConst 1 R_AUX2 --- *)
   have S7 : TS.step cde (m2, rs3, Pointer.inc pcL, pct) E0
             (m2, Transitional.Register.set R_AUX2 (Int 1) Other rs3,
              Pointer.inc (Pointer.inc pcL), pct).
@@ -2510,7 +2219,6 @@ Proof.
   have Htag4 : TInv.tag_inv L m2 rs4 pct
     by apply: TInv.tag_inv_setreg; [by [] | exact: Htag3].
   have Hc7 := TMacros.code_at_I_tail Hc6.
-  (* --- 8. IStore R_AUX1 R_AUX2: the flag stays Int 1 --- *)
   have EA14 : Transitional.Register.get R_AUX1 rs4
             = MVal Other (Ptr (C, 1, 1%Z)).
   { rewrite /rs4 TInv.get_set_neq // Hoth3 // /rs2 TInv.get_set_neq //
@@ -2543,7 +2251,6 @@ Proof.
   { rewrite /rs5. apply: TInv.tag_inv_setreg; first by [].
     apply: (TInv.tag_inv_store_data Hnoflag _ Hst4 Htag4).
     by rewrite /= EA24. }
-  (* --- the memory facts at [m3] --- *)
   have Hmj3 : TInject.minj a mem m3
     by apply: (TInject.minj_store_outside _ Hst4 Hmj2) => b0; exact: Hscrp b0.
   have Hv3 : forall q, TMem.vload m3 q = TMem.vload m2 q.
@@ -2586,18 +2293,6 @@ Proof.
   - exact: Htag5.
 Qed.
 
-(** ★ MAIN's ENTRY, entered by a GENUINE cross-component `ICall`.
-
-    `ef_entry_run` already covers the shared prefix — everything up to and
-    including `push R_RA` — because it is parameterised by the code that
-    follows. So this is that lemma composed with [flag_protocol_taken_run],
-    and the result has exactly the shape [TSM.EF_main] consumes: four slots
-    (caller's `R_SP`, inherited scratch, the spilled `Ret n`, and the context
-    marker `Int 1`), `R_SP` pointing one past them.
-
-    Without it, `TSim.entry_ext` at `(main, main)` is FALSE, not merely
-    unproved: main's wrapper is not the standard one, and a program in which
-    some component imports `(main, main)` is perfectly well formed. *)
 Lemma ef_main_cross_entry_run C ne lmain a mem m rs pc pct L n mscr tailc :
   TMacros.code_at_I cde C pc
     (IConst (IInt 1) R_ONE
@@ -2644,10 +2339,6 @@ Lemma ef_main_cross_entry_run C ne lmain a mem m rs pc pct L n mscr tailc :
                              is_code := false |}),
                 TMem.vload m' (C, fbE, 3%Z) = Some (Int 1)
               & TMem.tload m' (C, fbE, 3%Z) = Some Other]],
-        (* ★ NO flag exception: the protocol rewrites `(C,1,1)` with the SAME
-           value and the SAME tag it already held, so the two projections the
-           invariants are phrased over do not move. That is what lets this
-           lemma and [ef_entry_run] share one interface. *)
         [/\ (forall q, (Pointer.component q <> C \/ Pointer.block q <> fbE) ->
                TMem.vload m' q = TMem.vload m q),
             (forall q, (Pointer.component q <> C \/ Pointer.block q <> fbE) ->
@@ -2668,7 +2359,6 @@ Lemma ef_main_cross_entry_run C ne lmain a mem m rs pc pct L n mscr tailc :
 Proof.
   move=> Hcode Htailc Hcomp Hrt Hmscr Etm Hvflag Htflag HcmF Hnoscr
          Hscrp Huniq HI Htag.
-  (* --- the shared prefix, verbatim [ef_entry_run] --- *)
   case: (ef_entry_run Hcode (ltac:(by []) :
            [:: IConst (IPtr (flag_buf_ptr (scr C))) R_AUX1;
                ILoad R_AUX1 R_AUX2]
@@ -2682,7 +2372,6 @@ Proof.
            [Hw0 Ht0 Hw1 Ht1 Hsl2]
            [Hpv Hpt Ecp1 Hc1 [HONE1 HSP1 Hoth1]] Htag1]]]]].
   set L' := ((TInv.CMem ((C, fbE, 2%Z) : Pointer.t), Ret n) :: L).
-  (* --- block 1 is not the fresh frame, so the flag survived the prefix --- *)
   have Hb1E : forall (C' : Component.id) (o : Z),
       Pointer.component ((C', 1, o) : Pointer.t) <> C
       \/ Pointer.block ((C', 1, o) : Pointer.t) <> fbE
@@ -2698,7 +2387,6 @@ Proof.
     by move: Htflag1; rewrite /TMem.tload Hmflag => -[].
   have Evf : Transitional.val mflag.1 = Int 1
     by move: Hvflag1; rewrite /TMem.vload Hmflag => -[].
-  (* --- the fresh frame carries no ledger site, because nothing loads --- *)
   have Hnos : forall o : Z,
       ~ List.In (TInv.CMem ((C, fbE, o) : Pointer.t)) (TInv.sites L).
   { move=> o /List.in_map_iff [[s t] [/= Es Hin]].
@@ -2711,7 +2399,6 @@ Proof.
   have Hnosite3 : ~ List.In (TInv.CMem ((C, fbE, 3%Z) : Pointer.t))
                     (TInv.sites L').
   { move=> [E|Hin]; last exact: (Hnos 3%Z Hin). by case: E. }
-  (* --- the flag protocol, branch taken --- *)
   case: (flag_protocol_taken_run (ne := ne) Hc1 Htailc Ecp1 Hmflag Etf Evf
            HSP1 HONE1 HfbE1 Havoid Hscrp Hnosite3 Huniq Hcap1 Hmj1
            Htag1)
@@ -2783,24 +2470,6 @@ Proof.
   - exact: Htag2.
 Qed.
 
-(** ★ THE CALLEE ENTRY, whichever wrapper `compile_proc` gave it.
-
-    One interface over [ef_entry_run] and [ef_main_cross_entry_run], so that
-    `diagram_call_ext` never has to know which of the two it is running. The
-    two differ in exactly three observable ways, and all three are absorbed
-    here:
-
-    - the frame is three slots deep or four, so `R_SP` lands at `spE` rather
-      than at a literal `3`;
-    - main's wrapper additionally clobbers `R_AUX2`, so the "other registers
-      survive" clause excludes it (which the standard run also satisfies);
-    - the suspended activation is an [EF_std] or an [EF_main]. Rather than
-      export the two epilogue shapes, the lemma exports the CONSTRUCTION: give
-      it a memory that still shows the wrapper's frame and it hands back the
-      [ext_frame_match] the caller's `stack_match` needs.
-
-    Preservation is stated identically for both — see the note on
-    [ef_main_cross_entry_run] for why the flag rewrite is invisible. *)
 Lemma ef_call_entry_run C ne plf a mem m rs pc pct L n mscr :
   ((exists tl,
       TMacros.code_at_I cde C pc
@@ -2889,7 +2558,7 @@ Lemma ef_call_entry_run C ne plf a mem m rs pc pct L n mscr :
 Proof.
   move=> Hshape Hcomp Hrt Hmscr Etm HcmF Hnoscr Hscrp Huniq HI Htag.
   case: Hshape => [[tl [Hcode Etl]]|[lmain [lret [Hcode Hvf Htf]]]].
-  - (* ---- the STANDARD wrapper ---- *)
+  -
     subst tl.
     case: (ef_entry_run Hcode (ltac:(by []) :
              IJal plf :: pop R_RA ++ pop R_AUX1
@@ -2926,7 +2595,7 @@ Proof.
            ++ exact: Ea.
            ++ exact: Hs.
     + exact: Htag'.
-  - (* ---- MAIN's dual entry, on a genuine cross-component call ---- *)
+  -
     case: (ef_main_cross_entry_run Hcode (ltac:(by []) :
              IJal plf :: pop R_ARG ++ pop R_RA ++ pop R_AUX1
                ++ store_arg (scr C) R_AUX1 R_AUX2 ++ pop R_SP
@@ -2968,27 +2637,6 @@ Proof.
     + exact: Htag'.
 Qed.
 
-(** ★ MAIN's ENTRY — the wrapper the MACHINE lands on, and the longest run in
-    the campaign:
-
-        IConst 1 R_ONE ; IMov R_SP R_AUX1 ; IConst sfs R_SP ; IAlloc R_SP R_SP ;
-        push R_AUX1 ; load_arg (scr C) R_AUX1 ; push R_AUX1 ; push R_RA ;
-        IConst (IPtr (flag)) R_AUX1 ; ILoad R_AUX1 R_AUX2 ; push R_AUX2 ;
-        IBnz R_AUX2 lmain ; IConst 0 R_COM ; ILabel lmain ;
-        IConst 1 R_AUX2 ; IStore R_AUX1 R_AUX2 ; IJal plf
-
-    Two things make it different from [ef_entry_run], and both come from there
-    being no caller:
-
-    - [R_RA] holds [Register.init]'s junk, so slot 2 takes a non-capability
-      ([push_junk_ra_run]) and the ledger is untouched — main's activation
-      creates no [Ret];
-    - the CONTEXT MARKER in slot 3 is the FLAG cell's old value. On the initial
-      run that is [Int 0], so the [IBnz] is not taken, `IConst 0 R_COM` installs
-      main's argument, and the flag is then set to [Int 1] so that a later
-      genuine call to [main] takes the other branch.
-
-    The marker is what [ef_halt_run] reads back on the way out. *)
 Lemma ef_main_entry_run C ne lmain plf a mem m rs pc pct L mscr mflag tailc :
   TMacros.code_at_I cde C pc
     (IConst (IInt 1) R_ONE
@@ -3049,15 +2697,11 @@ Lemma ef_main_entry_run C ne lmain plf a mem m rs pc pct L mscr mflag tailc :
               & Transitional.val (Transitional.Register.get R_COM rs')
                 = Int 0]]
       & [/\ TInv.tag_inv L m' rs' pct,
-            (* ★ the FLAG, now set: the wrapper's own [IStore]. This is
-               [scrs_ok]'s second clause, and the reason a LATER genuine call
-               to [main] takes the other branch of the [IBnz]. *)
             TMem.vload m' (C, 1, 1%Z) = Some (Int 1)
           & TMem.tload m' (C, 1, 1%Z) = Some Other]].
 Proof.
   move=> Hcode Hcomp Hrt Hmscr Etm Hmflag Etf Evf HcmF HnotReg Hnoscr Hnoflag
          Hscrp HI Htag.
-  (* --- 1. IConst 1 R_ONE --- *)
   have Hc0 := Hcode.
   have S1 : TS.step cde (m, rs, pc, pct) E0
             (m, Transitional.Register.set R_ONE (Int 1) Other rs,
@@ -3113,7 +2757,6 @@ Proof.
        ++ tailc).
   { apply: TMacros.code_at_I_tail. apply: TMacros.code_at_I_tail.
     apply: TMacros.code_at_I_tail. exact: Hc1. }
-  (* --- 5-6. push R_AUX1: the caller's [R_SP] into slot 0 --- *)
   have HONE2 : Transitional.Register.get R_ONE rs2 = MVal Other (Int 1)
     by rewrite Hoth2 // /rs1 TInv.get_set_eq.
   have Hsp0 : (0 <= 0 < Z.of_nat (4 + ne))%Z by split; lia.
@@ -3136,7 +2779,6 @@ Proof.
     by rewrite (TMem.load_store_neq Hst0 (Hne0 0%Z)).
   have Hmflag2 : Transitional.Memory.load m2 (C, 1, 1%Z) = Some mflag
     by rewrite (TMem.load_store_neq Hst0 (Hne0 1%Z)).
-  (* --- 7-8. load_arg: the INHERITED scratch value into [R_AUX1] --- *)
   set pc6 := Pointer.inc (Pointer.inc pc4).
   have Hcomp6 : Pointer.component pc6 = C
     by rewrite /pc6 /pc4 !Pointer.inc_preserves_component.
@@ -3200,7 +2842,6 @@ Proof.
   { rewrite Hraw3.
     - exact: Hmflag2.
     - by move=> E; move: (f_equal Pointer.offset E) => /=; lia. }
-  (* --- 9-10. push R_AUX1: the inherited scratch into slot 1 --- *)
   set pc8 := Pointer.inc (Pointer.inc pc6).
   have Hcomp8 : Pointer.component pc8 = C
     by rewrite /pc8 /pc6 /pc4 !Pointer.inc_preserves_component.
@@ -3235,7 +2876,6 @@ Proof.
     by move=> o E; apply: HfbE1; move: (f_equal Pointer.block E) => /= ->.
   have Hmflag4 : Transitional.Memory.load m4 (C, 1, 1%Z) = Some mflag
     by rewrite (TMem.load_store_neq Hst1 (Hne1 1%Z)).
-  (* --- 11-12. push R_RA: main's activation has no capability to spill --- *)
   set pc10 := Pointer.inc (Pointer.inc pc8).
   have Hcomp10 : Pointer.component pc10 = C
     by rewrite /pc10 /pc8 /pc6 /pc4 !Pointer.inc_preserves_component.
@@ -3273,7 +2913,6 @@ Proof.
     by move=> o E; apply: HfbE1; move: (f_equal Pointer.block E) => /= ->.
   have Hmflag5 : Transitional.Memory.load m5 (C, 1, 1%Z) = Some mflag
     by rewrite (TMem.load_store_neq Hst2 (Hne2 1%Z)).
-  (* --- 13-14. the FLAG load: the context marker --- *)
   set pc12 := Pointer.inc (Pointer.inc pc10).
   have Hcomp12 : Pointer.component pc12 = C
     by rewrite /pc12 /pc10 /pc8 /pc6 /pc4 !Pointer.inc_preserves_component.
@@ -3335,7 +2974,6 @@ Proof.
     apply: TInv.tag_inv_setreg; first by [].
     apply: (TInv.tag_inv_store_data Hnoflag _ Hst6 Htag7).
     by rewrite /= Etf. }
-  (* --- 15-16. push R_AUX2: the marker into slot 3 --- *)
   set pc14 := Pointer.inc (Pointer.inc pc12).
   have Hcomp14 : Pointer.component pc14 = C
     by rewrite /pc14 /pc12 /pc10 /pc8 /pc6 /pc4
@@ -3368,7 +3006,6 @@ Proof.
     by rewrite /rs9 TInv.get_set_eq Etf Evf.
   have EA210 : Transitional.Register.get R_AUX2 rs10 = MVal Other (Int 0)
     by rewrite HA210 EA2.
-  (* --- 17-21. the branch is not taken; install the argument; set the flag *)
   set pc16 := Pointer.inc (Pointer.inc pc14).
   have Hcomp16 : Pointer.component pc16 = C
     by rewrite /pc16 /pc14 /pc12 /pc10 /pc8 /pc6 /pc4
@@ -3460,7 +3097,6 @@ Proof.
     by rewrite /= EA212. }
   have Hmj8 : TInject.minj a mem m8
     by apply: (TInject.minj_store_outside _ Hst8 Hmj7) => b0; exact: Hscrp b0.
-  (* --- the slots, at the final memory --- *)
   have Lfb : forall (o : Z) w, o <> (0 + 1 + 1 + 1)%Z ->
       Transitional.Memory.load m5 (C, fbE, o) = Some w ->
       Transitional.Memory.load m8 (C, fbE, o) = Some w.
@@ -3503,7 +3139,6 @@ Proof.
       by move=> E; apply: HfbE1; move: (f_equal Pointer.block E) => /= <-.
     by rewrite (TMem.load_store_neq Hst2 Hn1) (TMem.load_store_neq Hst1 Hn2)
                (TMem.load_store_neq Hst3 Hn3). }
-  (* --- assembled --- *)
   have E1z : (0 + 1)%Z = 1%Z by [].
   have E2z : (0 + 1 + 1)%Z = 2%Z by [].
   have E3z : (0 + 1 + 1 + 1)%Z = 3%Z by [].
@@ -3615,31 +3250,6 @@ Proof.
     + by rewrite /TMem.tload (TMem.load_store_eq Hst8) /= EA212.
 Qed.
 
-(** ★ The whole callee prologue
- — the T counterpart of
-    `S2I/Simulation.v:2698`'s [internal_prologue_run].
-
-    Nine steps: [ILabel], [IMov], [IConst], [IAlloc], two pushes (2 steps
-    each), and the [IMov R_COM R_ARG] that installs the argument. The first
-    four are [prologue_alloc_run]; the rest are two [push_data_macro]s and one
-    [TS.Mov].
-
-    Two things are stated here that `Simulation.v` cannot state, and they are
-    the reason this file exists:
-
-    - [R_RA] comes out UNTOUCHED, still carrying the activation's return
-      capability with its tag. At the I level [R_RA] is [Undef] throughout, so
-      there is nothing to say; at T this is what [ei_ra] needs.
-    - [tag_inv] comes out over the SAME ledger [L]. The prologue moves no
-      capability: both pushes are data pushes. That is why the whole thing
-      costs two [push_data_macro] calls and no ledger arithmetic.
-
-    The memory is reported both abstractly (the two slots, and loads outside
-    the frame preserved) and via [frame_cap], which is what the body's
-    [ei_cap] budget consumes. Loads-outside-preserved is the form the caller's
-    [scrs_ok] / [stack_match] / [frame_temps] all transfer along, since every
-    clause of each is a [vload] or [tload] — i.e. a projection of a raw
-    load. *)
 Lemma prologue_run Cf plf ne nxtB restB a mem tmemIn regsIn pct pc0 L :
   TMacros.code_at_I cde Cf pc0
     ([:: ILabel plf; IMov R_SP R_AUX1;
@@ -3662,9 +3272,6 @@ Lemma prologue_run Cf plf ne nxtB restB a mem tmemIn regsIn pct pc0 L :
           & forall q, Pointer.component q <> Cf \/ Pointer.block q <> fbN ->
               Transitional.Memory.load tmemOut q
               = Transitional.Memory.load tmemIn q],
-        (* the two linkage slots: the caller's [R_SP] and the argument.
-           Reported with their TAGS, because the epilogue's pops need
-           [tvtag = Other] to be data pops. *)
         [/\ Transitional.Memory.load tmemOut (Cf, fbN, 0%Z)
               = Some (MVal Other (Transitional.val
                         (Transitional.Register.get R_SP regsIn)),
@@ -3688,7 +3295,6 @@ Lemma prologue_run Cf plf ne nxtB restB a mem tmemIn regsIn pct pc0 L :
            & TMacros.code_at_I cde Cf pcF (nxtB :: restB)]].
 Proof.
   move=> Hcode Hcomp HONE HcmF HI Htag.
-  (* --- the first four steps --- *)
   have Hc0L : TMacros.code_at_I cde Cf pc0
     (ILabel plf
      :: ([:: IMov R_SP R_AUX1;
@@ -3707,7 +3313,6 @@ Proof.
            (TInv.ti_regs Htag (r := R_SP) (ltac:(by []))) HcmF HI Htag)
     => [tmem1 [regs3 [fbN [Sal [Hfresh Havoid [Hnosite Hpres] Hmj1 Hcap1]
                               [HSP3 HA13 Hoth3] Htag3]]]].
-  (* --- where the remaining five instructions sit --- *)
   set pc4 := Pointer.inc (Pointer.inc (Pointer.inc (Pointer.inc pc0))).
   have Hcomp4 : Pointer.component pc4 = Cf
     by rewrite /pc4 !Pointer.inc_preserves_component.
@@ -3716,7 +3321,6 @@ Proof.
   { apply: TMacros.code_at_I_tail. apply: TMacros.code_at_I_tail.
     apply: TMacros.code_at_I_tail. apply: TMacros.code_at_I_tail.
     exact: Hcode. }
-  (* --- push R_AUX1: the caller's R_SP into slot 0 --- *)
   have HONE3 : Transitional.Register.get R_ONE regs3 = MVal Other (Int 1)
     by rewrite Hoth3.
   have Hsp0 : (0 <= 0 < Z.of_nat (4 + ne))%Z by split; lia.
@@ -3729,7 +3333,6 @@ Proof.
            HSP3 HONE3 Hsp0 Hcap1 (Hnosite 0%Z) Havoid Hmj1 Htag3)
     => [tmem2 [regs4 [Sp0 [Hsl0 Hpres0 Hst0 Hcap2 Hmj2]
                           [HSP4 HA14 Hoth4] Htag4]]].
-  (* --- push R_ARG: the argument into slot 1 --- *)
   set pc6 := Pointer.inc (Pointer.inc pc4).
   have Hcomp6 : Pointer.component pc6 = Cf
     by rewrite /pc6 !Pointer.inc_preserves_component.
@@ -3748,7 +3351,6 @@ Proof.
            HSP4 HONE4 Hsp1 Hcap2 (Hnosite (0 + 1)%Z) Havoid Hmj2 Htag4)
     => [tmem3 [regs5 [Sp1 [Hsl1 Hpres1 Hst1 Hcap3 Hmj3]
                           [HSP5 HARG5 Hoth5] Htag5]]].
-  (* --- IMov R_COM R_ARG: install the argument --- *)
   set pc8 := Pointer.inc (Pointer.inc pc6).
   have Hc8 : TMacros.code_at_I cde Cf pc8
     ([:: IMov R_COM R_ARG] ++ nxtB :: restB).
@@ -3756,7 +3358,6 @@ Proof.
     exact: Hc6. }
   have HCOMt : tvtag (Transitional.Register.get R_COM regs5) = Other.
   { apply: (TInv.ti_regs Htag5). by []. }
-  (* [R_COM] is unmoved by everything before the [IMov] *)
   have HCOM5 : Transitional.Register.get R_COM regs5
              = Transitional.Register.get R_COM regsIn
     by rewrite Hoth5 // Hoth4 // Hoth3.
@@ -3769,7 +3370,7 @@ Proof.
           (tvtag (Transitional.Register.get R_COM regs5)) regs5)),
     fbN, (Pointer.inc pc8).
   split.
-  - (* --- the nine steps --- *)
+  -
     eapply star_step with (t1 := E0) (t2 := E0); [exact: SL | | by []].
     eapply star_trans with (t1 := E0) (t2 := E0); [exact: Sal | | by []].
     eapply star_trans with (t1 := E0) (t2 := E0);
@@ -3779,7 +3380,7 @@ Proof.
     apply: star_one.
     eapply TS.Mov; [exact: (TMacros.code_at_I_head Hc8)
                    | exact: (TMacros.check_pc_at_I Hc8)].
-  - (* --- the memory facts --- *)
+  -
     split=> //.
     move=> q Hne.
     have Hne0 : q <> ((Cf, fbN, 0%Z) : Pointer.t)
@@ -3788,7 +3389,7 @@ Proof.
       by move=> E; case: Hne => [H|H]; apply: H; rewrite E.
     rewrite (TMem.load_store_neq Hst1 Hne1) (TMem.load_store_neq Hst0 Hne0).
     exact: (Hpres q Hne).
-  - (* --- the two linkage slots --- *)
+  -
     split.
     + have Hne01 : (Cf, fbN, 0%Z) <> (Cf, fbN, (0 + 1)%Z)
         by move=> E; move: (f_equal Pointer.offset E) => /=; lia.
@@ -3796,14 +3397,14 @@ Proof.
       by move: Hsl0; rewrite HA13.
     + have -> : (1 = 0 + 1)%Z by [].
       by move: Hsl1; rewrite Hoth4 // Hoth3.
-  - (* --- the registers --- *)
+  -
     split.
     + by rewrite TInv.get_set_neq // TInv.get_set_neq // Hoth5 // Hoth4.
     + by rewrite TInv.get_set_neq // TInv.get_set_neq //.
     + by rewrite TInv.get_set_neq // TInv.get_set_eq /= HCOM5.
     + by rewrite TInv.get_set_eq /= HCOM5.
     + by rewrite TInv.get_set_neq // TInv.get_set_neq // Hoth5 // Hoth4 // Hoth3.
-  - (* --- tag_inv, and where the pc landed --- *)
+  -
     split.
     + rewrite HCOMt /=. apply: TInv.tag_inv_setreg; first by [].
       apply: TInv.tag_inv_setreg; first by [].

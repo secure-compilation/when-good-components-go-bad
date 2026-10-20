@@ -103,13 +103,6 @@ Module Source.
                  | inr values => length values > 0
                  end%nat.
 
-  (* Static buffer contents may not forge pointers into DYNAMIC memory: a
-     buffer value is an integer, Undef, or a pointer to a STATIC buffer
-     (block [Block.local]). This mirrors [values_are_integers] for
-     expressions ("no pointer forging"): a pointer literal aimed at a
-     dynamically allocated block would let a program observe the compiler's
-     block-allocation strategy (source and compiled code allocate different
-     block ids for the same source allocation). *)
   Definition well_formed_buffer_value (C: Component.id) (v: value) : bool :=
     match v with
     | Ptr p => Nat.eqb (Pointer.block p) Block.local
@@ -145,8 +138,6 @@ Module Source.
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
                 has_required_local_buffers p C;
-    (* buffer contents do not forge pointers into dynamic memory or into
-       other components *)
     wfprog_buffer_values:
       forall C buf, prog_buffers p C = Some buf ->
                     well_formed_buffer C buf;

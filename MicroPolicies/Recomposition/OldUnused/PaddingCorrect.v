@@ -1,19 +1,3 @@
-(* ============================================================================
-   PaddingCorrect.v — FORWARD and BACKWARD compiler correctness of the NOP-padding
-   pass [pad_align] (Padding.v), as does_prefix transfer.
-
-   For the Merged machine semantics [mergedsem prg] of an arbitrary program, padding
-   preserves and reflects observable behaviour:
-       does_prefix (mergedsem q) m  <->  does_prefix (mergedsem (pad_align q q').1) m
-   (forward = preservation, backward = reflection).  The dead NOPs inserted by the
-   padding are never observable; the proof is a code-address-shift [Star] simulation
-   between the unpadded and padded runs (same trace), routed through [does_prefix_equiv]
-   exactly as the recomposition proof routes its three-way simulation.
-
-   This file establishes the program-generic semantics [mergedsem] and its determinacy
-   (the prerequisite of [does_prefix_equiv]); the code-shift step correspondence is the
-   core of the two correctness theorems.
-   ============================================================================ *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -56,7 +40,6 @@ Variable NC : nat.
 
 Local Notation state := (@Symbolic.state mt LRC.lrc_tags unit).
 
-(* The Merged step, packaged as a CompCert single-event small-step (mirrors [step1]). *)
 Definition pstep (ge : unit) (s : state) (t : trace) (s' : state) : Prop :=
   match t with
   | [::]      => step_me s s' None     (NC := NC)
@@ -64,7 +47,6 @@ Definition pstep (ge : unit) (s : state) (t : trace) (s' : state) : Prop :=
   | _         => False
   end.
 
-(* A halting configuration: the pc points to a [Halt] code cell (mirrors [final_state_me]). *)
 Definition pfinal : state -> Prop :=
   fun '(Symbolic.State m r (Types.Atom pc _) _) =>
     match m pc with
@@ -73,7 +55,6 @@ Definition pfinal : state -> Prop :=
         Types.decode_instr i = Some (Types.Halt _) /\ is_code tag = true
     end.
 
-(* The Merged semantics of an arbitrary program (its code encoded into the initial memory). *)
 Definition mergedsem (prg : program) : semantics :=
   {| Smallstep.state := state;
      Smallstep.genvtype := unit;
@@ -83,7 +64,6 @@ Definition mergedsem (prg : program) : semantics :=
      Smallstep.final_state := pfinal;
      Smallstep.globalenv := tt |}.
 
-(* Determinacy — prerequisite of [does_prefix_equiv]; program-generic (mirrors [det_sem']). *)
 Lemma det_mergedsem prg : determinate (mergedsem prg).
 Proof.
   econstructor; intros; unfold mergedsem in *.
@@ -101,17 +81,12 @@ Proof.
       destruct H as [eq ?]; rewrite eq in step; simpl in step; inversion step.
 Qed.
 
-(* ===== The per-block position shift φ induced by the padding. =====
-   [shift_pos sizes p] maps an original code position [p] to its padded position, where [sizes]
-   lists the per-block (original-size, padded-size) pairs (padded >= original).  A position in
-   block i at intra-block offset o maps to (sum of padded sizes of blocks < i) + o. *)
 Fixpoint shift_pos (sizes : seq (nat * nat)) (p : nat) : nat :=
   match sizes with
   | [::] => p
   | (s, n) :: rest => if p < s then p else n + shift_pos rest (p - s)
   end.
 
-(* φ shifts forward (each padded block is at least as large as the original). *)
 Lemma shift_pos_ge sizes p :
   all (fun x => x.1 <= x.2) sizes -> p <= shift_pos sizes p.
 Proof.
@@ -120,7 +95,6 @@ Proof.
   have Hrec := IH (p - s) Hall. move: Hps Hsn Hrec; lia.
 Qed.
 
-(* φ is monotone (order-preserving embedding of positions). *)
 Lemma shift_pos_mono sizes p q :
   all (fun x => x.1 <= x.2) sizes -> p <= q -> shift_pos sizes p <= shift_pos sizes q.
 Proof.
@@ -133,17 +107,12 @@ Proof.
     have Hrec := IH (p - s) (q - s) Hall Hle. move: Hrec; lia.
 Qed.
 
-(* The per-block (original-size, padded-size) list of the LEFT padded output: block i of
-   [proc_split cde] is padded to [maxn] of its size and block i of [proc_split cde']. *)
-(* per-block (orig-size, padded-size) of [align_blocks bs bs'].1 (padded = maxn of the pair). *)
 Definition block_sizes (bs bs' : seq (@Merged.code mt)) : seq (nat * nat) :=
   [seq (size p.1, maxn (size p.1) (size p.2)) | p <- zip bs bs'].
 
 Definition pad_block_sizes (cde cde' : @Merged.code mt) : seq (nat * nat) :=
   block_sizes (proc_split cde) (proc_split cde').
 
-(* Each padded block is at least as large as the original (so φ = [shift_pos (pad_block_sizes …)]
-   is a forward, order-preserving embedding by [shift_pos_ge] / [shift_pos_mono]). *)
 Lemma block_sizes_le bs bs' : all (fun x => x.1 <= x.2) (block_sizes bs bs').
 Proof. rewrite /block_sizes all_map. by elim: (zip bs bs') => //= p s IH; rewrite leq_maxl. Qed.
 Lemma pad_block_sizes_le cde cde' : all (fun x => x.1 <= x.2) (pad_block_sizes cde cde').
@@ -173,7 +142,6 @@ Proof.
   rewrite align_blocks_cons size_cat size_block_pad_max //; exact: leq_maxl.
 Qed.
 
-(* φ maps a real code position into the padded code (needed to apply [encode_code_nth]). *)
 Lemma shift_pos_lt_size bs bs' n :
   size bs = size bs' -> n < size (flatten bs) ->
   shift_pos (block_sizes bs bs') n < size (align_blocks bs bs').1.
@@ -193,9 +161,6 @@ Proof.
       move: (H Hlt); lia.
 Qed.
 
-(* STRUCTURAL CORE (no word arithmetic): the padded code has the ORIGINAL cell at the
-   φ-shifted position.  [align_blocks bs bs'].1 at position [shift_pos (block_sizes bs bs') i]
-   equals [flatten bs] at [i].  (The gaps are dead NOPs; the real cells move by φ.) *)
 Lemma align_blocks_nth (bs bs' : seq (@Merged.code mt)) i
       (dflt : @Merged.instr mt * mem_tag) :
   size bs = size bs' -> i < size (flatten bs) ->
@@ -223,9 +188,6 @@ Proof.
     by rewrite nth_cat ifF //; lia.
 Qed.
 
-(* The structural core, specialized to the actual padding pass: [pad_code cde cde'].1 has the
-   original cell of [cde] at the φ-shifted position (φ = shift_pos (pad_block_sizes cde cde')),
-   given the two codes split into equally many procedure blocks. *)
 Lemma pad_code_nth cde cde' i dflt :
   size (proc_split cde) = size (proc_split cde') -> i < size cde ->
   nth dflt (pad_code cde cde').1 (shift_pos (pad_block_sizes cde cde') i) = nth dflt cde i.
@@ -237,14 +199,11 @@ Proof.
   apply: align_blocks_nth; [exact: Hcount | by rewrite proc_split_flatten].
 Qed.
 
-(* ===== [findopt]-under-shift foundation (label positions shift by φ). ===== *)
-
 Lemma findopt_cons T (pred : T -> bool) x s :
   findopt pred (x :: s)
   = if findopt pred s is Some n then Some (n + 1) else if pred x then Some 0 else None.
 Proof. rewrite /findopt /=. by case: (foldr _ _ s). Qed.
 
-(* [findopt] prefers the right segment (it returns the rightmost match's index). *)
 Lemma findopt_cat T (pred : T -> bool) s1 s2 :
   findopt pred (s1 ++ s2)
   = if findopt pred s2 is Some n then Some (size s1 + n) else findopt pred s1.
@@ -256,12 +215,10 @@ Proof.
     by congr Some; rewrite [size (x :: s1)]/=; lia.
 Qed.
 
-(* [findopt] finds nothing among inserted NOPs (the padding's dead cells). *)
 Lemma findopt_nop (pred : (@Merged.instr mt * mem_tag) -> bool) k c :
   pred (nop_cell c) = false -> findopt pred (nseq k (nop_cell c)) = None.
 Proof. move=> Hp; elim: k => [//|k IH]; by rewrite findopt_cons IH Hp. Qed.
 
-(* the index [findopt] returns is within bounds. *)
 Lemma findopt_lt T (pred : T -> bool) s k : findopt pred s = Some k -> k < size s.
 Proof.
   elim: s k => [|x s IH] k.
@@ -273,8 +230,6 @@ Proof.
     + by [].
 Qed.
 
-(* LABEL-POSITION SHIFT: [findopt] over the padded code = φ applied to [findopt] over the
-   original (NOPs match nothing; real cells move by φ). *)
 Lemma findopt_align_blocks (pred : (@Merged.instr mt * mem_tag) -> bool) bs bs' :
   (forall c, pred (nop_cell c) = false) -> size bs = size bs' ->
   findopt pred (align_blocks bs bs').1
@@ -298,7 +253,6 @@ Proof.
   Local Transparent shift_pos.
 Qed.
 
-(* …specialized to the actual pass. *)
 Lemma findopt_pad (pred : (@Merged.instr mt * mem_tag) -> bool) cde cde' :
   (forall c, pred (nop_cell c) = false) ->
   size (proc_split cde) = size (proc_split cde') ->
@@ -311,9 +265,6 @@ Qed.
 
 End PaddingCorrect.
 
-(* ===== The address relabeling φ_addr: identity on the data segment [< pc0], the per-block
-   position shift on the code segment [>= pc0].  This is the spine of the [match_states] relation
-   for the forward simulation between the unpadded and padded merged runs. ===== *)
 Section PadRelabel.
 
 Variables q q' : program.
@@ -334,8 +285,6 @@ Proof.
   have := shift_pos_ge (a - pc0) (pad_block_sizes_le (code q) (code q')); lia.
 Qed.
 
-(* φ is the identity on the shared code prefix [code p] when [q] starts with it — and, more
-   basically, monotone, so it is an order-preserving embedding of addresses. *)
 Lemma phi_nat_mono a b : a <= b -> phi_nat a <= phi_nat b.
 Proof.
   rewrite /phi_nat => Hab; case: ifP => Ha; case: ifP => Hb.
@@ -348,10 +297,6 @@ Qed.
 
 End PadRelabel.
 
-(* ===== encode_code-under-shift: the cell at the φ-shifted address in the padded encoded code
-   is the SAME source cell (same tag), with its JAL/Bnz immediate φ-shifted.  Built from the
-   lifted [encode_code_nth]/[encode_code_nth_inv]/[encode_code_foldr_nth] chain + [pad_code_nth]
-   (cells move by φ) + [findopt_pad] (labels move by φ). ===== *)
 Section EncodeShift.
 
 Variables q q' : program.
@@ -364,8 +309,6 @@ Hypothesis word_of_nat_inj : forall a b,
 Hypothesis Hcount : size (proc_split (code q)) = size (proc_split (code q')).
 Hypothesis Hbound  : pc0 + size (code q) < 2 ^ word_size mt.
 Hypothesis Hbound' : pc0 + size padc < 2 ^ word_size mt.
-
-(* the padded code's data offset equals q's (buffers unchanged): both use [pc0]. *)
 
 Lemma phi_addr_code (n : nat) :
   n < size (code q) ->
@@ -381,10 +324,6 @@ Qed.
 
 End EncodeShift.
 
-(* ===== Generic does_prefix-transfer plumbing: a trace-preserving Star-simulation with matching
-   initial / final / Nostep configurations transfers does_prefix.  Both padding correctness
-   theorems are instances of this (applied in each direction), reducing them to the code-shift
-   Star-simulation. ===== *)
 Lemma does_prefix_dir (L1 L2 : semantics)
   (det1 : determinate L1) (det2 : determinate L2)
   (R : Smallstep.state L1 -> Smallstep.state L2 -> Prop)
@@ -415,9 +354,6 @@ Proof.
   - by apply: does_no_initial_FTbc; apply: Hnoinit.
 Qed.
 
-(* ===== Lifting a single-step→Star simulation to a Star→Star simulation (generic; the inductive
-   glue [does_prefix_dir] consumes as its [Hstar] premise — it absorbs the silent NOP stutter the
-   padded run performs while traversing dead padding cells). ===== *)
 Lemma sim_star (L1 L2 : semantics)
   (R : Smallstep.state L1 -> Smallstep.state L2 -> Prop)
   (Hstep : forall s1 s2 t s1', R s1 s2 -> Step L1 s1 t s1' ->
@@ -433,20 +369,6 @@ Proof.
     exists w; split=> //. subst t12. exact: (star_trans Hu Hw erefl).
 Qed.
 
-(* ============================================================================
-   FORWARD and BACKWARD compiler correctness of the padding pass, as [does_prefix]
-   transfer.  Each direction reduces (via [does_prefix_dir] + determinacy) to a code-shift
-   [Star]-simulation between the unpadded and padded merged runs.  The per-step code-shift
-   correspondence is isolated as documented VERIFIED-TRUE interface hypotheses — exactly the
-   methodology by which Phase 3 isolated [stepf_reflect]/[undef_running_left] to land
-   [recomposition_blame].  The relation [Rf]/[Rb] is the padding analogue of recomposition's
-   [combined_codes]/[memory_match]/[registers_match]: data identical, code cells moved by the
-   per-block position shift φ ([shift_pos]/[phi_addr]), symbolic JAL/Bnz targets re-resolved, all
-   LRC tags preserved; the merged [transfer] is tag-driven and events are address-free, so each
-   unpadded step is matched by a (NOP-stutter-absorbing) [Star] of padded steps with the same
-   event, and conversely.  The glue ([Star] induction, no-initial, final/Nostep transfer,
-   assembly) is fully proven here.
-   ============================================================================ *)
 Section PaddingTheorems.
 
 Variable NC : nat.
@@ -454,7 +376,6 @@ Variables q q' : program.
 Local Notation padl := ((pad_align q q').1).
 Local Notation S := (@Symbolic.state mt LRC.lrc_tags unit).
 
-(* ----- FORWARD: the unpadded → padded code-shift simulation. ----- *)
 Variable Rf : S -> S -> Prop.
 Hypothesis Rf_init :
   Rf (Merged.initial_state (code q) (prog_buffers q) (prog_interface q))
@@ -467,7 +388,6 @@ Hypothesis Rf_final :
 Hypothesis Rf_nostep :
   forall s1 s2, Rf s1 s2 -> Nostep (mergedsem NC q) s1 -> Nostep (mergedsem NC padl) s2.
 
-(* FORWARD compiler correctness: padding preserves observable behaviour. *)
 Theorem padding_forward m :
   does_prefix (mergedsem NC q) m -> does_prefix (mergedsem NC padl) m.
 Proof.
@@ -480,7 +400,6 @@ Proof.
   - exact: Rf_nostep.
 Qed.
 
-(* ----- BACKWARD: the padded → unpadded code-shift simulation (mirror of [Rf]). ----- *)
 Variable Rb : S -> S -> Prop.
 Hypothesis Rb_init :
   Rb (Merged.initial_state (code padl) (prog_buffers padl) (prog_interface padl))
@@ -493,7 +412,6 @@ Hypothesis Rb_final :
 Hypothesis Rb_nostep :
   forall s1 s2, Rb s1 s2 -> Nostep (mergedsem NC padl) s1 -> Nostep (mergedsem NC q) s2.
 
-(* BACKWARD compiler correctness: padding reflects observable behaviour. *)
 Theorem padding_backward m :
   does_prefix (mergedsem NC padl) m -> does_prefix (mergedsem NC q) m.
 Proof.
@@ -508,16 +426,9 @@ Qed.
 
 End PaddingTheorems.
 
-(* match_traces forces equality of the (single-event) traces. *)
 Lemma match_traces_eq (t1 t2 : trace) : match_traces t1 t2 -> t1 = t2.
 Proof. by case. Qed.
 
-(* ===== From a SINGLE-STEP forward simulation, BOTH directions of the [does_prefix] transfer
-   follow.  The merged machine is determinate (det_mergedsem), so a lock-step forward simulation
-   plus determinacy yields the backward direction for FREE — no separate backward simulation is
-   needed.  This is what lets the unconditional padding theorems be discharged with the SINGLE
-   relation [Rf] (e.g. [match_pad ∧ pad_valid]) and its single-step forward step lemma, instead of
-   also having to exhibit and prove a backward simulation. ===== *)
 Section PaddingFromForward.
 
 Variable NC : nat.
@@ -537,7 +448,6 @@ Hypothesis Rf_final :
 Hypothesis Rf_nostep :
   forall s1 s2, Rf s1 s2 -> Nostep (mergedsem NC q) s1 -> Nostep (mergedsem NC padl) s2.
 
-(* FORWARD: wrap each single step into a one-step Star and reuse the generic transfer. *)
 Theorem padding_forward_sf m :
   does_prefix (mergedsem NC q) m -> does_prefix (mergedsem NC padl) m.
 Proof.
@@ -554,7 +464,6 @@ Proof.
   - exact: Rf_nostep.
 Qed.
 
-(* BACKWARD: derived from the forward single-step simulation + determinacy of the padded machine. *)
 Theorem padding_backward_sf m :
   does_prefix (mergedsem NC padl) m -> does_prefix (mergedsem NC q) m.
 Proof.

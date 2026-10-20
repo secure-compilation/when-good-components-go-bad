@@ -1,18 +1,3 @@
-(* Canonical, collision-free nat labels for SEPARATELY-compiled Merged programs.
-
-   [transitional_to_merged]'s legacy scheme computes its label bounds from the code map being
-   compiled, so two separately-compiled programs disagree on entry-label values (breaking
-   cross-program call resolution) and have boundary collisions.  This kernel provides a
-   canonical scheme over SHARED strict bounds [L] (body labels), [P] (procedure ids),
-   [C] (component ids) — supplied identically to all four recomposition programs:
-
-     mk_body  c l = 2*(l + L*c) + 1        (ILabel/IBnz/IJal operands of component c)
-     mk_entry c p = 2*(L*C + c*P + p) + 1  (procedure-entry labels)
-
-   All values are ODD, hence never [alloc_label = 2^14]; body and entry ranges are disjoint
-   (body < 2*L*C+1 <= entry); each family is injective with the defining component recoverable,
-   which gives label disjointness across programs with disjoint interfaces. *)
-
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat div seq.
 From mathcomp Require Import zify.
 Require Import Coq.micromega.Lia.
@@ -51,7 +36,6 @@ move=> E. have H1 := mk_entry_odd c p. have H2 := alloc_label_not_odd.
 by rewrite E H2 in H1.
 Qed.
 
-(* Injectivity: the body value determines (c, l) — Euclidean division by L. *)
 Lemma mk_body_inj c1 l1 c2 l2 :
   l1 < L -> l2 < L -> mk_body c1 l1 = mk_body c2 l2 -> c1 = c2 /\ l1 = l2.
 Proof.
@@ -64,7 +48,6 @@ have Hc : c1 = c2.
 split; [exact Hc | by lia]. 
 Qed.
 
-(* Injectivity: the entry value determines (c, p) — Euclidean division by P. *)
 Lemma mk_entry_inj c1 p1 c2 p2 :
   p1 < P -> p2 < P -> mk_entry c1 p1 = mk_entry c2 p2 -> c1 = c2 /\ p1 = p2.
 Proof.
@@ -77,7 +60,6 @@ have Hc : c1 = c2.
 split; [exact Hc | by lia].
 Qed.
 
-(* Range disjointness: a bounded body label is never an entry label. *)
 Lemma mk_body_entry_disjoint c l c' p :
   c < C -> l < L -> mk_body c l <> mk_entry c' p.
 Proof.

@@ -1,23 +1,3 @@
-(* Phase 5, tier 3a (part 3): the bracketing half of MP trace
-   well-formedness.
-
-   Single-run shadow-stack invariant tying a machine state to a
-   [Traces.stack_state]: the pc tag's level is the call depth, and every
-   linear Ret capability is registered in a shadow stack whose recorded
-   values point (in memory) at caller-coloured cells.  The LRC monitor's
-   linear-capability discipline (MOV/LOAD/STORE move capabilities,
-   invalidating the source; cross-events invalidate registers; JAL events
-   mint exactly one colour-checked capability) makes the invariant
-   inductive, and at a JUMP event it forces the ERet target to be the
-   top-of-stack caller — [well_bracketed_trace].
-
-   Functor-free, building on TraceWF.v.  The capability machinery
-   ([cap_at]/[cap_bijection]/[cap_reloc]/[lrc_silent_cap]) and the
-   per-opcode silent transfer lemmas are reproduced from StepSilentWeak.v
-   / PreservationLemmas.v (functor-internal there), with
-   [capability_correctness M ws] generalized to an arbitrary level
-   predicate [Q]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -58,18 +38,12 @@ Import Symbolic.
 
 Local Notation state := (@Symbolic.state mt LRC.lrc_tags unit).
 
-(* ==================== the linear-capability predicate ==================== *)
-
-(* "Ret capability at location [p]" ([inl r] register, [inr w] memory cell) *)
 Definition cap_at (s : state) (p : Types.reg mt + mword mt) (v : mword mt) (n : nat) : Prop :=
   match p with
   | inr w => exists t, mem s w = Some (v @ t) /\ vtag t = Ret n
   | inl r => regs s r = Some (v @ (Ret n))
   end.
 
-(* [capability_correctness] with the metadata lookup abstracted into an
-   arbitrary level predicate [Q v n]: every Ret-[n] capability's value
-   satisfies [Q _ n], and there is at most one Ret-[n] capability. *)
 Definition cap_correct_gen (Q : mword mt -> nat -> Prop) (s : state) : Prop :=
   forall v n p,
     match p with
@@ -113,9 +87,6 @@ Proof.
   - by move=> [t' [Hw' Ht']]; move: (Huniq (inr w') v' (ex_intro _ t' (conj Hw' Ht'))) => [= ->].
 Qed.
 
-(* Master relocation lemma: a value/index-preserving map from [s']-cap
-   locations to [s]-cap locations, injective on same-index cap locations,
-   transfers [cap_correct_gen] from [s] to [s']. *)
 Lemma cap_bijection : forall (s s' : state) (Q : mword mt -> nat -> Prop)
     (f : Types.reg mt + mword mt -> Types.reg mt + mword mt),
   (forall p v n, cap_at s' p v n -> cap_at s (f p) v n) ->
@@ -128,8 +99,6 @@ Proof.
   move=> p' v' Hp'. exact: (H2 p p' v v' n Hp Hp' (Huniq (f p') v' (H1 p' v' n Hp'))).
 Qed.
 
-(* Single-relocation corollary: the one Ret cap moves from [src] to [dst],
-   [src] is invalidated, every other location is unchanged. *)
 Lemma cap_reloc : forall (s s' : state) (Q : mword mt -> nat -> Prop)
     (src dst : Types.reg mt + mword mt),
   (forall v n, cap_at s' dst v n -> cap_at s src v n) ->
@@ -153,7 +122,6 @@ Proof.
     + by [].
 Qed.
 
-(* Subset corollary: every cap of [s'] was already at the SAME location in [s]. *)
 Lemma cap_subset : forall (s s' : state) (Q : mword mt -> nat -> Prop),
   (forall w v t n, mem s' w = Some (v @ t) -> vtag t = Ret n -> mem s w = Some (v @ t)) ->
   (forall r v n, regs s' r = Some (v @ (Ret n)) -> regs s r = Some (v @ (Ret n))) ->
@@ -176,8 +144,6 @@ Proof.
     + move=> [t' [Hw'' Ht']]; apply: (Huniq (inr w') v'); exists t';
         split; [exact: (Hmem w' v' t' n Hw'' Ht') | exact: Ht'].
 Qed.
-
-(* ==================== small update-effect helpers ==================== *)
 
 Lemma setm_reg_nonret :
   forall (rg : {fmap Types.reg mt -> atom (mword mt) (tag_type lrc_tags R)}) r x t,
@@ -217,7 +183,6 @@ Proof.
   by case: td => vt ct et bt /=; case: ifP => // /eqP.
 Qed.
 
-(* silent-step extraction through [next_state_updates_and_pc] *)
 Lemma nsu_silent_extract :
   forall (st : state) (kiv : option (tag_type lrc_tags Symbolic.M) -> ivec lrc_tags)
          (updts : seq update) (pc' : mword mt) (s' : state),
@@ -237,8 +202,6 @@ Proof.
   move=> [= Hs Hev]. subst s'.
   exists op0, ov0, st0. cbn. split; [exact: Edsu | by []].
 Qed.
-
-(* ==================== silent output-tag shapes ==================== *)
 
 Lemma const_transfer : forall (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
     (told : tag_type lrc_tags R) tni evinp (ov : ovec lrc_tags CONST) ev,
@@ -395,8 +358,6 @@ Proof.
     move=> _ _ Hc Hev. rewrite -Hc in Hev. discriminate Hev.
 Qed.
 
-(* ==================== jump/jal do-updates identities ==================== *)
-
 Lemma reg_read_update_id :
   forall (st : state) (k : reg mt) (a : atom (mword mt) (tag_type lrc_tags R)),
     regs st k = Some a ->
@@ -526,8 +487,6 @@ Proof.
 Qed.
 Local Transparent next_state_do_updates reg_clear_list_aux next_state_do_update.
 
-(* ==================== the allocator introduces no capability ==================== *)
-
 Lemma mkfmap_const_val (T : ordType) (S : eqType) (v : S) :
   forall (kvs : seq (T * S)) w d,
     (forall p, p \in kvs -> p.2 = v) -> getm (mkfmap kvs) w = Some d -> d = v.
@@ -568,24 +527,20 @@ Proof.
     by move: H => [= _ Hc]; discriminate Hc.
 Qed.
 
-(* ==================== silent steps preserve capability correctness ==================== *)
-
 Section SilentCap.
 
   Variable NC : nat.
 
-  (* Verbatim adaptation of StepSilentWeak's [lrc_silent_cap], with the
-     metadata lookup generalized to an arbitrary level predicate [Q]. *)
   Lemma lrc_silent_capQ : forall (s s' : state) (Q : mword mt -> nat -> Prop),
       step_mp (NC:=NC) s s' None ->
       cap_correct_gen Q s -> cap_correct_gen Q s'.
   Proof.
     move=> s s' Q Hstep Hcap. inversion Hstep.
-    - (* nop *)
+    -
       move: NEXT; rewrite /next_state_updates => /nsu_silent_extract [op0 [ov0 [st0 [Edsu [Hm [Hr _]]]]]].
       have Hs0 := ndsu_nil_updts Edsu. rewrite Hs0 in Hm Hr.
       apply: (cap_subset _ _ Hcap); [by move=> w v t n0; rewrite Hm | by move=> r0 v n0; rewrite Hr].
-    - (* const *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal;
@@ -601,7 +556,7 @@ Section SilentCap.
             [ by move=> w v t n0; rewrite /= -Hr1 -Hr2 /=
             | move=> r0 v n0; rewrite /= -Hr1 -Hr2 /= (updm_set Hupd); move=> Hset;
               exact: (setm_reg_nonret (t := Other) ltac:(move=> ?; discriminate) Hset) ] ).
-    - (* mov *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal.
@@ -620,14 +575,14 @@ Section SilentCap.
         move: HndsuC => [= Hfin2].
         have Ha1w : a1 = w1 @ t1 by move: Ha1; rewrite ST /= R1W; move=> [= <-].
         case: (r2 =P r1) => [Er2|Er2].
-        - (* r1 = r2: self-move, identity *)
+        -
           subst r2. apply: (cap_subset _ _ Hcap).
           + by move=> w v t n0; rewrite -Hfin2 -HstbE /=.
           + move=> r v n0. rewrite -Hfin2 -HstbE /= (updm_set Hupdb) setmE (updm_set Hupda) setmE.
             case: (r =P r1) => [Er1|_].
             * subst r. rewrite ST /= R1W. by [].
             * by [].
-        - (* r1 <> r2: cap moves r1 -> r2 *)
+        -
           apply: (cap_reloc (s := s) (src := inl r1) (dst := inl r2)).
           + move=> v n. rewrite /cap_at -Hfin2 -HstbE /= (updm_set Hupdb) setmE eqxx.
             move=> [= Hw1 Hvt]. rewrite /cap_at ST /= R1W Hvt -Hw1. by [].
@@ -675,7 +630,7 @@ Section SilentCap.
               rewrite /cap_at -Hfin2 -HstbE /= (updm_set Hupdb) setmE (negbTE Hrr2) (updm_set Hupda) setmE (negbTE Hrr1). by [].
             * rewrite /cap_at -Hfin2 -HstbE /=. by [].
           + exact: Hcap. }
-    - (* binop *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal;
@@ -713,7 +668,7 @@ Section SilentCap.
                       case: eqP => [Heq1|Hne1];
                         [ subst r0; rewrite Ha1w /=; move=> Hpre; rewrite ST /= R1W; exact: Hpre
                         | move=> Hpre; exact: Hpre ] ] ] ] ).
-    - (* load *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal.
@@ -736,14 +691,14 @@ Section SilentCap.
         have Ha1w : a1 = w1 @ t1 by move: Ha1; rewrite ST /= R1W; move=> [= <-].
         have Hb1w : b1 = w2 @ t2 by move: Hb1; rewrite ST /= MEM1; move=> [= <-].
         apply: (cap_reloc (s := s) (src := inr w1) (dst := inl r2)).
-        - (* Hdst: the loaded cap was at cell w1 *)
+        -
           move=> v n. rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE eqxx switch_val_snd.
           move=> [= Hw2 Hvt]. exists t2. rewrite ST /= MEM1 -Hw2. by split.
-        - (* Hsrc: cell w1 is invalidated -> no cap *)
+        -
           move=> v n [t [Hmem Hvt]]. move: Hmem Hvt.
           rewrite -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
           move=> [= _ <-]. rewrite switch_val_vtag. by case: (vtag t2).
-        - (* Hoth: every other location unchanged *)
+        -
           move=> p v n Hpw Hpr. case: p Hpw Hpr => [r|w] Hpw Hpr.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE (negbTE Hrr2) (updm_set Hupda) setmE.
@@ -785,7 +740,7 @@ Section SilentCap.
           + have Hww1 : w != w1 by apply/eqP => Hc; apply: Hpw; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE (negbTE Hww1). by [].
         - exact: Hcap. }
-    - (* store *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal.
@@ -807,15 +762,15 @@ Section SilentCap.
         case: (obind_inv Hndc) => mmc [Hupdc HstcE]. move: HstcE => [= HstcE].
         have Ha1w : a1 = w1 @ t1 by move: Ha1; rewrite ST /= R1W; move=> [= <-].
         apply: (cap_reloc (s := s) (src := inl r2) (dst := inr w1)).
-        - (* Hdst: the stored cap was in reg r2 *)
+        -
           move=> v n [t [Hmem Hvt]]. move: Hmem.
           rewrite -Hfin2 -HstcE /= (updm_set Hupdc) setmE eqxx.
           move=> [= Hw2 Ht]. move: Hvt. rewrite -Ht switch_val_vtag => Hvt.
           rewrite /cap_at ST /= R2W Hvt -Hw2. by [].
-        - (* Hsrc: source reg r2 is invalidated -> no cap *)
+        -
           move=> v n. rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
           move=> [= _ Ht]. move: Ht. by case: (t2).
-        - (* Hoth: every other location unchanged *)
+        -
           move=> p v n Hpr Hpw. case: p Hpr Hpw => [r|w] Hpr Hpw.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE (negbTE Hrr2) (updm_set Hupda) setmE.
@@ -858,7 +813,7 @@ Section SilentCap.
           + have Hww1 : w != w1 by apply/eqP => Hc; apply: Hpw; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE (negbTE Hww1). by [].
         - exact: Hcap. }
-    - (* jump *)
+    -
       move: NEXT. rewrite /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s w) => [ni|]; rewrite /=; move=> Hgoal;
@@ -875,7 +830,7 @@ Section SilentCap.
           move: Hss => [= ->];
           apply: (cap_subset _ _ Hcap);
             [ by move=> w0 v t n0; rewrite /= | by move=> r0 v n0; rewrite /= ] ).
-    - (* bnz *)
+    -
       move: NEXT. rewrite /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc'2: (mem s pc') => [ni|]; rewrite /=; move=> Hgoal;
@@ -895,7 +850,7 @@ Section SilentCap.
               case: eqP => [Heq|Hne];
                 [ subst r0; rewrite Ha Haw /=; move=> Hpre; exact: Hpre
                 | move=> Hpre; exact: Hpre ] ] ).
-    - (* jal *)
+    -
       move: NEXT. rewrite /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (swcast imm)) => [ni|]; rewrite /=; move=> Hgoal;
@@ -918,7 +873,7 @@ Section SilentCap.
             [ by move=> w0 v t n0; rewrite /=
             | move=> r0 v n0; rewrite /= (updm_set Hupd) setmE;
               case: eqP => [_|_]; [ by move=> [= _ Hc]; discriminate Hc | by [] ] ] ).
-    - (* syscall *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       have [Hmem Hreg] := alloc_fun_cap Halloc.
       apply: (cap_subset _ _ Hcap); [ exact: Hmem | exact: Hreg ].
@@ -926,9 +881,6 @@ Section SilentCap.
 
 End SilentCap.
 
-(* ==================== silent pc-tag preservation ==================== *)
-
-(* A silent transfer keeps the pc tag (both event branches produce Some). *)
 Lemma transfer_silent_trpc :
   forall (op : opcode) (tpc : tag_type lrc_tags Symbolic.P)
          (ti : tag_type lrc_tags Symbolic.M)
@@ -971,7 +923,7 @@ Proof.
     case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
     move: H. case: ifP => // _ H.
     move: H. case E: (switch_val _ _) => [a c] /=. by move=> [= <- _].
-  - (* jump *)
+  -
     rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts))) in H.
     case: (obind_inv H) => u0 [_ {}H].
@@ -984,7 +936,7 @@ Proof.
   - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
     by move: H => [= <- _].
-  - (* jal *)
+  -
     rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts))) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
@@ -1003,7 +955,6 @@ Proof.
   - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
 Qed.
 
-(* the allocator keeps the pc tag and every existing memory cell *)
 Lemma alloc_taga_pc : forall (N : nat) (s s' : state),
   alloc_fun (NC:=N) s = Some s' -> taga (pc s') = taga (pc s).
 Proof.
@@ -1042,16 +993,11 @@ Proof.
   move=> w d Hw /=. by rewrite unionmE Hw.
 Qed.
 
-(* ==================== the bracketing invariant ==================== *)
-
-(* address [v] holds a [C]-coloured cell *)
 Definition points_to_col
     (m : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
     (v : mword mt) (C : Component.id) : Prop :=
   exists iv tn, m v = Some (iv @ tn) /\ color tn = C.
 
-(* the single-run shadow stack: one entry (cap value, caller colour) per
-   level, most-recent-first (mirroring [Traces.callers]) *)
 Definition sstack : Type := seq (mword mt * Component.id).
 
 Definition sstack_pts
@@ -1059,19 +1005,13 @@ Definition sstack_pts
     (st : sstack) : Prop :=
   forall e, e \in st -> points_to_col m e.1 e.2.
 
-(* the level-[n] entry sits at position [size st - n.+1] *)
 Definition s_in_stack (st : sstack) (v : mword mt) (n : nat) : Prop :=
   n < size st /\ (nth (as_word 0, 0%nat) st (size st - n.+1)).1 = v.
 
-(* the machine's register keys: [ra] plus the clear list *)
 Definition regdomm_ok (s : state) : Prop :=
   forall r0, r0 \in domm (regs s) ->
     (r0 == ra) || (r0 \in [seq (as_word (ssrint.Posz n) : reg mt) | n <- reg_list]).
 
-(* the machine state realizes the trace-side [stack_state]: the pc level
-   is the call depth, the recorded caller colours are [callers], every
-   recorded value points at a cell of the recorded colour, and the Ret
-   capabilities are exactly (at most one each) the recorded values *)
 Definition bracket_inv (ss : stack_state) (s : state) : Prop :=
   exists st : sstack,
     [/\ taga (pc s) = Level (size st) (cur_comp ss),
@@ -1119,8 +1059,6 @@ Section BracketSilent.
       exact: (alloc_taga_pc Halloc).
   Qed.
 
-  (* forward cell persistence: every cell survives any step with its
-     colour/entry/is_code intact *)
   Lemma step_cell_persist : forall (s s' : state) ev,
     step_mp (NC:=NC) s s' ev ->
     forall w d, mem s w = Some d ->
@@ -1171,7 +1109,7 @@ Section BracketSilent.
               repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
               (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w d Hd. exists d. by rewrite Hms.
-    - (* load *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have [ta [tm [tb [Etr Esh]]]] := transfer_load_shape Htr.
@@ -1183,7 +1121,7 @@ Section BracketSilent.
       exists (w2 @ tm). split; first by [].
       move: Hd. rewrite Ew Hcell. move=> [= <-] /=.
       by rewrite Esh.
-    - (* store *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have [ta [tb [tm [Etr Esh]]]] := transfer_store_shape Htr.
@@ -1195,7 +1133,7 @@ Section BracketSilent.
       exists (w2 @ tm). split; first by [].
       move: Hd. rewrite Ew Hcell. move=> [= <-] /=.
       by rewrite Esh.
-    - (* jump *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -1207,7 +1145,7 @@ Section BracketSilent.
               repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
               (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w0 d Hd. exists d. by rewrite Hms.
-    - (* bnz *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -1219,7 +1157,7 @@ Section BracketSilent.
               repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
               (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w0 d Hd. exists d. by rewrite Hms.
-    - (* jal *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -1236,7 +1174,7 @@ Section BracketSilent.
               repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
               (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w0 d Hd. exists d. by rewrite Hms.
-    - (* syscall *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       move=> w d Hd. exists d. split; last by [].
       exact: (alloc_mem_incl Halloc Hd).
@@ -1255,8 +1193,6 @@ Section BracketSilent.
 
 End BracketSilent.
 
-(* ==================== event-step transfer extras ==================== *)
-
 Definition pct_level (t : tag_type lrc_tags Symbolic.P) : nat :=
   match t with Level n _ => n end.
 
@@ -1271,9 +1207,6 @@ Proof.
   by move: H => [= <-].
 Qed.
 
-(* An event JUMP consumes a top-level Ret capability from the jumped-through
-   register, decrements the level to the target cell's colour, and
-   invalidates the register file. *)
 Lemma jump_event_extra :
   forall (tpc : tag_type lrc_tags Symbolic.P) (ti : tag_type lrc_tags Symbolic.M)
          (rat : tag_type lrc_tags Symbolic.R)
@@ -1306,10 +1239,6 @@ Proof.
     + by rewrite -Hov.
 Qed.
 
-(* An event JAL mints exactly one Ret capability (index = the current
-   level) in the [ra] slot, increments the level to the target cell's
-   colour, checks the return cell's colour against the running component,
-   and invalidates the rest of the register file. *)
 Lemma jal_event_extra :
   forall (tpc : tag_type lrc_tags Symbolic.P) (ti : tag_type lrc_tags Symbolic.M)
          (tret : tag_type lrc_tags Symbolic.M)
@@ -1343,9 +1272,6 @@ Proof.
     + by rewrite -Hov.
 Qed.
 
-(* ==================== register invalidation at events ==================== *)
-
-(* "no tag in this all-R hseq is a Ret capability" *)
 Fixpoint all_nonret (tks : seq tag_kind) : hseq (tag_type lrc_tags) tks -> Prop :=
   match tks with
   | [::] => fun _ => True
@@ -1375,8 +1301,6 @@ Proof.
   - move=> Hg. by split.
 Qed.
 
-(* a fold of RegReads with non-Ret tags: memory untouched, and every
-   surviving Ret capability was already there, outside the written keys *)
 Lemma ndsu_regreads_nonret : forall (ks : seq (reg mt))
     (tags : hseq (tag_type lrc_tags) (nseq (size ks) Symbolic.R)) (st st0 : state),
   all_nonret tags ->
@@ -1404,8 +1328,6 @@ Lemma reg_invalidate_nonret :
   all_nonret (((Other : tag_type lrc_tags Symbolic.R) :: reg_invalidate_hseq)%hseq
               : hseq (tag_type lrc_tags) (nseq 11 Symbolic.R)).
 Proof. by do !split. Qed.
-
-(* ==================== full nsuap inversion (with registers) ==================== *)
 
 Lemma nsuap_inv_full : forall (st s' : state) (op : opcode) tpc ti
     (ts : hseq (tag_type lrc_tags) (inputs op)) updts pc' ev,
@@ -1436,8 +1358,6 @@ Proof.
     exists evinp, ov0, st0. cbn.
     split; [exact: Htr | exact: Edsu | by [] | by [] | by []].
 Qed.
-
-(* ==================== register-domain machinery ==================== *)
 
 Lemma alloc_regs_domm : forall (N : nat) (s s' : state),
   alloc_fun (NC:=N) s = Some s' -> domm (regs s') = domm (regs s).
@@ -1481,8 +1401,6 @@ Section RegDomm.
   Qed.
 
 End RegDomm.
-
-(* ==================== emitted-event shapes per opcode ==================== *)
 
 Lemma nop_emit : forall tpc (ti : tag_type lrc_tags Symbolic.M) tni evinp
     (ov : ovec lrc_tags NOP) ev,
@@ -1577,8 +1495,6 @@ Proof.
     do 4 eexists. by rewrite -He.
 Qed.
 
-(* ==================== invariant preservation: silent steps ==================== *)
-
 Section BracketSilentFull.
 
   Variable NC : nat.
@@ -1598,8 +1514,6 @@ Section BracketSilentFull.
 
 End BracketSilentFull.
 
-(* ==================== invariant transformation: event steps ==================== *)
-
 Lemma jump_inval_nonret :
   all_nonret (((Invalidated : tag_type lrc_tags Symbolic.R)
                  :: Invalidated :: Other :: reg_invalidate_hseq)%hseq
@@ -1610,13 +1524,10 @@ Section BracketEvents.
 
   Variable NC : nat.
 
-  (* the register keys rewritten by the event update lists *)
   Local Notation clear_ks :=
     ([seq (as_word (ssrint.Posz n1) : reg mt) | n1 <- reg_list]).
   Local Notation jump_ks r := ([:: ra, r & clear_ks]).
 
-  (* An ERet event pops the shadow stack: the machine's target component is
-     forced (by the consumed linear capability) to be the top caller. *)
   Lemma bracket_inv_ret : forall (ss : stack_state) (s s' : state) C v C',
     step_mp (NC:=NC) s s' (Some (ERet C v C')) ->
     bracket_inv ss s ->
@@ -1643,7 +1554,7 @@ Section BracketEvents.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _ _ _ _]]]] := nsuap_inv_full NEXT.
       have [Hev _] := store_transfer Htr. discriminate Hev.
-    - (* jump: the ERet case *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr Hdsu Hm Hr Hpcs]]]] := nsuap_inv_full NEXT.
       have [tn [Htni Hcur Hnext Hneq _]] := transfer_event_facts Htr.
@@ -1660,7 +1571,6 @@ Section BracketEvents.
       case: Hin => Hnlt Hnth.
       have Esz : size st = n.+1.
       { move: Elev. rewrite Etpc /=. by []. }
-      (* the stack is nonempty; its head is the consumed capability *)
       case: st Hpc Hmap Hpts Hcap Hnlt Hnth Esz Etpc
         => [|[wtop Ctop] st'] //= Hpc Hmap Hpts Hcap Hnlt Hnth Esz Etpc.
       have Esz' : size st' = n by move: Esz => [=].
@@ -1675,7 +1585,6 @@ Section BracketEvents.
       have Egtc : c' = Ctop.
       { move: Hgtc. rewrite Hcell. cbn [taga]. rewrite get_tni_color_eq.
         move=> [= <-]. exact: Hcol0. }
-      (* memory and registers after the step *)
       rewrite Htrov in Hdsu.
       have [Hmem0 Hnoret] := ndsu_regreads_nonret
         (ks := jump_ks r) jump_inval_nonret Hdsu.
@@ -1718,15 +1627,13 @@ Section BracketEvents.
     - rewrite /next_state_updates in NEXT; unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _ _ _ _]]]] := nsuap_inv_full NEXT.
       have Hev := bnz_emit Htr. discriminate Hev.
-    - (* jal emits an ECall, not an ERet *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _ _ _ _]]]] := nsuap_inv_full NEXT.
       have [c [p [v0 [c'0 He]]]] := jal_event_ecall Htr. discriminate He.
     - have Hev := run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* An ECall event pushes the caller onto the shadow stack: the freshly
-     minted capability points back at the (colour-checked) return cell. *)
   Lemma bracket_inv_call : forall (ss : stack_state) (s s' : state) C P0 v C',
     step_mp (NC:=NC) s s' (Some (ECall C P0 v C')) ->
     bracket_inv ss s ->
@@ -1753,14 +1660,14 @@ Section BracketEvents.
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _ _ _ _]]]] := nsuap_inv_full NEXT.
       have [Hev _] := store_transfer Htr. discriminate Hev.
-    - (* jump emits an ERet, not an ECall *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _ _ _ _]]]] := nsuap_inv_full NEXT.
       have [c [v0 [c'0 He]]] := jump_event_eret Htr. discriminate He.
     - rewrite /next_state_updates in NEXT; unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _ _ _ _]]]] := nsuap_inv_full NEXT.
       have Hev := bnz_emit Htr. discriminate Hev.
-    - (* jal: the ECall case *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr Hdsu Hm Hr Hpcs]]]] := nsuap_inv_full NEXT.
       have [tn [Htni Hcur Hnext Hneq _]] := transfer_event_facts Htr.
@@ -1778,7 +1685,6 @@ Section BracketEvents.
       have Hcolret : color tret = cur_comp ss.
       { move: Hcoltret. rewrite Etpc /=. by move=> ->. }
       rewrite Etpc /= in Htrov Htrpc.
-      (* peel the update chain: MemRead identity, RegWrite ra, clear *)
       rewrite Htrov in Hdsu.
       rewrite ndsu_cons in Hdsu.
       case: (obind_inv Hdsu) => st1 [H1 {}Hdsu].
@@ -1799,7 +1705,6 @@ Section BracketEvents.
       have [Hmem0 Hnoret] := ndsu_regreads_nonret
         (ks := clear_ks) reg_invalidate_nonret Hdsu.
       have Hms : mem s' = mem s by rewrite Hm Hmem0 Hm2.
-      (* every register capability of s' is the freshly minted one *)
       have Hcap' : forall r0 v0 n0, cap_at s' (inl r0) v0 n0 ->
         r0 = ra /\ v0 = (pc0 + 1)%w /\ n0 = size st.
       { move=> r0 v0 n0 Hp. rewrite /cap_at Hr in Hp.
@@ -1859,8 +1764,6 @@ Section BracketEvents.
 
 End BracketEvents.
 
-(* ==================== the bracketing theorem for machine runs ==================== *)
-
 Section BracketStar.
 
   Variable NC : nat.
@@ -1875,17 +1778,17 @@ Section BracketStar.
     - by split.
     - rewrite Etw {Etw}. move: Hstep. rewrite /= /prog_step_mp.
       case: t1 => [|e [|??]] // Hstep.
-      + (* silent *)
+      +
         exact: (IH ss (bracket_inv_silent Hstep Hinv)).
-      + (* event *)
+      +
         case: e Hstep => [C P0 v C'|C v C'] Hstep.
-        * (* ECall *)
+        *
           have [HC Hinv'] := bracket_inv_call Hstep Hinv.
           have [Hwbt Hinv''] := IH (StackState C' (C :: callers ss)) Hinv'.
           split.
           -- rewrite /= HC eqxx /=. exact: Hwbt.
           -- exact: Hinv''.
-        * (* ERet *)
+        *
           have [HC [tail0 [Hcs Hinv']]] := bracket_inv_ret Hstep Hinv.
           have [Hwbt Hinv''] := IH (StackState C' tail0) Hinv'.
           split.
@@ -1895,16 +1798,10 @@ Section BracketStar.
 
 End BracketStar.
 
-(* ==================== full trace well-formedness ==================== *)
-
 Section TraceWFMain.
 
   Variable NC : nat.
 
-  (* Every trace of a micro-policy machine run started in a state whose
-     entry tags are interface-sound and which realizes [stack_state0] is a
-     well-formed trace.  (The initial-state premises are static facts about
-     the loaded program, discharged for [compiler] output separately.) *)
   Lemma star_well_formed_trace :
     forall (W : program) (intf : Program.interface) (s : state) tw (s' : state),
     Star (mp_sem NC W) s tw s' ->

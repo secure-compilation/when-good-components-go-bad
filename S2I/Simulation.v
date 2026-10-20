@@ -1,16 +1,3 @@
-(* The S2I forward simulation (FCC): match relation and diagram.
-
-   Source is a CEK machine; the compiled code evaluates expressions leaving
-   results in R_COM, spilling temporaries onto a per-activation stack frame.
-   [match_states] relates a source state to a target state through
-     - a block renaming (SimInject) for memories and values,
-     - code anchoring (SimCode's [code_at]) for the pc,
-     - a continuation/frame correspondence ([cont_match]) and a call-stack
-       correspondence ([stack_match]).
-   The diagram is [forward_simulation_star]: source steps map to target plus
-   steps, except the administrative "descend" steps, which stutter under the
-   [measure] below. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -40,10 +27,6 @@ Import Intermediate.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ==================== the stutter measure ==================== *)
-
-(* Node weight 2: every "descend into a subexpression" source step strictly
-   decreases [esize e + ksize k] while executing no target instruction. *)
 Fixpoint esize (e : expr) : nat :=
   match e with
   | E_val _ | E_arg | E_local | E_exit => 1
@@ -73,18 +56,9 @@ Fixpoint ksize (k : cont) : nat :=
 Definition measure (s : S.CS.state) : nat :=
   esize (S.CS.s_expr s) + ksize (S.CS.s_cont s).
 
-(* ==================== frame bookkeeping ==================== *)
-
-(* canonical per-component pointers *)
 Definition lbp (C : Component.id) : Pointer.t := (C, 0, 0%Z).
 Definition scr (C : Component.id) : Pointer.t := (C, 1, 0%Z).
 
-(* Peak in-frame slot usage (above the 3 linkage slots) of a continuation,
-   given [t] currently live temporaries — from the moment the current
-   expression has just delivered its value. Occupancy-aware: value-consuming
-   continuations pop their temp before continuing, so the future need is
-   measured against the SHRUNK temp count (a flat "temps + future" bound is
-   not preserved across pushes). *)
 Fixpoint kneed (k : cont) (t : nat) : nat :=
   match k with
   | Kstop => t
@@ -100,39 +74,23 @@ Fixpoint kneed (k : cont) (t : nat) : nat :=
   | Kcall _ _ k' => maxn (t + 2) (kneed k' t)
   end.
 
-(* the temporaries on the frame, top of stack first: with R_SP at offset
-   2 + size temps, temp i sits at offset (1 + size temps) - i.
-   (The body frame now has TWO linkage slots — the caller's R_SP and the saved
-   R_ARG; the inherited-scratch slot moved to the wrapper's frame.) *)
 Definition frame_temps (tmem : Memory.t) (C : Component.id) (fb : Block.id)
            (temps : seq value) : Prop :=
   forall i, i < size temps ->
     Memory.load tmem (C, fb, Z.of_nat (1 + size temps - i))
     = Some (nth Undef temps i).
 
-(* every slot below [cap] is loadable (the frame was allocated that big) *)
 Definition frame_cap (tmem : Memory.t) (C : Component.id) (fb : Block.id)
            (cap : nat) : Prop :=
   forall j : Z, (0 <= j < Z.of_nat cap)%Z ->
     exists v, Memory.load tmem (C, fb, j) = Some v.
 
-(* Target-only-store discipline: blocks the compiled code writes raw (the
-   current frame, the scratch cells at block 1) must not alias the injection's
-   range, or target-only stores would break [mem_inject]
-   (cf. [store_outside_inject]). These facts are established at allocation time
-   ([alloc_outside_inject]) and preserved under [extend] because extensions map
-   onto freshly allocated target blocks. *)
 Definition scratch_priv (α : renaming) : Prop :=
   forall C' b0, α C' b0 <> Some 1.
 
 Definition frame_priv (α : renaming) (C : Component.id) (fb : Block.id) : Prop :=
   fb <> 1 /\ forall b0, α C b0 <> Some fb.
 
-(* ==================== the continuation relation ==================== *)
-
-(* [cont_match α C plm k rest temps]: after the current fragment, the code
-   [rest] implements the continuation [k]; [temps] are the target values
-   currently spilled for the pending operations (top of stack first). *)
 Inductive cont_match (α : renaming) (C : Component.id) (plm : NMap label)
   : cont -> code -> seq value -> Prop :=
 | CM_stop :
@@ -192,11 +150,6 @@ Inductive cont_match (α : renaming) (C : Component.id) (plm : NMap label)
          ++ ICall C' P' :: IConst (IInt 1) R_ONE
          :: reload_sp (scr C) ++ pop R_ARG ++ pop R_RA ++ rest) temps
 
-(* [cont_matchJ]: [cont_match] up to leading JOIN JUNK — the if-emission's
-   glue (a join label; or the else-branch's jump-to-join over the then-code).
-   The junk drains by silent administrative target steps (see
-   [cont_matchJ_drain]); the canonical relation underneath stays
-   syntax-directed. *)
 with cont_matchJ (α : renaming) (C : Component.id) (plm : NMap label)
   : cont -> code -> seq value -> Prop :=
 | CMJ_base : forall k rest temps,
@@ -214,23 +167,13 @@ Scheme cont_match_mutind := Minimality for cont_match Sort Prop
   with cont_matchJ_mutind := Minimality for cont_matchJ Sort Prop.
 Combined Scheme cont_match_combind from cont_match_mutind, cont_matchJ_mutind.
 
-(* ==================== the stack relation ==================== *)
-
 Section StackMatch.
 
 Variable G : global_env.
 Variable labelsP : NMap (NMap label).
 
-(* The suspended EXTERNAL-entry activation of the callee: after the body's
-   IJump, control lands in the external epilogue, pops the external frame
-   [fbE], and IReturns. Main's dual entry has the extra context-marker pop
-   (the marker is nonzero for a genuine cross-component call). *)
 Inductive ext_frame_match (tmem : Memory.t) (C : Component.id)
   : Block.id -> Pointer.t -> Z -> Prop :=
-(* The external frame now carries THREE linkage slots (four for main): the
-   caller's R_SP, the INHERITED SCRATCH the wrapper saved on entry, and R_RA
-   (plus main's context marker).  The scratch save/restore moved here from the
-   body, so the epilogue also restores the cell before popping R_SP. *)
 | EF_std : forall fbE jal_ret v0 v1 v2,
     Pointer.component jal_ret = C ->
     code_at G jal_ret (pop R_RA ++ pop R_AUX1
@@ -253,18 +196,10 @@ Inductive ext_frame_match (tmem : Memory.t) (C : Component.id)
     z <> 0%Z ->
     ext_frame_match tmem C fbE jal_ret 4%Z.
 
-(* [stack_match α tmem scrs C fb prot stk gps]:
-   the CURRENT activation runs in component [C] on frame [fb]; [stk]/[gps]
-   are the suspended source/target stacks; [scrs] maps each externally
-   suspended component to the scratch-cell content it relies upon; [prot]
-   collects the frame blocks the relation's memory facts live in (the
-   current [fb] is NOT protected: pushes write above its linkage slots). *)
 Inductive stack_match (α : renaming) (tmem : Memory.t)
   : NMap value -> Component.id -> Block.id
     -> seq (Component.id * Block.id) -> S.CS.stack -> I.CS.stack -> Prop :=
 | SM_init : forall scrs0 fb fb_ext ret_ext lret v0 v1 vx vs1,
-    (* current = main's initial activation; parent = main's dual entry,
-       marker Int 0: after the body, control drains to IHalt *)
     Memory.load tmem (Component.main, fb, 0%Z)
       = Some (Ptr (Component.main, fb_ext, 4%Z)) ->
     Memory.load tmem (Component.main, fb, 1%Z) = Some vs1 ->
@@ -283,20 +218,14 @@ Inductive stack_match (α : renaming) (tmem : Memory.t)
       [:: (Component.main, fb_ext)] [::] [:: ret_ext]
 | SM_internal : forall scrs C fb fb' prot stk gps oldarg targ k' rest' temps'
                        plm ret junkRA cap',
-    (* the caller: same component, suspended at an internal call site *)
     getm labelsP C = Some plm ->
     Pointer.component ret = C ->
     code_at G ret (pop R_RA ++ rest') ->
     cont_matchJ α C plm k' rest' temps' ->
-    (* the callee's linkage slots: caller R_SP and the saved argument.  There is
-       no scratch slot here — an INTRA-component activation neither saves nor
-       restores the cell (the save/restore lives in the wrapper), which is why
-       unwinding this frame leaves the transit map [scrs] untouched below. *)
     Memory.load tmem (C, fb, 0%Z)
       = Some (Ptr (C, fb', Z.of_nat (2 + size temps' + 1))) ->
     Memory.load tmem (C, fb, 1%Z) = Some targ ->
     val_inject α oldarg targ ->
-    (* the caller's suspended frame *)
     frame_priv α C fb' ->
     frame_temps tmem C fb' temps' ->
     Memory.load tmem (C, fb', Z.of_nat (2 + size temps')) = Some junkRA ->
@@ -304,27 +233,19 @@ Inductive stack_match (α : renaming) (tmem : Memory.t)
     3 + kneed k' (size temps') <= cap' ->
     (C, fb') \notin prot ->
     fb <> fb' ->
-    (* an intra return restores nothing: the map passes through *)
     stack_match α tmem scrs C fb' prot stk gps ->
     stack_match α tmem scrs C fb ((C, fb') :: prot)
       (S.CS.Frame C oldarg k' :: stk) (ret :: gps)
 | SM_external : forall scrs C C'' fb fbE spE fb'' prot stk gps oldarg
                        targ k'' rest'' temps'' plm'' jal_ret icall_ret vscr
                        junkRA junkARG cap'',
-    (* the caller: a DIFFERENT component, suspended at an ICall *)
     C'' <> C ->
     getm labelsP C'' = Some plm'' ->
-    (* the callee-side external-entry activation *)
     ext_frame_match tmem C fbE jal_ret spE ->
     frame_priv α C fbE ->
-    (* the callee's internal linkage slots: caller R_SP and the saved argument.
-       The inherited scratch [vscr] now lives in the callee's WRAPPER frame
-       [fbE] (slot 1), not in its body frame — that is where the wrapper saved
-       it on entry and where its epilogue will read it back from. *)
     Memory.load tmem (C, fb, 0%Z) = Some (Ptr (C, fbE, spE)) ->
     Memory.load tmem (C, fbE, 1%Z) = Some vscr ->
     Memory.load tmem (C, fb, 1%Z) = Some junkARG ->
-    (* the caller's return site and suspended state *)
     Pointer.component icall_ret = C'' ->
     code_at G icall_ret
       (IConst (IInt 1) R_ONE
@@ -337,21 +258,17 @@ Inductive stack_match (α : renaming) (tmem : Memory.t)
     val_inject α oldarg targ ->
     frame_cap tmem C'' fb'' cap'' ->
     3 + kneed k'' (size temps'') <= cap'' ->
-    (* the caller's transit expectation is the map's current entry *)
     getm scrs C''
       = Some (Ptr (C'', fb'', Z.of_nat (2 + size temps'' + 2))) ->
     (C'', fb'') \notin prot ->
     (C, fbE) \notin ((C'', fb'') :: prot) ->
     fb <> fbE ->
-    (* unwinding restores [vscr] into C's scratch cell *)
     stack_match α tmem (setm scrs C vscr) C'' fb'' prot stk gps ->
     stack_match α tmem scrs C fb
       ((C, fbE) :: (C'', fb'') :: prot)
       (S.CS.Frame C'' oldarg k'' :: stk) (jal_ret :: icall_ret :: gps).
 
 End StackMatch.
-
-(* ==================== the state relation ==================== *)
 
 Section MatchStates.
 
@@ -367,8 +284,6 @@ Definition labelsP : NMap (NMap label) :=
   | None => emptym
   end.
 
-(* The invariant pack behind MS_expr, as a record: diagram case lemmas take it
-   as ONE premise and rebuild it field by field. *)
 Record expr_inv (α : renaming) (scrs : NMap value) (C : Component.id)
        (stk : S.CS.stack) (mem : Memory.t) (k : cont) (e : expr) (arg : value)
        (gps : I.CS.stack) (tmem : Memory.t) (tregs : Register.t)
@@ -407,8 +322,6 @@ Record expr_inv (α : renaming) (scrs : NMap value) (C : Component.id)
               immediately_final mexpr = false
 }.
 
-(* The invariant pack behind MS_val: the value already sits in R_COM and the
-   pc sits on the continuation's code. *)
 Record val_inv (α : renaming) (scrs : NMap value) (C : Component.id)
        (stk : S.CS.stack) (mem : Memory.t) (k : cont) (v : value) (arg : value)
        (gps : I.CS.stack) (tmem : Memory.t) (tregs : Register.t)
@@ -492,8 +405,6 @@ Arguments ei_prot {p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temp
 Arguments ei_stack {p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm c rest s1 s2 cap}.
 Arguments ei_mainnf {p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm c rest s1 s2 cap}.
 
-(* ==================== diagram plumbing: descend steps ==================== *)
-
 Module TReplumb.
 
 Local Set Implicit Arguments.
@@ -503,7 +414,6 @@ Notation icode := Intermediate.Machine.code.
 
 Section WithCodePred.
 
-(* the only thing the seven proofs need of a code predicate: nothing *)
 Variable P : icode -> Prop.
 
 Variable a : renaming.
@@ -651,7 +561,7 @@ Proof.
   case E1: (compile_expr C (lbp C) (scr C) plm e s1) => [[ce sA]|]; last by [].
   rewrite /=.
   case Heqb: (Component.eqb C' C).
-  - (* internal call *)
+  -
     case EL: (getm plm P') => [tl|]; last by [].
     rewrite /=. move=> [Ec _] Hcode Hk. subst c.
     have EC : C' = C by apply/PeanoNat.Nat.eqb_eq.
@@ -659,7 +569,7 @@ Proof.
     split=> //.
     + move: Hcode. by do 10!rewrite -?catA ?cat_cons ?cat0s ?cats0.
     + apply: CMJ_base. exact: CM_call_int EC EL Hk.
-  - (* external call *)
+  -
     move=> [Ec _] Hcode Hk. subst c.
     have HneC : C' <> C.
     { move=> E. by rewrite E /Component.eqb PeanoNat.Nat.eqb_refl in Heqb. }
@@ -675,8 +585,6 @@ End WithCodePred.
 
 End TReplumb.
 
-
-(* ==================== cont_match inversion lemmas ==================== *)
 
 Lemma cont_match_binop1_inv {α C plm op e2 k rest temps} :
   cont_match α C plm (Kbinop1 op e2 k) rest temps ->
@@ -770,9 +678,6 @@ Proof.
   - right. by exists rest0.
 Qed.
 
-(* ==================== store-preservation toolkit ==================== *)
-
-(* Loadability survives ANY store (the store may only overwrite a value). *)
 Lemma frame_cap_store tmem tmem' C fb cap ptr w :
   frame_cap tmem C fb cap ->
   Memory.store tmem ptr w = Some tmem' ->
@@ -815,9 +720,6 @@ Proof.
       | rewrite L; eassumption | assumption].
 Qed.
 
-(* A store outside the relation's footprint preserves [stack_match]: it must
-   avoid the protected frames, the scratch blocks, and the linkage slots
-   (offsets 0..2) of the current frame — pushes above them are fine. *)
 Lemma stack_match_store G0 lP α tmem tmem' scrs C0 fb0 prot stk gps Cp bp op w :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   Memory.store tmem (Cp, bp, op) w = Some tmem' ->
@@ -841,7 +743,7 @@ Proof.
                   HneC HgetP'' Hext HprivE L0 L1 L2E Hic Hcode'' Hcont''
                   Hpriv'' Htemps'' LjRA'' Ltarg'' Hvi Hcap'' Hbud'' Hentry
                   Hnp'' HnpE HneE Htail IH Hprot Hcur].
-  - (* SM_init *)
+  -
     have NEcur : forall o : Z, (o < 2)%Z ->
         (Cp, bp, op) <> (Component.main, fb, o).
     { move=> o Ho [E1' E2' E3']. subst Cp bp op.
@@ -856,7 +758,7 @@ Proof.
     + rewrite Lneq; last by apply: NEext. exact: E1.
     + rewrite Lneq; last by apply: NEext. exact: E2.
     + rewrite Lneq; last by apply: NEext. exact: E3.
-  - (* SM_internal *)
+  -
     move: Hprot; rewrite inE negb_or => /andP [Hprot1 Hprot'].
     have NEcur : forall o : Z, (o < 2)%Z -> (Cp, bp, op) <> (C, fb, o).
     { move=> o Ho [E1' E2' E3']. subst Cp bp op.
@@ -871,7 +773,7 @@ Proof.
     + rewrite Lneq; last by apply: NEsusp. exact: LjRA.
     + exact: frame_cap_store Hcap Hs.
     + apply: IH => //. by move=> [E1' E2']; move: Hprot1; rewrite E1' E2' eqxx.
-  - (* SM_external *)
+  -
     move: Hprot; rewrite !inE !negb_or => /andP [HprotE /andP [Hprot2 Hprot']].
     have NEcur : forall o : Z, (o < 2)%Z -> (Cp, bp, op) <> (C, fb, o).
     { move=> o Ho [E1' E2' E3']. subst Cp bp op.
@@ -885,7 +787,6 @@ Proof.
     apply: SM_external; try eassumption.
     + apply: ext_frame_match_store Hext Hs _. exact: NEE.
     + rewrite Lneq; last by apply: NEcur; lia. exact: L0.
-    (* [vscr] now lives in the WRAPPER frame [fbE], so it is protected by [NEE] *)
     + rewrite Lneq; last by apply: NEE. exact: L1.
     + rewrite Lneq; last by apply: NEcur; lia. exact: L2E.
     + apply: frame_temps_store Htemps'' Hs _ => i Hi. exact: NEsusp.
@@ -896,9 +797,6 @@ Proof.
 Qed.
 
 
-(* ==================== alloc-preservation toolkit ==================== *)
-
-(* Memory-level: allocation changes no existing cell. *)
 Lemma memory_load_after_alloc tmem Ca n tmem' pt C1 b1 (o : Z) :
   Memory.alloc tmem Ca n = Some (tmem', pt) ->
   (C1, b1) <> (Ca, Pointer.block pt) ->
@@ -912,7 +810,6 @@ Proof.
   by move=> Eb; apply: Hne; rewrite Eb.
 Qed.
 
-(* The allocated block was not loadable before (needs the cursor invariant). *)
 Lemma memory_alloc_fresh tmem Ca n tmem' pt :
   (forall C cm, getm tmem C = Some cm -> ComponentMemory.wf cm) ->
   Memory.alloc tmem Ca n = Some (tmem', pt) ->
@@ -927,7 +824,6 @@ Proof.
   move: Hfr. rewrite (ComponentMemory.load_domm _ _ _ _ Hl). by [].
 Qed.
 
-(* rle-monotonicity of the continuation relation *)
 Lemma cont_match_rle_all α α' C plm :
   rle α α' ->
   (forall k rest temps, cont_match α C plm k rest temps ->
@@ -978,10 +874,6 @@ Proof.
       | exact: Ltr H3 | exact: Ltr H4 | assumption].
 Qed.
 
-(* Allocation (in any component) preserves the stack relation, along the
-   extended renaming: no existing cell moves, and the extension maps onto the
-   FRESH block, which cannot alias any protected frame (they all have loadable
-   cells). *)
 Lemma stack_match_alloc G0 lP α α' tmem tmem' scrs C0 fb0 prot stk gps Ca n
       bt pt :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
@@ -1060,8 +952,6 @@ Proof.
     + move=> j Hj. case: (Hcap'' j Hj) => w Hw. exists w. exact: Ltr Hw.
 Qed.
 
-(* Every protected frame carries recorded α-avoidance: α-image stores
-   (source-program assignments) can never hit a protected frame. *)
 Lemma stack_match_prot_priv G0 lP α tmem scrs C0 fb0 prot stk gps Cx bx :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   (Cx, bx) \in prot ->
@@ -1089,7 +979,6 @@ Proof.
       * exact: IH Hin'.
 Qed.
 
-(* Every protected frame is disjoint from the scratch block. *)
 Lemma stack_match_prot_not1 G0 lP α tmem scrs C0 fb0 prot stk gps Cx bx :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   (Cx, bx) \in prot ->
@@ -1117,7 +1006,6 @@ Proof.
       * exact: IH Hin'.
 Qed.
 
-(* fmap plumbing for the scratch tracker *)
 Lemma setm_over (m : NMap value) k v w : setm (setm m k w) k v = setm m k v.
 Proof. apply/eq_fmap => x. rewrite !setmE. by case: eqP. Qed.
 
@@ -1128,8 +1016,6 @@ Proof.
   case: (x =P k2) => [->|_] //. case: eqP => [E|//]. by case: Hne.
 Qed.
 
-(* Adding a FRESH entry to the scratch tracker preserves the stack relation
-   (a fresh entry cannot be any suspended caller's transit expectation). *)
 Lemma stack_match_scrs_extend G0 lP α tmem scrs C0 fb0 prot stk gps Cx w :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   getm scrs Cx = None ->
@@ -1148,7 +1034,6 @@ Proof.
           Hpriv'' Htemps'' LjRA'' Ltarg'' Hvi Hcap'' Hbud'' Hentry
           Hnp'' HnpE HneE Htail IH Hfresh].
   - by apply: SM_init; eassumption.
-  (* SM_internal no longer rewrites [scrs], so the tail goal is exactly the IH *)
   - apply: SM_internal; try eassumption.
     by apply: IH.
   - have HneCx'' : Cx <> C''.
@@ -1162,7 +1047,6 @@ Proof.
         rewrite setmE. by case: eqP => [E|_] //.
 Qed.
 
-(* Fresh frames come Undef-initialized: every slot below the size loads. *)
 Lemma memory_load_after_alloc_in tmem Ca n tmem' pt (o : Z) :
   Memory.alloc tmem Ca n = Some (tmem', pt) ->
   (0 <= o < Z.of_nat n)%Z ->
@@ -1177,7 +1061,6 @@ Proof.
   lia.
 Qed.
 
-(* uniq of a decomposed label list: the label is not in the prefix *)
 Lemma uniq_cat_cons_notin (l : label) ls1 ls2 :
   uniq (ls1 ++ l :: ls2) -> l \notin ls1.
 Proof.
@@ -1185,7 +1068,6 @@ Proof.
   move: Hh. rewrite negb_or => /andP [Hn _]. exact: Hn.
 Qed.
 
-(* A label with a unique occurrence splits code uniquely. *)
 Lemma label_split_unique (l : label) (A B ext rest : code) :
   A ++ ILabel l :: B = ext ++ ILabel l :: rest ->
   uniq (labels_of (A ++ ILabel l :: B)) ->
@@ -1211,8 +1093,6 @@ Proof.
     case: (IH _ Heq' HnA' HnE') => -> ->. by [].
 Qed.
 
-(* The code after a procedure's entry label: the internal prologue, the
-   compiled body, and the [Kstop] epilogue. *)
 Lemma compile_proc_after_label C0 plm P e s cd s' pl ext rest :
   compile_proc C0 (lbp C0) (scr C0) plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -1453,7 +1333,6 @@ Proof.
       by case: (label_split_unique _ _ _ _ _ Heq Huq2) => _ <-.
 Qed.
 
-(* Every protected frame has a loadable cell (fresh blocks avoid prot). *)
 Lemma stack_match_prot_loadable G0 lP α tmem scrs C0 fb0 prot stk gps Cx bx :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   (Cx, bx) \in prot ->
@@ -1483,11 +1362,6 @@ Proof.
       * exact: IH Hin'.
 Qed.
 
-(* Updating the RUNNING component's tracker entry preserves the stack relation.
-   [SM_external] still shadows the current component's entry in its tail
-   ([setm_over]).  [SM_internal] no longer rewrites [scrs] at all — an intra
-   activation restores nothing — so the update has to be pushed down its tail
-   INDUCTIVELY; hence [elim], not [case]. *)
 Lemma stack_match_scrs_update G0 lP α tmem scrs C0 fb0 prot stk gps w :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   stack_match G0 lP α tmem (setm scrs C0 w) C0 fb0 prot stk gps.
@@ -1511,7 +1385,6 @@ Proof.
     + by rewrite setm_over.
 Qed.
 
-(* The full shape of a compiled STANDARD procedure (callee side of ICall). *)
 Lemma compile_proc_shape_std C0 plm P e s cd s' pl :
   compile_proc C0 (lbp C0) (scr C0) plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -1543,8 +1416,6 @@ Proof.
   rewrite -Ecd Hmain. by [].
 Qed.
 
-(* The full shape of compiled MAIN (dual entry) when its body is not
-   immediately final (so no halt pad). *)
 Lemma compile_proc_shape_main C0 plm P e s cd s' pl :
   compile_proc C0 (lbp C0) (scr C0) plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -1587,7 +1458,6 @@ Proof.
   rewrite -Ecd Hmain Hfin. by [].
 Qed.
 
-(* main's halt pad: an immediately-final main compiles to IHalt-first code *)
 Lemma compile_proc_shape_main_final C0 plm P e s cd s' pl :
   compile_proc C0 (lbp C0) (scr C0) plm P e s = Some (cd, s') ->
   getm plm P = Some pl ->
@@ -1605,8 +1475,6 @@ Proof.
   by eexists.
 Qed.
 
-(* ==================== diagram: leaf evaluations ==================== *)
-
 Section Diagram.
 
 Variable p : Source.program.
@@ -1618,10 +1486,6 @@ Hypothesis Hcompile : compile_program p = Some tp.
 
 Let G : global_env := prepare_global_env tp.
 
-(* Draining the join junk: silent administrative steps (labels, and the
-   else-branch's taken IBnz over the then-code) lead from junk-wrapped code to
-   the canonical continuation code. Registers, memory and the stack are
-   untouched. *)
 Lemma cont_matchJ_drain α C plm k temps pc jrest :
   cont_matchJ α C plm k jrest temps ->
   code_at G pc jrest ->
@@ -1697,7 +1561,6 @@ Proof.
     + exact: Hcm'.
 Qed.
 
-(* plus-typed executors (mirrors of SimCode's exec_push/exec_pop) *)
 Lemma exec_push_plus gps mem regs pc r c C0 fb0 sp mem' :
   code_at G pc (push r ++ c) ->
   Register.get R_SP regs = Ptr (C0, fb0, sp) ->
@@ -1741,9 +1604,6 @@ Proof.
       | exact: Hload].
 Qed.
 
-(* Rebuild [val_inv] from [expr_inv] after the target ran the current
-   expression's code: memory untouched, only R_COM and the pc moved (plus
-   scratch registers), and the value now injects into R_COM. *)
 Lemma expr_to_val α scrs C stk mem k e v arg gps tmem tregs pc fb prot temps
       plm c rest s1 s2 cap tregs' pc' :
   expr_inv p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temps
@@ -1768,7 +1628,6 @@ Proof.
   - by move: Hbud; lia.
 Qed.
 
-(* [E_val v] leaves: only integer literals compile. One IConst step. *)
 Lemma leaf_val_run α scrs C stk mem k v arg gps tmem tregs pc fb prot temps
       plm c rest s1 s2 cap :
   expr_inv p tp α scrs C stk mem k (E_val v) arg gps tmem tregs pc fb prot
@@ -1787,7 +1646,6 @@ Proof.
   - exact: code_at_tail Hcode.
 Qed.
 
-(* [E_arg]: one IMov step; the result is the injected argument. *)
 Lemma leaf_arg_run α scrs C stk mem k arg gps tmem tregs pc fb prot temps
       plm c rest s1 s2 cap :
   expr_inv p tp α scrs C stk mem k E_arg arg gps tmem tregs pc fb prot
@@ -1806,8 +1664,6 @@ Proof.
   - exact: code_at_tail Hcode.
 Qed.
 
-(* [E_local]: one IConst step loading the local-buffer pointer; it injects
-   because renamings are the identity on [Block.local]. *)
 Lemma leaf_local_run α scrs C stk mem k arg gps tmem tregs pc fb prot temps
       plm c rest s1 s2 cap :
   expr_inv p tp α scrs C stk mem k E_local arg gps tmem tregs pc fb prot
@@ -1826,7 +1682,6 @@ Proof.
   - exact: code_at_tail Hcode.
 Qed.
 
-(* register bookkeeping through concrete set-chains *)
 Ltac rget := rewrite /Register.get /Register.set /= !setmE /=.
 
 Ltac is_arith T :=
@@ -1842,11 +1697,6 @@ Ltac slia :=
   | H : ?T |- _ => lazymatch type of T with Prop => tryif is_arith T then fail else clear H end
   end; lia.
 
-(* The [Kstop] epilogue: pop the saved argument, pop the caller's frame pointer,
-   and stack-return. Five silent steps; R_COM (the produced value) rides through
-   untouched.  The scratch restore that used to sit between the two pops now
-   lives in the WRAPPER (see the note on [compile_proc]), so this epilogue no
-   longer touches memory at all — hence no [tmem1]/[Memory.store] premise. *)
 Lemma epilogue_run C0 gps' tmem tregs pc fb jt vs0 vs1 :
   code_at G pc (pop R_ARG ++ pop R_SP ++ [:: IJump]) ->
   Pointer.component pc = C0 ->
@@ -1864,7 +1714,6 @@ Lemma epilogue_run C0 gps' tmem tregs pc fb jt vs0 vs1 :
       & Register.get R_ARG tregs1 = vs1].
 Proof.
   move=> Hcode Hpc HSP HONE Hl0 Hl1 Hjt.
-  (* pop R_ARG : the saved argument (slot 1) *)
   have SA := exec_pop _ _ _ _ _ R_ARG _ _ _ _ _ Hcode HSP HONE Hpc Hl1.
   set regsA := Register.set R_ARG vs1 _ in SA.
   set pcA := Pointer.inc (Pointer.inc pc) in SA.
@@ -1873,14 +1722,12 @@ Proof.
   have HcA := code_at_tail (code_at_tail Hcode).
   have HSPA : Register.get R_SP regsA = Ptr (C0, fb, 1%Z) by rget.
   have HONEA : Register.get R_ONE regsA = Int 1 by rget.
-  (* pop R_SP : the caller's frame pointer (slot 0) *)
   have SD := exec_pop _ _ _ _ _ R_SP _ _ _ _ _ HcA HSPA HONEA HpcA Hl0.
   set regsD := Register.set R_SP vs0 _ in SD.
   set pcD := Pointer.inc (Pointer.inc pcA) in SD.
   have HpcD : Pointer.component pcD = C0
     by rewrite /pcD !Pointer.inc_preserves_component.
   have HcD := code_at_tail (code_at_tail HcA).
-  (* IJump : stack return to [jt] *)
   have SE : star CS.step G (jt :: gps', tmem, regsD, pcD) E0
                  (gps', tmem, regsD, jt).
   { apply: star_one. apply: step_jump HcD _. by rewrite Hjt HpcD. }
@@ -1894,8 +1741,6 @@ Proof.
   - by rget.
 Qed.
 
-(* Main's dual-entry drain: pop the linkage and the Int-0 context marker,
-   fall through the IBnz onto the IHalt. Seven silent steps. *)
 Lemma main_drain_run gps tmem tmem1 tregs pc fbE lret v0m v1m v2m :
   code_at G pc (pop R_ARG ++ pop R_RA ++ pop R_AUX1
                 ++ store_arg (scr Component.main) R_AUX1 R_AUX2 ++ pop R_SP
@@ -1914,7 +1759,6 @@ Lemma main_drain_run gps tmem tmem1 tregs pc fbE lret v0m v1m v2m :
     executing G pcH IHalt.
 Proof.
   move=> Hcode Hpc HSP HONE HfbE1 Hl0 Hl1 Hl2 Hl3 Hstore.
-  (* pop R_ARG : the context marker (slot 3) *)
   have SA := exec_pop _ _ _ _ _ R_ARG _ _ _ _ _ Hcode HSP HONE Hpc Hl3.
   set regsA := Register.set R_ARG (Int 0) _ in SA.
   set pcA := Pointer.inc (Pointer.inc pc) in SA.
@@ -1923,7 +1767,6 @@ Proof.
   have HcA := code_at_tail (code_at_tail Hcode).
   have HSPA : Register.get R_SP regsA = Ptr (Component.main, fbE, 3%Z) by rget.
   have HONEA : Register.get R_ONE regsA = Int 1 by rget.
-  (* pop R_RA : the saved return (slot 2) *)
   have SB := exec_pop _ _ _ _ _ R_RA _ _ _ _ _ HcA HSPA HONEA HpcA Hl2.
   set regsB := Register.set R_RA v2m _ in SB.
   set pcB := Pointer.inc (Pointer.inc pcA) in SB.
@@ -1932,14 +1775,12 @@ Proof.
   have HcB := code_at_tail (code_at_tail HcA).
   have HSPB : Register.get R_SP regsB = Ptr (Component.main, fbE, 2%Z) by rget.
   have HONEB : Register.get R_ONE regsB = Int 1 by rget.
-  (* pop R_AUX1 : the INHERITED SCRATCH the wrapper saved on entry (slot 1) *)
   have SBB := exec_pop _ _ _ _ _ R_AUX1 _ _ _ _ _ HcB HSPB HONEB HpcB Hl1.
   set regsBB := Register.set R_AUX1 v1m _ in SBB.
   set pcBB := Pointer.inc (Pointer.inc pcB) in SBB.
   have HpcBB : Pointer.component pcBB = Component.main
     by rewrite /pcBB !Pointer.inc_preserves_component.
   have HcBB := code_at_tail (code_at_tail HcB).
-  (* store_arg : put it back into the component's scratch cell *)
   have HgBB : Register.get R_AUX1 regsBB = v1m by rget.
   have Hstore' : Memory.store tmem (Component.main, 1, 0%Z)
                    (Register.get R_AUX1 regsBB) = Some tmem1 by rewrite HgBB.
@@ -1952,7 +1793,6 @@ Proof.
   have HcBC := code_at_tail (code_at_tail HcBB).
   have HSPBC : Register.get R_SP regsBC = Ptr (Component.main, fbE, 1%Z) by rget.
   have HONEBC : Register.get R_ONE regsBC = Int 1 by rget.
-  (* pop R_SP : the caller's frame pointer (slot 0), read AFTER the store *)
   have Hl0' : Memory.load tmem1 (Component.main, fbE, 0%Z) = Some v0m.
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) //.
     by move=> E; inversion E; apply: HfbE1. }
@@ -1974,9 +1814,6 @@ Proof.
   - apply: executing_halt. exact: (code_at_tail HcC).
 Qed.
 
-(* The full final drain: a value sits in R_COM at [Kstop] with an empty source
-   stack; the target runs the epilogue, stack-returns into main's dual entry,
-   and drains onto the IHalt. Produces the MS_halted facts. *)
 Lemma final_drain α scrs C mem gps tmem tregs pc fb prot temps plm rest :
   mem_inject α mem tmem ->
   scratch_priv α ->
@@ -1996,20 +1833,14 @@ Lemma final_drain α scrs C mem gps tmem tregs pc fb prot temps plm rest :
       & mem_inject α mem tmem1].
 Proof.
   move=> Hmem Hscrp Hpriv Hscr_all Hdom HONE HSP Hpc Hcode Hcont Hsm.
-  (* the continuation is [Kstop]: the code is the epilogue, no temps *)
   inversion Hcont; subst.
-  (* the stack is empty: SM_init pins main's dual-entry linkage *)
   inversion Hsm; subst.
   rewrite -H in Hscr_all Hdom HSP Hcode.
-  (* the epilogue no longer touches memory: the scratch restore moved to the
-     wrapper, i.e. into [main_drain_run] below *)
   have [tregs1 [Sepi _ HONE1 HSP1 _]] :=
     epilogue_run _ [::] _ _ _ _ ret_ext _ _
                  Hcode (esym H) HSP HONE H0 H1 H7.
-  (* the scratch store is now performed BY the drain (the wrapper's restore) *)
   have [w0 Hw0] := Hscr_all _ Hdom.
   have [tmem1 Hstore] := Memory.store_after_load _ _ _ v1 Hw0.
-  (* the drain run *)
   have [tregs2 [pcH [Sdrain Hhalt]]] :=
     main_drain_run [::] tmem tmem1 tregs1 ret_ext fb_ext lret v0 v1 vx
                    H8 H7 HSP1 HONE1 (proj1 H6) H2 H3 H4 H5 Hstore.
@@ -2020,10 +1851,6 @@ Proof.
     move=> b0 /=. exact: Hscrp.
 Qed.
 
-(* ==================== diagram: value-consuming steps ==================== *)
-
-(* KS_Seq2: drain any join junk, then a stutter — the source drops the value
-   and moves into e2 with no further target step. *)
 Lemma diagram_seq2 α scrs C stk mem k v arg gps tmem tregs pc fb prot temps
       plm rest cap e2 :
   val_inv p tp α scrs C stk mem (Kseq e2 k) v arg gps tmem tregs pc fb prot
@@ -2068,7 +1895,6 @@ Proof.
   - exact: Hmnf.
 Qed.
 
-(* KS_Binop2: drain, then push the operand and descend. *)
 Lemma diagram_binop2 α scrs C stk mem k v1 arg gps tmem tregs pc fb prot temps
       plm rest cap op e2 :
   val_inv p tp α scrs C stk mem (Kbinop1 op e2 k) v1 arg gps tmem tregs pc fb
@@ -2146,7 +1972,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* KS_Assign2: drain, then push the operand and descend. *)
 Lemma diagram_assign2 α scrs C stk mem k v arg gps tmem tregs pc fb prot temps
       plm rest cap e1 :
   val_inv p tp α scrs C stk mem (Kassign1 e1 k) v arg gps tmem tregs pc fb
@@ -2224,7 +2049,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* KS_BinopEval: drain, pop the spilled operand, combine. *)
 Lemma diagram_binop_eval α scrs C stk mem k v1 v2 arg gps tmem tregs pc fb
       prot temps plm rest cap op :
   val_inv p tp α scrs C stk mem (Kbinop2 op v1 k) v2 arg gps tmem tregs pc fb
@@ -2302,7 +2126,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* KS_DerefEval: drain, then one ILoad step via [mi_load]. *)
 Lemma diagram_deref_eval α scrs C stk mem k arg gps tmem tregs pc fb
       prot temps plm rest cap bp op' v :
   val_inv p tp α scrs C stk mem (Kderef k) (Ptr (C, bp, op')) arg gps tmem
@@ -2351,8 +2174,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* KS_AssignEval: drain, pop the spilled value, store through the α-image
-   of the address, restore R_COM. *)
 Lemma diagram_assign_eval α scrs C stk mem mem' k v arg gps tmem tregs pc fb
       prot temps plm rest cap bp op' :
   val_inv p tp α scrs C stk mem (Kassign2 v k) (Ptr (C, bp, op')) arg gps tmem
@@ -2455,8 +2276,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* KS_AllocEval: drain, then one IAlloc step; lock-step allocation extends
-   the renaming onto the fresh blocks. *)
 Lemma diagram_alloc_eval α scrs C stk mem mem' k arg gps tmem tregs pc fb
       prot temps plm rest cap size ptr :
   val_inv p tp α scrs C stk mem (Kalloc k) (Int size) arg gps tmem
@@ -2537,10 +2356,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* KS_If2: drain, then the branch. Taken (i<>0): IBnz to the then-label plus
-   the label step; the then-code runs against a label-junk continuation.
-   Fallthrough (i=0): one IBnz step; the else-code runs against the
-   jump-over-then junk continuation. *)
 Lemma diagram_if2 α scrs C stk mem k arg gps tmem tregs pc fb prot temps
       plm rest cap e2 e3 i :
   val_inv p tp α scrs C stk mem (Kif e2 e3 k) (Int i) arg gps tmem tregs pc
@@ -2560,7 +2375,7 @@ Proof.
   subst rest1.
   have Ecom := val_inject_int_l _ _ _ Hcom.
   case Hi: (i != 0%Z).
-  - (* then-branch *)
+  -
     case: (HcD) => [Cp [Pc [pre [post [HgC HgP Ecode Eoff]]]]].
     have Huq := Huniq _ _ _ _ HgC HgP.
     set pre' := pre ++ IBnz R_COM lconseq :: c3 ++ [:: IBnz R_ONE lend].
@@ -2616,7 +2431,7 @@ Proof.
       * exact: Hprot.
       * exact: Hstack.
       * exact: Hmnf.
-  - (* else-branch: fallthrough *)
+  -
     have Hi0 : i = 0%Z by move: Hi => /negbFE /eqP.
     have SB : CS.step G (gps, tmem, tregs, pcD) E0
               (gps, tmem, tregs, Pointer.inc pcD).
@@ -2651,7 +2466,6 @@ Proof.
       * exact: Hmnf.
 Qed.
 
-(* The current frame always has a loadable linkage cell. *)
 Lemma stack_match_cur_loadable G0 lP α tmem scrs C0 fb0 prot stk gps :
   stack_match G0 lP α tmem scrs C0 fb0 prot stk gps ->
   exists (o : Z) w, Memory.load tmem (C0, fb0, o) = Some w.
@@ -2673,10 +2487,6 @@ Proof.
   - by exists 0%Z, (Ptr (C, fbE, spE)).
 Qed.
 
-(* The internal-entry prologue, from the entry label: allocate a fresh frame,
-   save the caller linkage (old SP, the scratch cell, the old argument), move
-   the argument into place. Thirteen silent steps; reusable by both call
-   flavours and the initial bridge. *)
 Lemma internal_prologue_run Cf gps2 tmemIn (regsIn : Register.t) pc0 plf ne
       bodyc restE α0 mem0 :
   code_at G pc0 (ILabel plf ::
@@ -2697,8 +2507,6 @@ Lemma internal_prologue_run Cf gps2 tmemIn (regsIn : Register.t) pc0 plf ne
                                 -> False),
             forall b0, α0 Cf b0 <> Some fbN
           & fbN <> 1],
-        (* the body frame now has TWO linkage slots: the caller's R_SP and the
-           saved argument.  The inherited scratch is saved by the WRAPPER. *)
         [/\ Memory.load tmemOut (Cf, fbN, 0%Z)
               = Some (Register.get R_SP regsIn),
             Memory.load tmemOut (Cf, fbN, 1%Z)
@@ -2765,7 +2573,6 @@ Proof.
       Memory.load tmem2 (Cf, fbN, o) = Some Undef.
   { move=> o Ho. apply: memory_load_after_alloc_in Halloc _.
     rewrite Nat2Z.id. exact: Ho. }
-  (* push R_AUX1 : slot 0 := saved SP *)
   have [tmem3 Hst3] := Memory.store_after_load _ _ _
       (Register.get R_AUX1 regs5) (HldN 0%Z (ltac:(lia))).
   have HSP5 : Register.get R_SP regs5 = Ptr (Cf, fbN, 0%Z)
@@ -2778,9 +2585,6 @@ Proof.
                 Hc3 HSP5 HONE5 (HpcX 4) Hst3.
   set regs6 := Register.set R_SP (Ptr (Cf, fbN, (0 + 1)%Z)) regs5 in S45.
   have Hc4 := code_at_tail (code_at_tail Hc3).
-  (* push R_ARG : slot 1 := saved argument.  The body no longer saves the
-     component's scratch cell — that moved to the wrapper — so the frame has
-     TWO linkage slots and R_SP lands at [0+1+1]. *)
   have Hld2 : Memory.load tmem3 (Cf, fbN, (0 + 1)%Z) = Some Undef.
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hst3);
       last by move=> EE; inversion EE.
@@ -2796,7 +2600,6 @@ Proof.
   set regs9 := Register.set R_SP (Ptr (Cf, fbN, (0 + 1 + 1)%Z)) regs6
     in S1011.
   have Hc10 := code_at_tail (code_at_tail Hc4).
-  (* IMov R_COM R_ARG *)
   have S12 := step_mov G gps2 tmem5 regs9 _ R_COM R_ARG _ Hc10.
   set regsF := Register.set R_ARG (Register.get R_COM regs9) regs9 in S12.
   have HgARG8 : Register.get R_ARG regs6 = Register.get R_ARG regsIn
@@ -2872,8 +2675,6 @@ Proof.
       move=> E. by case: (HneCur E).
 Qed.
 
-(* KS_InternalReturn: drain, run the epilogue (restores the caller's scratch
-   cell), stack-return to the internal call site, pop the saved R_RA. *)
 Lemma diagram_return_int α scrs C stk mem k' v oldarg arg gps tmem tregs pc fb
       prot temps plm rest cap :
   val_inv p tp α scrs C (S.CS.Frame C oldarg k' :: stk) mem Kstop v arg
@@ -2890,13 +2691,9 @@ Proof.
   case: (cont_match_stop_inv Hcm') => [Erest Etemps]. subst rest1 temps.
   inversion Hstack; subst; last by congruence.
   move: H2. rewrite Hplm. case=> Eplm. subst plm0.
-  (* NO scratch writeback here any more: an INTRA return restores nothing (the
-     save/restore lives in the wrapper), so the epilogue leaves memory alone. *)
-  (* the epilogue: 5 steps, lands at the internal return site *)
   have [tregs1 [Sepi HCOM1 HONE1 HSP1 HARG1]] :=
     epilogue_run _ gps0 _ _ _ _ ret _ _
                  HcD Ec HSP HONE H6 H7 H3.
-  (* pop the saved (junk) R_RA *)
   have Hjunk1 : Memory.load tmem (Pointer.component pc, fb',
                   (Z.of_nat (2 + size temps' + 1) - 1)%Z) = Some junkRA.
   { have -> : (Z.of_nat (2 + size temps' + 1) - 1)%Z
@@ -2904,7 +2701,6 @@ Proof.
     assumption. }
   have Ppop := exec_pop_plus gps0 tmem tregs1 ret R_RA _ _ _ _ _
                  H4 HSP1 HONE1 H3 Hjunk1.
-  (* the transit map passes through UNCHANGED: an intra return restores nothing *)
   exists scrs, tmem,
          (Register.set R_RA junkRA
             (Register.set R_SP
@@ -2934,8 +2730,6 @@ Proof.
     + by rget.
     + by rewrite !Pointer.inc_preserves_component H3.
     + exact: code_at_tail (code_at_tail H4).
-    (* NB [SM_internal]'s inversion auto-names all shifted down by one when it
-       lost its scratch load, so these are matched by TYPE, not by number. *)
     + assumption.
     + exact: Huniq.
     + assumption.
@@ -2948,9 +2742,6 @@ Proof.
     + exact: Hmnf.
 Qed.
 
-(* Resuming a suspended EXTERNAL caller after IReturn lands on its ICall
-   continuation: re-establish R_ONE, reload R_SP from the scratch transit
-   cell, pop the saved argument and the junk R_RA. Seven silent steps. *)
 Lemma icall_resume_run C'' gps' tmem1 regs0 icall_ret rest'' fb''
       (temps'' : seq value) targ junkRA'' :
   code_at G icall_ret
@@ -3033,11 +2824,6 @@ Proof.
     + exact: code_at_tail (code_at_tail Hc3).
 Qed.
 
-(* Crossing the external-entry glue on return: pop its linkage and IReturn
-   with the ERet event. Handles both the standard and main's dual entry. *)
-(* The wrapper's epilogue now RESTORES the inherited scratch before popping the
-   frame, so this run writes memory: [tmem1] → [tmem2].  Mirror image of the
-   internal-return diagram, which lost exactly this store. *)
 Lemma ef_cross_run Cc gps1 tmem1 tmem2 regs1 jal_ret fbE spE (i : Z) pc' vscr :
   ext_frame_match G tmem1 Cc fbE jal_ret spE ->
   Register.get R_SP regs1 = Ptr (Cc, fbE, spE) ->
@@ -3061,8 +2847,7 @@ Proof.
   inversion Hef as [fbE0 jr0 v0 v1 v2 Hjc0 HcodeE Hl0 Hl1 Hl2
                    |fbE0 jr0 lret v0 v1 v2 z Hjc0 HcodeE Hl0 Hl1 Hl2 Hl3 Hz];
     subst.
-  - (* EF_std: pop R_RA (slot 2) ; pop R_AUX1 (slot 1) ; store_arg ;
-       pop R_SP (slot 0, after the store) ; IReturn *)
+  -
     have Evs : vscr = v1 by congruence.
     subst vscr.
     have SA := exec_pop _ _ _ _ _ R_RA _ _ _ _ _ HcodeE HSP HONE erefl Hl2.
@@ -3074,14 +2859,12 @@ Proof.
     have HONEA : Register.get R_ONE regsA = Int 1 by rget.
     have HpcA : Pointer.component pcA = Pointer.component jal_ret
       by rewrite /pcA !Pointer.inc_preserves_component.
-    (* pop R_AUX1 : the inherited scratch this wrapper saved on entry *)
     have SB := exec_pop _ _ _ _ _ R_AUX1 _ _ _ _ _ HcA HSPA HONEA HpcA Hl1.
     set regsB := Register.set R_AUX1 v1 _ in SB.
     set pcB := Pointer.inc (Pointer.inc pcA) in SB.
     have HcB := code_at_tail (code_at_tail HcA).
     have HpcB : Pointer.component pcB = Pointer.component jal_ret
       by rewrite /pcB /pcA !Pointer.inc_preserves_component.
-    (* store_arg : put it back into the component's scratch cell *)
     have HgB : Register.get R_AUX1 regsB = v1 by rget.
     have Hst' : Memory.store tmem1 (Pointer.component jal_ret, 1, 0%Z)
                   (Register.get R_AUX1 regsB) = Some tmem2 by rewrite HgB.
@@ -3095,7 +2878,6 @@ Proof.
     have HONEC : Register.get R_ONE regsC = Int 1 by rget.
     have HpcC : Pointer.component pcC = Pointer.component jal_ret
       by rewrite /pcC /pcB /pcA !Pointer.inc_preserves_component.
-    (* pop R_SP : the caller's frame pointer, read AFTER the store *)
     have Hl0' : Memory.load tmem2 (Pointer.component jal_ret, fbE, 0%Z) = Some v0.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) //.
       by move=> E; inversion E; apply: HfbE1. }
@@ -3116,9 +2898,7 @@ Proof.
     eapply star_trans; [exact: (SB (pc' :: gps1)) | | by []].
     eapply star_trans; [exact: (SC (pc' :: gps1)) | | by []].
     eapply star_trans; [exact: (SD (pc' :: gps1)) | exact: star_one SE | by []].
-  - (* EF_main: pop R_ARG (marker, slot 3) ; pop R_RA (slot 2) ;
-       pop R_AUX1 (slot 1) ; store_arg ; pop R_SP (slot 0, after the store) ;
-       then the taken IBnz R_ARG over the IHalt *)
+  -
     have Evs : vscr = v1 by congruence.
     subst vscr.
     have SA := exec_pop _ _ _ _ _ R_ARG _ _ _ _ _ HcodeE HSP HONE erefl Hl3.
@@ -3139,14 +2919,12 @@ Proof.
     have HONEB : Register.get R_ONE regsB = Int 1 by rget.
     have HpcB : Pointer.component pcB = Pointer.component jal_ret
       by rewrite /pcB /pcA !Pointer.inc_preserves_component.
-    (* pop R_AUX1 : the inherited scratch *)
     have SBB := exec_pop _ _ _ _ _ R_AUX1 _ _ _ _ _ HcB HSPB HONEB HpcB Hl1.
     set regsBB := Register.set R_AUX1 v1 _ in SBB.
     set pcBB := Pointer.inc (Pointer.inc pcB) in SBB.
     have HcBB := code_at_tail (code_at_tail HcB).
     have HpcBB : Pointer.component pcBB = Pointer.component jal_ret
       by rewrite /pcBB /pcB /pcA !Pointer.inc_preserves_component.
-    (* store_arg : put it back *)
     have HgBB : Register.get R_AUX1 regsBB = v1 by rget.
     have Hst' : Memory.store tmem1 (Pointer.component jal_ret, 1, 0%Z)
                   (Register.get R_AUX1 regsBB) = Some tmem2 by rewrite HgBB.
@@ -3160,7 +2938,6 @@ Proof.
     have HONEBC : Register.get R_ONE regsBC = Int 1 by rget.
     have HpcBC : Pointer.component pcBC = Pointer.component jal_ret
       by rewrite /pcBC /pcBB /pcB /pcA !Pointer.inc_preserves_component.
-    (* pop R_SP : read AFTER the store *)
     have Hl0' : Memory.load tmem2 (Pointer.component jal_ret, fbE, 0%Z) = Some v0.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore) //.
       by move=> E; inversion E; apply: HfbE1. }
@@ -3168,7 +2945,6 @@ Proof.
     set regsC := Register.set R_SP v0 _ in SC.
     set pcC := Pointer.inc (Pointer.inc pcBC) in SC.
     have HcC := code_at_tail (code_at_tail HcBC).
-    (* the taken IBnz over the IHalt onto the ILabel lret *)
     case: (HcC) => [CpE [PcE [preE [postE [HgC HgP Ecode Eoff]]]]].
     have Huq := Huniq _ _ _ _ HgC HgP.
     set pre'' := preE ++ [:: IBnz R_ARG lret; IHalt].
@@ -3218,8 +2994,6 @@ Proof.
     eapply star_trans; [exact: star_one SE | exact: star_one SF | by []].
 Qed.
 
-(* KS_ExternalReturn: drain, epilogue, cross the EF entry (std or main
-   flavour), IReturn with the ERet event, resume the suspended caller. *)
 Lemma diagram_return_ext α scrs C Cf stk mem k'' i oldarg arg gps tmem tregs
       pc fb prot temps plm rest cap :
   val_inv p tp α scrs C (S.CS.Frame Cf oldarg k'' :: stk) mem Kstop (Int i)
@@ -3239,13 +3013,8 @@ Proof.
   inversion Hstack; subst; first by congruence.
   have Hjc : Pointer.component jal_ret = Pointer.component pc
     by inversion H5.
-  (* the scratch writeback is now performed by the WRAPPER, inside
-     [ef_cross_run] — the body epilogue leaves memory alone *)
   have [w0 Hw0] := Hall _ Hdom.
   have [tmem1 Hstore] := Memory.store_after_load _ _ _ vscr Hw0.
-  (* the epilogue: lands at jal_ret with the EF-frame pointer in R_SP.
-     [H7]/[H9] are the BODY frame's slots 0 and 1; [H8] is the WRAPPER's slot 1
-     (the inherited scratch), which [ef_cross_run] consumes below. *)
   have [tregs1 [Sepi HCOM1 HONE1 HSP1 HARG1]] :=
     epilogue_run _ (icall_ret :: gps0) _ _ _ _ jal_ret _ _
                  HcD Ec HSP HONE H7 H9 Hjc.
@@ -3255,7 +3024,6 @@ Proof.
     ef_cross_run (Pointer.component pc) gps0 tmem tmem1 tregs1 jal_ret fbE spE
                  i icall_ret vscr H5 HSP1 HONE1 HCOMi Huniq HneCf
                  (proj1 H6) H8 Hstore.
-  (* resume the caller *)
   have HCOMinv : Register.get R_COM (Register.invalidate regs2) = Int i.
   { by rewrite /Register.invalidate HCOM2 /Register.get mkfmapE /=. }
   have Htr1 : Memory.load tmem1 (Pointer.component icall_ret, 1, 0%Z)
@@ -3278,7 +3046,6 @@ Proof.
     icall_resume_run (Pointer.component icall_ret) gps0 tmem1
                      (Register.invalidate regs2) icall_ret rest'' fb''
                      temps'' targ junkRA H11 erefl Htr1 Hta1 Hjk1.
-  (* assemble the run; its trace is the single ERet event *)
   have Stotal : star CS.step G
       ([:: jal_ret, icall_ret & gps0], tmem, tregs, pc)
       [:: ERet (Pointer.component pc) i (Pointer.component icall_ret)]
@@ -3338,9 +3105,6 @@ Proof.
   - exact: Hmnf.
 Qed.
 
-(* KS_InternalCall: drain, push the return address, IJal to the callee's
-   entry label (label resolution across the compiled program), run the
-   internal prologue on a fresh frame, and suspend the caller. *)
 Lemma diagram_call_int α scrs C stk mem k P v arg gps tmem tregs pc fb prot
       temps plm rest cap P_expr :
   val_inv p tp α scrs C stk mem (Kcall C P k) (Int v) arg gps tmem tregs pc
@@ -3359,14 +3123,12 @@ Proof.
   case: (cont_match_call_inv Hcm') => [[tl [rest0 [_ Htl Erest Hk]]]
                                       |[rest0 [Hne _ _]]]; last by [].
   subst rest1.
-  (* the label resolution *)
   case: (compiled_jal_resolution Hwf_p Hcompile) => [labels [cenv1 [Egen HRES]]].
   have Elab : labelsP p = labels by rewrite /labelsP Egen.
   move: Hfind. rewrite /Source.find_procedure.
   case HgC: (getm (Source.prog_procedures p) C) => [Cprocs|] //. move=> HgP.
   rewrite Elab in Hplm.
   have HRES' := HRES _ _ _ _ _ _ HgC HgP Hplm Htl Hdom.
-  (* push the return address *)
   have [wRA HwRA] : exists w,
       Memory.load tmem (C, fb, Z.of_nat (2 + size temps)) = Some w.
   { apply: Hcap. move: Hbud => /=. lia. }
@@ -3403,7 +3165,6 @@ Proof.
     => [bodyc [sA [sB [Ebody Erest]]]].
   subst restP.
   have HcP := code_at_tail HcE.
-  (* register facts entering the prologue *)
   have Ecom := val_inject_int_l _ _ _ Hcom.
   have HSP2 : Register.get R_SP regs2
               = Ptr (C, fb, (Z.of_nat (2 + size temps) + 1)%Z)
@@ -3414,7 +3175,6 @@ Proof.
     by rewrite /regs2 /regs1; rget.
   have HARG2 : Register.get R_ARG regs2 = Register.get R_ARG tregs
     by rewrite /regs2 /regs1; rget.
-  (* IMov R_SP R_AUX1 *)
   have S1 : CS.step G (Pointer.inc pcJ :: gps, tmem1, regs2, Pointer.inc pcE)
             E0 (Pointer.inc pcJ :: gps, tmem1,
                 Register.set R_AUX1 (Register.get R_SP regs2) regs2,
@@ -3422,7 +3182,6 @@ Proof.
   { exact: step_mov HcP. }
   set regs3 := Register.set R_AUX1 (Register.get R_SP regs2) regs2 in S1.
   have Hc1 := code_at_tail HcP.
-  (* IConst frame-size R_SP *)
   have S2 : CS.step G (Pointer.inc pcJ :: gps, tmem1, regs3,
                        Pointer.inc (Pointer.inc pcE)) E0
             (Pointer.inc pcJ :: gps, tmem1,
@@ -3433,7 +3192,6 @@ Proof.
   set regs4 := Register.set R_SP (Int (Z.of_nat (4 + stack_need P_expr)))
                  regs3 in S2.
   have Hc2 := code_at_tail Hc1.
-  (* the fresh frame *)
   have Hmem1 : mem_inject α mem tmem1.
   { apply: store_outside_inject Hmem _ Hst1.
     move=> b0 /=. exact: (proj2 Hpriv). }
@@ -3479,12 +3237,10 @@ Proof.
     - rewrite /=. exact: Halloc. }
   set regs5 := Register.set R_SP (Ptr ptrN) regs4 in S3.
   have Hc3 := code_at_tail Hc2.
-  (* frame cells are loadable *)
   have HldN : forall (o : Z), (0 <= o < Z.of_nat (4 + stack_need P_expr))%Z ->
       Memory.load tmem2 (C, fbN, o) = Some Undef.
   { move=> o Ho. apply: memory_load_after_alloc_in Halloc _.
     rewrite Nat2Z.id. exact: Ho. }
-  (* push R_AUX1 : slot 0 := saved SP *)
   have [tmem3 Hst3] := Memory.store_after_load _ _ _
       (Register.get R_AUX1 regs5) (HldN 0%Z (ltac:(lia))).
   have HSP5 : Register.get R_SP regs5 = Ptr (C, fbN, 0%Z)
@@ -3500,10 +3256,6 @@ Proof.
                 _ _ _ tmem3 Hc3 HSP5 HONE5 HpcE4 Hst3'.
   set regs6 := Register.set R_SP (Ptr (C, fbN, (0 + 1)%Z)) regs5 in S45.
   have Hc4 := code_at_tail (code_at_tail Hc3).
-  (* push R_ARG : slot 1 := saved argument.  The body no longer saves the
-     component's scratch cell here — [load_arg scr R_AUX1; push R_AUX1] moved to
-     the wrapper (see the note on [compile_proc]), so the frame has just TWO
-     linkage slots and R_SP lands at [0+1+1]. *)
   have Hld2 : Memory.load tmem3 (C, fbN, (0 + 1)%Z) = Some Undef.
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hst3);
       last by move=> E; inversion E.
@@ -3520,11 +3272,9 @@ Proof.
   set regs9 := Register.set R_SP (Ptr (C, fbN, (0 + 1 + 1)%Z)) regs6
     in S1011.
   have Hc10 := code_at_tail (code_at_tail Hc4).
-  (* IMov R_COM R_ARG *)
   have S12 := step_mov G (Pointer.inc pcJ :: gps) tmem5 regs9 _ R_COM R_ARG
                 _ Hc10.
   set regsF := Register.set R_ARG (Register.get R_COM regs9) regs9 in S12.
-  (* preservation of old cells across the whole prologue *)
   have HneN : forall C1 b1, Memory.load tmem (C1, b1, 0%Z) = Some w1 \/ True ->
       True by [].
   clear HneN.
@@ -3545,7 +3295,6 @@ Proof.
   have HneOld : forall C1 b1, Memory.load tmem (C1, b1, 0%Z) = Some w1 ->
       True by [].
   clear HneOld.
-  (* fresh-frame disjointness from everything old *)
   have HfrN : forall C1 b1 (o : Z) w,
       Memory.load tmem (C1, b1, o) = Some w ->
       (C1, b1) <> (C, fbN) :> (Component.id * Block.id).
@@ -3554,7 +3303,6 @@ Proof.
     rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hst1);
       last by move=> EE; inversion EE; case: HfbNfb.
     exact: Hl. }
-  (* the new frame's linkage cells *)
   have Hslot0 : Memory.load tmem5 (C, fbN, 0%Z)
                 = Some (Ptr (C, fb, Z.of_nat (2 + size temps + 1))).
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hst5);
@@ -3564,14 +3312,12 @@ Proof.
     { rewrite /regs5 /regs4 /regs3 HSP2. rget.
       congr Ptr. congr (_, _). lia. }
     exact: Memory.load_after_store_eq Hst3. }
-  (* slot 1 is now the saved ARGUMENT (the scratch slot moved to the wrapper) *)
   have Hslot1 : Memory.load tmem5 (C, fbN, 1%Z)
                 = Some (Register.get R_ARG tregs).
   { have -> : Register.get R_ARG tregs = Register.get R_ARG regs6.
     { by rewrite /regs6 /regs5 /regs4 /regs3 /regs2 /regs1; rget. }
     have -> : (1%Z) = (0 + 1)%Z by [].
     exact: Memory.load_after_store_eq Hst5. }
-  (* final register facts *)
   have HONEF : Register.get R_ONE regsF = Int 1.
   { by rewrite /regsF /regs9 /regs6 /regs5 /regs4 /regs3
             /regs2 /regs1; rget. }
@@ -3580,7 +3326,6 @@ Proof.
   have HARGF : Register.get R_ARG regsF = Int v.
   { rewrite /regsF register_get_set_eq /regs9 /regs6 /regs5
             /regs4 /regs3 /regs2 /regs1. rget. exact: Ecom. }
-  (* assemble *)
   eexists tmem5, regsF, _, (Pointer.inc pcJ :: gps), bodyc,
           (pop R_ARG ++ pop R_SP ++ [:: IJump]), sA, sB, fbN.
   split.
@@ -3639,7 +3384,7 @@ Proof.
         case: (stack_match_prot_loadable _ _ _ _ _ _ _ _ _ _ _ _
                  Hstack Hin) => [o [w Hl]].
         exact: (HfrN _ _ _ _ Hl erefl).
-    + (* the pushed SM_internal level *)
+    +
       apply: (SM_internal _ _ _ _ _ _ _ fb _ _ _ arg
                 (Register.get R_ARG tregs) k rest0 temps plm
                 (Pointer.inc pcJ) (Register.get R_RA tregs) cap).
@@ -3651,13 +3396,13 @@ Proof.
       * exact: Hslot1.
       * exact: HARG.
       * exact: Hpriv.
-      * (* the caller's temps survive *)
+      *
         move=> i Hi. apply: Ltr5 (Htemps i Hi) _ _.
         -- move=> EE.
            have := f_equal (fun q : Pointer.t => Pointer.offset q) EE.
            rewrite /=. lia.
         -- case=> E2. exact: (HfbNfb (esym E2)).
-      * (* the pushed R_RA *)
+      *
         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hst5);
           last by move=> EE; inversion EE; case: HfbNfb.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hst3);
@@ -3667,9 +3412,8 @@ Proof.
         { case=> E2. exact: (HfbNfb (esym E2)). }
         rewrite (memory_load_after_alloc _ _ _ _ _ _ _ _ Halloc HpairN).
         exact: Memory.load_after_store_eq Hst1.
-      * (* the caller's cap *)
+      *
         move=> j Hj. case: (Hcap j Hj) => w Hw.
-        (* the RA slot may have been overwritten: use loadability *)
         rewrite (Memory.load_after_store _ _ _ _ (C, fb, j) Hst5).
         case: ifP => _; first by eexists.
         rewrite (Memory.load_after_store _ _ _ _ (C, fb, j) Hst3).
@@ -3681,7 +3425,7 @@ Proof.
       * move: Hbud => /=. lia.
       * exact: Hprot.
       * exact: HfbNfb.
-      * (* the tail, at the recorded-write map *)
+      *
         have Hstk5 : stack_match G (labelsP p) α tmem5 scrs C fb prot stk gps.
         { have Hs1 : stack_match G (labelsP p) α tmem1 scrs C fb prot stk gps.
           { apply: stack_match_store Hstack Hst1 Hprot _.
@@ -3703,14 +3447,10 @@ Proof.
             move=> E. by case: (HcurN E). }
           apply: stack_match_store Hs3 Hst5 HnpN _.
           move=> E. by case: (HcurN E). }
-        (* [SM_internal] no longer rewrites [scrs], so the tail is verbatim *)
         exact: Hstk5.
     + exact: Hmnf.
 Qed.
 
-(* KS_ExternalCall: drain, push the linkage, store the transit pointer,
-   ICall (the ECall event), cross the callee's external entry, run the
-   internal prologue, and suspend the caller externally. *)
 Lemma diagram_call_ext α scrs C Cf stk mem k P v arg gps tmem tregs pc fb
       prot temps plm rest cap P_expr :
   val_inv p tp α scrs C stk mem (Kcall Cf P k) (Int v) arg gps tmem tregs pc
@@ -3735,7 +3475,6 @@ Proof.
     first by case: HneCf; rewrite EC.
   subst rest1.
   have Ecom := val_inject_int_l _ _ _ Hcom.
-  (* push R_RA *)
   have [wRA HwRA] : exists w,
       Memory.load tmem (C, fb, Z.of_nat (2 + size temps)) = Some w.
   { apply: Hcap. move: Hbud => /=. slia. }
@@ -3752,7 +3491,6 @@ Proof.
          ++ ICall Cf P :: IConst (IInt 1) R_ONE
          :: reload_sp (scr C) ++ pop R_ARG ++ pop R_RA ++ rest0).
   { exact: code_at_tail (code_at_tail HcD). }
-  (* push R_ARG *)
   have HcapA : frame_cap tmemA C fb cap.
   { exact: frame_cap_store Hcap HstA. }
   have [wAR HwAR] : exists w,
@@ -3773,7 +3511,6 @@ Proof.
   have HpcB : Pointer.component pcB = C
     by rewrite /pcB !Pointer.inc_preserves_component Ec.
   have HcB := code_at_tail (code_at_tail HcA).
-  (* store_arg : the transit pointer *)
   have Hn1fb : forall (C1 : Component.id) (o1 o2 : Z),
       (C, fb, o1) <> (C1, 1, o2) :> Pointer.t.
   { move=> C1 o1 o2 E. inversion E. by case: Hpriv => + _; apply. }
@@ -3796,7 +3533,6 @@ Proof.
   have Etransit : transit
                   = Ptr (C, fb, (Z.of_nat (2 + size temps) + 1 + 1)%Z)
     by rewrite /transit /regs2; rget.
-  (* the ICall: interface and entry point *)
   have Eintf : genv_interface G = Source.prog_interface p.
   { by rewrite /G /prepare_global_env /=
        (compilation_preserves_interface _ _ Hcompile). }
@@ -3808,7 +3544,6 @@ Proof.
   { case: Hexp => CI' [HhasC' _].
     rewrite (compilation_preserves_interface _ _ Hcompile).
     by rewrite mem_domm HhasC'. }
-  (* the callee's compiled code and entry point *)
   move: (Hfind). rewrite /Source.find_procedure.
   case HgCf: (getm (Source.prog_procedures p) Cf) => [CprocsF|] //.
   move=> HgPf.
@@ -3833,7 +3568,6 @@ Proof.
   { apply: step_call HcC _ _ HEP HCOM3.
     - by rewrite HpcC.
     - by rewrite HpcC. }
-  (* the callee's entry label exists *)
   have [plf Hplf] : exists plf, getm plmf P = Some plf.
   { move: Hcp.
     rewrite /compile_proc /find_proc_label /= /Comp.bind /Comp.lift.
@@ -3846,7 +3580,6 @@ Proof.
     => [labels2 [cenv2 [Egen2 HRES]]].
   move: Egen2. rewrite Egen. case=> E1' E2'. subst labels2 cenv2.
   have HRES' := HRES _ _ _ _ _ _ HgCf HgPf Hplmf Hplf HCfdom.
-  (* the caller-side memory relation and preserved loads up to tmemC *)
   have HmemC : mem_inject α mem tmemC.
   { have HmemA : mem_inject α mem tmemA.
     { apply: store_outside_inject Hmem _ HstA.
@@ -3863,8 +3596,6 @@ Proof.
       last by move=> EE; inversion EE; apply: HneCf.
     rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb _ _ _) HstB).
     by rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb _ _ _) HstA). }
-  (* transport of arbitrary old cells to tmemC (outside the two frame slots
-     and the caller's scratch cell) *)
   have LtrC : forall C1 b1 (o : Z) w,
       Memory.load tmem (C1, b1, o) = Some w ->
       (C1, b1, o) <> (C, fb, Z.of_nat (2 + size temps)) ->
@@ -3881,7 +3612,7 @@ Proof.
     exact: Hl. }
   case Hmain: (Component.eqb Cf Component.main && Procedure.eqb P
                  Procedure.main).
-  - (* main-callee: dual entry with the flag *)
+  -
     move: (Hmain) => /andP [/PeanoNat.Nat.eqb_eq ECf /PeanoNat.Nat.eqb_eq EP].
     subst Cf P.
     have Hfin : immediately_final P_expr = false.
@@ -3955,8 +3686,6 @@ Proof.
     set regsG5 := Register.set R_SP (Ptr (Component.main, fbE, (0 + 1)%Z))
                     regsG4 in F56.
     have Hd6 := code_at_tail (code_at_tail Hd4).
-    (* load_arg scr R_AUX1 : the WRAPPER now saves the inherited scratch (this
-       moved here from the body's prologue — see the note on [compile_proc]) *)
     have HwE1 : Memory.load tmemE1 (Component.main, 1, 0%Z) = Some wf.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
         last by move=> EE; inversion EE; exact: HfbE1.
@@ -3971,7 +3700,6 @@ Proof.
                      (Register.set R_AUX1 (Ptr (scr Component.main)) regsG5)
       in F67.
     have Hd6b := code_at_tail (code_at_tail Hd6).
-    (* push R_AUX1 : slot 1 := the inherited scratch *)
     have HldE1 : Memory.load tmemE1 (Component.main, fbE, (0 + 1)%Z)
                  = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
@@ -3990,7 +3718,6 @@ Proof.
     set regsG5c := Register.set R_SP
                      (Ptr (Component.main, fbE, (0 + 1 + 1)%Z)) regsG5b in F67b.
     have Hd6c := code_at_tail (code_at_tail Hd6b).
-    (* push R_RA : slot 2 *)
     have HldE2ra : Memory.load tmemE1b (Component.main, fbE, (0 + 1 + 1)%Z)
                    = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1b);
@@ -4012,7 +3739,6 @@ Proof.
                     (Ptr (Component.main, fbE, (0 + 1 + 1 + 1)%Z))
                     regsG5c in F78.
     have Hd8 := code_at_tail (code_at_tail Hd6c).
-    (* the flag test: IConst flag-ptr; ILoad; push the marker *)
     have M9 := step_const G (Pointer.inc pcC :: gps) tmemE2 regsG6 _
                  (IPtr (flag_buf_ptr (scr Component.main))) R_AUX1 _ Hd8.
     set regsM9 := Register.set R_AUX1
@@ -4069,7 +3795,6 @@ Proof.
                      (Ptr (Component.main, fbE, (0 + 1 + 1 + 1 + 1)%Z)) regsM10
       in M1112.
     have Hd12 := code_at_tail (code_at_tail Hd10).
-    (* the taken IBnz over the initial-run constant *)
     have Huq0 := Huniq _ _ _ _ HgB HgBE.
     set pre14 := ([:: IConst (IInt 1) R_ONE; IMov R_SP R_AUX1;
                       IConst (IInt (Z.of_nat (4 + stack_need P_expr))) R_SP;
@@ -4137,7 +3862,6 @@ Proof.
                   (IInt 1) R_AUX2 _ HdL1.
     set regsM15 := Register.set R_AUX2 (Int 1) regsM12 in M15.
     have HdL2 := code_at_tail HdL1.
-    (* re-store the flag *)
     have HflagE3 : Memory.load tmemE3 (Component.main, 1, (0 + 1)%Z)
                    = Some (Int 1).
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE3);
@@ -4156,7 +3880,6 @@ Proof.
                   R_AUX1 R_AUX2 _ (flag_buf_ptr (scr Component.main)) tmemE4
                   HdL2 HgA1M15 (ltac:(by [])) HstE4'.
     have HdL3 := code_at_tail HdL2.
-    (* IJal pl *)
     case: (HRES' (Pointer.inc (Pointer.inc (Pointer.inc
              (Component.main, bE, Z.of_nat (size pre14)))))
              (ltac:(by rewrite !Pointer.inc_preserves_component)))
@@ -4187,7 +3910,6 @@ Proof.
       move: (code_at_tail HdL3).
       rewrite /jal_ret.
       by do 12!rewrite -?catA ?cat_cons ?cat0s ?cats0. }
-    (* the landing and the internal prologue *)
     have Huq := Huniq _ _ _ _ HgBJ HgCdJ.
     case: (compile_proc_after_label _ _ _ _ _ _ _ _ _ _ HcpJ Hplf HdecJ Huq)
       => [bodycJ [sAJ [sBJ [EbodyJ ErestJ]]]].
@@ -4247,7 +3969,6 @@ Proof.
            [Sprol [HmemF Hwscr HfreshN HavoidN HfbN1]
              [Hslot0 Hslot1 LtrN]
              [RONEF RSPF RARGF RCOMF] [HpcF HcF HcapN Hsmtr]]]]]]].
-    (* register values entering the prologue *)
     have HgSP17 : Register.get R_SP regsM17
                   = Ptr (Component.main, fbE, (0 + 1 + 1 + 1 + 1)%Z)
       by rewrite /regsM17 /regsM15 /regsM12 /Register.get /Register.set
@@ -4256,8 +3977,6 @@ Proof.
     { rewrite -HCOMinv /regsM17 /regsM15 /regsM12 /regsM10 /regsM9 /regsG6
               /regsG5c /regsG5b /regsG5 /regsG4 /regsG3 /regsG2 /regsG1
               /Register.get /Register.set !setmE /=. by []. }
-    (* the callee's EF-frame slots survive into tmemF.  FOUR of them now:
-       caller R_SP, the INHERITED SCRATCH, R_RA, and the context marker. *)
     have HldEF0 : Memory.load tmemE4 (Component.main, fbE, 0%Z)
                   = Some (Register.get R_AUX1 regsG4).
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE4);
@@ -4310,7 +4029,6 @@ Proof.
     have HldF3 : Memory.load tmemF (Component.main, fbE, (0 + 1 + 1 + 1)%Z)
                  = Some (Int 1).
     { exact: LtrN HldEF3 HpairEN. }
-    (* transports of old cells to tmemF; the flag cell is special-cased *)
     have LtrEF : forall C1 b1 (o : Z) w,
         Memory.load tmemC (C1, b1, o) = Some w ->
         (C1, b1) <> (Component.main, fbE) :> (Component.id * Block.id) ->
@@ -4412,7 +4130,6 @@ Proof.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb _ _ _) HstB).
       by rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb _ _ _)
                     HstA). }
-    (* the assembled run *)
     have Hplus : plus CS.step G (gps, tmem, tregs, pc)
         [:: ECall (Pointer.component pcC) Procedure.main v Component.main]
         (jal_ret :: Pointer.inc pcC :: gps, tmemF, regsF, pcF).
@@ -4535,7 +4252,6 @@ Proof.
           => //.
       * split; [exact: HfbE1 | exact: HavoidE].
       * by rewrite Hslot0 HgSP17.
-      (* the WRAPPER frame's slot 1 is the inherited scratch [wscr] *)
       * have -> : (1%Z) = (0 + 1)%Z by [].
         rewrite HldF1 Ew /regsG5b /Register.get /Register.set setmE /=.
         by [].
@@ -4639,28 +4355,24 @@ Proof.
              by apply/eqP => E; apply: HneCf; rewrite E.
            exact: Hget.
     + by [].
-  - (* standard callee *)
+  -
     case: (compile_proc_shape_std _ _ _ _ _ _ _ _ Hcp Hplf Hmain)
       => [bodyc0 [sA0 [sB0 [Ebody0 Ecd]]]].
     rewrite Ecd in HcE0.
     set regsI := Register.invalidate regs3 in Scall HCOMinv.
-    (* IConst 1 R_ONE *)
     have F1 := step_const G (Pointer.inc pcC :: gps) tmemC regsI _ (IInt 1)
                  R_ONE _ HcE0.
     set regsG1 := Register.set R_ONE (Int 1) regsI in F1.
     have Hd1 := code_at_tail HcE0.
-    (* IMov R_SP R_AUX1 *)
     have F2 := step_mov G (Pointer.inc pcC :: gps) tmemC regsG1 _ R_SP R_AUX1
                  _ Hd1.
     set regsG2 := Register.set R_AUX1 (Register.get R_SP regsG1) regsG1 in F2.
     have Hd2 := code_at_tail Hd1.
-    (* IConst frame R_SP *)
     have F3 := step_const G (Pointer.inc pcC :: gps) tmemC regsG2 _
                  (IInt (Z.of_nat (4 + stack_need P_expr))) R_SP _ Hd2.
     set regsG3 := Register.set R_SP
                     (Int (Z.of_nat (4 + stack_need P_expr))) regsG2 in F3.
     have Hd3 := code_at_tail Hd2.
-    (* IAlloc : the EF frame *)
     have [cmf Hcmf] : exists cm, getm tmemC Cf = Some cm.
     { move: HwfC. rewrite /Memory.load /=.
       case: (getm tmemC Cf) => // cm _. by exists cm. }
@@ -4699,7 +4411,6 @@ Proof.
         Memory.load tmemD (Cf, fbE, o) = Some Undef.
     { move=> o Ho. apply: memory_load_after_alloc_in HallocE _.
       rewrite Nat2Z.id. exact: Ho. }
-    (* push R_AUX1 : slot 0 *)
     have [tmemE1 HstE1] := Memory.store_after_load _ _ _
         (Register.get R_AUX1 regsG4) (HldE 0%Z (ltac:(slia))).
     have HSPG4 : Register.get R_SP regsG4 = Ptr (Cf, fbE, 0%Z)
@@ -4711,7 +4422,6 @@ Proof.
                   _ _ _ _ tmemE1 Hd4 HSPG4 HONEG4 (ltac:(by [])) HstE1.
     set regsG5 := Register.set R_SP (Ptr (Cf, fbE, (0 + 1)%Z)) regsG4 in F56.
     have Hd6 := code_at_tail (code_at_tail Hd4).
-    (* load_arg scr R_AUX1 : the wrapper saves the inherited scratch *)
     have HwE1 : Memory.load tmemE1 (Cf, 1, 0%Z) = Some wf.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
         last by move=> EE; inversion EE; exact: HfbE1.
@@ -4725,7 +4435,6 @@ Proof.
     set regsG5b := Register.set R_AUX1 wf
                      (Register.set R_AUX1 (Ptr (scr Cf)) regsG5) in F67.
     have Hd6b := code_at_tail (code_at_tail Hd6).
-    (* push R_AUX1 : slot 1 := the inherited scratch *)
     have HldE1 : Memory.load tmemE1 (Cf, fbE, (0 + 1)%Z) = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
         last by move=> EE; inversion EE.
@@ -4742,7 +4451,6 @@ Proof.
     set regsG5c := Register.set R_SP (Ptr (Cf, fbE, (0 + 1 + 1)%Z)) regsG5b
       in F67b.
     have Hd6c := code_at_tail (code_at_tail Hd6b).
-    (* push R_RA : slot 2 *)
     have HldE2ra : Memory.load tmemE1b (Cf, fbE, (0 + 1 + 1)%Z) = Some Undef.
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1b);
         last by move=> EE; inversion EE; slia.
@@ -4761,7 +4469,6 @@ Proof.
     set regsG6 := Register.set R_SP (Ptr (Cf, fbE, (0 + 1 + 1 + 1)%Z)) regsG5c
       in F78.
     have Hd8 := code_at_tail (code_at_tail Hd6c).
-    (* IJal plf *)
     case: (HRES' (iter 12 Pointer.inc (Cf, bE, 0%Z)) (ltac:(by [])))
       => [bPJ [cdJ [extJ [restJ [CprocsBJ [HgBJ HgCdJ HdecJ HexJ HflJ]]]]]].
     case: HexJ => [s1J [s2J HcpJ]].
@@ -4786,7 +4493,6 @@ Proof.
          (pop R_ARG ++ pop R_SP ++ [:: IJump])))).
       move: (code_at_tail Hd8).
       by do 10!rewrite -?catA ?cat_cons ?cat0s ?cats0. }
-    (* the landing and the internal prologue *)
     have Huq := Huniq _ _ _ _ HgBJ HgCdJ.
     case: (compile_proc_after_label _ _ _ _ _ _ _ _ _ _ HcpJ Hplf HdecJ Huq)
       => [bodycJ [sAJ [sBJ [EbodyJ ErestJ]]]].
@@ -4833,15 +4539,12 @@ Proof.
            [Sprol [HmemF Hwscr HfreshN HavoidN HfbN1]
              [Hslot0 Hslot1 LtrN]
              [RONEF RSPF RARGF RCOMF] [HpcF HcF HcapN Hsmtr]]]]]]].
-    (* register values entering the prologue *)
     have HgSP7 : Register.get R_SP regsG7 = Ptr (Cf, fbE, (0 + 1 + 1 + 1)%Z)
       by rewrite /regsG7 /regsG6 /Register.get /Register.set !setmE /=.
     have HgCOM7 : Register.get R_COM regsG7 = Int v.
     { rewrite -HCOMinv /regsG7 /regsG6 /regsG5c /regsG5b /regsG5 /regsG4
               /regsG3 /regsG2 /regsG1 /Register.get /Register.set !setmE /=.
       by []. }
-    (* the callee's EF-frame slots survive into tmemF: caller R_SP, the
-       INHERITED SCRATCH, and R_RA *)
     have HldEF0 : Memory.load tmemE2 (Cf, fbE, 0%Z)
                   = Some (Register.get R_AUX1 regsG4).
     { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE2);
@@ -4871,7 +4574,6 @@ Proof.
     have HldF2 : Memory.load tmemF (Cf, fbE, (0 + 1 + 1)%Z)
                  = Some (Register.get R_RA regsG5c).
     { exact: LtrN HldEF2 HpairEN. }
-    (* transports of caller cells to tmemF *)
     have LtrEF : forall C1 b1 (o : Z) w,
         Memory.load tmemC (C1, b1, o) = Some w ->
         (C1, b1) <> (Cf, fbE) :> (Component.id * Block.id) ->
@@ -4948,7 +4650,6 @@ Proof.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb _ _ _) HstB).
       by rewrite (Memory.load_after_store_neq _ _ _ _ _ (Hn1fb _ _ _)
                     HstA). }
-    (* the assembled run *)
     have Hplus : plus CS.step G (gps, tmem, tregs, pc)
         [:: ECall (Pointer.component pcC) P v Cf]
         (jal_ret :: Pointer.inc pcC :: gps, tmemF, regsF, pcF).
@@ -5061,7 +4762,6 @@ Proof.
                   (Register.get R_RA regsG5c)) => //.
       * split; [exact: HfbE1 | exact: HavoidE].
       * by rewrite Hslot0 HgSP7.
-      (* the WRAPPER frame's slot 1 is the inherited scratch [wscr] *)
       * have -> : (1%Z) = (0 + 1)%Z by [].
         rewrite HldF1 Ew /regsG5b /Register.get /Register.set setmE /=.
         by [].
@@ -5152,10 +4852,6 @@ Proof.
     + by [].
 Qed.
 
-(* ==================== the initial bridge ==================== *)
-
-(* every block of the compiled global environment holds a procedure body of
-   the compiled program *)
 Lemma genv_block_code_inv Cx CprocsB b cd :
   getm (genv_procedures G) Cx = Some CprocsB ->
   getm CprocsB b = Some cd ->
@@ -5183,8 +4879,6 @@ Proof.
   exact: In_elementsm_getm HIn.
 Qed.
 
-(* every compiled procedure's labels are pairwise distinct: the entry label
-   was generated before the body's counter window opened *)
 Lemma compiled_uniq_labels Cx C_procs b P_code :
   getm (genv_procedures G) Cx = Some C_procs ->
   getm C_procs b = Some P_code ->
@@ -5214,13 +4908,11 @@ Proof.
   have Hlt := Hbnd _ _ Hpl0. lia.
 Qed.
 
-(* the initial renaming touches no scratch block *)
 Lemma init_scratch_priv : scratch_priv init_renaming.
 Proof.
   by move=> C' b0; rewrite /init_renaming; case: ifP.
 Qed.
 
-(* the compiled program's initial scratch and flag cells *)
 Lemma initial_scratch_cells C' :
   C' \in domm (Intermediate.prog_interface tp) ->
   Memory.load (Intermediate.prepare_procedures_memory tp) (C', 1, 0%Z)
@@ -5246,10 +4938,6 @@ Proof.
     by rewrite ?setmE /=.
 Qed.
 
-(* THE bridge: main's compiled dual entry runs from the target's initial
-   state, takes the initial (flag = Int 0) fall-through path, sets the flag,
-   jumps into the internal prologue, and lands on main's compiled body in a
-   state matching the source's initial state. *)
 Lemma start_bridge mexpr :
   Source.prog_main p = Some mexpr ->
   immediately_final mexpr = false ->
@@ -5261,7 +4949,6 @@ Lemma start_bridge mexpr :
          pcF fbN prot1 [::] plm1 c1 rest1 sA sB (4 + stack_need mexpr).
 Proof.
   move=> Hmain Hfin.
-  (* main's procedure, compiled code, and entry block *)
   move: (Hmain). rewrite /Source.prog_main /Source.find_procedure.
   case HgCm: (getm (Source.prog_procedures p) Component.main)
     => [CprocsM|] //= HgPm.
@@ -5286,7 +4973,6 @@ Proof.
   { apply: (Hentrypt CI HgCI).
     apply/orP; right.
     by rewrite Hmaintp !PeanoNat.Nat.eqb_refl. }
-  (* the initial state, unfolded *)
   have Einit : CS.initial_machine_state tp
     = ([::], Intermediate.prepare_procedures_memory tp, Register.init,
        (Component.main, bE, 0%Z)).
@@ -5297,7 +4983,6 @@ Proof.
       => [[mem procs] eps] /=.
     by move=> ->. }
   rewrite Einit.
-  (* the entry shape *)
   have [plf Hplf] : exists plf, getm plmf Procedure.main = Some plf.
   { move: Hcp.
     rewrite /compile_proc /find_proc_label /= /Comp.bind /Comp.lift.
@@ -5310,10 +4995,8 @@ Proof.
   have HcE0 : code_at G (Component.main, bE, 0%Z) cd.
   { exists CprocsB, cd, [::], [::]. split=> //. by rewrite cats0. }
   rewrite Ecd in HcE0.
-  (* the memory relation and the initial cells *)
   have Hmem0 := initial_mem_inject _ _ Hwf_p Hcompile.
   have [HwfM0 Hflag0] := initial_scratch_cells _ Hdom.
-  (* the shared 8-instruction entry: IConst R_ONE, frame alloc, two pushes *)
   have F1 := step_const G [::] (Intermediate.prepare_procedures_memory tp)
                Register.init _ (IInt 1) R_ONE _ HcE0.
   set regsG1 := Register.set R_ONE (Int 1) Register.init in F1.
@@ -5383,8 +5066,6 @@ Proof.
   set regsG5 := Register.set R_SP (Ptr (Component.main, fbE, (0 + 1)%Z))
                   regsG4 in F56.
   have Hd6 := code_at_tail (code_at_tail Hd4).
-  (* load_arg scr R_AUX1 : the wrapper saves the inherited scratch (Undef at
-     the initial state) *)
   have HwE1 : Memory.load tmemE1 (Component.main, 1, 0%Z) = Some Undef.
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
       last by move=> EE; inversion EE; exact: HfbE1.
@@ -5399,7 +5080,6 @@ Proof.
                    (Register.set R_AUX1 (Ptr (scr Component.main)) regsG5)
     in F67.
   have Hd6b := code_at_tail (code_at_tail Hd6).
-  (* push R_AUX1 : slot 1 := the inherited scratch *)
   have HldE1 : Memory.load tmemE1 (Component.main, fbE, (0 + 1)%Z)
                = Some Undef.
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1);
@@ -5418,7 +5098,6 @@ Proof.
   set regsG5c := Register.set R_SP (Ptr (Component.main, fbE, (0 + 1 + 1)%Z))
                    regsG5b in F67b.
   have Hd6c := code_at_tail (code_at_tail Hd6b).
-  (* push R_RA : slot 2 *)
   have HldE2ra : Memory.load tmemE1b (Component.main, fbE, (0 + 1 + 1)%Z)
                  = Some Undef.
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE1b);
@@ -5440,7 +5119,6 @@ Proof.
                   (Ptr (Component.main, fbE, (0 + 1 + 1 + 1)%Z))
                   regsG5c in F78.
   have Hd8 := code_at_tail (code_at_tail Hd6c).
-  (* the flag test: IConst flag-ptr; ILoad (Int 0); push the marker *)
   have M9 := step_const G [::] tmemE2 regsG6 _
                (IPtr (flag_buf_ptr (scr Component.main))) R_AUX1 _ Hd8.
   set regsM9 := Register.set R_AUX1
@@ -5493,12 +5171,10 @@ Proof.
                    (Ptr (Component.main, fbE, (0 + 1 + 1 + 1 + 1)%Z)) regsM10
     in M1112.
   have Hd12 := code_at_tail (code_at_tail Hd10).
-  (* the UNtaken IBnz: this is the initial run, the flag was Int 0 *)
   have HA2M12 : Register.get R_AUX2 regsM12 = Int 0
     by rewrite /regsM12 /regsM10 /Register.get /Register.set !setmE /=.
   have M13 := step_bnz_z G [::] tmemE3 regsM12 _ R_AUX2 lm _ Hd12 HA2M12.
   have Hd13 := code_at_tail Hd12.
-  (* main's initial argument *)
   have M14 := step_const G [::] tmemE3 regsM12 _ (IInt 0) R_COM _ Hd13.
   set regsM14 := Register.set R_COM (Int 0) regsM12 in M14.
   have Hd14 := code_at_tail Hd13.
@@ -5507,7 +5183,6 @@ Proof.
   have M16 := step_const G [::] tmemE3 regsM14 _ (IInt 1) R_AUX2 _ Hd15.
   set regsM16 := Register.set R_AUX2 (Int 1) regsM14 in M16.
   have Hd16 := code_at_tail Hd15.
-  (* flag := Int 1 *)
   have HflagE3 : Memory.load tmemE3 (Component.main, 1, (0 + 1)%Z)
                  = Some (Int 0).
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE3);
@@ -5526,7 +5201,6 @@ Proof.
                 (flag_buf_ptr (scr Component.main)) tmemE4
                 Hd16 HgA1M16 (ltac:(by [])) HstE4'.
   have Hd17 := code_at_tail Hd16.
-  (* IJal to the internal entry *)
   case: (compiled_jal_resolution Hwf_p Hcompile)
     => [labels2 [cenv2 [Egen2 HRES]]].
   move: Egen2. rewrite Egen. case=> E1' E2'. subst labels2 cenv2.
@@ -5557,7 +5231,6 @@ Proof.
     move: (code_at_tail Hd17).
     rewrite /jal_ret.
     by do 12!rewrite -?catA ?cat_cons ?cat0s ?cats0. }
-  (* the landing and the internal prologue *)
   have Huq := compiled_uniq_labels _ _ _ _ HgBJ HgCdJ.
   case: (compile_proc_after_label _ _ _ _ _ _ _ _ _ _ HcpJ Hplf HdecJ Huq)
     => [bodycJ [sAJ [sBJ [EbodyJ ErestJ]]]].
@@ -5621,7 +5294,6 @@ Proof.
          [Sprol [HmemF Hwscr HfreshN HavoidN HfbN1]
            [Hslot0 Hslot1 LtrN]
            [RONEF RSPF RARGF RCOMF] [HpcF HcF HcapN Hsmtr]]]]]]].
-  (* register values entering the prologue *)
   have HgSP17 : Register.get R_SP regsM17
                 = Ptr (Component.main, fbE, (0 + 1 + 1 + 1 + 1)%Z)
     by rewrite /regsM17 /regsM16 /regsM14 /regsM12 /Register.get
@@ -5629,8 +5301,6 @@ Proof.
   have HgCOM17 : Register.get R_COM regsM17 = Int 0
     by rewrite /regsM17 /regsM16 /regsM14 /Register.get /Register.set
                !setmE /=.
-  (* the EF-frame slots survive into tmemF: caller R_SP, the INHERITED
-     SCRATCH, R_RA, and the context marker *)
   have HldEF0 : Memory.load tmemE4 (Component.main, fbE, 0%Z)
                 = Some (Register.get R_AUX1 regsG4).
   { rewrite (Memory.load_after_store_neq _ _ _ _ _ _ HstE4);
@@ -5683,7 +5353,6 @@ Proof.
   have HldF3 : Memory.load tmemF (Component.main, fbE, (0 + 1 + 1 + 1)%Z)
                = Some (Int 0).
   { exact: LtrN HldEF3 HpairEN. }
-  (* transport of untouched initial cells to tmemF *)
   have LtrEF : forall C1 b1 (o : Z) w,
       Memory.load (Intermediate.prepare_procedures_memory tp) (C1, b1, o)
         = Some w ->
@@ -5713,7 +5382,6 @@ Proof.
     apply: LtrN _ Hne.
     have -> : (Int 1) = Register.get R_AUX2 regsM16 by rewrite HgA2M16.
     exact: Memory.load_after_store_eq HstE4. }
-  (* the assembled run *)
   have Hplus : plus CS.step G
       ([::], Intermediate.prepare_procedures_memory tp, Register.init,
        (Component.main, bE, 0%Z)) E0
@@ -5782,9 +5450,6 @@ Proof.
   + by move=> m0; rewrite Hmain; case=> <-.
 Qed.
 
-(* ==================== master-diagram plumbing ==================== *)
-
-(* deciding finality of a (cont, stack) pair *)
 Lemma nofin_dec (k : cont) (stk : S.CS.stack) :
   (k = Kstop /\ stk = [::]) \/ (k = Kstop -> stk <> [::]).
 Proof.
@@ -5799,7 +5464,6 @@ Proof.
   move=> v0. left. by exists v0.
 Qed.
 
-(* immediately-final expressions never step at (Kstop, [::]) *)
 Lemma final_expr_nostep GS0 C mem e arg t s' :
   immediately_final e = true ->
   S.CS.kstep GS0 (S.CS.State C [::] mem Kstop e arg) t s' -> False.
@@ -5807,7 +5471,6 @@ Proof.
   case: e => //= => [v|] _ Hstep; by inversion Hstep.
 Qed.
 
-(* a matched final value state drains onto main's IHalt *)
 Lemma val_inv_final_drain α scrs C mem v arg gps tmem tregs pc fb prot temps
       plm rest cap :
   val_inv p tp α scrs C [::] mem Kstop v arg gps tmem tregs pc fb prot temps
@@ -5829,9 +5492,6 @@ Proof.
   eapply star_trans; [exact: Sd | exact: Sf | by []].
 Qed.
 
-(* re-anchoring an expression invariant after a zero-step administrative
-   descend: everything survives except the compiled fragment, the code
-   anchor, the continuation and the budget *)
 Lemma expr_inv_replumb {α scrs C stk mem k k' e e' arg gps tmem tregs pc fb
       prot temps plm c rest sA sB cap c' rest' sA' sB'} :
   expr_inv p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm
@@ -5849,8 +5509,6 @@ Proof.
   by split.
 Qed.
 
-(* packaging a result state: either it is final (drain onto IHalt) or it
-   matches in place *)
 Lemma expr_pack α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm
       c rest sA sB cap :
   expr_inv p tp α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm
@@ -5907,7 +5565,6 @@ Proof.
   apply: MS_halted Hm1 Hh.
 Qed.
 
-(* the value-consuming dispatcher: a source step out of a value state *)
 Lemma val_consume {α scrs C stk mem k v arg gps tmem tregs pc fb prot temps
       plm rest cap t s1'} :
   S.CS.kstep (Source.GlobalEnv.prepare_global_env p)
@@ -5922,7 +5579,7 @@ Lemma val_consume {α scrs C stk mem k v arg gps tmem tregs pc fb prot temps
 Proof.
   move=> Hstep Hval.
   inversion Hstep; subst.
-  - (* KS_Binop2 *)
+  -
     case/diagram_binop2: Hval
       => [pcF [tmem' [cd [rest' [sAx [sBx [Hp He2]]]]]]].
     left.
@@ -5930,14 +5587,14 @@ Proof.
     + exists ts'. split; last exact: Hm2.
       eapply plus_trans; [exact: Hp | exact: P2 | by []].
     + eexists. split; [exact: Hp | exact: Hm2].
-  - (* KS_BinopEval *)
+  -
     case/diagram_binop_eval: Hval
       => [tregs' [pcF [rest' [temps' [Hp Hv2]]]]].
     left.
     case/val_pack: Hv2 => [ts' [Sp Hm2]].
     exists ts'. split; last exact: Hm2.
     eapply plus_star_trans; [exact: Hp | exact: Sp | by []].
-  - (* KS_Seq2 *)
+  -
     case/diagram_seq2: Hval => [pc' [c2 [rest' [sAx [sBx [Sd Hor He2]]]]]].
     case/expr_pack: He2 => [[ts' [P2 Hm2]] | Hm2].
     + left. exists ts'. split; last exact: Hm2.
@@ -5948,14 +5605,14 @@ Proof.
         -- by [].
         -- by rewrite -Epc.
       * left. eexists. split; [exact: Hpl | exact: Hm2].
-  - (* KS_If2 *)
+  -
     case/diagram_if2: Hval => [pcF [cd [rest' [sAx [sBx [Hp He2]]]]]].
     left.
     case/expr_pack: He2 => [[ts' [P2 Hm2]] | Hm2].
     + exists ts'. split; last exact: Hm2.
       eapply plus_trans; [exact: Hp | exact: P2 | by []].
     + eexists. split; [exact: Hp | exact: Hm2].
-  - (* KS_AllocEval *)
+  -
     case: (diagram_alloc_eval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hval
              (ltac:(eassumption)) (ltac:(eassumption)))
       => [α' [tmem' [tregs' [pcF [rest' [Hp Hv2]]]]]].
@@ -5963,14 +5620,14 @@ Proof.
     case/val_pack: Hv2 => [ts' [Sp Hm2]].
     exists ts'. split; last exact: Hm2.
     eapply plus_star_trans; [exact: Hp | exact: Sp | by []].
-  - (* KS_DerefEval *)
+  -
     case: (diagram_deref_eval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hval (ltac:(eassumption)))
       => [tregs' [pcF [rest' [Hp Hv2]]]].
     left.
     case/val_pack: Hv2 => [ts' [Sp Hm2]].
     exists ts'. split; last exact: Hm2.
     eapply plus_star_trans; [exact: Hp | exact: Sp | by []].
-  - (* KS_Assign2 *)
+  -
     case/diagram_assign2: Hval
       => [pcF [tmem' [cd [rest' [sAx [sBx [Hp He2]]]]]]].
     left.
@@ -5978,14 +5635,14 @@ Proof.
     + exists ts'. split; last exact: Hm2.
       eapply plus_trans; [exact: Hp | exact: P2 | by []].
     + eexists. split; [exact: Hp | exact: Hm2].
-  - (* KS_AssignEval *)
+  -
     case: (diagram_assign_eval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hval (ltac:(eassumption)))
       => [tmem2 [tregs' [pcF [rest' [temps' [Hp Hv2]]]]]].
     left.
     case/val_pack: Hv2 => [ts' [Sp Hm2]].
     exists ts'. split; last exact: Hm2.
     eapply plus_star_trans; [exact: Hp | exact: Sp | by []].
-  - (* KS_InternalCall *)
+  -
     case: (diagram_call_int _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hval (ltac:(eassumption)))
       => [tmem5 [tregs5 [pcF [gps1 [c1 [rest1 [sAx [sBx [fbN [Hp
           He2]]]]]]]]]].
@@ -5994,7 +5651,7 @@ Proof.
     + exists ts'. split; last exact: Hm2.
       eapply plus_trans; [exact: Hp | exact: P2 | by []].
     + eexists. split; [exact: Hp | exact: Hm2].
-  - (* KS_ExternalCall *)
+  -
     case: (diagram_call_ext _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hval (ltac:(eassumption))
              (ltac:(eassumption)) (ltac:(eassumption)))
       => [scrs1 [tmem9 [tregs9 [pcF [gps1 [c1 [rest1 [sAx [sBx [fbN
@@ -6004,7 +5661,7 @@ Proof.
     + exists ts'. split; last exact: Hm2.
       eapply plus_trans; [exact: Hp | exact: P2 | by rewrite E0_right].
     + eexists. split; [exact: Hp | exact: Hm2].
-  - (* KS_InternalReturn *)
+  -
     case/diagram_return_int: Hval
       => [scrs1 [tmem1 [tregs1 [pcF [gps' [rest' [temps' [fb' [prot' [cap'
           [Hp Hv2]]]]]]]]]]].
@@ -6012,7 +5669,7 @@ Proof.
     case/val_pack: Hv2 => [ts' [Sp Hm2]].
     exists ts'. split; last exact: Hm2.
     eapply plus_star_trans; [exact: Hp | exact: Sp | by []].
-  - (* KS_ExternalReturn *)
+  -
     case: (diagram_return_ext _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hval (ltac:(eassumption)))
       => [scrs1 [tmem1 [tregs1 [pcF [gps1 [rest1 [temps1 [fb1 [prot1
           [cap1 [plm1 [Hp Hv2]]]]]]]]]]]].
@@ -6022,7 +5679,6 @@ Proof.
     eapply plus_star_trans; [exact: Hp | exact: Sp | by rewrite E0_right].
 Qed.
 
-(* the expression dispatcher: a source step out of an expression state *)
 Lemma step_diagram_expr {α scrs C stk mem k e arg gps tmem tregs pc fb prot
       temps plm c rest sA sB cap t s1'} :
   S.CS.kstep (Source.GlobalEnv.prepare_global_env p)
@@ -6037,7 +5693,7 @@ Lemma step_diagram_expr {α scrs C stk mem k e arg gps tmem tregs pc fb prot
 Proof.
   move=> Hstep He Hnf.
   case: (exprval_dec e) => [[v0 Ev0] | Hnev].
-  - (* a value: one IConst step, then consume *)
+  -
     subst e.
     case/leaf_val_run: (He) => [i [Ev S0 Hc0]].
     subst v0.
@@ -6057,9 +5713,9 @@ Proof.
       eapply star_plus_trans; [exact: star_one S0 | exact: P2 | by []].
     + left. eexists. split; last exact: Hm2.
       rewrite Ht. exact: plus_one S0.
-  - (* administrative descends and non-value leaves *)
+  -
     inversion Hstep; subst; try by case: (Hnev _ erefl).
-    + (* KS_Binop1 *)
+    +
       right.
       case: (TReplumb.binop1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6070,7 +5726,7 @@ Proof.
       * by rewrite /measure /=; lia.
       * by [].
       * apply: MS_expr; [exact: He' | by []].
-    + (* KS_Seq1 *)
+    +
       right.
       case: (TReplumb.seq1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6081,7 +5737,7 @@ Proof.
       * by rewrite /measure /=; lia.
       * by [].
       * apply: MS_expr; [exact: He' | by []].
-    + (* KS_If1 *)
+    +
       right.
       case: (TReplumb.if1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6092,7 +5748,7 @@ Proof.
       * by rewrite /measure /=; lia.
       * by [].
       * apply: MS_expr; [exact: He' | by []].
-    + (* KS_Arg *)
+    +
       case/leaf_arg_run: (He) => [S0 Hvinj Hc0].
       have Hval2 := expr_to_val _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
         (Register.set R_COM (Register.get R_ARG tregs) tregs)
@@ -6107,7 +5763,7 @@ Proof.
       case/val_pack: Hval2 => [ts' [Sp Hm2]].
       left. exists ts'. split; last exact: Hm2.
       eapply plus_left; [exact: S0 | exact: Sp | by []].
-    + (* KS_LocalBuffer *)
+    +
       case/leaf_local_run: (He) => [S0 Hvinj Hc0].
       have Hval2 := expr_to_val _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
         (Register.set R_COM (Ptr (lbp C)) tregs)
@@ -6122,7 +5778,7 @@ Proof.
       case/val_pack: Hval2 => [ts' [Sp Hm2]].
       left. exists ts'. split; last exact: Hm2.
       eapply plus_left; [exact: S0 | exact: Sp | by []].
-    + (* KS_Alloc1 *)
+    +
       right.
       case: (TReplumb.alloc1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6133,7 +5789,7 @@ Proof.
       * by rewrite /measure /=; lia.
       * by [].
       * apply: MS_expr; [exact: He' | by []].
-    + (* KS_Deref1 *)
+    +
       right.
       case: (TReplumb.deref1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6144,7 +5800,7 @@ Proof.
       * by rewrite /measure /=; lia.
       * by [].
       * apply: MS_expr; [exact: He' | by []].
-    + (* KS_Assign1 *)
+    +
       right.
       case: (TReplumb.assign1_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6155,7 +5811,7 @@ Proof.
       * by rewrite /measure /=; lia.
       * by [].
       * apply: MS_expr; [exact: He' | by []].
-    + (* KS_InitCall *)
+    +
       right.
       case: (TReplumb.initcall_replumb (P := code_at _ _) (ei_comp He)
                (ei_code He) (ei_cont He))
@@ -6168,7 +5824,6 @@ Proof.
       * apply: MS_expr; [exact: He' | by []].
 Qed.
 
-(* THE master simulation diagram *)
 Lemma step_diagram s1 t s1' :
   S.CS.kstep (Source.GlobalEnv.prepare_global_env p) s1 t s1' ->
   forall s2, match_states p tp s1 s2 ->
@@ -6178,7 +5833,7 @@ Proof.
   move=> Hstep s2 Hmatch.
   move: Hstep.
   case: s1 s2 / Hmatch.
-  - (* MS_start *)
+  -
     move=> Hstep.
     have [mexpr Em] : exists mexpr, Source.prog_main p = Some mexpr.
     { case E: (Source.prog_main p) => [m|]; first by exists m.
@@ -6199,20 +5854,18 @@ Proof.
       eapply plus_trans; [exact: Hplusb | exact: P2 | by []].
     + left. exists (gps1, tmemF, tregsF, pcF). split; last exact: Hm2.
       rewrite Ht. exact: Hplusb.
-  - (* MS_expr *)
+  -
     move=> α scrs C stk mem k e arg gps tmem tregs pc fb prot temps plm c0
            rest0 sA0 sB0 cap Hinv Hnf Hstep.
     exact: (step_diagram_expr Hstep Hinv Hnf).
-  - (* MS_val *)
+  -
     move=> α scrs C stk mem k v arg gps tmem tregs pc fb prot temps plm
            rest0 cap Hinv Hnf Hstep.
     exact: (val_consume Hstep Hinv).
-  - (* MS_halted *)
+  -
     move=> α C mem v arg gps tmem tregs pc Hmem Hexec Hstep.
     by inversion Hstep.
 Qed.
-
-(* ==================== initial and final states ==================== *)
 
 Lemma match_initial_states s1 :
   S.CS.initial_state p s1 ->
@@ -6234,7 +5887,7 @@ Proof.
                    | α scrs C stk mem k v arg gps tmem tregs pc fb prot temps
                      plm rest0 cap Hinv Hnf
                    | α C mem v arg gps tmem tregs pc Hmem Hexec] Hfin.
-  - (* MS_start: the halt pad sits under the initial pc *)
+  -
     have [mexpr Em] : exists mexpr, Source.prog_main p = Some mexpr.
     { case E: (Source.prog_main p) => [m|]; first by exists m.
       move: (Source.cprog_main_existence Hclosed_p). by rewrite E. }
@@ -6287,21 +5940,19 @@ Proof.
     { exists CprocsB, cd, [::], [::]. split=> //. by rewrite cats0. }
     rewrite EcdH in HcE0.
     exact: code_at_head HcE0.
-  - (* MS_expr: only E_exit is final here *)
+  -
     case: Hfin => [Ee | [v [Ee [Ek Estk]]]]; last first.
     { by case: (Hnf _ Ee Ek Estk). }
     subst e.
     move: (ei_comp Hinv) => /= [Ec _]. subst c0.
     move: (ei_code Hinv) => Hcode.
     exact: code_at_head Hcode.
-  - (* MS_val: value final states are excluded by the side condition *)
+  -
     case: Hfin => [Ee | [v1 [Ee [Ek Estk]]]]; first by [].
     by case: (Hnf Ek Estk).
-  - (* MS_halted *)
+  -
     exact: Hexec.
 Qed.
-
-(* ==================== the forward simulation ==================== *)
 
 Theorem fcc_sim : forward_simulation (S.CS.sem p) (I.CS.sem tp).
 Proof.
@@ -6317,10 +5968,6 @@ Qed.
 
 End Diagram.
 
-(* ==================== THE compiler correctness theorem ==================== *)
-
-(* FCC: the compiled program forward-simulates the source. This discharges
-   the axiom formerly assumed in S2I/Compiler.v. *)
 Theorem I_simulates_S :
   forall {p},
     Source.closed_program p ->
@@ -6333,8 +5980,6 @@ Proof.
   exact: (fcc_sim p tp Hwf Hclosed Hcompile).
 Qed.
 
-(* BCC *)
-(* We derive BCC from FCC as in CompCert *)
 Corollary S_simulates_I:
   forall {p},
     Source.closed_program p ->
@@ -6387,9 +6032,6 @@ Proof.
   destruct Hb'b as [Hb'b | [t [Hb't Htb]]].
   - left. now subst.
   - unfold behavior_improves_finpref. subst b'.
-    (* right. exists t. split. assumption. -- committing too early *)
-    (* we start by combining behavior_prefix t b and prefix m b to get
-       that t and m must be in the prefix relation one way or the other *)
     eapply behavior_prefix_comp' in Htb; [| exact Hmb].
     destruct Htb.
     + left. destruct m as [| |t']; simpl in H. tauto. tauto. simpl.

@@ -1,13 +1,3 @@
-(* Task #14 (I→Merged correctness), T14.3 (partial): LABEL UNIQUENESS of
-   compiled code.
-
-   [fresh_label C] returns component C's counter and bumps it, so labels
-   emitted while compiling C form a strictly increasing stream.  This file
-   proves the interval invariant ([lbl_ok lo hi c]: every ILabel of c lies
-   in [lo,hi) and occurs at most once) through [compile_expr], on the way to
-   the per-component uniqueness sum the linearizer's Bnz-label resolution
-   needs (LinPos's [Huniq] premise). *)
-
 Require Import Common.Definitions.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
@@ -29,12 +19,9 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* the Intermediate-level "is the label-l0 marker" predicate (definitionally
-   LinPos.ilab; kept local so S2I does not depend on MicroPolicies) *)
 Definition is_ilabel (l0 : nat) (mi : instr) : bool :=
   if mi is ILabel l' then l' == l0 else false.
 
-(* component C's fresh-label counter *)
 Definition nlab (s : comp_env) (comp : Component.id) : nat :=
   odflt 0 (getm (next_label s) comp).
 
@@ -47,9 +34,6 @@ split; first by [].
 by rewrite /nlab /= setmE eqxx.
 Qed.
 
-(* ==================== the interval invariant ==================== *)
-
-(* labels of c lie in [lo,hi) and each occurs at most once *)
 Definition lbl_ok (lo hi : nat) (c : code) : Prop :=
   [/\ (forall l, List.In (ILabel l) c -> lo <= l /\ l < hi)
     & (forall l, count (is_ilabel l) c <= 1)].
@@ -86,7 +70,6 @@ Qed.
 Lemma lbl_ok_nil (lo hi : nat) : lbl_ok lo hi [::].
 Proof. by split=> [l []|l]. Qed.
 
-(* code with no labels at all satisfies any interval *)
 Lemma lbl_ok_nolab (c : code) :
   (forall l, count (is_ilabel l) c = 0) ->
   forall lo hi, lbl_ok lo hi c.
@@ -117,7 +100,6 @@ split=> [l [E|HIn]|l].
 - rewrite /= Hmi. exact: Hc.
 Qed.
 
-(* concatenation with DISJOINT label intervals, either order in the code *)
 Lemma lbl_ok_cat_disj (lo hi lo1 hi1 lo2 hi2 : nat) (c1 c2 : code) :
   lbl_ok lo1 hi1 c1 -> lbl_ok lo2 hi2 c2 ->
   hi1 <= lo2 \/ hi2 <= lo1 ->
@@ -132,7 +114,7 @@ split=> [l HIn|l].
 - rewrite count_ilabel_cat.
   case E1: (count (is_ilabel l) c1) => [|n1].
   + have := Hc2 l. by lia.
-  + (* l occurs in c1, hence in [lo1,hi1): it cannot also occur in c2 *)
+  +
     have HIn1 : List.In (ILabel l) c1.
     { apply: count_ilabel_In. by rewrite E1. }
     have [Hll1 Hlh1] := Hb1 l HIn1.
@@ -145,7 +127,6 @@ split=> [l HIn|l].
       by lia.
 Qed.
 
-(* ordered special case *)
 Lemma lbl_ok_cat (lo mid hi : nat) (c1 c2 : code) :
   lbl_ok lo mid c1 -> lbl_ok mid hi c2 ->
   lo <= mid -> mid <= hi ->
@@ -155,17 +136,12 @@ move=> H1 H2 Hlm Hmh.
 apply: (lbl_ok_cat_disj H1 H2); by lia.
 Qed.
 
-(* ---- the emitted label-free blocks ---- *)
-
 Lemma lbl_ok_push (r : register) (lo hi : nat) : lbl_ok lo hi (push r).
 Proof. by apply: lbl_ok_nolab => l. Qed.
 
 Lemma lbl_ok_pop (r : register) (lo hi : nat) : lbl_ok lo hi (pop r).
 Proof. by apply: lbl_ok_nolab => l. Qed.
 
-(* ==================== one extra (entry) label ==================== *)
-
-(* labels of c are the distinguished [extra] plus an interval, all unique *)
 Definition lbl_ok1 (extra lo hi : nat) (c : code) : Prop :=
   [/\ (forall l, List.In (ILabel l) c -> l = extra \/ (lo <= l /\ l < hi))
     & (forall l, count (is_ilabel l) c <= 1)].
@@ -183,7 +159,6 @@ split=> [l [E|HIn]|l].
 - rewrite /= Hmi. exact: Hc.
 Qed.
 
-(* the tail's labels sit strictly above l0, so prepending ILabel l0 is safe *)
 Lemma lbl1_cons_label (extra l0 lo2 hi2 : nat) (c : code) :
   lbl_ok1 extra lo2 hi2 c -> l0 < lo2 -> l0 <> extra -> l0 < hi2 ->
   lbl_ok1 extra l0 hi2 (ILabel l0 :: c).
@@ -197,7 +172,6 @@ split=> [l [E|HIn]|l].
 - rewrite /=.
   case El0: (l0 == l) => /=; last exact (Hc l).
   move/eqP: El0 => El0. subst l.
-  (* l0 does not occur in c *)
   case Ec: (count (is_ilabel l0) c) => [|n] //.
   exfalso.
   have HIn : List.In (ILabel l0) c.
@@ -206,7 +180,6 @@ split=> [l [E|HIn]|l].
   by lia.
 Qed.
 
-(* introducing the distinguished label over an interval-only tail *)
 Lemma lbl1_cons_extra (extra lo2 hi2 : nat) (c : code) :
   lbl_ok lo2 hi2 c -> extra < lo2 ->
   lbl_ok1 extra lo2 hi2 (ILabel extra :: c).
@@ -229,8 +202,6 @@ Qed.
 Ltac lbl1_step := apply: lbl1_cons_nolab; [by move=> ?|].
 Ltac lbl_step0 := apply: lbl_ok_cons_nolab; [by move=> ?|].
 
-(* ==================== compile_expr ==================== *)
-
 Lemma compile_expr_labels (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : code) (s' : comp_env),
@@ -239,19 +210,19 @@ Lemma compile_expr_labels (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- <-].
   split; first by [].
   by apply: lbl_ok_nolab => l.
-- (* E_arg *)
+-
   move: Hc => /= [<- <-].
   split; first by [].
   by apply: lbl_ok_nolab => l.
-- (* E_local *)
+-
   move: Hc => /= [<- <-].
   split; first by [].
   by apply: lbl_ok_nolab => l.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
   rewrite /=.
@@ -269,7 +240,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: (lbl_ok_cat_disj (lbl_ok_pop R_AUX1 (nlab s2 C) (nlab s2 C))
             (lo2 := nlab s2 C) (hi2 := nlab s2 C)); try by lia.
   by apply: lbl_ok_nolab => l.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
   rewrite /=.
@@ -279,7 +250,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   have [Hm2 Hok2] := IH2 _ _ _ E2.
   split; first by lia.
   apply: (lbl_ok_cat Hok1 Hok2); by lia.
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
   rewrite /=.
@@ -298,9 +269,6 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   have [Ec5 Hn5] := fresh_label_inv E5.
   subst lconseq lend.
   split; first by lia.
-  (* code = c1 ++ [IBnz _] ++ c3 ++ [IBnz _; ILabel n3] ++ c2 ++ [ILabel n4];
-     label sets: c1 ⊆ [n0,n1), c3 ⊆ [n2,n3), {n3}, c2 ⊆ [n1,n2), {n4} —
-     assemble LEFT-grouped so interval hulls stay disjoint at each step *)
   have HM : lbl_ok (nlab s3 C) (nlab s4 C)
               [:: IBnz R_ONE (nlab s4 C); ILabel (nlab s3 C)].
   { apply: lbl_ok_cons_nolab; first by move=> l.
@@ -319,7 +287,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: (lbl_ok_cat_disj Hok1
             (lbl_ok_cons_nolab (mi := IBnz R_COM (nlab s3 C))
                (fun l => erefl) HG3)); by lia.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|]; last by [].
   rewrite /=. move=> [<- <-].
@@ -328,7 +296,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: (lbl_ok_cat_disj Hok1
             (lo2 := nlab s1 C) (hi2 := nlab s1 C)); try by lia.
   by apply: lbl_ok_nolab => l.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|]; last by [].
   rewrite /=. move=> [<- <-].
@@ -337,7 +305,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: (lbl_ok_cat_disj Hok1
             (lo2 := nlab s1 C) (hi2 := nlab s1 C)); try by lia.
   by apply: lbl_ok_nolab => l.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|]; last by [].
   rewrite /=.
@@ -346,7 +314,6 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   have [Hm1 Hok1] := IH1 _ _ _ E1.
   have [Hm2 Hok2] := IH2 _ _ _ E2.
   split; first by lia.
-  (* code = c2 ++ push ++ c1 ++ pop ++ [IStore; IMov] — c2's interval is ABOVE c1's *)
   apply: (lbl_ok_cat_disj Hok2
             (lo2 := nlab s C) (hi2 := nlab s1 C)); try by lia.
   apply: (lbl_ok_cat_disj (lbl_ok_push R_COM (nlab s C) (nlab s C))
@@ -356,12 +323,12 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: (lbl_ok_cat_disj (lbl_ok_pop R_AUX1 (nlab s1 C) (nlab s1 C))
             (lo2 := nlab s1 C) (hi2 := nlab s1 C)); try by lia.
   by apply: lbl_ok_nolab => l.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|]; last by [].
   rewrite /=.
   case Heqb: (Component.eqb C' C).
-  + (* intra-component: Jal to the procedure's entry label *)
+  +
     rewrite /find_proc_label /Comp.lift.
     case EL: (getm P_labels P') => [tl|]; last by [].
     rewrite /=. move=> [<- <-].
@@ -376,23 +343,19 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
                  (fun l => erefl) (lbl_ok_nil (nlab s1 C) (nlab s1 C)))
               (lo2 := nlab s1 C) (hi2 := nlab s1 C)); try by lia.
     exact: lbl_ok_pop.
-  + (* cross-component call *)
+  +
     move=> [<- <-].
     have [Hm1 Hok1] := IH _ _ _ E1.
     split; first by lia.
     apply: (lbl_ok_cat_disj Hok1
               (lo2 := nlab s1 C) (hi2 := nlab s1 C)); try by lia.
     by apply: lbl_ok_nolab => l.
-- (* E_exit *)
+-
   move: Hc => /= [<- <-].
   split; first by [].
   by apply: lbl_ok_nolab => l.
 Qed.
 
-(* ==================== compile_proc ==================== *)
-
-(* the compiled procedure's labels are its OWN entry label pl (from P_labels,
-   below the counter) plus the fresh interval, each occurring at most once *)
 Lemma compile_proc_labels (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (P : Procedure.id) (e : expr)
     (s : comp_env) (c : code) (s' : comp_env) (pl : label) :
@@ -416,7 +379,7 @@ subst lmain lreturn.
 split; first by lia.
 case Hm: (Component.eqb C Component.main && Procedure.eqb P Procedure.main)
   => /=.
-- (* main: the external entry defines lmain and lreturn *)
+-
   case Hf: (immediately_final e) => /=; [lbl1_step|];
     (repeat lbl1_step);
     (apply: (lbl1_cons_label (lo2 := nlab s2 C)); [|by lia|by lia|by lia]);
@@ -428,7 +391,7 @@ case Hm: (Component.eqb C Component.main && Procedure.eqb P Procedure.main)
     (apply: (lbl_ok_cat_disj Hok4
                (lo2 := nlab s4 C) (hi2 := nlab s4 C)); try by lia);
     by apply: lbl_ok_nolab => ?.
-- (* non-main *)
+-
   (repeat lbl1_step);
     (apply: lbl1_cons_extra; [|by lia]);
     (repeat lbl_step0);
@@ -437,7 +400,6 @@ case Hm: (Component.eqb C Component.main && Procedure.eqb P Procedure.main)
     by apply: lbl_ok_nolab => ?.
 Qed.
 
-(* counter monotonicity of one procedure's compilation *)
 Lemma compile_proc_mono (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (P : Procedure.id) (e : expr)
     (s : comp_env) (c : code) (s' : comp_env) :
@@ -461,10 +423,6 @@ have [Hm4 _] := compile_expr_labels E4.
 by lia.
 Qed.
 
-(* ==================== label-map generation ==================== *)
-
-(* the generated per-component label map: values below the counter,
-   pairwise distinct *)
 Definition plm_ok (m : NMap label) (bound : nat) : Prop :=
   [/\ (forall P l, getm m P = Some l -> l < bound)
     & (forall P1 P2 l, getm m P1 = Some l -> getm m P2 = Some l -> P1 = P2)].
@@ -520,7 +478,6 @@ split.
 - by move=> P1 P2 l; rewrite emptymE.
 Qed.
 
-(* the fold does not touch other components' counters *)
 Lemma gen_all_frame (cs : list (Component.id * NMap expr)) :
   forall acc s ml s' (K : Component.id),
   gen_all_procedures_labels_aux acc cs s = Some (ml, s') ->
@@ -539,7 +496,6 @@ elim: cs => [|[C0 Cprocs0] cs IH] acc s ml s' K /=.
   exact: (gen_component_labels_aux_frame _ _ HneqK _ _ _ _ _ Eg).
 Qed.
 
-(* every listed component gets a bounded, injective label map *)
 Lemma gen_all_labels_ok (cs : list (Component.id * NMap expr)) :
   forall acc s ml s',
   gen_all_procedures_labels_aux acc cs s = Some (ml, s') ->
@@ -570,8 +526,6 @@ rewrite /=. move=> Hrest /andP [HC0nin Huniq] C Cprocs [E|HIn].
 - exact: (IH _ _ _ _ Hrest Huniq _ _ HIn).
 Qed.
 
-(* ==================== counting helpers ==================== *)
-
 Lemma count_ilabel_0 (l : nat) (c : code) :
   ~ List.In (ILabel l) c -> count (is_ilabel l) c = 0.
 Proof.
@@ -588,8 +542,6 @@ elim: acc => [|[P cd] acc IH] //= H0.
 rewrite count_ilabel_0; last by apply: (H0 P cd); left.
 rewrite IH //. by move=> P0 cd0 HIn; apply: (H0 P0 cd0); right.
 Qed.
-
-(* ==================== the per-component procedures fold ==================== *)
 
 Lemma compile_procedures_aux_labels (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (lo0 : nat)
@@ -618,7 +570,6 @@ elim: ps => [|[P e] ps IH] acc s res s' /=.
 - rewrite /Comp.bind.
   case E1: (compile_proc C lbp scr P_labels P e s) => [[cd s1]|]; last by [].
   rewrite /=. move=> Hrest Hplb Hplinj Hlo Huniq Hshape Hsums.
-  (* the successful compile_proc pins P's entry label *)
   have [pl EL] : exists pl, getm P_labels P = Some pl.
   { move: E1. rewrite /compile_proc /find_proc_label /= /Comp.bind /Comp.lift.
     case ELx: (getm P_labels P) => [pl|]; last by [].
@@ -653,7 +604,7 @@ elim: ps => [|[P e] ps IH] acc s res s' /=.
   { move=> l. rewrite /=.
     case Ecd: (count (is_ilabel l) cd) => [|n].
     - have := Hsums l. by lia.
-    - (* l occurs in cd: it occurs nowhere in acc *)
+    -
       have HInL : List.In (ILabel l) cd.
       { apply: count_ilabel_In. by rewrite Ecd. }
       have Hacc0 : sumn [seq count (is_ilabel l) pc.2 | pc <- acc] = 0.
@@ -678,7 +629,6 @@ elim: ps => [|[P e] ps IH] acc s res s' /=.
   by lia.
 Qed.
 
-(* entry point: empty accumulator *)
 Lemma compile_procedures_labels (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (lo0 : nat)
     (ps : list (Procedure.id * expr)) (s : comp_env)
@@ -698,8 +648,6 @@ have [_ Hu _ Hc] := compile_procedures_aux_labels Hcp Hplb Hplinj Hlo
                       (fun l => leq0n 1).
 by split.
 Qed.
-
-(* ==================== fmap-level accounting ==================== *)
 
 Lemma getm_def_In_uniq (A : Type) (cds : list (nat * A)) (P : nat) (cd : A) :
   uniq (unzip1 cds) -> List.In (P, cd) cds -> getm_def cds P = Some cd.
@@ -751,10 +699,6 @@ Proof.
 exact: (sorted_uniq (@Ord.lt_trans _) (@Ord.ltxx _) (valP m)).
 Qed.
 
-(* ==================== THE theorem ==================== *)
-
-(* compiled programs declare each label at most once per component — the
-   [Huniq] premise of the linearizer's Bnz-label resolution (LinPos) *)
 Theorem compiled_labels_unique (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->
@@ -785,31 +729,24 @@ have Hbase : forall (C : Component.id) (Cprocs : NMap code) (l : nat),
   have Huniq_cs := uniq_unzip1_elementsm (Source.prog_procedures p).
   have [plm [sC [cds [sC' [Hpls Hloc Hcp Hout]]]]]
     := compile_components_aux_getC _ _ _ _ _ _ _ _ _ Ec Huniq_cs HIn.
-  (* identify Cprocs with the compiled component map *)
   have Ecp' : Cprocs = mkfmap cds.
   { move: Hget. rewrite mkfmapE Hout. by move=> [->]. }
   subst Cprocs.
-  (* the label map's facts, at C's counter after generation *)
   have [plm' [Hpls' Hplb Hplinj]]
     := gen_all_labels_ok Eg Huniq_cs HIn.
   have Eplm : plm' = plm.
   { move: Hpls'. rewrite Hpls. by move=> [->]. }
   subst plm'.
-  (* C's counter is untouched between generation and its compilation *)
   have Elo : nlab sC C = nlab cenv1 C by rewrite /nlab Hloc.
   have Hle : nlab cenv1 C <= nlab sC C by rewrite Elo.
   have [Hucds Hsums] := compile_procedures_labels Hcp Hplb Hplinj
                           Hle (uniq_unzip1_elementsm Cprocs_src).
   rewrite (sumn_count_mkfmap l Hucds).
   exact: Hsums. }
-(* wrap_main REMOVED: the record is used as built *)
 rewrite /Comp.ret. move=> [<-] C Cprocs l /=.
 move=> Hget. exact: (Hbase _ _ _ Hget).
 Qed.
 
-(* ==================== compiled procedures are nonempty ==================== *)
-
-(* a successful [compile_proc] emits a nonempty body *)
 Lemma compile_proc_shape0 (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (P : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) :
@@ -827,8 +764,6 @@ case: (Component.eqb C Component.main && Procedure.eqb P Procedure.main)
 case: (immediately_final e) => /=; by eexists.
 Qed.
 
-(* fold-level origin: every produced body comes from a [compile_proc]
-   call (or sat in the accumulator) *)
 Lemma compile_procedures_aux_origin (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (ps : list (Procedure.id * expr)) :
   forall (acc : list (Procedure.id * code)) (s : comp_env)
@@ -852,7 +787,6 @@ elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
   + by left.
 Qed.
 
-(* the fold only grows its accumulator *)
 Lemma compile_procedures_aux_mono (C : Component.id)
     (lbp scr : Pointer.t) (P_labels : NMap label)
     (ps : list (Procedure.id * expr)) :
@@ -870,7 +804,6 @@ elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
   apply: (IH _ _ _ _ Hrest). by right.
 Qed.
 
-(* the output keys are a permutation of source keys and accumulator *)
 Lemma compile_procedures_aux_keys (C : Component.id)
     (lbp scr : Pointer.t) (P_labels : NMap label)
     (ps : list (Procedure.id * expr)) :
@@ -891,9 +824,6 @@ elim: ps => [|[P0 e0] ps IH] acc s res s' /=.
   by rewrite -cat1s perm_catCA.
 Qed.
 
-(* ==================== compiled bodies end in a terminal ==================== *)
-
-(* positions before the trailing element always have successors *)
 Lemma nth_error_last_shape (A : Type) (l : list A) (t : A)
     (o : nat) (i : A) :
   List.nth_error (l ++ [:: t]) o = Some i ->
@@ -919,7 +849,6 @@ move: Ho'; rewrite size_cat /= addn1 ltnS leq_eqVlt
   by have := Hne E.
 Qed.
 
-(* a nonempty list splits off its last element *)
 Lemma seq_last_ex (A : Type) (d : A) (l : seq A) :
   l <> [::] -> exists pre, l = pre ++ [:: seq.last d l].
 Proof.
@@ -928,7 +857,6 @@ exists (belast a l).
 by rewrite /= cats1 -lastI.
 Qed.
 
-(* a successful [compile_proc] ends on IJump *)
 Lemma compile_proc_lastE (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (P : Procedure.id) (e : expr)
     (s : comp_env) (cd : code) (s' : comp_env) (d : instr) :
@@ -944,7 +872,6 @@ cbv zeta.
 by rewrite !last_cat /= last_cat /=.
 Qed.
 
-(* the general origin of every compiled procedure body *)
 Theorem compiled_proc_origin (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->
@@ -987,13 +914,10 @@ have Hbase : forall (C : Component.id) (Cprocs : NMap code)
   have [HInnil | [e [s0 [s1 Hcpc]]]]
     := compile_procedures_aux_origin Hcp HInP; first by [].
   by exists plm, e, s0, s1. }
-(* wrap_main REMOVED: the record is used as built *)
 rewrite /Comp.ret. move=> [<-] C Cprocs P cd /=.
 move=> Hget HgetP. left. exact: (Hbase _ _ _ _ Hget HgetP).
 Qed.
 
-(* compiled bodies have a successor after every non-terminal
-   instruction (discharges Onext) *)
 Theorem compiled_proc_terminal (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->
@@ -1025,14 +949,6 @@ have [[plm [e [s0 [s1 Hcpc]]]] | [lab Ecd]]
   + by move=> [Ei]; have := Hh (esym Ei).
   + by move=> Hx; have := List.nth_error_In _ _ Hx.
 Qed.
-
-(* ==================== R_RA-freeness of compiled code ==================== *)
-
-(* Compiled instructions never name R_RA in a constrained position: not as
-   a Const/Mov/BinOp/Bnz/Alloc operand and not as Load/Store's ADDRESS
-   register.  (The MOVED register of Load/Store is R_RA exactly at the
-   push/pop-R_RA sites — allowed.)  This is the boolean shape predicate;
-   the MicroPolicies side bridges it to [ra_free_instr]. *)
 
 Definition reg_ra_b (r : register) : bool :=
   match r with R_RA => true | _ => false end.

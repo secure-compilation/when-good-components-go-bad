@@ -1,5 +1,3 @@
-(* EncodeCode.v — [encode_code] structure lemmas extracted from RecompositionInit (program-generic;
-   global Merged/Instance defs only). [word_of_nat_inj] = the one numeric assumption. *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -48,13 +46,13 @@ Proof.
   - intros k0 v0. rewrite foldl_rcons.
     rewrite unionmE.
     case Hacc: (foldl unionm emptym m0 k0) => [v' |].
-    + (* accumulator has a value — it came from ms *)
+    +
       move=> [<-].
       destruct (IH _ _ Hacc) as [mi [Hmi Hmi_k]].
       exists mi. split; [| exact Hmi_k].
       rewrite -cats1.
       apply List.in_or_app. left. exact Hmi.
-    + (* accumulator is None — value comes from m0 *)
+    +
       move=> Hm0. simpl in Hm0.
       eexists; split; [| eassumption].
       rewrite -cats1.
@@ -81,9 +79,6 @@ Lemma In_fmap_getm: forall {T: ordType} {S: Type} (m: {fmap T -> S}) k v,
 Proof.
   intros T0 S0 m k v Hin.
   destruct m as [s Hs]. simpl in *.
-  (* s is a sorted list of (T0 * S0) pairs, Hin : List.In (k, v) s *)
-  (* getm_def scans left-to-right: if k == p.1 then Some p.2 else recurse *)
-  (* Since s is sorted with unique keys, (k, v) in s means getm_def finds it *)
   induction s as [| [k0 v0] rest IH].
   - contradiction.
   - simpl. simpl in Hin. destruct Hin as [Heq | Hin].
@@ -91,23 +86,18 @@ Proof.
       rewrite /getm. simpl. rewrite eqxx. reflexivity.
     + rewrite /getm. simpl.
       case Hkeq: (k == k0).
-      * (* k = k0 but (k, v) is in rest — contradicts sorted/unique *)
+      *
         move/eqP : Hkeq => Hkeq. subst k0.
         exfalso.
         have Hpath := Hs.
-        (* path.sorted Ord.lt (k :: unzip1 rest) — since unzip1 ((k,v0)::rest) = k :: unzip1 rest *)
         simpl in Hpath.
-        (* Hpath should be: path Ord.lt k (unzip1 rest) *)
-        (* From (k, v) ∈ rest, k ∈ unzip1 rest *)
         have Hkin: List.In k (unzip1 rest).
         { clear -Hin. induction rest as [| [k1 v1] rest' IH].
           - contradiction.
           - simpl in *. destruct Hin as [[= -> ->] | Hin].
             + left. reflexivity.
             + right. exact (IH Hin). }
-        (* Convert to \in *)
         apply Extra.In_in in Hkin.
-        (* Hs gives path Ord.lt k (unzip1 rest) *)
         simpl in Hs.
         have := path.order_path_min (@Ord.lt_trans T0) Hs.
         move=> /allP /(_ _ Hkin).
@@ -124,21 +114,14 @@ Proof.
   intros T0 T0' S0 f m k' v.
   unfold Tmp.mapk.
   intros H. apply foldl_unionm_In in H as [mi [Hmi Hmi_k']].
-  (* Hmi : List.In mi (unzip2 (mapim (fun k x => mkfmap [:: (f k, x)]) m)) *)
-  (* Hmi_k' : mi k' = Some v *)
   set mm := mapim (fun k x => mkfmap [:: (f k, x)]) m in Hmi.
   destruct (In_unzip2_exists Hmi) as [k0 Hpair].
   apply In_fmap_getm in Hpair.
-  (* move/getmP : Hpair => Hpair. *)
-  (* Hpair : mm k0 = Some mi *)
   rewrite /mm mapimE in Hpair.
   destruct (m k0) as [x0 |] eqn:Hmk0; simpl in Hpair; [| discriminate].
   injection Hpair => Hmi_eq.
-  (* mi = mkfmap [:: (f k0, x0)] *)
   rewrite -Hmi_eq /= in Hmi_k'.
   rewrite setmE in Hmi_k'.
-  (* rewrite -Hmi_eq mkfmapE /= in Hmi_k'. *)
-  (* Hmi_k' : (if k' == f k0 then Some x0 else None) = Some v *)
   case: ifP Hmi_k' => [/eqP Hfk | //].
   move=> [<-].
   exists k0. split.
@@ -244,8 +227,6 @@ Proof.
       split; [reflexivity |]. split.
       * unfold encode_instr_atom. simpl. reflexivity.
       * unfold encode_instr_atom, encode_instr. simpl.
-        (* pos = offset - 1 - acc.2 = offset - 1 - size cde' (by foldr_counter) *)
-        (* conclusion wants: offset - 1 - (size (i0,t0 :: cde') - 1 - 0) = offset - 1 - size cde' *)
         rewrite subn0. simpl size.
         replace ((size cde').+1 - 1) with (size cde').
         2: { rewrite subn1 //=. }
@@ -254,9 +235,6 @@ Proof.
     + simpl in Hnth.
       destruct (IH lp offset n' v Hnth) as [i' [t' [Hin' [Htag' Hval']]]].
       exists i', t'. split; [exact Hin' |]. split; [exact Htag' |].
-      (* Hval' has: offset - 1 - (size cde' - 1 - n') *)
-      (* need: offset - 1 - (size (i0,t0 :: cde') - 1 - n'.+1) *)
-      (* size (i0,t0 :: cde') - 1 - n'.+1 = (size cde').+1 - 1 - n'.+1 = size cde' - 1 - n' *)
       simpl size.
       replace (offset - 1 - ((size cde').+1 - 1 - n'.+1)) with (offset - 1 - (size cde' - 1 - n')).
       exact Hval'.
@@ -291,8 +269,6 @@ Proof.
   rewrite -fmap_of_seqE in Hnth.
   eapply mapk_Some_inv with (f := (fun x : nat => word_of_nat (x + pc0)))
     in Hnth; eauto.
-  (* on-domm injectivity of the position relabel: positions are < size cde, so a+pc0,b+pc0
-     stay < 2^word and word_of_nat is injective there. *)
   move=> a b Ha Hb H.
   have Hsz : size list = size cde by exact: encode_code_foldr_size.
   have Halt : a < size cde.

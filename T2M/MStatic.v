@@ -1,9 +1,3 @@
-(** * T2M — instantiating the simulation for COMPILED pairs.
-
-    Discharges MStar's section context (size/wf premises, label/procedure
-    and code-shape statics) for a linked pair of S2I outputs, and assembles
-    [t2me_fwd_assembled]/[t2me_bwd_assembled] from [t2me_premises] + [run_fits]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -86,8 +80,6 @@ Local Notation Wme :=
 
 Variable Hprem : MDefs.t2me_premises L P C a b.
 
-(* ---- the pieces of the bundle ---- *)
-
 Lemma disch_Hwfa : Intermediate.well_formed_program a.
 Proof. by case: Hprem => -[_ _ ? _ _] _. Qed.
 
@@ -111,8 +103,6 @@ rewrite /Merged.alloc_label word_size_mt /MDefs.NC.
 by rewrite ltn_exp2l.
 Qed.
 
-(* ---- OBLIGATION: the size premises from [link_fits] ---- *)
-
 Lemma disch_Hsmall :
   size (linearize_bufs PB) + size codeW < Merged.alloc_label.
 Proof.
@@ -132,7 +122,6 @@ have Hpc0E : size (initial_memory (mt := mt) PB)
 by lia.
 Qed.
 
-(* the T code's domain is the linked procedure map's *)
 Lemma unzip1_cclg (T : Type) (PI' : Program.interface)
     (cenv : Intermediate.program) (l : list (Component.id * T)) :
   unzip1 (Transitional.compile_component_list_gen PI' cenv l) = unzip1 l.
@@ -160,15 +149,11 @@ rewrite inE => /orP[/eqP ->|Hin].
 - case: (c == k) => //. exact: IH.
 Qed.
 
-(* ---- OBLIGATION: the immediate fits from [t2m_ok] ---- *)
-
 Lemma disch_Himm_a : MDefs.imm_fits a.
 Proof. by case: Hprem => _ [_ [[_ _ ?] _ _]]. Qed.
 
 Lemma disch_Himm_b : MDefs.imm_fits b.
 Proof. by case: Hprem => _ [_ [_ [_ _ ?] _]]. Qed.
-
-(* ---- the label/procedure/component bounds from [lin_ok_at] ---- *)
 
 Lemma disch_Hlab_a : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures a cid = Some Cprocs ->
@@ -220,8 +205,6 @@ case: Hprem => _ [_ [_ [Hlin _ _] _]].
 by case: Hlin => _ _ _ ? _.
 Qed.
 
-(* ---- OBLIGATION: label uniqueness of S2I output ---- *)
-
 Lemma disch_Huniq_a : forall cid l0 Cprocs0,
   Intermediate.prog_procedures a cid = Some Cprocs0 ->
   sumn [seq count (ilab l0) (odflt [::] (Cprocs0 p')) | p' <- domm Cprocs0]
@@ -242,9 +225,6 @@ case: Hprem => -[_ [sb [_ Hcb]] _ _ _] _.
 exact: (compiled_labels_unique Hcb _ Hc).
 Qed.
 
-(* ---- the provenance backbone ---- *)
-
-(* the linked T code's per-component segment IS the linearizer's *)
 Lemma cdeW_code (c : Component.id)
     (C_code : seq (Transitional.instr * mem_tag)) :
   cdeW c = Some C_code ->
@@ -259,8 +239,6 @@ case: (altP (c =P k)) => [->|_].
 - exact: IH.
 Qed.
 
-(* every cell of a component's segment is a procedure HEADER or the
-   translation of a body instruction *)
 Lemma In_flatten_map (A B : Type) (f : A -> seq B) (l : seq A) (y : B) :
   List.In y (flatten (map f l)) ->
   exists x, List.In x l /\ List.In y (f x).
@@ -311,7 +289,6 @@ case Hpc: (getm Cprocs p) => [Pcode|] /=.
   left. exists Cprocs, p. by split=> //; rewrite ?E.
 Qed.
 
-(* a linked procedure map entry comes from one side *)
 Lemma procs_side (c : Component.id) (Cprocs : NMap Machine.code) :
   Intermediate.prog_procedures tp c = Some Cprocs ->
   Intermediate.prog_procedures a c = Some Cprocs \/
@@ -323,7 +300,6 @@ case E: (Intermediate.prog_procedures a c) => [v|] /=.
 - move=> ?. by right.
 Qed.
 
-(* [executing] lands inside the component's segment *)
 Lemma executing_In (tpc : Pointer.t) (i : Transitional.instr)
     (tg : mem_tag) (c : Component.id) :
   Transitional.executing cdeW tpc i tg c ->
@@ -333,8 +309,6 @@ case=> C_code [Ec [Hcde [_ Hnth]]].
 rewrite -(cdeW_code Hcde).
 exact: List.nth_error_In Hnth.
 Qed.
-
-(* ---- no self-mov in S2I output: the boolean walk ---- *)
 
 Definition selfmov (i0 : Machine.instr) : bool :=
   if i0 is IMov r1 r2
@@ -463,15 +437,11 @@ case: (lin_In_inv Hin)
     * by rewrite Ecd /= in Hhas.
 Qed.
 
-(* ---- no mov FROM R_RA ---- *)
-
 Definition ramov (i0 : Machine.instr) : bool :=
   if i0 is IMov r1 _
   then Nat.eqb (Intermediate.Register.to_nat r1)
                (Intermediate.Register.to_nat Machine.R_RA)
   else false.
-
-(* ---- the R_RA flow is SP-mediated (push/pop only) ---- *)
 
 Definition rabad (i0 : Machine.instr) : bool :=
   match i0 with
@@ -505,8 +475,6 @@ case: (lin_In_inv Hin)
   all: inversion EI; subst; reflexivity.
 Qed.
 
-(* ---- positional flatten machinery for the forward-branch static ---- *)
-
 Lemma nth_flatten_inv (A : Type) (ll : seq (seq A)) (o : nat) (x : A) :
   List.nth_error (flatten ll) o = Some x ->
   exists n1 seg k,
@@ -537,7 +505,6 @@ case: (ltnP o (size seg)) => [Hlt|Hge] Hnth.
   by lia.
 Qed.
 
-(* at most one position satisfies a count-1-bounded predicate *)
 Lemma count_pos_le1 (A : Type) (pr : A -> bool) (s : seq A)
     (k : nat) (x : A) :
   List.nth_error s k = Some x -> pr x -> 0 < count pr s.
@@ -568,7 +535,6 @@ elim: s k1 k2 => [|y s IH] [|k1] [|k2] //= Hc H1 P1 H2 P2.
   by rewrite (IH _ _ Hc' H1 P1 H2 P2).
 Qed.
 
-(* a sum over a uniq seq with two distinct >=1 contributors is >= 2 *)
 Lemma sumn_mem_le (T : eqType) (f : T -> nat) (s : seq T) (x : T) :
   x \in s -> f x <= sumn [seq f y | y <- s].
 Proof.
@@ -741,7 +707,6 @@ have Ho12 : BinInt.Z.to_nat (Pointer.offset tpc)
 by lia.
 Qed.
 
-(* a RESOLVING label is an [ILabel] of one side, hence bounded *)
 Lemma label_bound (c : Component.id) (l : label) (pc' : Pointer.t) :
   Transitional.find_label_in_comp cdeW c l = Some pc' -> l < L.
 Proof.
@@ -775,7 +740,6 @@ Lemma disch_HlL_jal : forall tpc l tg c pc',
   Transitional.find_label_in_comp cdeW c l = Some pc' -> l < L.
 Proof. move=> tpc l tg c pc' _ Hfind. exact: label_bound Hfind. Qed.
 
-(* a RESOLVING procedure label is a HEADER, hence a declared procedure *)
 Lemma disch_HpP : forall tpc c' pid tg c pc',
   Transitional.executing cdeW tpc (TrJalProc (c', pid)) tg c ->
   Transitional.find_plabel_in_code cdeW c' pid = Some pc' -> pid < P.
@@ -800,8 +764,6 @@ case: (lin_In_inv Hin)
   all: by inversion EI.
 Qed.
 
-(* if every segment gives P-cells in-segment successors, so does the
-   flattening *)
 Lemma flatten_next (A : Type) (Pr : A -> Prop) (ll : seq (seq A))
     (o : nat) (x : A) :
   (forall seg, List.In seg ll -> forall k y,
@@ -847,7 +809,6 @@ case: (ltnP o (size seg)) => [Hlt|Hge] Hnth HP.
   by rewrite minusE (subSn Hge).
 Qed.
 
-(* a jal/call cell always has a successor cell in its segment *)
 Lemma succ_exists (tpc : Pointer.t) (i : Transitional.instr)
     (tg : mem_tag) (c : Component.id) :
   Transitional.executing cdeW tpc i tg c ->
@@ -976,8 +937,6 @@ rewrite (_ : domm (Definitions.prog_interface Wme)
 by rewrite (Intermediate.wfprog_defined_procedures Hwf).
 Qed.
 
-(* ---- OBLIGATION: the initial bridge ---- *)
-
 Lemma disch_bridge :
   forall m : finpref_behavior,
   MDefs.run_fits cdeW tp (finpref_trace m) ->
@@ -1068,9 +1027,6 @@ split.
   by rewrite /Merged.initial_state /= unionmE Hen Him.
 Qed.
 
-(* ================================================================== *)
-(* The frozen forward statement.                                      *)
-(* ================================================================== *)
 
 Theorem t2me_fwd_assembled : forall m,
     forall (MM : Component.id -> seq sv)
@@ -1118,9 +1074,6 @@ apply: (t2me_fwd_prefix HMMd Hcstd Huniqd disch_Hbound disch_HPB disch_Hwfa disc
 - exact: Hrf.
 Qed.
 
-(* The behaviour-directed backward statement: the verdict for a GIVEN
-   T behaviour — what the S-hop composes with.                        *)
-
 Theorem t2me_bwd_assembled_for : forall m bT,
     forall (MM : Component.id -> seq sv)
       (HMMd : forall c S, getm cdeW c = Some S -> comp_ok (c, 1, Z0) S (MM c))
@@ -1166,7 +1119,5 @@ apply: (t2me_bwd_prefix_for HMMd Hcstd Huniqd disch_Hbound disch_HPB disch_Hwfa 
 - exact: Hrf.
 - exact: HbT.
 Qed.
-
-(* The frozen backward statement.                                     *)
 
 End Discharge.

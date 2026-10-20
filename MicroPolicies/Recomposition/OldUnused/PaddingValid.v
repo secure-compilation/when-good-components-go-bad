@@ -1,7 +1,3 @@
-(* ===== [pad_valid] is preserved by every step.  Needed to instantiate the unconditional padding
-   theorems with [Rf := match_pad /\ pad_valid]: steps only EXTEND memory (setm/unionm, never remove
-   cells) and write code-pointers only to addresses that already hold a cell, so [addr_ok] (hence
-   [pad_valid]) is preserved. ===== *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -73,7 +69,6 @@ Variable NC : nat.
 
 Local Notation st := (@Symbolic.state mt lrc_tags unit).
 
-(* re-expose the q/q'-parametrized definitions proved in PaddingSim *)
 Local Notation match_pad  := (@PaddingSim.match_pad q q').
 Local Notation pad_valid  := (@PaddingSim.pad_valid q q').
 Local Notation phia       := (@PaddingSim.phia q q').
@@ -83,8 +78,6 @@ Local Notation memwk      := (@PaddingSim.memwk q q').
 Local Notation memwk_bwd  := (@PaddingSim.memwk_bwd q q').
 Local Notation wregs      := (@PaddingSim.wregs q q').
 
-(* re-expose the q/q'-parametrized helper lemmas — [q]/[q'] are implicit (inferred from args), so
-   only the well-formedness hypotheses are pre-applied; the lemma-own args stay implicit. *)
 Local Notation code_cell_q      := (PaddingSim.code_cell_q Hcount Hbound Hbound').
 Local Notation phia_addr_code   := (PaddingSim.phia_addr_code Hcount Hbound Hbound').
 Local Notation pc_succ_corr     := (PaddingSim.pc_succ_corr Hcount Hbound Hbound' fallthrough_aligned).
@@ -99,7 +92,6 @@ Local Notation nonterm_succ_lt  := (PaddingSim.nonterm_succ_lt code_last_term).
 
 Local Opaque PaddingSim.rel_v.
 
-(* [addr_ok] is monotone under memory extension (cells are never removed). *)
 Lemma addr_ok_mono (m m' : {fmap mword mt -> atom (mword mt) mem_tag}) (w : mword mt) :
   (forall w' c, m w' = Some c -> exists c', m' w' = Some c') ->
   PaddingSim.addr_ok q q' m w -> PaddingSim.addr_ok q q' m' w.
@@ -113,8 +105,6 @@ Lemma unionm_ext (m bm : {fmap mword mt -> atom (mword mt) mem_tag}) :
   forall w' c, m w' = Some c -> exists c', (unionm m bm) w' = Some c'.
 Proof. move=> w' c Hc; exists c; rewrite unionmE Hc //. Qed.
 
-(* a single [do_update] never removes a memory cell (RegWrite/RegRead leave [mem] alone; MemWrite/
-   MemRead [updm] only change a present cell's value). *)
 Lemma ndsu1_mem_ext (s s' : st) (tk : Symbolic.tag_kind)
    (tag : Symbolic.tag_type lrc_tags tk) (u : Symbolic.update) :
   Symbolic.next_state_do_update s tag u = Some s' ->
@@ -132,7 +122,6 @@ Proof.
     rewrite setmE; case: (w =P w0) => [_|_]; [by eexists | by exists c].
 Qed.
 
-(* same for [next_state_do_updates] (a list of updates). *)
 Lemma ndsu_mem_ext (tks : seq Symbolic.tag_kind) (tags : hseq (Symbolic.tag_type lrc_tags) tks)
    (updts : seq Symbolic.update) (s s' : st) :
   Symbolic.next_state_do_updates s tags updts = Some s' ->
@@ -146,8 +135,6 @@ Proof.
     have [c1 Hc1] := ndsu1_mem_ext E Hw. exact: (IH _ _ _ _ H _ _ Hc1).
 Qed.
 
-(* memory extension for a whole [next_state_updates_and_pc] (all non-syscall opcodes): the result's
-   memory still contains every cell of the input ([mem s' = mem st'] for the do-updates result). *)
 Lemma nsuap_mem_ext (s s' : st) (kiv : Symbolic.k_ivec lrc_tags)
    (updts : seq Symbolic.update) (pc' : mword mt) (e : option event) :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s kiv updts pc' = Some (s', e) ->
@@ -162,9 +149,6 @@ Proof.
   exact: (ndsu_mem_ext Hds).
 Qed.
 
-(* extraction: a successful [next_state_updates_and_pc] is exactly a [next_state_do_updates] on the
-   transfer's output tags (mem/regs of the result ARE the do-updates result's).  Generic over the
-   event [ev] and over [Merged.transfer] (cf. [nsu_silent_extract] for [LRC.transfer], None-only). *)
 Lemma nsuap_extract (s s' : st) (kiv : Symbolic.k_ivec lrc_tags)
    (updts : seq Symbolic.update) (pc' : mword mt) (e : option event) :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s kiv updts pc' = Some (s', e) ->
@@ -181,8 +165,6 @@ Proof.
   by move=> [= <- _] /=; exists op0, ov0, st0.
 Qed.
 
-(* the result pc of [next_state_updates_and_pc] is exactly the supplied [pc'] (the transfer only sets
-   its tag).  Lets the pc-range invariant read the new pc per opcode. *)
 Lemma nsuap_pc (s s' : st) (kiv : Symbolic.k_ivec lrc_tags)
    (updts : seq Symbolic.update) (pc' : mword mt) (e : option event) :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s kiv updts pc' = Some (s', e) ->
@@ -197,19 +179,10 @@ Proof.
   by move=> [= <- _].
 Qed.
 
-(* an empty update list leaves the state unchanged (forces the kind-list to be empty). *)
 Lemma ndsu_nil (tks : seq tag_kind) (tags : hseq (tag_type lrc_tags) tks) (s0 st0 : st) :
   Symbolic.next_state_do_updates s0 tags [::] = Some st0 -> st0 = s0.
 Proof. by case: tks tags => [|tk tks'] tags //= [->]. Qed.
 
-(* ===== per-opcode next-cell-FREE inversions: give [mem s']/[regs s'] without the [m(pc+1)] fact
-   that [match_pad] would supply (pad_valid_step has only [pad_valid]).  The output tags do not
-   depend on [tni], so the result is the same whether or not the next cell exists. ===== *)
-
-(* a register map [rs] keeps [r0]'s code-pointers: any code-pointer register of [rs] has the SAME
-   value+tag in [r0].  Preserved by every register update that writes a non-code-pointer tag
-   ([setm .. (_ @ Other)] — covers all of BINOP/STORE/JUMP/SYSCALL's register writes uniformly,
-   sidestepping the value-aliasing that breaks an exact-form inversion). *)
 Definition codeptr_unchanged (r0 rs : {fmap reg mt -> atom (mword mt) value_tag}) : Prop :=
   forall k w t, rs k = Some (w @ t) -> is_codeptr t -> r0 k = Some (w @ t).
 
@@ -232,8 +205,6 @@ Proof.
   - exact: H.
 Qed.
 
-(* a single register-kind update with a non-code-pointer output tag preserves [codeptr_unchanged]
-   and leaves memory untouched (covers RegRead/RegWrite; Mem-updates at kind [R] are impossible). *)
 Lemma ndu_R_cpu (r0 : {fmap reg mt -> atom (mword mt) value_tag}) (s0 s0' : st)
    (t : tag_type lrc_tags R) (u : Symbolic.update) :
   is_codeptr t = false ->
@@ -250,7 +221,6 @@ Proof.
     split; last by []. exact: (cpu_setm_nc Ht Hcpu).
 Qed.
 
-(* a single memory-kind update leaves the register map untouched. *)
 Lemma ndu_M_regs (s0 s0' : st) (t : tag_type lrc_tags M) (u : Symbolic.update) :
   Symbolic.next_state_do_update s0 t u = Some s0' -> Symbolic.regs s0' = Symbolic.regs s0.
 Proof.
@@ -259,7 +229,6 @@ Proof.
   - by case Ew: (Symbolic.mem s0 w) => [a|] //=; case E: (updm _ _ _) => [m'|] //= [= <-].
 Qed.
 
-(* [updm] succeeds on a key already present, returning a [setm]. *)
 Lemma updm_R (r : {fmap reg mt -> atom (mword mt) value_tag}) (k : reg mt)
    (vold v : atom (mword mt) value_tag) :
   r k = Some vold -> updm r k v = Some (setm r k v).
@@ -346,9 +315,6 @@ Proof.
   - by rewrite /= /LRC.check_belong /= Hrg /= (updm_R Hrg) /= => [= <- _].
 Qed.
 
-(* a do_updates whose tags are ALL register-kind and non-code-pointer leaves memory unchanged and
-   keeps code-pointers ([codeptr_unchanged]).  Proven by induction on the kind-list; robust to any
-   register aliasing.  Covers BINOP/STORE-regs/JUMP-clear/SYSCALL register writes. *)
 Definition tk_R_nc (tk : tag_kind) : tag_type lrc_tags tk -> bool :=
   match tk return tag_type lrc_tags tk -> bool with
   | R => fun t => ~~ is_codeptr t | _ => fun _ => false end.
@@ -380,9 +346,6 @@ Proof.
     by split; [ exact: Hc2 | rewrite Hm2 Hm1 ].
 Qed.
 
-(* like [ndsu_allR] but ALSO allows memory-kind updates (which leave registers untouched): only the
-   register-kind output tags must be non-code-pointer.  Concludes [codeptr_unchanged] only (memory
-   may change).  Covers STORE/JUMP/SYSCALL register writes. *)
 Definition tk_nc (tk : tag_kind) : tag_type lrc_tags tk -> bool :=
   match tk return tag_type lrc_tags tk -> bool with
   | R => fun t => ~~ is_codeptr t | _ => fun _ => true end.
@@ -417,14 +380,12 @@ Proof.
     apply: (IH _ _ _ _ Hrec Hrest). exact: (ndu_cpu Htk Hd Hcpu).
 Qed.
 
-(* one-step unfold of the do-updates fold over an explicit hseq-cons (definitional). *)
 Lemma my_ndsu_cons (s0 : st) (tk : tag_kind) (tks' : seq tag_kind) (t : tag_type lrc_tags tk)
    (tags' : hseq (tag_type lrc_tags) tks') (u : Symbolic.update) (us : seq Symbolic.update) :
   Symbolic.next_state_do_updates s0 (HSeqCons t tags' : hseq (tag_type lrc_tags) (tk :: tks')) (u :: us)
   = obind (fun st' => Symbolic.next_state_do_updates st' tags' us) (Symbolic.next_state_do_update s0 t u).
 Proof. by []. Qed.
 
-(* a register-kind update leaves memory untouched. *)
 Lemma ndu_R_mem (s0 s0' : st) (t : tag_type lrc_tags R) (u : Symbolic.update) :
   Symbolic.next_state_do_update s0 t u = Some s0' -> Symbolic.mem s0' = Symbolic.mem s0.
 Proof.
@@ -433,7 +394,6 @@ Proof.
   - by case Ek: (Symbolic.regs s0 k) => [a|] //=; case E: (updm _ _ _) => [rs'|] //= [= <-].
 Qed.
 
-(* a memory-write update sets exactly the written cell. *)
 Lemma ndu_MW_mem (s0 s0' : st) (t : tag_type lrc_tags M) (w1 w2 : mword mt) :
   Symbolic.next_state_do_update s0 t (Symbolic.MemWrite w1 w2) = Some s0' ->
   Symbolic.mem s0' = setm (Symbolic.mem s0) w1 (w2 @ t).
@@ -443,8 +403,6 @@ Proof.
   by move: E; rewrite /updm; case: (Symbolic.mem s0 w1) => [a|] // [= <-].
 Qed.
 
-(* exact single-step results (for LOAD, whose [r2] write may be a code-pointer so [ndsu_cpu] doesn't
-   apply — we need the precise [regs]/[mem]). *)
 Lemma ndu_RegRead_eq (s0 s0' : st) (t : tag_type lrc_tags R) (k : reg mt) (a : atom (mword mt) value_tag) :
   Symbolic.regs s0 k = Some a -> Symbolic.next_state_do_update s0 t (RegRead k) = Some s0' ->
   Symbolic.regs s0' = setm (Symbolic.regs s0) k ((vala a) @ t) /\ Symbolic.mem s0' = Symbolic.mem s0.
@@ -460,9 +418,6 @@ Lemma ndu_RegWrite_eq (s0 s0' : st) (t : tag_type lrc_tags R) (k : reg mt) (x : 
   Symbolic.regs s0' = setm (Symbolic.regs s0) k (x @ t) /\ Symbolic.mem s0' = Symbolic.mem s0.
 Proof. move=> Hk; rewrite /Symbolic.next_state_do_update /= /updm Hk /= => [= <-] /=; split=> //. Qed.
 
-(* register-clear pass-through is the identity (re-proved locally; cf. PreservationLemmas).  A
-   [RegRead] re-tagging a register with its own tag is a no-op; [reg_clear_list] reads each
-   register's own tag, so the whole clear is a no-op.  Used for JUMP/JAL internal transfer. *)
 Lemma reg_read_update_id : forall (s0 : st) (k : reg mt) (a : atom (mword mt) (tag_type lrc_tags R)),
   Symbolic.regs s0 k = Some a -> Symbolic.next_state_do_update s0 (taga a) (RegRead k) = Some s0.
 Proof.
@@ -472,8 +427,6 @@ Proof.
   rewrite Es; clear Hk Es; by case: s0.
 Qed.
 
-(* a [RegWrite] to a defined register installs the value-tagged atom (construction form, before the
-   [next_state_do_update] opacity below).  Used for the JAL return-address write. *)
 Lemma reg_write_set (s0 : st) (k : reg mt) (x : mword mt) (t : tag_type lrc_tags R)
    (vold : atom (mword mt) value_tag) :
   Symbolic.regs s0 k = Some vold ->
@@ -482,7 +435,6 @@ Lemma reg_write_set (s0 : st) (k : reg mt) (x : mword mt) (t : tag_type lrc_tags
             (setm (Symbolic.regs s0) k (x @ t)) (Symbolic.pc s0) (Symbolic.internal s0)).
 Proof. by move=> Hk; rewrite /Symbolic.next_state_do_update /= /updm Hk /=. Qed.
 
-(* keep [next_state_do_update] folded so [reg_read_update_id] rewrites match in the clear below. *)
 Local Opaque Symbolic.next_state_do_update.
 
 Lemma reg_clear_do_updates_id :
@@ -502,17 +454,12 @@ Proof.
     exact: (IH s0 (as_word (ssrint.Posz e)) ve l'' Hve Hl'').
 Qed.
 
-(* forward empty-do_updates (base case of the invalidate-list induction). *)
 Lemma ndsu_nil0 (s0 : st) (tags : hseq (tag_type lrc_tags) [::]) :
   Symbolic.next_state_do_updates s0 tags [::] = Some s0.
 Proof. by []. Qed.
 
-(* keep [next_state_do_updates] folded in the [/=] peels below so [ndsu_allR] applies (its own proof
-   above used it transparent). *)
 Local Opaque Symbolic.next_state_do_updates.
 
-(* one-sided invalidate-list: [RegRead]s re-tagging readable registers to [Invalidated] succeed and
-   leave memory unchanged (the s1-only core of [PaddingSim.nsuap_inval_list]). *)
 Lemma nsuap_inval_list_1 : forall (ks : seq nat) (s0 : st),
   (forall k, k \in ks -> exists a, Symbolic.regs s0 (as_word (ssrint.Posz k)) = Some a) ->
   exists sd, Symbolic.next_state_do_updates s0
@@ -537,7 +484,6 @@ Proof.
     rewrite ndsu_cons Hd1 [obind _ (Some s0a)]/=; exact: Hsd.
 Qed.
 
-(* the LOAD do-updates ([RegRead r1; MemRead w1; RegWrite r2 w2]) result, exactly. *)
 Lemma load_du (s0 s0' : st) (ta : tag_type lrc_tags R) (tb : tag_type lrc_tags M) (td : tag_type lrc_tags R)
    (r1 r2 : reg mt) (w1 w2 : mword mt) (a1 : atom (mword mt) value_tag) (am : matom) (vold : atom (mword mt) value_tag) :
   Symbolic.next_state_do_updates s0
@@ -561,7 +507,6 @@ Proof.
   by split; [ rewrite Hr3e Hr2e Hr1e | rewrite Hm3e Hm2e Hm1e ].
 Qed.
 
-(* STORE writes only the cell [w1] (value [w2], its memory-tag's value-tag becomes the source [t2]). *)
 Lemma store_du_mem (s0 s0' : st) (ta tb : tag_type lrc_tags R) (tc : tag_type lrc_tags M)
    (r1 r2 : reg mt) (w1 w2 : mword mt) :
   Symbolic.next_state_do_updates s0
@@ -575,9 +520,6 @@ Proof.
   by rewrite (ndu_MW_mem Hd3) (ndu_R_mem Hd2) (ndu_R_mem Hd1).
 Qed.
 
-(* BINOP: all three register writes carry [Other] (non-code-pointer) ⟹ code-pointers are
-   unchanged; mem untouched.  The do_updates is discharged by [ndsu_allR] (robust to the r1/r2
-   register aliasing that an exact-value inversion would break). *)
 Lemma binop_nsu_cpu (m : {fmap mword mt -> matom}) (r : {fmap reg mt -> ratom})
    (pcw : mword mt) (tpc : tag_type lrc_tags Symbolic.P) (ext : unit) (ti : mem_tag) (op : binop)
    (r1 r2 r3 : reg mt) (x : mword mt) (t1 t2 told : value_tag) (s' : st) (e : option event) :
@@ -606,9 +548,6 @@ Qed.
 Lemma switch_val_vtag (td : mem_tag) (v : value_tag) : vtag ((switch_val td v).1) = v.
 Proof. by case: td. Qed.
 
-(* one-sided register clear for a cross-component RETURN/CALL: invalidate [ra] and [r], keep [rcom]
-   at [Other], invalidate the remaining 10 registers — succeeds and leaves memory unchanged (the
-   s1-only core of [PaddingSim.return_clear], dropping the 2-sided [wregs] bookkeeping). *)
 Lemma return_clear_1 (s0 : st) (r : reg mt) (rav w rcv : mword mt) (rat t1 : value_tag)
    (l : hseq (tag_type lrc_tags) (nseq (size Symbolic.reg_list).+1 Symbolic.R)) :
   Symbolic.regs s0 ra = Some (rav @ rat) -> Symbolic.regs s0 r = Some (w @ t1) ->
@@ -663,7 +602,6 @@ Proof.
   exact: Hd1.
 Qed.
 
-(* forward [reg_clear_list_aux] cons step (local copy of PaddingFwdJal's [Local] lemma). *)
 Local Lemma rcla_cons_some (e : nat) (l' : seq nat)
    (rs : {fmap reg mt -> atom (mword mt) (Symbolic.tag_type lrc_tags Symbolic.R)})
    (t : Symbolic.tag_type lrc_tags Symbolic.R)
@@ -677,10 +615,6 @@ Proof.
   by rewrite reg_clear_list_aux_cons Hr [obind _ (Some a)]/= Hll [obind _ (Some ll)]/=.
 Qed.
 
-(* one-sided JAL cross-component CALL register clear (mirror of [return_clear_1]): the [MemRead] is
-   identity, [RegWrite ra] installs the [Ret level] return address, [rcom] is kept [Other], the rest
-   invalidated.  Also exposes that the only code-pointer introduced is [ra := pc+1], via
-   [codeptr_unchanged] against [setm regs ra ((pc+1)@Ret level)]. *)
 Lemma jal_call_clear_1 (s0 : st) (vret old rcv : mword mt) (tret : mem_tag) (told : value_tag) (level : nat) :
   Symbolic.mem s0 (vala (Symbolic.pc s0) + 1)%w = Some (vret @ tret) ->
   Symbolic.regs s0 ra = Some (old @ told) ->
@@ -737,9 +671,6 @@ Proof.
   - exact: Hcpu.
 Qed.
 
-(* STORE: registers re-tagged non-code-pointer ([ndsu_cpu]); memory writes only cell [w1] whose
-   value-tag becomes the source register tag [t2].  [told] is destructured up front so [switch_val]
-   is concrete (otherwise [/=] fails to reduce the obind chain). *)
 Lemma store_nsu (m : {fmap mword mt -> matom}) (r : {fmap reg mt -> ratom})
    (pcw : mword mt) (tpc : tag_type lrc_tags Symbolic.P) (ext : unit) (ti : mem_tag)
    (r1 r2 : reg mt) (w1 w2 : mword mt) (t1 t2 : value_tag) (told : mem_tag) (s' : st) (e : option event) :
@@ -771,9 +702,6 @@ Proof.
     by split; [ exact: Hc | eexists; split; [ exact: Hm | by [] ] ].
 Qed.
 
-(* LOAD: r1 retagged Other; r2 := loaded value [w2] tagged [vtag t2] (code-pointer ⟹ addr_ok by
-   [PV2] on the loaded cell, which Merged forces to be data); cell w1 retagged with a non-code-pointer
-   value-tag. *)
 Lemma load_nsu (m : {fmap mword mt -> matom}) (r : {fmap reg mt -> ratom})
    (pcw : mword mt) (tpc : tag_type lrc_tags Symbolic.P) (ext : unit) (ti : mem_tag)
    (r1 r2 : reg mt) (w1 w2 : mword mt) (t1 : value_tag) (t2 : mem_tag) (old : mword mt) (told : value_tag)
@@ -807,7 +735,6 @@ Proof.
     by split; [ exact: Hre | eexists; split; [ exact: Hme | by [] ] ].
 Qed.
 
-(* a successful step's instruction cell is code ([Merged.instr_rules] refuses executing data). *)
 Lemma nsuap_is_code (s s' : st) (op0 : opcode) (tpc : tag_type lrc_tags Symbolic.P) (ti : mem_tag)
    (ts : hseq (tag_type lrc_tags) (inputs op0)) (updts : seq Symbolic.update) (pc' : mword mt) (e : option event) :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -820,11 +747,9 @@ Proof.
     by case: (is_code ti) => /=; [ move=> _ | move=> [=] ].
 Qed.
 
-(* every pc-tag is [Level l c] (eta for [pc_tag]); lets us expose [tpc] for [jump_step_inv]. *)
 Lemma pc_tag_eta (t : tag_type lrc_tags Symbolic.P) : exists l c, t = build_tpc l c.
 Proof. by case: t => l c; exists l, c. Qed.
 
-(* a successful step has its event-inputs defined. *)
 Lemma nsuap_evi (s s' : st) (kiv : Symbolic.k_ivec lrc_tags) (updts : seq Symbolic.update)
    (pc' : mword mt) (e : option event) :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s kiv updts pc' = Some (s', e) ->
@@ -834,38 +759,31 @@ Proof.
   by case Hevi: (Symbolic.evi s) => [ei|]; [ exists ei | move=> [=] ].
 Qed.
 
-(* a constant-value allocator block: every cell of [mkfmap (mkseq (fun n => (f n, a)) k)] holds [a]
-   (local copy of PaddingFwdSys's lemma). *)
 Lemma alloc_block_const_value {T : ordType} {S : eqType}
       (f : nat -> T) (a : S) (k : nat) (w : T) (d : S) :
   mkfmap (mkseq (fun n => (f n, a)) k) w = Some d -> d = a.
 Proof. move=> H; move/mkfmap_Some: H; rewrite /mkseq => /mapP[x _ [= _ ->]] //. Qed.
 
-(* keep allocator-block constructors folded so [/=] only reduces State projections (not [unionm]'s
-   definition), letting [unionm_ext]/[unionmE]/[alloc_block_const_value] match in the SYSCALL case. *)
 Local Opaque unionm mkfmap mkseq.
 
-(* every step preserves [pad_valid].  Proof per-opcode: memory is only extended (setm/unionm) so
-   [addr_ok_mono] carries old obligations; the only NEW code-pointer written is the JAL return
-   address [pc+1], whose cell exists (the [RA] read), hence is [addr_ok]. *)
 Lemma pad_valid_step (s s' : st) (ev : option event) :
   pad_valid s -> step_me (NC := NC) s s' ev -> pad_valid s'.
 Proof.
   move=> [PV1 PV2] Hstep; rewrite /step_me in Hstep; inversion Hstep; subst.
-  - (* NOP: empty updates ⇒ s' has the same mem/regs as s. *)
+  -
     move: NEXT => /nsuap_extract [op0 [ov0 [st0 [Hds [Hmem Hreg]]]]].
     have ? := ndsu_nil Hds; subst st0.
     split.
     + by move=> r0 w t; rewrite Hreg Hmem => Hr Hc; exact: (PV1 _ _ _ Hr Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (PV2 _ _ _ Hw Hc).
-  - (* CONST: r := swcast n @ Other (non-codeptr); mem unchanged. *)
+  -
     have [Hmem Hreg] := const_nsu_valid OLD NEXT.
     split.
     + move=> r0 w t; rewrite Hreg setmE; case: (r0 =P r) => [_|_].
       * by move=> [= _ <-] Hcp; discriminate Hcp.
       * by move=> Hr Hc; rewrite Hmem; exact: (PV1 _ _ _ Hr Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (PV2 _ _ _ Hw Hc).
-  - (* MOV: r2 := w1@t1 (copy of source r1); r1 re-tagged non-codeptr; mem unchanged. *)
+  -
     have [Hmem Hreg] := mov_nsu_valid R1W OLD NEXT.
     split.
     + move=> r0 w t; rewrite Hreg !setmE.
@@ -875,12 +793,12 @@ Proof.
         -- by move=> [= _ <-]; case: (is_address t1) => /= Hcp; discriminate Hcp.
         -- by move=> Hr Hc; rewrite Hmem; exact: (PV1 _ _ _ Hr Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (PV2 _ _ _ Hw Hc).
-  - (* BINOP: all writes Other (non-codeptr) ⟹ code-pointer regs unchanged; mem unchanged. *)
+  -
     have [Hmem Hcpu] := binop_nsu_cpu NEXT.
     split.
     + by move=> r0 w t Hr0 Hc; rewrite Hmem; exact: (PV1 _ _ _ (Hcpu _ _ _ Hr0 Hc) Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (PV2 _ _ _ Hw Hc).
-  - (* LOAD: r1 retag Other; r2 := loaded value (codeptr ⟹ PV2 on the cell); cell retag noncodeptr. *)
+  -
     have [Hreg [tc [Hmem Hnc]]] := load_nsu R1W MEM1 OLD NEXT.
     split.
     + move=> r0 w t; rewrite Hreg !setmE.
@@ -898,7 +816,7 @@ Proof.
       * move=> Hw Hc.
         apply: (addr_ok_mono _ (PV2 _ _ _ Hw Hc)).
         move=> w' c Hw'; rewrite setmE; case: (w' =P w1) => [_|_]; [ by eexists | by exists c ].
-  - (* STORE: regs code-pointers unchanged; mem only writes cell w1 (value w2, vtag t2 = reg r2's). *)
+  -
     have [Hcpu [tc [Hmem Hvt]]] := store_nsu NEXT.
     split.
     + move=> r0 w t Hr0 Hc.
@@ -911,7 +829,7 @@ Proof.
       * move=> Hw Hc.
         apply: (addr_ok_mono _ (PV2 _ _ _ Hw Hc)).
         move=> w' c Hw'; rewrite setmE; case: (w' =P w1) => [_|_]; [ by eexists | by exists c ].
-  - (* JUMP: internal = identity; cross-component return = registers invalidated. mem unchanged. *)
+  -
     have [level [ctpc Etpc]] := pc_tag_eta tpc0.
     rewrite /mvec Etpc in NEXT.
     pose st0 := @Symbolic.State mt lrc_tags unit mem0 reg (pc0 @ (build_tpc level ctpc)) extra.
@@ -940,15 +858,14 @@ Proof.
       split.
       * move=> r0 w0 t Hr0 Hc; rewrite /= Hmsd; exact: (PV1 _ _ _ (Hcpu _ _ _ Hr0 Hc) Hc).
       * move=> w0 v t; rewrite /= Hmsd => Hw0 Hc; exact: (PV2 _ _ _ Hw0 Hc).
-  - (* BNZ: r re-tagged Other (non-codeptr); mem unchanged. *)
+  -
     have [Hmem Hreg] := bnz_nsu_valid RW NEXT.
     split.
     + move=> r0 w0 t; rewrite Hreg setmE; case: (r0 =P r) => [_|_].
       * by move=> [= _ <-] Hcp; discriminate Hcp.
       * by move=> Hr Hc; rewrite Hmem; exact: (PV1 _ _ _ Hr Hc).
     + by move=> w0 v t; rewrite Hmem => Hw Hc; exact: (PV2 _ _ _ Hw Hc).
-  - (* JAL: internal = ra := pc+1 @ InternalJump; cross-component call = ra := pc+1 @ Ret level, rest
-       cleared.  The only new code-pointer is ra = pc+1, valid since its target cell exists (RA). *)
+  -
     have [level [ctpc Etpc]] := pc_tag_eta tpc0.
     rewrite /mvec Etpc in NEXT.
     pose st0 := @Symbolic.State mt lrc_tags unit mem0 reg (pc0 @ (build_tpc level ctpc)) extra.
@@ -972,7 +889,7 @@ Proof.
     have [Hcolor [Hcret Hdisj]] := jal_step_inv Hic RA OLD CLEAR NEXT.
     rewrite Hleq in NEXT.
     case: Hdisj => [Hbel1 | [celltgt [rcv [Hmw0 [Hbel1 [Hrcom [u Hentry]]]]]]].
-    + (* internal JAL: ra := pc+1 @ InternalJump *)
+    +
       move: NEXT.
       rewrite (jal_internal_nsuap (s := st0) Hic RA OLD Ha1 Hlh1 Hbel1 Hcolor Hcret Hevi) => [= <- _].
       split.
@@ -980,7 +897,7 @@ Proof.
         -- by move=> [= Ew Et] _; subst; rewrite /addr_ok; left; exists (vret @ tret).
         -- move=> Hr0 Hc; exact: (PV1 _ _ _ Hr0 Hc).
       * move=> w0 v t Hw0 Hc; exact: (PV2 _ _ _ Hw0 Hc).
-    + (* cross-component CALL JAL: ra := pc+1 @ Ret level, rest cleared *)
+    +
       have Hbelne : color ti0 != color (taga celltgt) by move: Hbel1; rewrite PaddingSim.belong_someE.
       have Hentry' : check_entry (color ti0) (Some (taga celltgt)) = Some tt by move: Hentry; case: u.
       have [p Hpname] : exists p, get_proc_name (Some (taga celltgt)) = Some p.
@@ -1008,9 +925,7 @@ Proof.
         -- by move=> [= Ew Et]; subst; rewrite /addr_ok; left; exists (vret @ tret).
         -- move=> Hr0'; exact: (PV1 _ _ _ Hr0' Hc).
       * move=> w0 v t; rewrite /= Hmsd => Hw0 Hc; exact: (PV2 _ _ _ Hw0 Hc).
-  - (* SYSCALL: the only syscall is the allocator.  The new block is data (vtag = Other), the result
-       register [syscall_ret] is tagged [Other], and pre-existing code-pointers stay valid because
-       [addr_ok] is monotone under [unionm] (no cell is removed). *)
+  -
     have Hsem : Symbolic.sem sc = LRC.alloc_fun (NC := NC).
     { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=.
       case: ifP => [_ [= <-] //|_]. by move=> [=]. }
@@ -1055,19 +970,10 @@ Proof.
         by move: Hc; rewrite Ht.
 Qed.
 
-(* ===== Second invariant: every code-pointer (in registers OR memory) points strictly inside the
-   code region [pc0 .. pc0+|code q|).  Needed (together with [match_pad]) to pin the pc inside the
-   code range for the final-state / no-step correspondence (φ is non-injective at the code/heap
-   boundary).  Memory-independent (unlike [addr_ok]), so simpler than [pad_valid_step]; the only
-   subtlety is JAL's [ra := pc+1], whose range follows from the executing pc being a code cell
-   (the [code_iso] hypothesis = [match_pad]'s code conjunct) + [code_last_term]. ===== *)
-(* an [instr_merged] decoding to [Jal] is [MrJal] (the only [Jal] producer), hence non-terminal. *)
 Lemma imt_jal_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) (w : imm mt) :
   Jal w = instr_merged_to_mp i lp pos -> PaddingSim.is_term i = false.
 Proof. by case: i. Qed.
 
-(* per-opcode non-terminality: a merged instr decoding to a [pc+1] opcode is non-terminal (each
-   such opcode is produced by exactly one non-terminal [Mr*] constructor). *)
 Lemma imt_nop_nonterm i lp pos :
   Nop mt = instr_merged_to_mp i lp pos -> PaddingSim.is_term i = false.
 Proof. by case: i. Qed.
@@ -1090,17 +996,14 @@ Lemma imt_bnz_nonterm i lp pos r w :
   Bnz r w = instr_merged_to_mp i lp pos -> PaddingSim.is_term i = false.
 Proof. by case: i. Qed.
 
-(* a [Jal] cell's immediate is the resolved label position. *)
 Lemma imt_jal_target (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) (w : imm mt) :
   Jal w = instr_merged_to_mp i lp pos -> exists l, w = @word_of_nat (imm_size mt) (lp l pos).
 Proof. by case: i => //= l [= ->]; exists l. Qed.
 
-(* a [Bnz] cell's immediate is the resolved relative offset. *)
 Lemma imt_bnz_target (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) (r : Types.reg mt) (w : imm mt) :
   Bnz r w = instr_merged_to_mp i lp pos -> exists l, w = @word_of_nat (imm_size mt) (lp l pos - pos).
 Proof. by case: i => //= rc l [= _ ->]; exists l. Qed.
 
-(* [Bnz] inversion exposing the underlying [MrBnz] cell — needed to invoke [bnz_labels_resolved]. *)
 Lemma imt_bnz_inv (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) (r : Types.reg mt) (w : imm mt) :
   Bnz r w = instr_merged_to_mp i lp pos ->
   exists rc l, i = MrBnz rc l /\ w = @word_of_nat (imm_size mt) (lp l pos - pos).
@@ -1119,19 +1022,19 @@ Lemma cptr_code_step (s s' : st) (ev : option event) :
   cptr_code s -> step_me (NC := NC) s s' ev -> cptr_code s'.
 Proof.
   move=> Hciso [CC1 CC2] Hstep; rewrite /step_me in Hstep; inversion Hstep; subst.
-  - (* NOP *)
+  -
     move: NEXT => /nsuap_extract [op0 [ov0 [st0 [Hds [Hmem Hreg]]]]].
     have ? := ndsu_nil Hds; subst st0.
     by split; [ move=> r0 w t; rewrite Hreg => Hr Hc; exact: (CC1 _ _ _ Hr Hc)
               | move=> w v t; rewrite Hmem => Hw Hc; exact: (CC2 _ _ _ Hw Hc) ].
-  - (* CONST: r := Other *)
+  -
     have [Hmem Hreg] := const_nsu_valid OLD NEXT.
     split.
     + move=> r0 w t; rewrite Hreg setmE; case: (r0 =P r) => [_|_].
       * by move=> [= _ <-] Hcp; discriminate Hcp.
       * by move=> Hr Hc; exact: (CC1 _ _ _ Hr Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (CC2 _ _ _ Hw Hc).
-  - (* MOV: r2 := copy of r1 *)
+  -
     have [Hmem Hreg] := mov_nsu_valid R1W OLD NEXT.
     split.
     + move=> r0 w t; rewrite Hreg !setmE; case: (r0 =P r2) => [_|_].
@@ -1140,12 +1043,12 @@ Proof.
         -- by move=> [= _ <-]; case: (is_address t1) => /= Hcp; discriminate Hcp.
         -- by move=> Hr Hc; exact: (CC1 _ _ _ Hr Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (CC2 _ _ _ Hw Hc).
-  - (* BINOP: all Other *)
+  -
     have [Hmem Hcpu] := binop_nsu_cpu NEXT.
     split.
     + by move=> r0 w t Hr0 Hc; exact: (CC1 _ _ _ (Hcpu _ _ _ Hr0 Hc) Hc).
     + by move=> w v t; rewrite Hmem => Hw Hc; exact: (CC2 _ _ _ Hw Hc).
-  - (* LOAD: r2 := loaded value (mem code-pointer ⟹ in range) *)
+  -
     have [Hreg [tc [Hmem Hnc]]] := load_nsu R1W MEM1 OLD NEXT.
     split.
     + move=> r0 w t; rewrite Hreg !setmE; case: (r0 =P r2) => [_|_].
@@ -1156,14 +1059,14 @@ Proof.
     + move=> w v t; rewrite Hmem setmE; case: (w =P w1) => [_|_].
       * by move=> [= <- <-] Hc; rewrite Hnc in Hc; discriminate Hc.
       * by move=> Hw Hc; exact: (CC2 _ _ _ Hw Hc).
-  - (* STORE: cell := r2's value (register code-pointer ⟹ in range) *)
+  -
     have [Hcpu [tc [Hmem Hvt]]] := store_nsu NEXT.
     split.
     + by move=> r0 w t Hr0 Hc; exact: (CC1 _ _ _ (Hcpu _ _ _ Hr0 Hc) Hc).
     + move=> w v t; rewrite Hmem setmE; case: (w =P w1) => [_|_].
       * by move=> [= <- <-] Hc; move: Hc; rewrite Hvt => Hcc; exact: (CC1 _ _ _ R2W Hcc).
       * by move=> Hw Hc; exact: (CC2 _ _ _ Hw Hc).
-  - (* JUMP: internal = identity, return = cleared.  No new code-pointer. *)
+  -
     have [level [ctpc Etpc]] := pc_tag_eta tpc0.
     rewrite /mvec Etpc in NEXT.
     pose st0 := @Symbolic.State mt lrc_tags unit mem0 reg (pc0 @ (build_tpc level ctpc)) extra.
@@ -1191,14 +1094,14 @@ Proof.
       split.
       * by move=> r0 w0 t Hr0 Hc; exact: (CC1 _ _ _ (Hcpu _ _ _ Hr0 Hc) Hc).
       * by move=> w0 v t; rewrite /= Hmsd => Hw0 Hc; exact: (CC2 _ _ _ Hw0 Hc).
-  - (* BNZ: r := Other *)
+  -
     have [Hmem Hreg] := bnz_nsu_valid RW NEXT.
     split.
     + move=> r0 w0 t; rewrite Hreg setmE; case: (r0 =P r) => [_|_].
       * by move=> [= _ <-] Hcp; discriminate Hcp.
       * by move=> Hr Hc; exact: (CC1 _ _ _ Hr Hc).
     + by move=> w0 v t; rewrite Hmem => Hw Hc; exact: (CC2 _ _ _ Hw Hc).
-  - (* JAL: ra := pc+1 (in range: pc is a code cell, JAL non-terminal); rest cleared. *)
+  -
     have Hic := nsuap_is_code NEXT.
     have Hpc1 : in_crange (pc0 + 1)%w.
     { have Hcell := Hciso _ _ PC Hic.
@@ -1266,7 +1169,7 @@ Proof.
         -- by move=> [= Ew Et]; subst; exact: Hpc1.
         -- by move=> Hr0'; exact: (CC1 _ _ _ Hr0' Hc).
       * by move=> w0 v t; rewrite /= Hmsd => Hw0 Hc; exact: (CC2 _ _ _ Hw0 Hc).
-  - (* SYSCALL: allocator.  Result register [Other], new block cells [Other] ⟹ no new code-pointer. *)
+  -
     have Hsem : Symbolic.sem sc = LRC.alloc_fun (NC := NC).
     { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=.
       case: ifP => [_ [= <-] //|_]. by move=> [=]. }
@@ -1307,12 +1210,6 @@ Proof.
         by move: Hc; rewrite Ht.
 Qed.
 
-(* ===== Third invariant: the pc stays OUT of the φ-collision zone [pc0+|code q|, pc0+|padc|): it is
-   either inside the code region (< pc0+|code q|) or at/above the padded-code end (>= pc0+|padc|, e.g.
-   the allocator syscall entry).  This is exactly what [Rf_final]/[Rf_nostep] need (φ is non-injective
-   only on that zone).  Post-condition of every step: sequential/bnz/jal-label land in code; jump and
-   syscall land on a register code-pointer (in code by [cptr_code]); jal-to-allocator lands high. ===== *)
-(* a code address at index [x < |code q|] is inside the code region. *)
 Lemma addr_in_code (x : nat) :
   x < size (code q) -> (val (@word_of_nat (word_size mt) (pc0 + x)) : nat) < pc0 + size (code q).
 Proof.
@@ -1321,7 +1218,6 @@ Proof.
   - have := alloc_label_lt_word; move: Hx Hbound; lia.
 Qed.
 
-(* [pc+1] of a code address at index [n < |code q|-1] stays inside the code region. *)
 Lemma pc1_in_code (n : nat) :
   n.+1 < size (code q) ->
   (val ((@word_of_nat (word_size mt) (n + pc0) + 1)%w) : nat) < pc0 + size (code q).
@@ -1340,8 +1236,6 @@ Lemma pc_safe_step (s s' : st) (ev : option event) :
   cptr_code s -> step_me (NC := NC) s s' ev -> pc_safe s'.
 Proof.
   move=> Hciso [CC1 _] Hstep; rewrite /step_me in Hstep; inversion Hstep; subst; rewrite /pc_safe.
-  (* the 6 sequential opcodes: pc' = pc+1, pc is a code cell (code_iso) decoding to a non-terminal
-     ⟹ not the last cell ⟹ pc+1 stays in the code region. *)
   1-6: have Hpc := nsuap_pc NEXT; have Hic := nsuap_is_code NEXT; have Hcell := Hciso _ _ PC Hic.
   1-6: case: (code_cell_q Hcell) => ncc [imc [tmc [Hn [Hweq [Hnth [Htag Hdec]]]]]].
   1-6: have H1 := Hdec; rewrite vala_at INST in H1; move: H1 => [= H1].
@@ -1352,7 +1246,7 @@ Proof.
   - exact: (pc1_in_code (nonterm_succ_lt Hn Hnth (imt_binop_nonterm H1))).
   - exact: (pc1_in_code (nonterm_succ_lt Hn Hnth (imt_load_nonterm  H1))).
   - exact: (pc1_in_code (nonterm_succ_lt Hn Hnth (imt_store_nonterm H1))).
-  - (* JUMP: pc' = target register value [w], a code-pointer (InternalJump/Ret) ⟹ in code by [cptr_code]. *)
+  -
     have Hpc := nsuap_pc NEXT.
     have Hic := nsuap_is_code NEXT.
     have [level [ctpc Etpc]] := pc_tag_eta tpc0.
@@ -1360,19 +1254,17 @@ Proof.
     have [Hcolor Hdisj] := jump_step_inv Hic RW RA CLEAR NEXT.
     have Ht1c : is_codeptr t1 by case: Hdisj => [[_ ->]|[? [? [? [_ [_ [-> _]]]]]]].
     by left; move: Hpc => ->; exact: (proj2 (CC1 _ _ _ RW Ht1c)).
-  - (* BNZ: not-taken ⟹ pc+1; taken ⟹ resolved offset; both land in a safe region.
-       The branch [target] need not be correct for [pc_safe] — only that [pc'] stays in code; the
-       [None] (unresolved label) sub-case is excluded by [bnz_labels_resolved]. *)
+  -
     have Hpc := nsuap_pc NEXT.
     have Hic := nsuap_is_code NEXT.
     have Hcell := Hciso _ _ PC Hic.
     case: (code_cell_q Hcell) => ncc [imc [tmc [Hn [Hweq [Hnth [Htag Hdec]]]]]].
     have H1 := Hdec; rewrite vala_at INST in H1; move: H1 => [= H1].
     move: Hpc; rewrite /pc'; case: ifP => [Hw0|Hwn].
-    + (* not taken: pc' = pc0 + 1, a code cell at index [ncc] which is non-terminal ⟹ [ncc+1] in code. *)
+    +
       rewrite Hweq => ->.
       left; exact: (pc1_in_code (nonterm_succ_lt Hn Hnth (imt_bnz_nonterm H1))).
-    + (* taken: pc' = pc0 + swcast (resolved relative offset) *)
+    +
       have [rc [l0 [Himc Hn_eq]]] := imt_bnz_inv H1.
       rewrite Hweq Hn_eq.
       case Hfo: (findopt (fun p => match p.1 with MrLabel l1 => l0 == l1 | _ => false end) (code q)) => [m|].
@@ -1383,7 +1275,7 @@ Proof.
       * rewrite Himc in Hnth.
         have [m Hm] := bnz_labels_resolved Hnth.
         by congruence.
-  - (* JAL: pc' = swcast imm = resolved label (in code) or allocator entry (>= padded end). *)
+  -
     have Hpc := nsuap_pc NEXT.
     have Hic := nsuap_is_code NEXT.
     have Hcell := Hciso _ _ PC Hic.
@@ -1402,7 +1294,7 @@ Proof.
       * have Hb : size (@Merged.initial_memory mt (prog_buffers q)) + ncc < alloc_label
           by move: Hn Hbound; lia.
         by rewrite (swcast_word_of_nat_id Hb) => ->; left; exact: (addr_in_code Hn).
-  - (* SYSCALL: pc' = return address (a code-pointer in [ra]) ⟹ in code by [cptr_code]. *)
+  -
     have Hsem : Symbolic.sem sc = LRC.alloc_fun (NC := NC).
     { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=.
       case: ifP => [_ [= <-] //|_]. by move=> [=]. }
@@ -1434,13 +1326,6 @@ Proof.
     apply: (proj2 (CC1 _ _ _ Hra1' _)); by rewrite Hjc.
 Qed.
 
-(* ===== [pc_pos]: the LEFT-run data-as-code reachability invariant.  Strictly stronger than
-   [pc_safe]: the in-code disjunct is the TWO-SIDED [in_crange] (also [pc0 <=]) and the high disjunct
-   is [mem@pc = None] (rather than the bare [>= pc0+|padc|]).  Both refinements are what turn "pc
-   stays out of the φ-gap" into "the pc cell is code (or absent)" — exactly what rules out a
-   compromise stepping onto φ-shifted data.  The lower bound is free now [in_crange] is two-sided;
-   the JAL-to-allocator high case records [mem s' alloc_label = None] (supplied as [Hanm'], maintained
-   by the allocator-never-fills-[alloc_label] invariant). ===== *)
 Lemma in_crange_val (w : mword mt) :
   size (@Merged.initial_memory mt (prog_buffers q)) <= (val w : nat) ->
   (val w : nat) < size (@Merged.initial_memory mt (prog_buffers q)) + size (code q) ->
@@ -1485,7 +1370,7 @@ Proof.
   - exact: (pc1_in_range (nonterm_succ_lt Hn Hnth (imt_binop_nonterm H1))).
   - exact: (pc1_in_range (nonterm_succ_lt Hn Hnth (imt_load_nonterm  H1))).
   - exact: (pc1_in_range (nonterm_succ_lt Hn Hnth (imt_store_nonterm H1))).
-  - (* JUMP: pc' = target register value [w], a code-pointer ⟹ in_crange by two-sided [cptr_code]. *)
+  -
     have Hpc := nsuap_pc NEXT.
     have Hic := nsuap_is_code NEXT.
     have [level [ctpc Etpc]] := pc_tag_eta tpc0.
@@ -1493,7 +1378,7 @@ Proof.
     have [Hcolor Hdisj] := jump_step_inv Hic RW RA CLEAR NEXT.
     have Ht1c : is_codeptr t1 by case: Hdisj => [[_ ->]|[? [? [? [_ [_ [-> _]]]]]]].
     by left; move: Hpc => ->; exact: (CC1 _ _ _ RW Ht1c).
-  - (* BNZ *)
+  -
     have Hpc := nsuap_pc NEXT.
     have Hic := nsuap_is_code NEXT.
     have Hcell := Hciso _ _ PC Hic.
@@ -1515,7 +1400,7 @@ Proof.
       * rewrite Himc in Hnth.
         have [m Hm] := bnz_labels_resolved Hnth.
         by congruence.
-  - (* JAL: pc' = resolved label (in_crange) or allocator entry (high ⟹ [mem = None]). *)
+  -
     have Hpc := nsuap_pc NEXT.
     have Hic := nsuap_is_code NEXT.
     have Hcell := Hciso _ _ PC Hic.
@@ -1534,7 +1419,7 @@ Proof.
       * have Hb : size (@Merged.initial_memory mt (prog_buffers q)) + ncc < alloc_label
           by move: Hn Hbound; lia.
         by rewrite (swcast_word_of_nat_id Hb) => ->; left; exact: (addr_in_range Hn).
-  - (* SYSCALL: pc' = return address (a code-pointer in [ra]) ⟹ in_crange by [cptr_code]. *)
+  -
     have Hsem : Symbolic.sem sc = LRC.alloc_fun (NC := NC).
     { move: GETCALL; rewrite /Instance.table /Merged.table mkfmapE /=.
       case: ifP => [_ [= <-] //|_]. by move=> [=]. }

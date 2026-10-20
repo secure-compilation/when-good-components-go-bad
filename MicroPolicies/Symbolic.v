@@ -187,8 +187,6 @@ Definition convert (i : ssrint.int) : BinNums.Z :=
   | ssrint.Negz n => BinInt.Z.opp (BinInt.Z.of_nat (S n))
   end.
 
-(* [convert] is the standard [int -> Z] embedding ([Negz n] is [-(n+1)]), hence injective.
-   (The previous version dropped the [+1] for [Negz], conflating [0] and [-1].) *)
 Lemma convert_inj : injective convert.
 Proof.
 move=> [m|m] [n|n]; rewrite /convert => H.
@@ -279,8 +277,6 @@ Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
   end.
 
 
-(* [updm] is an in-place update: it succeeds only on a key already in the domain, so it leaves
-   the domain unchanged. *)
 Lemma updm_domm_eq {T : ordType} {St : Type} (m m' : {fmap T -> St}) k v :
   updm m k v = Some m' -> domm m' = domm m.
 Proof.
@@ -290,7 +286,6 @@ case: (altP (x =P k)) => [->|_] //=.
 by rewrite mem_domm E.
 Qed.
 
-(* A single update only [updm]s a register/memory key, so it preserves the register domain. *)
 Lemma next_state_do_update_regs_domm (st : state) (tk : tag_kind)
       (tag : tag_type ttypes tk) (updt : update) (st' : state) :
   next_state_do_update st tag updt = Some st' -> domm (regs st') = domm (regs st).

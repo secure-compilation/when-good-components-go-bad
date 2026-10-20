@@ -38,43 +38,18 @@ Import TraceBracket(jal_do_updates_result, jump_do_updates_result, nsu_silent_ex
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentStrong2.
 
-(* The s1/RIGHT weak silent-step diagram square of the three-way recomposition simulation.
-
-   In the threeway diagram ([Common/SmallstepUB.v], section THREEWAY_SIMU_DIAGRAM) the silent
-   step is split four ways by (which source steps) x (which match-states branch); the four live
-   in four files chained for a shared Defs:
-     step_silent_strong1 : s1 steps, LEFT  match  -- StepSilentStrong  (Qed)
-     step_silent_strong2 : s2 steps, RIGHT match  -- StepSilentStrong2 (admitted)
-     step_silent_weak1   : s1 steps, RIGHT match  -- here               (admitted)
-     step_silent_weak2   : s2 steps, LEFT  match  -- StepSilentWeak2    (admitted)
-   In a weak case the strongly-related run s3 (= prog'') does NOT move: the weak source takes an
-   internal step the recomposed run doesn't mirror, so s3 stays put and only M / the weak
-   equivalence are updated. *)
-
 Module StepWeak (S: RecompositionContext).
 
-  (* Chain off StepStrong2 so the whole recomposition shares ONE Defs instance. *)
   Include StepStrong2 S.
   Import PCCM.
 
-  (* s1 (= prog, L1) takes a silent step while RIGHT-matched: s2/c' determines s3, so s3
-     stays put; only the weak (Left) equivalence with s1 and the common equivalence move. *)
-  (* Both [step_restricted_UB] constructors carry the target (LRC) step [step2 = step_mp] for s1:
-     [step_UB_allowed] is [stepT ∧ allowed], [step_UB_disallowed] is [stepS ∧ stepT].  So the weak
-     run's step is uniformly [step_mp s1 s1' None] regardless of which UB branch fired. *)
   Lemma weak1_step2 : forall s1 s1', Step sem s1 E0 s1' -> step2 tt s1 E0 s1'.
   Proof. move=> s1 s1' H. by inversion H. Qed.
 
-  (* [combined_codes] only reads [mem]; a mem-preserving state change preserves it.
-     (Local copy — the identical lemma in StepEventReturn is downstream of this module.) *)
   Lemma combined_codes_mem_cong_w : forall (i : side) (s s' t t' : state),
     mem s = mem s' -> mem t = mem t' -> combined_codes i s t -> combined_codes i s' t'.
   Proof. move=> i s s' t t' Hs Ht H. rewrite /combined_codes -Hs -Ht. exact: H. Qed.
 
-  (* MASTER reconstruction for the mem-unchanged opcodes: if s1's LRC step leaves [mem] fixed,
-     keeps the pc-tag (hence the colour), preserves the register domain, and adds no Ret-cap
-     (capability), then both the weak (Left) equivalence and the common equivalence transfer to
-     s1' verbatim (s2/s3 are unchanged).  Every Left relation reads only [mem], which is fixed. *)
   Lemma preserves_weak_local : forall s1 s2 s3 M s1',
     weak_equiv Left M s1 s3 -> common_equiv M s1 s2 s3 ->
     mem s1' = mem s1 -> taga (pc s1') = taga (pc s1) ->
@@ -119,12 +94,6 @@ Module StepWeak (S: RecompositionContext).
       + exact: wpcc2.
   Qed.
 
-  (* ===== Cross-run congruences under a CONFINED data write (PROVEN — recomposition content). =====
-     The s1-side store overwrites cell [w0] (colour preserved, both old/new non-code).  The three
-     cross-run relations that read [mem s1] survive it. *)
-
-  (* [decode_match] only reads its first memory at a CODE cell (the JAL target); a non-code write
-     can't be that target, so it is preserved. *)
   Lemma decode_match_data_write_l : forall (i : side) (m m3 : memory) (w0 : mword mt) v old a b,
     m w0 = Some old -> ~ is_code (taga old) ->
     decode_match i m m3 a b -> decode_match i (setm m w0 v) m3 a b.
@@ -138,9 +107,6 @@ Module StepWeak (S: RecompositionContext).
       move: Hm; rewrite Heq Hold; case=> Hd; rewrite Hd; exact: Hcd.
   Qed.
 
-  (* [points_to_comp_code'] at the write cell keeps holding: the new value has the same colour, and
-     for a [Right]-side frame the predicate only asks for that colour (a [Left] frame needs code, so
-     it can't sit on the non-code cell). *)
   Lemma pts_code'_data_write : forall (m : memory) (w0 : mword mt) v old j C v1,
     m w0 = Some old -> color (taga v) = color (taga old) ->
     ~ is_code (taga v) -> ~ is_code (taga old) ->
@@ -153,7 +119,6 @@ Module StepWeak (S: RecompositionContext).
     case: Hdisj => [Hjr|Hco]; first by left. by case: (Hnco Hco).
   Qed.
 
-  (* The whole stack invariant survives the confined write (only [PTS_CODE1] reads [m1]). *)
   Lemma wf_stack_data_write_l : forall (m1 m2 m3 : memory) (w0 : mword mt) v old n M,
     m1 w0 = Some old -> color (taga v) = color (taga old) ->
     ~ is_code (taga v) -> ~ is_code (taga old) ->
@@ -169,9 +134,6 @@ Module StepWeak (S: RecompositionContext).
       exact: (pts_code'_data_write Hold Hcolvo Hncv Hnco PTS1).
   Qed.
 
-  (* ===== Cross-run congruences under a memory EXTENSION (alloc adds fresh cells; old cells kept). ===== *)
-
-  (* [decode_match]'s first-memory read (JAL target) survives an extension that preserves old cells. *)
   Lemma decode_match_extend_l : forall (i : side) (m m' m3 : memory) a b,
     (forall w d, m w = Some d -> m' w = Some d) ->
     decode_match i m m3 a b -> decode_match i m' m3 a b.
@@ -203,16 +165,9 @@ Module StepWeak (S: RecompositionContext).
     - apply: wf_stack_cons_right; eauto. exact: (pts_code'_extend Hext PTS1).
   Qed.
 
-  (* [data_match'] forces equal mem-tags on the two cells (its leading [t1 = t2] conjunct). *)
   Lemma data_match'_taga : forall i m d d', data_match' i m d d' -> taga d = taga d'.
   Proof. move=> i m [v1 t1] [v2 t2]; rewrite /data_match' /= => -[Ht _]; exact: Ht. Qed.
 
-  (* MASTER reconstruction for the STORE opcode (PROVEN — recomposition content).  s1 writes cell [w0]
-     with a value [v] of the running colour [color_of s1] (∈ ic, Right side ⇒ NOT relevant-Left),
-     overwriting a same-colour non-code [old]; [mem s3]/[mem s2]/[M] are unchanged.  Both equivalences
-     transfer.  The single-run invariants (register_domm / capability / general_memory_correctness for
-     s1') are taken as inputs — the caller discharges them with the low-level [lrc_silent_*] step
-     lemmas (capability is subtle: STORE can relocate a Ret cap reg→mem, but it stays unique in M). *)
   Lemma preserves_weak_mem_write : forall s1 s2 s3 M s1' w0 v old,
     weak_equiv Left M s1 s3 -> common_equiv M s1 s2 s3 ->
     mem s1 w0 = Some old ->
@@ -238,7 +193,6 @@ Module StepWeak (S: RecompositionContext).
     inversion common as [m0 c1 c2 c3 n c0 tag_pc1 tag_pc2 tag_pc3 wfst reg_domm1 reg_domm2 reg_domm3
                           gmc1 gmc2 gmc3 capa_cor1 capa_cor2 capa_cor3 code_left code_right Hcval wpcc1 wpcc2].
     subst m0 c1 c2 c3.
-    (* address_correctness is preserved cell-by-cell under the confined write *)
     have addr_cong : forall (ww : mword mt) (tt : value_tag),
         address_correctness Left ww tt (mem s1) -> address_correctness Left ww tt (mem s1').
       move=> ww tt. rewrite /address_correctness. case: tt => [r0||| ] //=;
@@ -251,19 +205,19 @@ Module StepWeak (S: RecompositionContext).
     - apply: weak_equiv_def.
       + by rewrite Hcol.
       + by rewrite Hcol.
-      + (* memory_address_correctness Left s1' *)
+      +
         move=> v0 w Hrelv0 Hw. apply: addr_cong.
         move: Hw; rewrite Hmem' setmE; case: eqP => [Heq|Hne].
         * move=> [= Hvv]; subst v0; exfalso; apply: Hnrel_c0; move: Hrelv0; by rewrite Hcolv.
         * move=> Hw1; exact: (w_mem v0 w Hrelv0 Hw1).
       + exact: w'_mem.
-      + (* entry_points_offset Left (mem s1') (mem s3) *)
+      +
         move=> c w w' d d' proc l l' Hrelc Hw Hw' Hcd Hcd' Hcold' Hcold'' Hentd Hentd'.
         have Hw1 : mem s1 w = Some d.
           move: Hw; rewrite Hmem' setmE; case: eqP => [Heq|//].
           move=> [= Hdv]. exfalso; apply: Hncv. by rewrite -Hdv in Hcd.
         exact: (entry_offw c w w' d d' proc l l' Hrelc Hw1 Hw' Hcd Hcd' Hcold' Hcold'' Hentd Hentd').
-      + (* memory_match Left M s1' s3 *)
+      +
         move=> w d Hncode Hrel.
         case: (@eqP _ w w0) => [Heq|Hne].
         * subst w. split.
@@ -283,7 +237,7 @@ Module StepWeak (S: RecompositionContext).
       + by rewrite Htag.
       + exact: tag_pc2.
       + exact: tag_pc3.
-      + (* wf_stack *)
+      +
         rewrite Hmem'. exact: (wf_stack_data_write_l Hmemw0 Hcolvo Hncv Hncold wfst).
       + exact: Hrd.
       + exact: reg_domm2.
@@ -294,7 +248,7 @@ Module StepWeak (S: RecompositionContext).
       + exact: Hcap.
       + exact: capa_cor2.
       + exact: capa_cor3.
-      + (* combined_codes Left s1' s3 *)
+      +
         move=> w v0 t off c Hrelc Hoff Hcodet Hcolt.
         move: (code_left w v0 t off c Hrelc Hoff Hcodet Hcolt) => [H1 H2]. split.
         * move=> Hs1'.
@@ -315,11 +269,6 @@ Module StepWeak (S: RecompositionContext).
       + exact: wpcc2.
   Qed.
 
-  (* MASTER reconstruction for the alloc SYSCALL (PROVEN — recomposition content).  s1 EXTENDS its
-     memory with fresh cells of the running colour ([color_of s1] ∈ ic ⇒ NOT relevant-Left), keeping
-     every old cell ([Hext1]); every new cell is a non-code [color_of s1] cell ([Hext2]).
-     [mem s3]/[mem s2]/[M] are unchanged.  Both equivalences transfer.  Single-run invariants are
-     inputs (caller discharges them with the [lrc_silent_*] lemmas). *)
   Lemma preserves_weak_alloc : forall s1 s2 s3 M s1',
     weak_equiv Left M s1 s3 -> common_equiv M s1 s2 s3 ->
     taga (pc s1') = taga (pc s1) ->
@@ -395,16 +344,8 @@ Module StepWeak (S: RecompositionContext).
       + exact: wpcc2.
   Qed.
 
-  (* ===== LOW-LEVEL, SELF-CONTAINED LRC step-machinery facts (no recomposition content). =====
-     These are mechanical properties of [LRC.instr_rules]/[next_state_do_updates] and are the
-     ones the policy allows to be [Admitted]; everything recomposition-specific below is proved. *)
 
 
-
-  (* ===== Shared step-machinery tooling (PROVEN). ===== *)
-
-  (* A single update never changes the register-file domain: reg writes/reads [updm] an existing key
-     (domain fixed), memory updates leave the registers alone. *)
   Lemma ndsu1_regs_domm : forall (st st' : state) (tk : tag_kind) (tag : tag_type lrc_tags tk) updt,
     next_state_do_update st tag updt = Some st' -> domm (regs st') = domm (regs st).
   Proof.
@@ -431,11 +372,6 @@ Module StepWeak (S: RecompositionContext).
       rewrite (IH _ _ _ _ H). exact: (ndsu1_regs_domm E1).
   Qed.
 
-  (* One silent opcode square, factored to the two facts [preserves_weak_local] needs about memory and
-     the pc-tag.  When the update list carries no MemWrite, [next_state_do_updates] leaves memory fixed,
-     and every silent LRC instruction rule keeps the pc-tag ([trpc] = [tpc]); so the post-state's memory
-     is unchanged and its pc-tag is the instruction's input pc-tag.  (Stated non-existentially — no
-     output OVec escapes — so its use leaves no shelved hseq evar for the multi-input opcodes.) *)
   Lemma weak_opcode_facts :
     forall (st : state) (op : opcode) (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
            (ts : hseq (fun tk => tag_type lrc_tags tk) (vinputs (OP op))) (updts : seq update)
@@ -457,9 +393,6 @@ Module StepWeak (S: RecompositionContext).
               | by rewrite /= (op_silent_trpc Htr Hev) ]).
   Qed.
 
-  (* The allocator's effect: it preserves the register domain and the pc-tag, and EXTENDS memory with
-     fresh cells of the running colour (old cells kept; every cell is old or a [color_of s] non-code
-     new cell).  This single lemma serves the syscall cases of regdomm / gmc / cap and [weak_alloc_facts]. *)
   Lemma alloc_fun_effect : forall (s s' : state),
     alloc_fun (NC:=NC) s = Some s' ->
     domm (regs s') = domm (regs s) /\ taga (pc s') = taga (pc s) /\
@@ -493,8 +426,6 @@ Module StepWeak (S: RecompositionContext).
         right. rewrite /=. by rewrite color_of_pc_tag.
   Qed.
 
-  (* The allocator introduces no Ret capability: new memory cells carry [def_mem_tag] (vtag Other)
-     and the one register it writes ([syscall_ret]) gets tag [Other].  Feeds the syscall [cap] case. *)
   Lemma alloc_fun_cap : forall (s s' : state),
     alloc_fun (NC:=NC) s = Some s' ->
     (forall w v t n, mem s' w = Some (v @ t) -> vtag t = Ret n -> mem s w = Some (v @ t)) /\
@@ -525,33 +456,23 @@ Module StepWeak (S: RecompositionContext).
       by move: H => [= _ Hc]; discriminate Hc.
   Qed.
 
-  (* A successful silent step preserves the register-file domain. *)
   Lemma step_regs_domm : forall (s s' : state),
     step_mp (NC:=NC) s s' None -> domm (regs s') = domm (regs s).
   Proof.
     move=> s s' Hstep. inversion Hstep.
-    (* opcode cases (all 9): peel NEXT (rewrite [next_state_updates] for the non-control-flow ones),
-       then [nsu_silent_extract] gives [regs s' = regs st0] with [ndsu = Some st0]; [ndsu_regs_domm]. *)
     all: try (try rewrite /next_state_updates in NEXT;
               move: NEXT => /nsu_silent_extract [? [? [st0 [Edsu [_ [Hregs _]]]]]];
               rewrite Hregs; exact: (ndsu_regs_domm Edsu)).
-    (* syscall: pin to alloc_fun (the only table entry), whose register effect is one [updm] *)
     have Halloc := run_syscall_alloc GETCALL CALL.
     by have [Hd _] := alloc_fun_effect Halloc.
   Qed.
 
-  (* A silent LRC step preserves the register domain. *)
   Lemma lrc_silent_regdomm : forall (s s' : state),
       step_mp (NC:=NC) s s' None -> register_domm (regs s) -> register_domm (regs s').
   Proof.
     move=> s s' Hstep Hrd. rewrite /register_domm (step_regs_domm Hstep). exact: Hrd.
   Qed.
 
-  (* If every Ret cap in [s'] sits at the SAME location (and same value) in [s], then
-     [capability_correctness] transfers from [s] to [s']: [in_stack] is read off [s], and uniqueness
-     in [s'] follows from uniqueness in [s] (fewer caps, same places).  This handles every opcode that
-     only KEEPS or REMOVES Ret caps (nop/const/binop/jump/bnz/jal/syscall — none introduces a fresh
-     Ret tag at a new location). *)
   Lemma cap_subset : forall (s s' : state) (M : metadata) (ws : which_state),
     (forall w v t n, mem s' w = Some (v @ t) -> vtag t = Ret n -> mem s w = Some (v @ t)) ->
     (forall r v n, regs s' r = Some (v @ (Ret n)) -> regs s r = Some (v @ (Ret n))) ->
@@ -575,15 +496,12 @@ Module StepWeak (S: RecompositionContext).
           split; [exact: (Hmem w' v' t' n Hw'' Ht') | exact: Ht'].
   Qed.
 
-  (* Uniform "Ret capability at location [p]" predicate ([inl r] register, [inr w] memory cell). *)
   Definition cap_at (s : state) (p : Types.reg mt + mword mt) (v : mword mt) (n : nat) : Prop :=
     match p with
     | inr w => exists t, mem s w = Some (v @ t) /\ vtag t = Ret n
     | inl r => regs s r = Some (v @ (Ret n))
     end.
 
-  (* The uniqueness clause of [capability_correctness] is exactly: any other Ret-[n] cap location
-     equals [p].  These two lemmas convert between the [match]-form and this clean [p = p'] form. *)
   Lemma cap_correct_to_cap_at : forall M ws s,
     capability_correctness M ws s ->
     forall v n p, cap_at s p v n ->
@@ -612,10 +530,6 @@ Module StepWeak (S: RecompositionContext).
     - by move=> [t' [Hw' Ht']]; move: (Huniq (inr w') v' (ex_intro _ t' (conj Hw' Ht'))) => [= ->].
   Qed.
 
-  (* Master relocation lemma: if there is a map [f] from [s']-cap-locations to [s]-cap-locations
-     preserving value and Ret-index, and [f] is injective on same-index cap locations, then
-     [capability_correctness] transfers from [s] to [s'].  This covers MOV/LOAD/STORE, where the one
-     Ret cap moves to a new location and the source is invalidated. *)
   Lemma cap_bijection : forall (s s' : state) (M : metadata) (ws : which_state)
       (f : Types.reg mt + mword mt -> Types.reg mt + mword mt),
     (forall p v n, cap_at s' p v n -> cap_at s (f p) v n) ->
@@ -628,9 +542,6 @@ Module StepWeak (S: RecompositionContext).
     move=> p' v' Hp'. exact: (H2 p p' v v' n Hp Hp' (Huniq (f p') v' (H1 p' v' n Hp'))).
   Qed.
 
-  (* Single-relocation corollary: the one Ret cap moves from [src] to [dst], [src] is invalidated,
-     and every other location is unchanged.  Used for MOV (reg->reg), LOAD (mem->reg), STORE
-     (reg->mem). *)
   Lemma cap_reloc : forall (s s' : state) (M : metadata) (ws : which_state)
       (src dst : Types.reg mt + mword mt),
     (forall v n, cap_at s' dst v n -> cap_at s src v n) ->
@@ -654,20 +565,16 @@ Module StepWeak (S: RecompositionContext).
       + by [].
   Qed.
 
-  (* A silent LRC step preserves [capability_correctness]: every rule writes Other/Invalidated tags or
-     MOVES a Ret cap (the source is always invalidated: MOV's source reg, STORE's source reg via [ts'],
-     LOAD only reads), so no Ret capability is ever DUPLICATED — it stays unique and tracked by the
-     (unchanged) stack metadata.  (Holds even when memory changes — STORE relocates a cap reg→mem.) *)
   Lemma lrc_silent_cap : forall (s s' : state) (M : metadata) (ws : which_state),
       step_mp (NC:=NC) s s' None ->
       capability_correctness M ws s -> capability_correctness M ws s'.
   Proof.
     move=> s s' M ws Hstep Hcap. inversion Hstep.
-    - (* nop *)
+    -
       move: NEXT; rewrite /next_state_updates => /nsu_silent_extract [op0 [ov0 [st0 [Edsu [Hm [Hr _]]]]]].
       have Hs0 := ndsu_nil_updts Edsu. rewrite Hs0 in Hm Hr.
       apply: (cap_subset _ _ Hcap); [by move=> w v t n0; rewrite Hm | by move=> r0 v n0; rewrite Hr].
-    - (* const *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal;
@@ -683,7 +590,7 @@ Module StepWeak (S: RecompositionContext).
             [ by move=> w v t n0; rewrite /= -Hr1 -Hr2 /=
             | move=> r0 v n0; rewrite /= -Hr1 -Hr2 /= (updm_set Hupd); move=> Hset;
               exact: (setm_reg_nonret (t := Other) ltac:(move=> ?; discriminate) Hset) ] ).
-    - (* mov *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal.
@@ -702,14 +609,14 @@ Module StepWeak (S: RecompositionContext).
         move: HndsuC => [= Hfin2].
         have Ha1w : a1 = w1 @ t1 by move: Ha1; rewrite ST /= R1W; move=> [= <-].
         case: (r2 =P r1) => [Er2|Er2].
-        - (* r1 = r2: self-move, identity *)
+        -
           subst r2. apply: (cap_subset _ _ Hcap).
           + by move=> w v t n0; rewrite -Hfin2 -HstbE /=.
           + move=> r v n0. rewrite -Hfin2 -HstbE /= (updm_set Hupdb) setmE (updm_set Hupda) setmE.
             case: (r =P r1) => [Er1|_].
             * subst r. rewrite ST /= R1W. by [].
             * by [].
-        - (* r1 <> r2: cap moves r1 -> r2 *)
+        -
           apply: (cap_reloc (s := s) (src := inl r1) (dst := inl r2)).
           + move=> v n. rewrite /cap_at -Hfin2 -HstbE /= (updm_set Hupdb) setmE eqxx.
             move=> [= Hw1 Hvt]. rewrite /cap_at ST /= R1W Hvt -Hw1. by [].
@@ -757,7 +664,7 @@ Module StepWeak (S: RecompositionContext).
               rewrite /cap_at -Hfin2 -HstbE /= (updm_set Hupdb) setmE (negbTE Hrr2) (updm_set Hupda) setmE (negbTE Hrr1). by [].
             * rewrite /cap_at -Hfin2 -HstbE /=. by [].
           + exact: Hcap. }
-    - (* binop *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal;
@@ -795,7 +702,7 @@ Module StepWeak (S: RecompositionContext).
                       case: eqP => [Heq1|Hne1];
                         [ subst r0; rewrite Ha1w /=; move=> Hpre; rewrite ST /= R1W; exact: Hpre
                         | move=> Hpre; exact: Hpre ] ] ] ] ).
-    - (* load *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal.
@@ -818,14 +725,14 @@ Module StepWeak (S: RecompositionContext).
         have Ha1w : a1 = w1 @ t1 by move: Ha1; rewrite ST /= R1W; move=> [= <-].
         have Hb1w : b1 = w2 @ t2 by move: Hb1; rewrite ST /= MEM1; move=> [= <-].
         apply: (cap_reloc (s := s) (src := inr w1) (dst := inl r2)).
-        - (* Hdst: the loaded cap was at cell w1 *)
+        -
           move=> v n. rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE eqxx switch_val_snd.
           move=> [= Hw2 Hvt]. exists t2. rewrite ST /= MEM1 -Hw2. by split.
-        - (* Hsrc: cell w1 is invalidated -> no cap *)
+        -
           move=> v n [t [Hmem Hvt]]. move: Hmem Hvt.
           rewrite -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
           move=> [= _ <-]. rewrite switch_val_vtag. by case: (vtag t2).
-        - (* Hoth: every other location unchanged *)
+        -
           move=> p v n Hpw Hpr. case: p Hpw Hpr => [r|w] Hpw Hpr.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE (negbTE Hrr2) (updm_set Hupda) setmE.
@@ -867,7 +774,7 @@ Module StepWeak (S: RecompositionContext).
           + have Hww1 : w != w1 by apply/eqP => Hc; apply: Hpw; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE (negbTE Hww1). by [].
         - exact: Hcap. }
-    - (* store *)
+    -
       move: NEXT. rewrite /next_state_updates /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (vala (pc s) + 1)%w) => [ni|]; rewrite /=; move=> Hgoal.
@@ -889,15 +796,15 @@ Module StepWeak (S: RecompositionContext).
         case: (obind_inv Hndc) => mmc [Hupdc HstcE]. move: HstcE => [= HstcE].
         have Ha1w : a1 = w1 @ t1 by move: Ha1; rewrite ST /= R1W; move=> [= <-].
         apply: (cap_reloc (s := s) (src := inl r2) (dst := inr w1)).
-        - (* Hdst: the stored cap was in reg r2 *)
+        -
           move=> v n [t [Hmem Hvt]]. move: Hmem.
           rewrite -Hfin2 -HstcE /= (updm_set Hupdc) setmE eqxx.
           move=> [= Hw2 Ht]. move: Hvt. rewrite -Ht switch_val_vtag => Hvt.
           rewrite /cap_at ST /= R2W Hvt -Hw2. by [].
-        - (* Hsrc: source reg r2 is invalidated -> no cap *)
+        -
           move=> v n. rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE eqxx.
           move=> [= _ Ht]. move: Ht. by case: (t2).
-        - (* Hoth: every other location unchanged *)
+        -
           move=> p v n Hpr Hpw. case: p Hpr Hpw => [r|w] Hpr Hpw.
           + have Hrr2 : r != r2 by apply/eqP => Hc; apply: Hpr; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdb) setmE (negbTE Hrr2) (updm_set Hupda) setmE.
@@ -940,7 +847,7 @@ Module StepWeak (S: RecompositionContext).
           + have Hww1 : w != w1 by apply/eqP => Hc; apply: Hpw; rewrite Hc.
             rewrite /cap_at -Hfin2 -HstcE /= (updm_set Hupdc) setmE (negbTE Hww1). by [].
         - exact: Hcap. }
-    - (* jump *)
+    -
       move: NEXT. rewrite /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s w) => [ni|]; rewrite /=; move=> Hgoal;
@@ -957,7 +864,7 @@ Module StepWeak (S: RecompositionContext).
           move: Hss => [= ->];
           apply: (cap_subset _ _ Hcap);
             [ by move=> w0 v t n0; rewrite /= | by move=> r0 v n0; rewrite /= ] ).
-    - (* bnz *)
+    -
       move: NEXT. rewrite /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc'2: (mem s pc') => [ni|]; rewrite /=; move=> Hgoal;
@@ -977,7 +884,7 @@ Module StepWeak (S: RecompositionContext).
               case: eqP => [Heq|Hne];
                 [ subst r0; rewrite Ha Haw /=; move=> Hpre; exact: Hpre
                 | move=> Hpre; exact: Hpre ] ] ).
-    - (* jal *)
+    -
       move: NEXT. rewrite /next_state_updates_and_pc /next_state.
       case Hevi: (evi s) => [evinp|] //=.
       case Hpc': (mem s (swcast imm)) => [ni|]; rewrite /=; move=> Hgoal;
@@ -1000,18 +907,12 @@ Module StepWeak (S: RecompositionContext).
             [ by move=> w0 v t n0; rewrite /=
             | move=> r0 v n0; rewrite /= (updm_set Hupd) setmE;
               case: eqP => [_|_]; [ by move=> [= _ Hc]; discriminate Hc | by [] ] ] ).
-    - (* syscall *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       have [Hmem Hreg] := alloc_fun_cap Halloc.
       apply: (cap_subset _ _ Hcap); [ exact: Hmem | exact: Hreg ].
   Qed.
 
-  (* MASTER lemma for the STORE/LOAD memory change: re-tagging ONE cell, keeping its colour, is_code,
-     and entry, and (for a CODE cell) its value, preserves all 8 [general_memory_correctness]
-     conditions.  STORE re-tags a non-code cell (value may change, is_code stays false ⇒ the
-     code/BNZ/end conditions are untouched at that cell, and no code cell points to it); LOAD re-tags
-     the loaded cell keeping its value (so decodes are unchanged).  [switch_val] supplies the colour/
-     is_code/entry preservation in both. *)
   Lemma gmc_retag : forall (m : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
       (w0 : mword mt) (d d' : atom (mword mt) (tag_type lrc_tags Symbolic.M)),
     m w0 = Some d ->
@@ -1025,15 +926,12 @@ Module StepWeak (S: RecompositionContext).
   Proof.
     move=> m w0 d d' Hw0 Hcol Hic Hent Hval Hcvo'.
     move=> [Hmpc [Hmpc' [Hcpc [Hae [Hbnz [Hend [Hcim [Heic Hcvo]]]]]]]].
-    (* Any code target found in [m] is found in [setm m w0 d'] (if it is [w0] itself, the re-tagged
-       cell is still code since is_code is kept). *)
     have lift_target : forall (a : mword mt) (v' : atom (mword mt) (tag_type lrc_tags Symbolic.M)),
         m a = Some v' -> is_code (taga v') ->
         exists v'', setm m w0 d' a = Some v'' /\ is_code (taga v'').
     { move=> a v' Hma Hicv'. rewrite setmE. case: eqP => [Heq|Hne].
       - exists d'. split; first by []. move: Hma; rewrite Heq Hw0 => [= Ev]. by rewrite Hic Ev.
       - by exists v'. }
-    (* The BNZ/Jal target-lookup branches lift cell-by-cell. *)
     have bnz_lift : forall (iw a : mword mt),
         match decode_instr iw with
         | Some (Bnz _ n) => exists v', m (addw a (swcast n)) = Some v' /\ is_code (taga v')
@@ -1051,35 +949,35 @@ Module StepWeak (S: RecompositionContext).
           [ left; exact: (lift_target _ _ Hmv' Hicv') | by right ]. }
     rewrite /general_memory_correctness.
     split; last split; last split; last split; last split; last split; last split; last split.
-    - (* memory_prefix_condition *)
+    -
       move=> c w v. rewrite setmE. case: eqP => [-> {w}|Hne].
       + move=> [= Hv]. subst v. move=> Hcv Hncv.
         have Hcd : color (taga d) = c by rewrite -Hcol.
         have Hncd : ~ is_code (taga d) by rewrite -Hic.
         exact: (Hmpc c w0 d Hw0 Hcd Hncd).
       + move=> Hw Hcv Hncv. exact: (Hmpc c w v Hw Hcv Hncv).
-    - (* memory_prefix_condition' *)
+    -
       move=> c w v Hlt. rewrite setmE. case: eqP => [-> {w}|Hne].
       + move=> [= Hv]. subst v. move=> Haddr.
         have [Hc Hnc] := Hmpc' c w0 d Hlt Hw0 Haddr.
         split; [by rewrite Hcol | by rewrite Hic].
       + move=> Hw Haddr. exact: (Hmpc' c w v Hlt Hw Haddr).
-    - (* code_prefix_condition *)
+    -
       move=> w v. rewrite setmE. case: eqP => [-> {w}|Hne].
       + move=> [= Hv]. subst v. move=> Hicv.
         have Hicd : is_code (taga d) by rewrite -Hic.
         exact: (Hcpc w0 d Hw0 Hicd).
       + move=> Hw Hicv. exact: (Hcpc w v Hw Hicv).
-    - (* alloc_empty *)
+    -
       rewrite /alloc_empty setmE. case: eqP => [Heq|Hne]; last exact: Hae.
       by move: Hw0; rewrite -Heq Hae.
-    - (* BNZ_correctness *)
+    -
       move=> w v. rewrite setmE. case: eqP => [-> {w}|Hne].
       + move=> [= Hv]. subst v. move=> Hicv.
         have Hicd : is_code (taga d) by rewrite -Hic.
         rewrite (Hval Hicd). exact: (bnz_lift _ _ (Hbnz w0 d Hw0 Hicd)).
       + move=> Hw Hicv. exact: (bnz_lift _ _ (Hbnz w v Hw Hicv)).
-    - (* end_condition *)
+    -
       move=> w v. rewrite setmE. case: eqP => [-> {w}|Hne].
       + move=> [= Hv]. subst v. move=> Hicv.
         have Hicd : is_code (taga d) by rewrite -Hic.
@@ -1089,30 +987,21 @@ Module StepWeak (S: RecompositionContext).
       + move=> Hw Hicv. move: (Hend w v Hw Hicv) => [Hh|[v' [Hmv' Hicv']]].
         * by left.
         * right. exact: (lift_target _ _ Hmv' Hicv').
-    - (* color_in_memory *)
+    -
       move=> w d0. rewrite setmE. case: eqP => [Heq|Hne].
       + move=> [= Hd0]. subst d0. rewrite Hcol. exact: (Hcim w0 d Hw0).
       + move=> Hw. exact: (Hcim w d0 Hw).
-    - (* entry_is_code *)
+    -
       move=> w d0 e. rewrite setmE. case: eqP => [Heq|Hne].
       + move=> [= Hd0]. subst d0. rewrite Hent Hic. move=> He. exact: (Heic w0 d e Hw0 He).
       + move=> Hw He. exact: (Heic w d0 e Hw He).
-    - (* code_vtag_other *)
+    -
       move=> w d0. rewrite setmE. case: eqP => [Heq|Hne].
       + move=> [= Hd0]. subst d0. exact: Hcvo'.
       + move=> Hw. exact: (Hcvo w d0 Hw).
   Qed.
 
 
-  (* (check_belong_color / store_transfer / load_transfer / load_guard / switch_val_* moved up,
-     before lrc_silent_cap.) *)
-
-  (* A successful alloc step preserves [general_memory_correctness]: it EXTENDS [mem s] with a fresh
-     block [mkseq] of cells coloured [c0] (the running component), non-code, value 0, entry None, all
-     at addresses in [c0]'s prefix region (via [mask_range], from the allocator's end-in-prefix guard
-     + [andw_last_component_prefix]).  Single-side port of the gmc discharge inside [alloc_fun_common_r].
-     [c0] valid ([Hval]) ⇒ its new cells satisfy [color_in_memory]; [1+c0 < 2^NC] ([Hbnd]) feeds the
-     prefix lemmas.  Old cells / their code targets survive [unionm] (it prefers the old map). *)
   Lemma gmc_alloc : forall (s s' : state) (n0 c0 : nat),
     taga (pc s) = Level n0 c0 ->
     (1 + c0 < 2 ^ NC)%nat ->
@@ -1149,14 +1038,14 @@ Module StepWeak (S: RecompositionContext).
       - by move: Hg => /negb_false_iff /eqP. }
     move: Hgmc => [Hmpc [Hmpc' [Hcpc [Hae [Hbnz [Hend [Hcim [Heic Hcvo]]]]]]]].
     split; [|split; [|split; [|split; [|split; [|split; [|split; [|split]]]]]]].
-    - (* memory_prefix_condition *)
+    -
       rewrite /memory_prefix_condition => c w' v'. rewrite unionmE.
       case: ifP => _; [exact: Hmpc|].
       move=> Hmkf; xblk Hmkf; move: Hmkf => /mkfmap_Some /=.
       rewrite /mkseq; move=> /mapP [] x x_in_iota /= [] H1 H2 H0 _.
       left. subst v' w'. rewrite (Hmk x x_in_iota).
       by move: H0 => /= <-.
-    - (* memory_prefix_condition' *)
+    -
       rewrite /memory_prefix_condition' => c w' v' Hb. rewrite unionmE.
       case: ifP => _; [exact: (Hmpc' _ _ _ Hb)|].
       move=> Hmkf; xblk Hmkf; move: Hmkf => /mkfmap_Some /=.
@@ -1166,13 +1055,13 @@ Module StepWeak (S: RecompositionContext).
       move: H3; rewrite H1 (Hmk x x_in_iota).
       move=> /(component_memory_prefix_inj _ _ (ltnW NC_lt_word) HbCC Hb) /addnI Hcc.
       exact: Hcc.
-    - (* code_prefix_condition *)
+    -
       move=> w v. rewrite unionmE.
       case: ifP => _; [exact: Hcpc|].
       move=> Hmkf; xblk Hmkf; move: Hmkf => /mkfmap_Some /=.
       rewrite /mkseq; move=> /mapP [] x x_in_iota /= [] H1 H2.
       move=> Hcode; rewrite H2 in Hcode; discriminate Hcode.
-    - (* alloc_empty *)
+    -
       rewrite /alloc_empty unionmE. case: ifP => _; [exact: Hae|].
       destruct (mkfmap _ _) eqn:Hmkf; auto.
       apply mkfmap_Some in Hmkf. move: Hmkf => /=. rewrite /mkseq.
@@ -1185,7 +1074,7 @@ Module StepWeak (S: RecompositionContext).
       rewrite /PFX in Hz.
       transitivity (0%w : word (word_size mt));
         [exact: (esym Hz) | exact: (esym component_memory_prefix_zero)].
-    - (* BNZ_correctness *)
+    -
       move=> w d. rewrite unionmE. case: ifP => Hin.
       + move=> Hd Hcode. move: (Hbnz w d Hd Hcode).
         case: (decode_instr (vala d)) => [[]|] //=.
@@ -1195,32 +1084,28 @@ Module StepWeak (S: RecompositionContext).
           left. exists v'. split; last exact: Hcv'. by rewrite unionmE Hv'.
       + move=> Hd; xblk Hd; move: Hd => /mkfmap_Some /=. rewrite /mkseq.
         move=> /mapP [] x x_in_iota /= [] H1 H2. subst d. by [].
-    - (* end_condition *)
+    -
       move=> w d. rewrite unionmE. case: ifP => Hin.
       + move=> Hd Hcode. move: (Hend w d Hd Hcode) => [Hh|[d' [Hd' Hcd']]]; [by left|].
         right. exists d'. split; last exact: Hcd'.
         by rewrite unionmE Hd'.
       + move=> Hd; xblk Hd; move: Hd => /mkfmap_Some /=. rewrite /mkseq.
         move=> /mapP [] x x_in_iota /= [] H1 H2. subst d. by [].
-    - (* color_in_memory *)
+    -
       move=> w d. rewrite unionmE. case: ifP => _; [exact: Hcim|].
       move=> Hd; xblk Hd; move: Hd => /mkfmap_Some /=. rewrite /mkseq.
       move=> /mapP [] x x_in_iota /= [] H1 H2. subst d. rewrite /= HCC.
       case/orP: Hval => [Hip|Hic]; [left|right]; exact/Extra.In_in.
-    - (* entry_is_code *)
+    -
       move=> w d e. rewrite unionmE. case: ifP => _; [exact: Heic|].
       move=> Hd; xblk Hd; move: Hd => /mkfmap_Some /=. rewrite /mkseq.
       move=> /mapP [] x x_in_iota /= [] H1 H2. subst d. by [].
-    - (* code_vtag_other *)
+    -
       move=> w d. rewrite unionmE. case: ifP => _; [exact: Hcvo|].
       move=> Hd; xblk Hd; move: Hd => /mkfmap_Some /=. rewrite /mkseq.
       move=> /mapP [] x x_in_iota /= [] H1 H2. subst d. by [].
   Qed.
 
-  (* The alloc SYSCALL's effect (PROVEN).  The table holds exactly the allocator, so a fired syscall
-     runs [alloc_fun], which EXTENDS memory (old cells kept; new cells carry the running colour and are
-     data) and keeps the pc-tag.  Takes the table lookup [GETCALL] — this both pins [sc] to the
-     allocator (so the statement is SOUND, not a false [∀ sc] claim) and makes it provable. *)
   Lemma weak_alloc_facts : forall (pc0 : mword mt) (s1 s1' : state) (sc : syscall lrc_tags unit),
     Instance.table (NC:=NC) pc0 = Some sc ->
     @run_syscall _ _ lrc_tags LRC.transfer unit sc s1 = Some (s1', None) ->
@@ -1235,12 +1120,6 @@ Module StepWeak (S: RecompositionContext).
   Qed.
 
 
-  (* A silent LRC step preserves [general_memory_correctness].  Per opcode (via [inversion step_mp]):
-     the 6 register-only opcodes (nop/const/mov/binop/jump/bnz) leave [mem] fixed ([nsu_silent_extract]
-     + [ndsu_mem_noM]); STORE/LOAD re-tag ONE cell keeping colour/is_code/entry ([gmc_retag], fed by
-     [weak_store_facts]/[weak_load_facts]); JAL's prologue MemRead is identity ([jal_step_mem]); the
-     alloc SYSCALL extends with prefix-region cells of the running colour ([gmc_alloc]).  The running
-     component's validity [Hval] (carried by [common_equiv]) feeds the alloc case. *)
   Lemma lrc_silent_gmc : forall (s s' : state),
       step_mp (NC:=NC) s s' None ->
       (color_of s \in domm ip) || (color_of s \in domm ic) ->
@@ -1252,27 +1131,27 @@ Module StepWeak (S: RecompositionContext).
               (have Hmem0 : Symbolic.mem st0 = Symbolic.mem s
                  by (apply: (ndsu_mem_noM _ _ Edsu); [nomw|nomr]));
               rewrite Hmem Hmem0; assumption).
-    - (* load *)
+    -
       have [Hw0 [Hmem' _]] := weak_load_facts ST MEM1 NEXT.
       rewrite Hmem'. apply: (gmc_retag Hw0 _ _ _ _ _ Hgmc).
       + by rewrite switch_val_color.
       + by rewrite switch_val_iscode.
       + by rewrite switch_val_entry.
       + by [].
-      + (* is_code(d') -> vtag(d') = Other : a code cell has vtag Other, so the LOAD re-tag is identity *)
+      +
         rewrite switch_val_iscode switch_val_vtag => Hic.
         have [_ [_ [_ [_ [_ [_ [_ [_ Hcvo_in]]]]]]]] := Hgmc.
         by rewrite (Hcvo_in w1 (w2 @ t2) Hw0 Hic).
-    - (* store *)
+    -
       have [v [old' [Hw0 [Hmem' [_ [Hcolv [Hcolold [Hncv [Hncold Hentvo]]]]]]]]] :=
         weak_store_facts ST OLD NEXT.
       rewrite Hmem'. apply: (gmc_retag Hw0 _ _ Hentvo _ _ Hgmc).
       + by rewrite Hcolv Hcolold.
       + by rewrite (introF idP Hncv) (introF idP Hncold).
       + by move=> Hc; case: (Hncold Hc).
-      + (* is_code(d') -> vtag(d') = Other : VACUOUS, the stored cell is non-code *)
+      +
         by move=> Hic; case: (Hncv Hic).
-    - (* jal *)
+    -
       unfold mvec, pc' in NEXT.
       suff E : Symbolic.mem s' = Symbolic.mem s by rewrite E; exact: Hgmc.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -1292,29 +1171,13 @@ Module StepWeak (S: RecompositionContext).
                 repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin)
           | by (move=> w' Hin; cbn in Hin;
                 repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ] ).
-    - (* syscall (alloc) *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       move: Hval; rewrite (color_of_pc_tag s).
       case Etag: (taga (Symbolic.pc s)) => [n0 c0] /= Hval'.
       exact: (gmc_alloc Etag (colors_bounded Hval') Hval' Halloc Hgmc).
   Qed.
 
-  (* The reconstruction for one mem-unchanged opcode is spelled out as a literal block per bullet in
-     [step_silent_weak1] below.  It is NOT factored into an Ltac: a second Ltac level (whether the
-     hyps are passed as params or bound by [match goal]) mysteriously fails to elaborate the
-     [preserves_weak_local] apply for the multi-input opcodes, whereas the literal proof-body form
-     elaborates fine.  Each block: [weak_opcode_facts] gives [mem s1' = mem s1] (no MemWrite, via
-     [nomw]) and [taga (pc s1') = tpc]; then [preserves_weak_local] rebuilds both equivalences,
-     with [register_domm]/[capability] preserved by the two [lrc_silent_*] step lemmas. *)
-
-  (* MASTER reconstruction for the LOAD case.  The LOAD re-tags the loaded cell [w1] (value [w2] kept,
-     colour/is_code/entry kept, only the value-tag switched to Invalidated/Other).  Two sub-cases on
-     [is_address (vtag t2)]:
-       - FALSE ([vtag t2 = Other]): the re-tag is the IDENTITY, so [mem s1' = mem s1] — reuse
-         [preserves_weak_local].
-       - TRUE ([vtag t2 in Ret/IJ/Inv]): a code cell would have [vtag = Other] ([code_vtag_other], the
-         9th gmc conjunct), so the cell is NON-code; [load_guard] then forces its colour to the running
-         (non-Left-relevant) component — exactly the [preserves_weak_mem_write] shape. *)
   Lemma preserves_weak_load : forall s1 s2 s3 M s1' w1 w2 (t2 : tag_type lrc_tags Symbolic.M),
     weak_equiv Left M s1 s3 -> common_equiv M s1 s2 s3 ->
     mem s1 w1 = Some (w2 @ t2) ->
@@ -1334,7 +1197,7 @@ Module StepWeak (S: RecompositionContext).
                             wgmc1 wgmc2 wgmc3 wcap1 wcap2 wcap3 wcl wcr wval].
       by move: wgmc1 => [_ [_ [_ [_ [_ [_ [_ [_ Hc]]]]]]]]. }
     case Hia: (is_address (vtag t2)).
-    - (* genuine re-tag: cell is non-code ⇒ running (non-relevant) component ⇒ mem-write shape *)
+    -
       have Hnc : ~~ is_code t2.
       { apply/negP => Hic. move: (Hcvo1 w1 (w2 @ t2) Hmw1 Hic) => /= Hvo.
         by move: Hia; rewrite Hvo. }
@@ -1347,7 +1210,7 @@ Module StepWeak (S: RecompositionContext).
       + by rewrite /= Hcol.
       + by rewrite /= switch_val_iscode; exact: Hncp.
       + by rewrite /=; exact: Hncp.
-    - (* identity re-tag (vtag t2 = Other): memory unchanged *)
+    -
       have Hnt : forall (tt : tag_type lrc_tags Symbolic.M),
           is_address (vtag tt) = false ->
           (switch_val tt (moved_tag (vtag tt))).1 = tt.
@@ -1374,35 +1237,31 @@ Module StepWeak (S: RecompositionContext).
                           wgmc1 wgmc2 wgmc3 wcap1 wcap2 wcap3 wcl wcr wval].
     subst m0 c1 c2 c3.
     inversion step_mp.
-    (* The 8 mem-unchanged opcodes (nop/const/mov/binop/load/jump/bnz/jal): [weak_simple] closes
-       the main goal — the update list has no MemWrite ⇒ [mem s1' = mem s1], the LRC rule preserves
-       the pc-tag ([weak_opcode_facts]), then [preserves_weak_local] reconstructs both equivalences.
-       STORE (#6) and SYSCALL (#10) write memory — they need a separate per-write argument. *)
-    - (* 1  nop *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s1') = taga (pc s1) by (rewrite Htt ST).
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 2  const *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s1') = taga (pc s1) by (rewrite Htt ST).
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 3  mov *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s1') = taga (pc s1) by (rewrite Htt ST).
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 4  binop *)
+    -
       rewrite /next_state_updates in NEXT.
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s1') = taga (pc s1) by (rewrite Htt ST).
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 5  load — confined re-tag of the loaded cell (running ic comp, or a code cell) *)
+    -
       have [Hw0 [Hmem' [Htag Hguard]]] := weak_load_facts ST MEM1 NEXT.
       apply: (preserves_weak_load weak common Hw0 Hmem' Htag Hguard).
       + exact: (lrc_silent_regdomm step_mp wrd1).
@@ -1410,7 +1269,7 @@ Module StepWeak (S: RecompositionContext).
       + apply: (lrc_silent_gmc step_mp _ wgmc1).
         by rewrite (color_of_pc_tag s1) wtpc1.
       + exact: (PCCM.silent_step_pc_code_color step_mp).
-    - (* 6  store — confined mem write to the running (ic) component's cell *)
+    -
       have [vnew [oldd [Hw0 [Hmem' [Htag [Hcolv [Hcolold [Hncv [Hncold _Hentvo]]]]]]]]] :=
         weak_store_facts ST OLD NEXT.
       apply: (preserves_weak_mem_write weak common Hw0 Hmem' Htag Hcolv Hcolold Hncv Hncold).
@@ -1419,18 +1278,17 @@ Module StepWeak (S: RecompositionContext).
       + apply: (lrc_silent_gmc step_mp _ wgmc1).
         by rewrite (color_of_pc_tag s1) wtpc1.
       + exact: (PCCM.silent_step_pc_code_color step_mp).
-    - (* 7  jump  (NEXT already in _and_pc form) *)
+    -
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s1') = taga (pc s1) by (rewrite Htt ST).
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 8  bnz   (NEXT already in _and_pc form) *)
+    -
       have Hf := weak_opcode_facts NEXT. have [Hmm Htt] := Hf ltac:(nomw) ltac:(nomr). clear Hf.
       have Htag : taga (pc s1') = taga (pc s1) by (rewrite Htt ST).
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 9  jal   (NEXT already in _and_pc form) — confined identity MemRead, mem unchanged.
-         Inlined (cf. [weak_jal_facts]) because applying the lemma to the let-bound [mvec] hangs. *)
+    -
       unfold mvec, pc' in NEXT.
       have Hmemcell : mem s1 (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
       have [Hmm Htag] : mem s1' = mem s1 /\ taga (pc s1') = taga (pc s1).
@@ -1455,7 +1313,7 @@ Module StepWeak (S: RecompositionContext).
               | rewrite /= Htrpc; by rewrite ST ] ). }
       apply: (preserves_weak_local weak common Hmm Htag);
         [ exact: (lrc_silent_regdomm step_mp wrd1) | exact: (lrc_silent_cap step_mp wcap1) | exact: (PCCM.silent_step_pc_code_color step_mp) ].
-    - (* 10 syscall (alloc) — confined memory extension by the running (ic) component *)
+    -
       have [Htag [Hext1 Hext2]] := weak_alloc_facts GETCALL CALL.
       apply: (preserves_weak_alloc weak common Htag Hext1 Hext2).
       + exact: (lrc_silent_regdomm step_mp wrd1).
@@ -1464,12 +1322,5 @@ Module StepWeak (S: RecompositionContext).
         by rewrite (color_of_pc_tag s1) wtpc1.
       + exact: (PCCM.silent_step_pc_code_color step_mp).
   Qed.
-
-  (* [Print Assumptions step_silent_weak1] (checked once, not left in the functor body so it is not
-     re-run on every downstream [Include]) lists ONLY the policy-allowed low-level LRC step-machinery
-     axioms — [lrc_silent_regdomm], [lrc_silent_cap], [lrc_silent_gmc], [weak_opcode_facts],
-     [weak_store_facts], [weak_alloc_facts] — plus the module's [RecompositionContext] parameters.
-     No recomposition-substantive lemma is admitted (preserves_weak_*, the combined_codes / wf_stack /
-     decode_match / memory_match congruences are all proved). *)
 
 End StepWeak.

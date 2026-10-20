@@ -1,9 +1,3 @@
-(* Task #14 (I→Merged correctness): COMPILED-program instantiations.
-
-   S2I/LabelUniq's [compiled_labels_unique] discharges LinPos's [Huniq]
-   premise (per-component label uniqueness), so the body-label (IBnz)
-   resolution lemmas hold unconditionally for compiled programs. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
@@ -37,12 +31,10 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* the two marker predicates are definitionally equal *)
 Lemma is_ilabelE (l : nat) (mi : Machine.instr) :
   LabelUniq.is_ilabel l mi = ilab l mi.
 Proof. by []. Qed.
 
-(* [compiled_labels_unique] in LinPos's [Huniq] shape *)
 Lemma compiled_Huniq (sp : Source.program) (p : Intermediate.program) :
   compile_program sp = Some p ->
   forall (c : Component.id) (l : nat) (Cprocs : NMap Machine.code),
@@ -62,7 +54,6 @@ have -> : [seq count (LabelUniq.is_ilabel l) (odflt [::] (Cprocs p'))
 by [].
 Qed.
 
-(* body-label (IBnz target) resolution, unconditional for compiled programs *)
 Section CompiledBody.
 
 Variables L P C : nat.
@@ -113,10 +104,6 @@ Qed.
 
 End CompiledBody.
 
-(* ==================== initial-memory pointer discharge ==================== *)
-
-(* a defined load from the prepared initial memory reads a static buffer
-   chunk (or the inl-filler Undef) *)
 Lemma prepare_load_chunk (p : Intermediate.program)
     (C : Component.id) (b : Block.id) (o : Z) (v : value) :
   Memory.Memory.load (Intermediate.prepare_procedures_memory p) (C, b, o)
@@ -143,8 +130,6 @@ case: buf Eb => [sz|chunk] Eb.
   move=> Eb. by exists bm, chunk; split.
 Qed.
 
-(* the buffer maps of a union of gen_buffers images are gen_buffers
-   blocks: pointer values in them are pinned by the sides' wf *)
 Lemma compiled_Hptr_union (spa spb : Source.program)
     (p : Intermediate.program) :
   Source.well_formed_program spa ->
@@ -163,7 +148,7 @@ move=> Hwfa Hwfb Hbuf C0 b b' off o' c' Hload.
 have [[bm [chunk [HgetC Hgetb Hnth]]] | //] := prepare_load_chunk Hload.
 move: HgetC. rewrite Hbuf unionmE.
 case Ega: (getm (gen_buffers (Source.prog_buffers spa)) C0) => [bma|] /=.
-- (* left side *)
+-
   move=> [Ebm]. subst bma.
   move: Ega. rewrite /gen_buffers mapmE.
   case Esrc: (Source.prog_buffers spa C0) => [srcbuf|] //= [Ebm2].
@@ -188,7 +173,7 @@ case Ega: (getm (gen_buffers (Source.prog_buffers spa)) C0) => [bma|] /=.
     * by move=> H; discriminate H.
     * by move=> H; discriminate H.
     * by rewrite List.nth_error_nil; move=> H; discriminate H.
-- (* right side *)
+-
   move=> HgetC.
   move: HgetC. rewrite /gen_buffers mapmE.
   case Esrc: (Source.prog_buffers spb C0) => [srcbuf|] //= [Ebm2].
@@ -216,8 +201,6 @@ case Ega: (getm (gen_buffers (Source.prog_buffers spa)) C0) => [bma|] /=.
     * by rewrite List.nth_error_nil; move=> H; discriminate H.
 Qed.
 
-(* pointer values loaded from the compiled initial memory target the
-   declared local block of their own component (discharges Hptr) *)
 Lemma compiled_Hptr (sp : Source.program) (p : Intermediate.program) :
   Source.well_formed_program sp ->
   Intermediate.prog_buffers p = gen_buffers (Source.prog_buffers sp) ->
@@ -235,7 +218,7 @@ case Esrc: (Source.prog_buffers sp C0) => [srcbuf|] //= [Ebm].
 subst bm.
 move: Hgetb. rewrite !setmE.
 case: eqP => [Eb0 | Hne0].
-- (* block 0: the source buffer, wf pins the pointer *)
+-
   case: srcbuf Esrc => [sz|vals] Esrc //= [Echunk].
   subst chunk.
   have Hwfb := Source.wfprog_buffer_values Hwf Esrc.
@@ -247,7 +230,7 @@ case: eqP => [Eb0 | Hne0].
   eexists. split.
   + by rewrite mapmE Esrc /=.
   + by rewrite mem_domm setmE eqxx.
-- (* block 1: the [Undef; Int 0] filler has no pointers *)
+-
   case: eqP => [Eb1 | //] [Echunk].
   subst chunk.
   move: Hnth.

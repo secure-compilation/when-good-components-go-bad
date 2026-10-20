@@ -1,5 +1,3 @@
-(* SCRATCH (not in _CoqProject): develop stepf_reflect against RecBackward.vo.
-   Admits allowed here; port the finished proof into RecBackward.v. *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -51,8 +49,6 @@ Module RBScratch_Jump (S : RecompositionContext).
     color_of s0 = match taga (pc s0) with Level _ c => c end.
   Proof. by move=> [m r [v tp] e]. Qed.
 
-  (* [evi] succeeds on the strong side whenever it succeeds on the merged side (same [rcom] register
-     domain via [reg_reflect]). *)
   Lemma rb_evi_reflect : forall i M s s3,
     registers_match i M s s3 -> (exists a3, regs s3 rcom = Some a3) -> exists ei, evi s = Some ei.
   Proof.
@@ -61,9 +57,6 @@ Module RBScratch_Jump (S : RecompositionContext).
     rewrite /evi Ha'. by eexists.
   Qed.
 
-  (* If a register read succeeds on the merged side, it succeeds on the strong side with the
-     SAME tag (so [reg_clear_list_aux], which only reads registers in [reg_list], succeeds on the
-     strong side and produces the SAME tag-hseq). *)
   Lemma rb_reg_clear_aux_reflect : forall (i : side) M s s3 (l : seq nat)
       (top : tag_type lrc_tags R) (res : hseq (tag_type lrc_tags) (nseq (S (size l)) R)),
     registers_match i M s s3 ->
@@ -80,9 +73,6 @@ Module RBScratch_Jump (S : RecompositionContext).
       rewrite Htag (IH (taga v3) l3 Hrm H3l) /=. by [].
   Qed.
 
-  (* Register-value reflection for an [InternalJump]-tagged register: the strong-side value is
-     [v'] with [w = addw v' (as_word off)]; under alignment [off = 0] so [v' = w].  (This pins the
-     strong-side jump TARGET to be the SAME [w] as the merged side.) *)
   Lemma rb_reg_ijump_reflect : forall (i : side) M s s3 r w,
     registers_match i M s s3 -> is_relevant_comp i (color_of s) ->
     regs s3 r = Some (w @ InternalJump) ->
@@ -99,9 +89,6 @@ Module RBScratch_Jump (S : RecompositionContext).
     by rewrite -Hw in Hr.
   Qed.
 
-  (* From a SILENT LRC JUMP transfer (the [if belong .. then do! _<-is_jump tp ..] branch), the
-     jump-register tag [tp] (= 2nd input) is [InternalJump].  Mirror of [silent_transfer_belong]
-     for the [is_jump] gate. *)
   Lemma rb_jump_silent_isjump :
     forall tpc ti (tra tp trcom : tag_type lrc_tags R)
            (next : hseq (tag_type lrc_tags) (nseq 10 R)) tni evi (ov : ovec lrc_tags JUMP),
@@ -115,19 +102,17 @@ Module RBScratch_Jump (S : RecompositionContext).
     move: Hg; case Heq: (_ == current') => // _.
     move: Hrest; cbn -[check_belong belong is_other is_jump get_tni_color check_ret].
     case Hb: (belong (match ti with {| color := c |} => c end) tni) => Hrest; last first.
-    - (* cross/return branch: ev = Some (ERet ..) <> None, contradiction *)
+    -
       exfalso.
       case: (obind_inv Hrest) => ? [_ {}Hrest]; case: (obind_inv Hrest) => ? [_ {}Hrest].
       by case: (obind_inv Hrest) => ? [_ Hf]; move: Hf => [= _].
-    - (* silent intra branch: do! _ <- is_jump tp; .. *)
+    -
       move: Hrest; case Hij: (is_jump tp) => [u'|] //= _. by case: u' Hij.
   Qed.
 
   Lemma rb_is_jump_eq : forall t : value_tag, is_jump t = Some tt -> t = InternalJump.
   Proof. by case. Qed.
 
-  (* From a SILENT merged JUMP step ([next_state_updates_and_pc] with [Merged.transfer], target
-     [pc' = w], inputs [HSeqCons rat l]), the jump-register tag [hshead l] is [InternalJump]. *)
   Lemma rb_merged_jump_isjump :
     forall (st s' : RB.state) tpc ti (rat : tag_type lrc_tags R)
            (l : hseq (tag_type lrc_tags) (nseq 12 R)) updts (w : mword mt),
@@ -147,15 +132,6 @@ Module RBScratch_Jump (S : RecompositionContext).
        exact: (rb_jump_silent_isjump Htr)).
   Qed.
 
-  (* Belong-gate reflection for the JUMP target, driven from the MERGED side.  From the merged
-     side's successful [belong c] at the target cell [mem s3 w] (always true for a silent jump),
-     recover [belong c (mem s w)].  Cases on [mem s3 w]:
-       - [Some d3]: merged belong pins [color(taga d3) = c].
-           * code:  [succ_code_reflect] (backward, off = 0) ⟹ [mem s w = Some(_@taga d3)], colour c.
-           * data:  colour-c cell is relevant ⟹ [memory_match] proj1 ⟹ strong cell, same colour c.
-       - [None]: belong [None] is vacuously true; reflect to the strong side via [combined_codes]/
-           [memory_match] (the strong target is either absent or colour-c).  This last branch needs
-           the merged target to be present for a *reachable* intra-jump and is the documented corner. *)
   Lemma rb_target_belong : forall (i : side) M s s3 (w : mword mt),
     combined_codes i s s3 -> memory_match i M s s3 ->
     is_relevant_comp i (color_of s) -> side_of (color_of s) = i ->
@@ -164,17 +140,17 @@ Module RBScratch_Jump (S : RecompositionContext).
   Proof.
     move=> i M s s3 w Hcc Hmm Hrel Hside Hbel3.
     case Hm3 : (mem s3 w) Hbel3 => [d3|] Hbel3.
-    - (* merged target present *)
+    -
       have Hcolc3 : color (taga d3) = color_of s.
       { move: Hbel3; rewrite /belong; case: (taga d3) => vt ct et ict /= /eqP H. by rewrite H. }
       clear Hbel3.
       case Hcode3 : (is_code (taga d3)).
-      + (* code: backward reflect to strong side, same tag, colour c *)
+      +
         have Hm3' : mem s3 w = Some ((vala d3) @ (taga d3)) by case: d3 Hm3 Hcolc3 Hcode3 => v3 t3 /= ->.
         have [v' Hsw] := succ_code_reflect Hcc Hrel Hcode3 Hcolc3 Hm3'.
         rewrite Hsw /belong /=.
         by case: (taga d3) Hcolc3 => vt ct et ict /= ->; rewrite eqxx.
-      + (* data: colour-c hence relevant; reflect via memory_match proj1 *)
+      +
         have Hn : ~ is_code (taga d3) by rewrite Hcode3.
         have Hrelc3 : is_relevant_comp i (color (taga d3)) by rewrite Hcolc3.
         have [d' [Hdm' Hsw]] := proj1 (Hmm w d3 Hn Hrelc3) Hm3.
@@ -183,10 +159,7 @@ Module RBScratch_Jump (S : RecompositionContext).
         rewrite /data_match' /= => -[Htt _]. subst td.
         rewrite Hsw /belong /=. clear Hsw.
         by case: t3 Hcolc3 => vt ct et ict /= ->; rewrite eqxx.
-    - (* merged target absent.  For a reachable silent intra-component jump the target is a code
-         cell of the running component, hence present on the merged side; the [None] branch
-         (merged target absent while the strong target is a non-running-component cell) is the
-         documented unreachable corner.  Left as the single admit of this helper. *)
+    -
       case Hsw : (mem s w) => [d|] //=.
       admit.
   Admitted.
@@ -209,7 +182,7 @@ Module RBScratch_Jump (S : RecompositionContext).
     suff [s' [ev' Hf]] : exists s' ev', step_eval_me (NC := NC) s = Some (s', ev').
     { exists s', ev'. by apply/Exec.stepP. }
     case: ev Hstep => [e|] Hstep.
-    { (* ev = Some e: cross-component Jump/Jal *) admit. }
+    {  admit. }
     inversion Hstep
       as [mem3 reg3 pc3 tpc3 i3 ti3 extra3 ST3 PC3 INST3 mv3 NEXT3
          |mem3 reg3 pc3 tpc3 i3 ti3 n3 r3 old3 told3 extra3 ST3 PC3 INST3 OLD3 mv3 NEXT3
@@ -221,7 +194,7 @@ Module RBScratch_Jump (S : RecompositionContext).
          |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
          |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
          |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-    - (* Nop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -245,7 +218,6 @@ Module RBScratch_Jump (S : RecompositionContext).
       have [v' Hmems] := succ_code_reflect Hcc Hrel Hcode3s Hcolc Hd3s.
       have Hmems' : mem s (vala (pc s) + 1)%w = Some (v' @ t3s)
         by rewrite Hpcaddr.
-      (* builder: s mirrors the Nop step *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -267,7 +239,7 @@ Module RBScratch_Jump (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         by rewrite Hcd Hpccol Hcolc eqxx /=.
-    - (* Const *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -314,7 +286,7 @@ Module RBScratch_Jump (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hold /=.
         by [].
-    - (* Mov *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -365,10 +337,10 @@ Module RBScratch_Jump (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hr1 /= setmE.
         by case: (r2 =P r1) => Hr21 /=; rewrite ?Hr2 //=.
-    - (* Binop *) admit.
-    - (* Load *) admit.
-    - (* Store *) admit.
-    - (* Jump *)
+    -  admit.
+    -  admit.
+    -  admit.
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -380,16 +352,13 @@ Module RBScratch_Jump (S : RecompositionContext).
         - rewrite INST3 in Hj2; discriminate Hj2. }
       have Hcd : color td = color_of s by rewrite Htag (Hpci (i3 @ ti3) Hd3) Hcoleq.
       have [Hpc3' Hbel] := merged_silent_next_pc_belong NEXT3.
-      (* operand reflections (same tags) *)
       have RW3' : regs s3 r = Some (w @ t1) by rewrite ST3 /=.
       have RA3' : regs s3 ra = Some (rav @ rat) by rewrite ST3 /=.
       have [rav' Hra] := reg_reflect Hrm RA3'. cbn [taga] in Hra.
-      (* reg_clear_list reflects to the SAME tag-hseq on the strong side *)
       have Hclear3 : reg_clear_list_aux reg_list (regs s3) t1 = Some l
         by rewrite ST3 /=; exact CLEAR3.
       have Hclears : reg_clear_list_aux reg_list (regs s) t1 = Some l
         := rb_reg_clear_aux_reflect Hrm Hclear3.
-      (* the jump-register tag is InternalJump (from the merged JUMP [is_jump] gate); hshead l = t1 *)
       have Hij := rb_merged_jump_isjump NEXT3.
       have Hheadl : hshead l = t1.
       { move: Hclear3; rewrite /reg_list /=.
@@ -400,17 +369,14 @@ Module RBScratch_Jump (S : RecompositionContext).
       have RW3'' : regs s3 r = Some (w @ InternalJump) by rewrite RW3' Ht1.
       have Hclears' : reg_clear_list_aux reg_list (regs s) InternalJump = Some l
         by rewrite -Ht1.
-      (* reflect the jump-register value: off = 0 so the strong target is the SAME w *)
       have Hrw : regs s r = Some (w @ InternalJump)
         := rb_reg_ijump_reflect Hrm Hrel RW3''.
-      (* belong of the strong target cell *)
       have Htpc3c : match tpc3 with Level _ c => c end = color_of s.
       { by rewrite Hcoleq ST3 /=. }
       have Hbelw : belong (color_of s)
                      (match mem s w with Some ni => Some (taga ni) | None => None end).
       { apply: (rb_target_belong (s3 := s3) Hcc Hmm Hrel Hside).
         by move: Hbel; rewrite Htpc3c. }
-      (* evi reflects *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -418,7 +384,6 @@ Module RBScratch_Jump (S : RecompositionContext).
       have Hiscode : is_code td by rewrite Htag.
       have Hpccol : match pct s with Level _ c => c end = color_of s by rewrite rb_color_ofE.
       have Hcdpc : color td = match pct s with Level _ c => c end by rewrite Hcd Hpccol.
-      (* build the strong-side jump step *)
       exists (@State mt lrc_tags unit (mem s) (regs s) (w @ (pct s)) (internal s)), None.
       apply/Exec.stepP.
       eapply step_jump.
@@ -428,7 +393,7 @@ Module RBScratch_Jump (S : RecompositionContext).
       + exact Hrw.
       + exact Hra.
       + rewrite /reg_clear_list. exact Hclears'.
-      + (* the [RegRead ra :: RegRead r :: reg_clear_read] fold is the identity on [s] *)
+      +
         Local Opaque next_state_do_updates.
         have Hupd : next_state_do_updates s
                       (HSeqCons rat l : hseq (tag_type lrc_tags) (R :: nseq (size reg_list).+1 R))
@@ -442,7 +407,6 @@ Module RBScratch_Jump (S : RecompositionContext).
           exact: (reg_clear_do_updates_id (l := reg_list) (st := s) (k0 := r)
                     (a0 := w @ InternalJump) Hrw Hcl). }
         rewrite /next_state_updates_and_pc /next_state Hevi /=.
-        (* the JUMP-register input tag is [InternalJump] *)
         have Hhij : hshead l = InternalJump by rewrite Hheadl Ht1.
         have El : l = (hshead l :: hshead (hsbehead l) :: hsbehead (hsbehead l))%hseq.
         { rewrite [in LHS](hseq_eta l) [in hsbehead l](hseq_eta (hsbehead l)). by []. }
@@ -460,16 +424,16 @@ Module RBScratch_Jump (S : RecompositionContext).
           ( rewrite (_ : (match td with {| color := c |} => c end == cpc) = true);
             last by (apply/eqP; rewrite Hcurc Hpccol) );
           rewrite /=.
-        * (* mem s w = Some ni: belong holds at the target *)
+        *
           rewrite (Hfold ni); last by (move: Hbelw; rewrite Hmsw /=).
           rewrite -El Hhij /is_jump /=.
           by rewrite Hupd.
-        * (* mem s w = None: belong None is true *)
+        *
           rewrite -El Hhij /is_jump /=.
           by rewrite Hupd.
-    - (* Bnz *) admit.
-    - (* Jal *) admit.
-    - (* Syscall *) admit.
+    -  admit.
+    -  admit.
+    -  admit.
   Admitted.
 
 End RBScratch_Jump.

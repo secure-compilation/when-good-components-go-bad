@@ -42,13 +42,8 @@ Require Import MicroPolicies.Recomposition.StepSilentWeak2.
 
 Module StepEventCall (S: RecompositionContext).
 
-  (* Chain off StepWeak2 so the whole recomposition shares ONE Defs instance. *)
   Include StepWeak2 S.
 
-  (* The running component after a cross-component call is the callee [c]; it is a real
-     interface component because the call-target cell [d] is coloured [c] (via [get_tni_color])
-     and lives in a [color_in_memory]'d memory.  Discharges the new [common_equiv] validity
-     premise (the running component's pc-tag colour ∈ ip ∪ ic). *)
   Lemma running_comp_valid_call m w d c :
     color_in_memory m -> m w = Some d -> get_tni_color (Some (taga d)) = Some c ->
     (c \in domm ip) || (c \in domm ic).
@@ -59,9 +54,6 @@ Module StepEventCall (S: RecompositionContext).
     apply/orP; have := Hcm w d Hmw; rewrite Hc; case=> [/In_in ?|/In_in ?]; [by left|by right].
   Qed.
 
-  (* After a call/return event the pc lands on the entry/return cell, whose [get_tni_color] is the
-     new running colour [c] (= [color_of s], the post-event pc-tag colour).  So [pc_code_color]
-     holds of the post-state: the unique cell at the new pc is running-coloured. *)
   Lemma pc_code_color_entry : forall (s : state) cell c n,
       mem s (vala (pc s)) = Some cell ->
       get_tni_color (Some (taga cell)) = Some c ->
@@ -75,21 +67,12 @@ Module StepEventCall (S: RecompositionContext).
     by move: Htc; rewrite /get_tni_color; case: (taga cell) => vt ct et bt /= [= ->].
   Qed.
 
-  (* [Opaque]/[Transparent] settings are NOT inherited through [Require Import], so
-     re-establish them here: without this the 100+ [simpl in *] calls in [step_event_call]
-     explode over the word/fmap ops and the proof term blows up (>600s Qed, the 9.4MB .vo).
-     [as_word]/[word_of_nat] stay TRANSPARENT — the proof [unfold]s them deliberately for the
-     concrete register addresses (0..19). *)
   Opaque andw shlw mask component_memory_prefix.
   Opaque unionm setm mkfmap mkfmapfp.
-  (* PERF: keep [pc_code_color] folded so the giant-state pcc hyps/goals don't normalise in Qed. *)
   Local Opaque pc_code_color.
 
   Notation "x $ t" := {| vala := x; taga := t |} (at level 5, format "x '$' t").
 
-  (* [cbn] that leaves the word/fmap/hseq spines and the LRC policy helpers FROZEN, so reducing
-     [stepf] never materialises the 12-register [reg_invalidate_hseq] / JAL [OVec] (the source of
-     the historical [StepEventCall.vo] blow-up).  Used by [call_step_scratch] below. *)
   Ltac mcbn H := cbn -[obind oapp as_word word_of_nat andw shlw mask component_memory_prefix
                        unionm setm getm mkfmap mkfmapfp domm decode_instr
                        next_state_do_updates next_state_do_update reg_clear_list_aux
@@ -97,16 +80,6 @@ Module StepEventCall (S: RecompositionContext).
                        switch_val build_tpc get_tni_color get_proc_name check_ret
                        is_address is_jump is_other rcom_value] in H.
 
-  (* Fast characterisation peel for the future [call_step_inv] (conclusion is still [True] — this
-     is the regression-tested scaffold).  In ~6s it [apply stepP]s, fetches+decodes, then for EVERY
-     one of the 14 [instr] constructors + the syscall branch: peels [evi]/[transfer] with [obind_inv]
-     (stop-guarded at [transfer] so the dependent [vovec (op IVEC)] type has no free witness),
-     [case]s the conditional next-cell address ([if] in the address handles BNZ; ssr [case: (smem _)]
-     handles JAL/JUMP/sequential), then unfolds [transfer]/[instr_rules] and peels the rule's
-     [do!]/[if]/[let] structure to the EVENT.  All 8 silent opcodes are refuted by [congruence]
-     (event [None] <> [ECall]); exactly the JAL cross-component branch survives. *)
-  (* [call_step_inv] (minimal, will be extended): a Merged [ECall] step forces the instruction at
-     [pc] to decode to a [Jal].  Proven by the all-opcode characterisation peel. *)
   Lemma call_step_inv : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp',
     step_me (NC := NC) s s' (Some (ECall comp proc z comp')) ->
     exists ip imm cell rac a1 n st',
@@ -137,9 +110,6 @@ Module StepEventCall (S: RecompositionContext).
   Proof.
     intros s s' comp proc z comp' H.
     apply stepP in H.
-    (* Abbreviate the goal to a single token [G] so the ~30 [destruct]/[case]s in the peel each
-       carry [G] (not the conclusion) as their match return-type — without this a 3-conjunct goal
-       blows the peel from ~8s to a 45-min timeout. *)
     match goal with |- ?Goal => set (G := Goal) end.
     destruct s as [smem sreg [spc stpc] sextra].
     destruct stpc as [slvl scol].
@@ -154,8 +124,6 @@ Module StepEventCall (S: RecompositionContext).
     all: unfold next_state_updates, next_state_updates_and_pc, next_state in H.
     all: cbv zeta in H; mcbn H.
     all: try unfold run_syscall in H.
-    (* peel 1: strip the [evi]/[transfer]/register-read [do!]s, leaving [H] as the small
-       [match op IVEC with ...] continuation (the [transfer] equation moves to a side hyp). *)
     all: repeat (lazymatch type of H with
            | obind _ (transfer _ _) = _ => fail
            | _ => first
@@ -165,22 +133,11 @@ Module StepEventCall (S: RecompositionContext).
                    match type of H with context[a] => destruct a end end
                ]; mcbn H
            end).
-    (* discharge the syscall branch (event is [None]) and any immediately-contradictory
-       opcode branch before the (relatively pricey) [case]s. *)
     all: try (exfalso; congruence).
-    (* [H] now stops at [obind _ (transfer IVEC _)]: [transfer]'s result is NOT yet extracted,
-       so the dependent type [vovec (op IVEC)] has no free witness to block [case].  Guard on
-       [DEC] so the [case] skips the syscall branch ([case]ing [smem] there forces [Symbolic.sem]). *)
     all: try (match type of H with context[if ?c then _ else _] =>
                 let e := fresh in destruct c eqn:e end; mcbn H).
     all: try (match goal with _ : decode_instr _ = Some _ |- _ =>
                 move: H; case Ejt: (smem _) => [[niv nit]|]; move=> H; mcbn H end).
-    (* peel 2: strip the [transfer]/[next_state_do_updates] [do!]s down to the event.  For JAL
-       this leaves [H : Some (st', o0) = Some (s', Some (ECall ...))] (event [o0] = the JAL-cross
-       event) plus the side hyp [transfer ... = Some (ov, o0)] still to be characterised. *)
-    (* op is concrete now, so unfolding [transfer]/[instr_rules] is safe; [mcbn] keeps the
-       12-register OVec frozen.  Peel EVERY [do!]-hyp (not just [H]): the [instr_rules] equation
-       is a side hyp whose event must resolve too. *)
     all: unfold transfer, instr_rules, LRC.instr_rules, check_belong, check_entry in H.
     all: cbv zeta in H; mcbn H.
     all: repeat (first
@@ -196,13 +153,7 @@ Module StepEventCall (S: RecompositionContext).
                let e := fresh "Eif" in revert HH; destruct c eqn:e; intro HH; mcbn HH end
            | match goal with HH : context[let (_, _) := ?x in _] |- _ => destruct x; mcbn HH end ]).
     all: mcbn H.
-    (* All 8 silent opcodes are refuted here (their event is [None] <> [ECall]); exactly ONE goal
-       survives — the genuine JAL cross-component call, with [H : Some (jal_state, do! p <-
-       get_proc_name; Some (ECall current p z c')) = Some (s', Some (ECall comp proc z comp'))]. *)
     all: try (exfalso; congruence).
-    (* lone JAL survivor: expand [G] back to the conclusion; [Hf : smem spc = Some (i$ti)],
-       [DEC : decode_instr i = Some (Jal _)], [Ejt : smem (swcast imm) = Some cell] (target cell). *)
-    (* inject the survivor's event eq to expose [proc]/[comp'] (= the rule's [p]/[c']) *)
     all: injection H as ? Hev; apply obind_inv in Hev as [? [Hgpn Hev]];
          injection Hev as ? ? ? ?; subst.
     all: repeat match goal with u : unit |- _ => destruct u end.
@@ -230,11 +181,6 @@ Module StepEventCall (S: RecompositionContext).
             | match goal with H : next_state_do_updates _ _ _ = Some _ |- _ => exact H end ].
   Qed.
 
-  (* [step_mp] (LRC.transfer, NO is_code gate) analogue of [call_step_inv].  Used for the UB cases
-     of the match_right helper [secmr]: there s1 (the context) executes data as a JAL, so [step_me]
-     (Merged) fails on the missing [is_code], but the LRC step [step_mp] still produces the JAL-cross
-     event.  Proof is [call_step_inv]'s verbatim (the peel is defensive — the is_code-gate branch
-     simply never fires for LRC); only [LRC.transfer] is added to the transfer-unfold. *)
   Lemma call_step_inv_mp : forall (s s' : Symbolic.state lrc_tags unit) comp proc z comp',
     step_mp (NC := NC) s s' (Some (ECall comp proc z comp')) ->
     exists ip imm cell rac a1 n st',
@@ -332,17 +278,6 @@ Module StepEventCall (S: RecompositionContext).
             | match goal with H : next_state_do_updates _ _ _ = Some _ |- _ => exact H end ].
   Qed.
 
-  (* TODO(jt): [call_step_inv] above is the PROVEN (Qed, ~7s) fast characterisation core that
-     replaces the historical >400s [inversion + unfold_all] (which made this proof intractable).
-     Remaining to un-[Admitted] [step_event_call]: (1) extend [call_step_inv]'s conclusion from
-     "the instruction is a JAL" to the full JAL-cross data (target cell, [belong=false],
-     [comp=current], [proc=get_proc_name], [comp'=get_tni_color], [z=rcom_value], and [s'=]the
-     jal-cross result) — all already exposed in the lone JAL survivor; (2) the symmetric
-     [call_step_intro] (build a [step_jal] via [Symbolic.step_jal], Symbolic.v:378); (3) rewire the
-     four P/C x P/C reconstruction cases off these. *)
-  (* The reg-clear suffix of a cross-call/return do_updates SUCCEEDS (returns Some _) whenever every
-     register it reads exists — the tags are arbitrary (Invalidated/Other), so this is existence, not
-     the own-tag no-op of [reg_clear_do_updates_id]. *)
   Lemma reg_clear_read_exists :
     forall (l : seq nat) (st : state)
            (tags : hseq (tag_type ttypes) (nseq (size l) R)),
@@ -368,8 +303,6 @@ Module StepEventCall (S: RecompositionContext).
     apply: (Hex m); by rewrite in_cons Hm orbT.
   Qed.
 
-  (* The full cross-call/return do_updates SUCCEEDS: a MemRead no-op on the cell at [w], the ra-write
-     reg(4):=w, then the register clear.  All cells must exist. *)
   Lemma cross_do_updates_exists :
     forall (st : state) (w : mword mt)
            (tags : hseq (tag_type ttypes) (M :: R :: nseq (size reg_list) R)),
@@ -408,14 +341,8 @@ Module StepEventCall (S: RecompositionContext).
     repeat (match goal with |- context[as_word (ssrint.Posz ?a) == as_word (ssrint.Posz ?b)] =>
       rewrite (introF eqP (@reg_index_neq a b ltac:(move=> ?; discriminate)
                             ltac:(by []) ltac:(by []))) end).
-  (* After the MemRead [/=] fully unfolds the chain, every later update is a nested
-     [do! a <- regs ..; if isSome (regs ..) then Some (setm ..) else None]: [setmE]+[killcond]
-     reduce the [regs (fold) (as_word n)] reads to [regs st (as_word n)], [Hr] discharges them. *)
   Local Ltac rrstep Hr := rewrite ?setmE; killcond; rewrite Hr /=.
 
-  (* Every capability stored in a depth-[cn] stack has a [Ret] level STRICTLY below [cn]:
-     the top frame is at level [cn-1], the rest recurse.  Used to show the freshly-pushed
-     [Ret cn] capability is unique (nothing already in the stack / memory carries level [cn]). *)
   Lemma wf_stack_levels_lt :
     forall (m1 m2 m3 : memory) (cn : nat) (M : stack),
       wf_stack m1 m2 m3 cn M ->
@@ -443,8 +370,6 @@ Module StepEventCall (S: RecompositionContext).
         by rewrite addn1; apply: (ltn_trans Hk); exact: ltnSn.
   Qed.
 
-  (* The cross do_updates RESULT: reg4:=w@(Ret cn), reg1:=arg@Other, the rest @Invalidated.
-     [cbn] (not [ndsu_cons]) peels the hseq-cast spine; [next_state_do_update] reduced per step. *)
   Lemma cross_do_updates_props :
     forall (st : state) (w : mword mt) (tret : tag_type ttypes M) (cn : nat) cell a1,
       mem st w = Some cell ->
@@ -483,7 +408,6 @@ Module StepEventCall (S: RecompositionContext).
       rrstep Ha4. rrstep Ha1. rrstep Ha0. rrstep Ha2. rrstep Ha3.
       rrstep Ha5. rrstep Ha6. rrstep Ha7. rrstep Ha16. rrstep Ha17.
       rrstep Ha18. rrstep Ha19. reflexivity. }
-    (* ?rs is now the concrete [setm]-fold; read each register back via [setmE]. *)
     split; [ | split ].
     - by rewrite !setmE; killcond; rewrite eqxx /=.
     - by rewrite !setmE; killcond; rewrite eqxx /=.
@@ -494,12 +418,6 @@ Module StepEventCall (S: RecompositionContext).
   Qed.
   Local Opaque next_state_do_update.
 
-  (* Plumbing (fmap-domain arithmetic): [next_state_do_updates] only [updm]/[setm]s register
-     keys it reads/writes (all already in the domain when the step succeeds), so it preserves
-     the register domain.  Provable by induction on [updts]; admitted as plumbing per the admit
-     policy (fset/[register_domm] arithmetic) so the substantive proof below stays on track. *)
-  (* [next_state_do_updates] only [updm]s register/memory keys, so it preserves the register
-     domain (proved generically in [Symbolic], where the definition is transparent). *)
   Lemma reg_domm_cross :
     forall (st st' : state) (tks : seq tag_kind) (tags : hseq (tag_type ttypes) tks)
            (updts : seq update),
@@ -511,9 +429,6 @@ Module StepEventCall (S: RecompositionContext).
     by move: Hd; rewrite /register_domm.
   Qed.
 
-  (* The cross-call wf_stack push, extracted as a standalone lemma so it is proven in a CLEAN,
-     minimal context — this sidesteps the §1 perf wall that the in-place [eapply
-     wf_stack_cons_left] hits when the goal carries the huge post-s2-reduction context. *)
   Lemma cross_wf_stack :
     forall (m1 m2 m3 : @memory mt) (cn : nat) (cc : Component.id) (M0 : stack)
            (pc0 pc2v pc3v vret vra3 : mword mt) (tret : tag_type lrc_tags M)
@@ -549,9 +464,6 @@ Module StepEventCall (S: RecompositionContext).
     - exact: WF.
   Qed.
 
-  (* Right-side mirror of [cross_wf_stack]: the merged run s3 follows the STRONG run s2 (position 2),
-     so v3 = addw v2 off and the side is Right (cc in the context [ic]).  Position 1 is the weak run
-     s1 (cell [ret]); positions 2,3 share the strong tag [tret]. *)
   Lemma cross_wf_stack_right :
     forall (m1 m2 m3 : @memory mt) (cn : nat) (cc : Component.id) (M0 : stack)
            (pc1v pc2sv pc3v vret vra3 : mword mt) (tret : tag_type lrc_tags M)
@@ -587,9 +499,6 @@ Module StepEventCall (S: RecompositionContext).
     - exact: WF.
   Qed.
 
-  (* Capability preservation for s1' of the cross-call, in a clean context. After the call the ONLY
-     Ret-tagged register is [ra] (the fresh capability fp1@Ret cn); memory is unchanged so input
-     [cap1] handles it; [wf_stack_levels_lt] gives no Ret-cn value pre-exists ⇒ the new one is unique. *)
   Lemma cross_capability_S1 :
     forall (s1 s1' : state) (m2 m3 : @memory mt) (cn : nat) (cc : Component.id) (M0 : stack)
            (fp1 fp2 fp3 vo1 : mword mt),
@@ -653,7 +562,6 @@ Module StepEventCall (S: RecompositionContext).
           exists t'; split; [ by move: Hmw'; rewrite ?Hmem | exact: Hvt' ].
   Qed.
 
-  (* WS_S2 mirror of [cross_capability_S1]: the capability sits in the 2nd stack slot. *)
   Lemma cross_capability_S2 :
     forall (s s' : state) (m1 m3 : @memory mt) (cn : nat) (cc : Component.id) (M0 : stack)
            (fp1 fp2 fp3 vo1 : mword mt),
@@ -717,7 +625,6 @@ Module StepEventCall (S: RecompositionContext).
           exists t'; split; [ by move: Hmw'; rewrite ?Hmem | exact: Hvt' ].
   Qed.
 
-  (* WS_S3 mirror of [cross_capability_S1]: the capability sits in the 3rd stack slot. *)
   Lemma cross_capability_S3 :
     forall (s s' : state) (m1 m2 : @memory mt) (cn : nat) (cc : Component.id) (M0 : stack)
            (fp1 fp2 fp3 vo1 : mword mt),
@@ -1018,12 +925,11 @@ Module StepEventCall (S: RecompositionContext).
         cbn [step1] in step_s2.
         inversion step_s2; subst s2; simpl in Hpc2.
         all: rewrite Hpc2 in PC.
-        all: try discriminate.   (* refutes syscall: Some ip2 = None *)
+        all: try discriminate.
         all: injection PC as PCeq2.
         all: assert (Hvi2 : vala ip2 = i) by (rewrite PCeq2; reflexivity).
         all: rewrite Hvi2 in Hdec2.
-        all: try (rewrite Hdec2 in INST; discriminate).  (* refutes the 8 non-JAL opcodes *)
-        (* only the JAL case remains *)
+        all: try (rewrite Hdec2 in INST; discriminate).
         inversion strong as
           [ms2 ? ? same_pc2 color_eq2 side_eq2 s_mem2 s'_mem2 entry_off2 s_reg2 s'_reg2 mem_match2 reg_match2].
         inversion common as
@@ -1032,12 +938,10 @@ Module StepEventCall (S: RecompositionContext).
         destruct gmc2 as [mp2 [mp2' [cp2 [ae2 [bnz2 [end2 [col_mem2 [ecode2 cvo2]]]]]]]].
         inversion same_pc2 as [? ? Hpcv Hnone | ? ? vsp off_sp Hmem_sp eq_off Hpc_sp].
         { exfalso. case: Hnone => Hnone _. simpl in Hnone. rewrite Hpc2 in Hnone. discriminate. }
-        (* extract s3's register facts into OUTER hypotheses (shared evars need outer terms) *)
         destruct (proj2 (reg_match2 ra (old$told)) OLD) as [[vo to] [Hdm3 Hold3]].
         destruct (reg_clear_list_total to rd3) as [l3 Hl3].
-        (* derive s3's instruction at pc3v via codeR (combined_codes) *)
-        simpl in tag_pc2; subst tpc0.    (* pc tag = Level cn cc, so pc color = cc *)
-        rewrite PCeq2 in Hpc2.            (* Hpc2 : mem0 pc0 = Some (i$ti0) *)
+        simpl in tag_pc2; subst tpc0.
+        rewrite PCeq2 in Hpc2.
         have Himm : imm2 = imm by congruence.
         have Hcelli : mem {| mem := mem0; regs := reg; pc := pc0$(Level cn cc); internal := extra |} pc'
                       = Some cell2.
@@ -1056,14 +960,12 @@ Module StepEventCall (S: RecompositionContext).
         { exact Hic. }
         { exact Hcolor. }
         specialize (Xpc Hpc2) as [vpc3 [match_dec_pc mem_s3_pc]].
-        (* decode_match: refute no-JAL (Hdec2) + alloc (Hcell2 vs ae1); keep the genuine JAL case *)
         inversion match_dec_pc as
           [Hnoj ? ? | Haj1 Haj2 | imm0 imm' dd dd' Hjd1 Hjd2 Hdd Hdd' Hcode_dd Htag_dd Hoff_dd].
         { exfalso; exact (Hnoj imm2 Hdec2). }
         { exfalso.
           have Himm2 : imm2 = word_of_nat alloc_label by congruence.
           move: Hcell2; rewrite Himm2 swcast_word_of_nat_alloc_label ae2; discriminate. }
-        (* derive s3's next cell (RA) via a second code_left at pc0+1 *)
         assert (Hic_ra : is_code tret).
         { case: (end2 pc0 (i$ti0) Hpc2 Hic) => [Hhalt | [v' [Hmv' Hicv']]].
           - exfalso; move: Hhalt; have -> : vala (i$ti0) = i by []; rewrite INST; done.
@@ -1083,7 +985,6 @@ Module StepEventCall (S: RecompositionContext).
         { exact Hcolor_ra. }
         specialize (Xra RA) as [vra3 [match_dec_ra mem_s3_ra]].
         simpl in Hpc_sp.
-        (* subst pc3t BEFORE eexists so [cc] (from [Level cn cc]) is in the [s3'] evar's scope. *)
         simpl in tag_pc3; subst pc3t.
         do 2 eexists. split.
         * have COLPROJ : forall (t : tag_type lrc_tags M),
@@ -1115,7 +1016,7 @@ Module StepEventCall (S: RecompositionContext).
             | rewrite -Hcd -Hcc2; exact Hbel2 | rewrite -Hcd; exact Htc2
             | rewrite -Hcd -Hcc2; exact Jce_2 | rewrite -Hcd; exact Hpn2
             | exact Hz | exact Hcc2 ].
-        * (* preserve the three-way match *)
+        *
           match goal with |- match_states ?M _ _ _ =>
             unify M (((vala (pc s1) + 1)%w$(Ret cn), (pc0 + 1)%w$(Ret cn),
                       (pc3v + 1)%w$(Ret cn), cc) :: M0) end.
@@ -1138,7 +1039,6 @@ Module StepEventCall (S: RecompositionContext).
               (st := {| mem := mem3; regs := regs3; pc := pc3v$(Level cn cc); internal := int3 |})
               (w := (pc3v + 1)%w) tret cn Hcell3 Ha3 Hreg4 Hex3.
           rewrite Hdu3 /=.
-          (* --- now characterise s1' the same way, by reducing NEXT --- *)
           have Hoth2 : taga a1 = Other.
           { have E := etrans (esym Jr1_2) Ha1. case: E => <-. exact Joth_2. }
           have Hce2 : check_entry cc (Some (taga cell2)) = Some tt by rewrite -Hcc; exact Jce_2.
@@ -1165,8 +1065,6 @@ Module StepEventCall (S: RecompositionContext).
             subst racP nP ipP immP.
             rewrite HsP. have E := etrans (esym HduP) Hdu2. case: E => ->. reflexivity. }
           rewrite -Hs2eq.
-          (* both s1' and s3' are now explicit cross-updated states. *)
-          (* --- reduce s2' from the raw step --- *)
           have [ipP [immP [racP [nP [stP [HpcP [HdecP [HracP [HnP [HduP HsP]]]]]]]]]] :=
             call_step_post_mp sme1.
           destruct s1 as [mem2 regs2 [pc2v pc2t] int2].
@@ -1197,22 +1095,15 @@ Module StepEventCall (S: RecompositionContext).
                           pc := (swcast imm1)$(build_tpc cn.+1 comp'); internal := int2 |} = s1'.
           { rewrite HsP. have E := etrans (esym HduP) Hdu1. case: E => ->. reflexivity. }
           rewrite -Hs1eq.
-          (* all three states s1'/s2'/s3' are now explicit; collapse the [setm]s via [setmI]. *)
           have ETA : forall (S : Type) (a : atom (mword mt) S), (vala a)$(taga a) = a
             by move=> S; case.
           rewrite (@setmI _ _ mem0); [|exact: RA].
           rewrite (ETA _ ret) (@setmI _ _ mem2); [|exact: Hret].
           rewrite (@setmI _ _ mem3); [|exact: Hcell3].
-          (* [is_code (taga ret)] is NOT available here: in the UB case s1 (the context) runs data
-             as a JAL, so the return cell need not be code.  The wf_stack push (via the LEFT branch
-             of [points_to_comp_code']) and the s1 register-address-correctness (vacuous for [Left]
-             since [color ret = cc \in ic]) both use [side_of cc = Right] instead of [is_code ret].
-             The return cell's color is [cc] (via [Hcb1]). *)
           have Hcolret : color (taga ret) = cc.
           { move: Hcb1; rewrite /check_belong /belong.
             case: (taga ret) => vt ct et bt /=.
             case: ifP => // Hbel _. apply/eqP; rewrite eq_sym; exact: Hbel. }
-          (* common_equiv is symmetric; prove it once (pinned metadata), then case on comp'. *)
           have Hic_rel : cc \in domm ic.
           { have HCm := col_mem2 pc0 (i$ti0) Hpc2; cbn [taga] in HCm; rewrite Hcolor in HCm.
             case: HCm => [/In_in HCm | /In_in HCm];
@@ -1227,30 +1118,30 @@ Module StepEventCall (S: RecompositionContext).
               (((pc2v + 1)%w$(Ret cn), (pc0 + 1)%w$(Ret cn), (pc3v + 1)%w$(Ret cn), cc) :: M0)
               S1 S2 S3 end.
           { eapply common_equiv_def;
-              [ by rewrite /build_tpc                                  (* taga s1' *)
-              | by rewrite /build_tpc                                  (* taga s2' *)
-              | by rewrite /build_tpc                                  (* taga s3' *)
+              [ by rewrite /build_tpc
+              | by rewrite /build_tpc
+              | by rewrite /build_tpc
               | exact: (cross_wf_stack_right Hic_rel eq_off Hret RA Hcell3
-                          Hcolor_ra Hic_ra Hcolret Hsideret Hpc_sp wfst) (* wf_stack *)
-              | exact: (reg_domm_cross Hdu1 rd1)                       (* register_domm s1' *)
-              | exact: (reg_domm_cross Hdu2 rd2)                       (* register_domm s2' *)
-              | exact: (reg_domm_cross Hdu3 rd3)                       (* register_domm s3' *)
-              | exact: gmc1                                            (* gmc s1' (weak, whole) *)
+                          Hcolor_ra Hic_ra Hcolret Hsideret Hpc_sp wfst)
+              | exact: (reg_domm_cross Hdu1 rd1)
+              | exact: (reg_domm_cross Hdu2 rd2)
+              | exact: (reg_domm_cross Hdu3 rd3)
+              | exact: gmc1
               | by repeat first [ exact: mp2 | exact: mp2' | exact: cp2 | exact: ae2
                   | exact: bnz2 | exact: end2 | exact: col_mem2 | exact: ecode2 | exact: cvo2 | split ]
-              | exact: gmc3                                            (* gmc s3' *)
+              | exact: gmc3
               | apply: cross_capability_S1;
                   [ exact: cap1 | exact: erefl | exact: wfst | exact: Hr4_1 | exact: Hr1_1
-                  | exact: Hinv1 | exact: (reg_domm_cross Hdu1 rd1) ]    (* capability s1' *)
+                  | exact: Hinv1 | exact: (reg_domm_cross Hdu1 rd1) ]
               | apply: cross_capability_S2;
                   [ exact: cap2 | exact: erefl | exact: wfst | exact: Hr4_2 | exact: Hr1_2
-                  | exact: Hinv2 | exact: (reg_domm_cross Hdu2 rd2) ]    (* capability s2' *)
+                  | exact: Hinv2 | exact: (reg_domm_cross Hdu2 rd2) ]
               | apply: cross_capability_S3;
                   [ exact: cap3 | exact: erefl | exact: wfst | exact: Hr4_3 | exact: Hr1_3
-                  | exact: Hinv3 | exact: (reg_domm_cross Hdu3 rd3) ]    (* capability s3' *)
-              | exact: codeL                                           (* combined_codes Left *)
-              | exact: codeR                                           (* combined_codes Right *)
-              | exact: (running_comp_valid_call col_mem2 Hcell2 Htc2) (* callee comp' valid *)
+                  | exact: Hinv3 | exact: (reg_domm_cross Hdu3 rd3) ]
+              | exact: codeL
+              | exact: codeR
+              | exact: (running_comp_valid_call col_mem2 Hcell2 Htc2)
               | (match goal with |- pc_code_color ?st =>
                    apply: (pc_code_color_entry (s := st) (c := comp'));
                      [ exact: Hcell1 | exact: Htc1 | by [] ] end)
@@ -1258,10 +1149,10 @@ Module StepEventCall (S: RecompositionContext).
                    apply: (pc_code_color_entry (s := st) (c := comp'));
                      [ exact: Hcelli | exact: Htc2 | by [] ] end) ]. }
           case Hside : (comp' \in domm ip).
-          -- (* comp' Left → match_states_left (s1' strong: UPGRADE from weak1) *)
+          --
              eapply match_states_left.
              ++ exact: HC.
-             ++ (* strong_equiv Left (s1', s3') -- UPGRADE from weak1 *)
+             ++
                 inversion weak as [mw sw sw' Hcolw Hsidw Hma1 Hma3 Heow Hmmw].
                 have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                 have Hva3 : vala a3 = vala a1.
@@ -1275,7 +1166,7 @@ Module StepEventCall (S: RecompositionContext).
                   move: Hev2z; cbn [rcom_value] => Hz1.
                   move: Hev1z; cbn [rcom_value] => Hz2. by rewrite Hz2 Hz1. }
                 eapply strong_equiv_def.
-                ** (* same_pc *)
+                **
                    have Himm0 : imm = imm0 by congruence.
                    have Hc2d : cell2 = dd.
                    { move: Hcell2 Hdd; rewrite Himm Himm0 => Hca Hcb; congruence. }
@@ -1294,8 +1185,6 @@ Module StepEventCall (S: RecompositionContext).
                    have [l1 He1] : exists l1, entry (taga cell1) = Some (proc, l1).
                    { move: Hpn1; rewrite /get_proc_name; case: (taga cell1) => vt ct et bt /=.
                      by case: et => [[p ll]|] //= [= <-]; exists ll. }
-                   (* the JAL target [cell1] is code via [entry_is_code] (it is a valid entry, [He1]);
-                      this avoids needing [is_code (taga tip1)] (false in the UB case). *)
                    have Hcode1t : is_code (taga cell1).
                    { have ecode1 : entry_is_code mem2
                        by move: gmc1 => [_ [_ [_ [_ [_ [_ [_ [He _]]]]]]]]; exact: He.
@@ -1307,20 +1196,18 @@ Module StepEventCall (S: RecompositionContext).
                    unshelve eapply (same_pc_normal _ _ (v := cell1) (off := off));
                      cbn [color_of build_tpc];
                      first [ exact: Hoff | exact: Hwoff | (split; [exact: Hcell1 | exact: Hcode1t]) ].
-                ** (* color_of *) by rewrite /color_of /build_tpc.
-                ** (* side_of = Right *) by rewrite /side_of /color_of /build_tpc Hside.
-                ** (* mem_addr s2' *) exact: Hma1.
-                ** (* mem_addr s3' *) exact: Hma3.
-                ** (* entry_offset *) exact: Heow.
-                ** (* reg_addr s2' *)
+                **  by rewrite /color_of /build_tpc.
+                **  by rewrite /side_of /color_of /build_tpc Hside.
+                **  exact: Hma1.
+                **  exact: Hma3.
+                **  exact: Heow.
+                **
                    move: (reg_domm_cross Hdu1 rd1) => Hdmm1.
                    move=> v r Hr. have Hrin : r \in domm rs1 by apply/dommP; exists v.
                    move: Hrin Hr; rewrite Hdmm1 in_fset in_cons => /orP[/eqP Hr4 | /mapP[n Hn Hrn]].
                    { subst r => Hr; move: Hr; rewrite Hr4_1 => -[<-].
                      rewrite /address_correctness /=.
                      exists ret; split; first exact: Hret.
-                     (* [color ret = cc \in ic] ⇒ [is_relevant_comp Left (color ret)] is false:
-                        the [Ret]-tagged capability's address-correctness is vacuous on the [Left]. *)
                      move=> Hrel; rewrite Hcolret in Hrel; exfalso.
                      eapply Machine.Intermediate.fdisjoint_partition_notinboth;
                        [ have [[_ fdisj] _] := Hmergeable_ifaces; exact: fdisj
@@ -1330,7 +1217,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_1 => -[<-]. by rewrite /address_correctness. }
                      { have [v2 Hv2] := Hinv1 n Hnr.
                        move: Hr; rewrite Hv2 => -[<-]. by rewrite /address_correctness. } }
-                ** (* reg_addr s3' *)
+                **
                    move: (reg_domm_cross Hdu3 rd3) => Hdmm3.
                    move=> v r Hr. have Hrin : r \in domm rs3 by apply/dommP; exists v.
                    move: Hrin Hr; rewrite Hdmm3 in_fset in_cons => /orP[/eqP Hr4 | /mapP[n Hn Hrn]].
@@ -1342,7 +1229,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_3 => -[<-]. by rewrite /address_correctness. }
                      { have [v3 Hv3] := Hinv3 n Hnr.
                        move: Hr; rewrite Hv3 => -[<-]. by rewrite /address_correctness. } }
-                ** (* memory_match Right *)
+                **
                    have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                      data_match' Left M0 d1 d2 ->
                      data_match' Left (((pc2v+1)%w$(Ret cn), (pc0+1)%w$(Ret cn),
@@ -1355,7 +1242,7 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (Hmmw w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-                ** (* registers_match Right *)
+                **
                    move: (reg_domm_cross Hdu1 rd1) (reg_domm_cross Hdu3 rd3) => Hdmm1 Hdmm3.
                    move=> w d; split=> Hw.
                    { have Hwd : w \in domm rs3 by apply/dommP; exists d.
@@ -1386,7 +1273,7 @@ Module StepEventCall (S: RecompositionContext).
                          move: Hw; rewrite WA Hv2 => -[<-].
                          exists (v3$Invalidated); split; last exact: Hv3.
                          by rewrite /data_match; split. }
-             ++ (* weak_equiv Right (s2', s3') -- DOWNGRADE from strong2 *)
+             ++
                 have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                   data_match' Right M0 d1 d2 ->
                   data_match' Right (((pc2v+1)%w$(Ret cn), (pc0+1)%w$(Ret cn),
@@ -1405,10 +1292,10 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (mem_match2 w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-          -- (* comp' Right → match_states_right (s2' strong: preserve strong2) *)
+          --
              eapply match_states_right.
              ++ exact: HC.
-             ++ (* weak_equiv Left (s1', s3') -- preserve weak1 *)
+             ++
                 have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                   data_match' Left M0 d1 d2 ->
                   data_match' Left (((pc2v+1)%w$(Ret cn), (pc0+1)%w$(Ret cn),
@@ -1428,9 +1315,9 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (Hmmw w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-             ++ (* strong_equiv Right (s2', s3') -- preserve strong2 *)
+             ++
                 eapply strong_equiv_def.
-                ** (* same_pc *)
+                **
                    have Himm0 : imm = imm0 by congruence.
                    have Hc1d : cell2 = dd.
                    { move: Hcell2 Hdd; rewrite Himm Himm0 => Hca Hcb; congruence. }
@@ -1456,13 +1343,13 @@ Module StepEventCall (S: RecompositionContext).
                    unshelve eapply (same_pc_normal _ _ (v := cell2) (off := off)); cbn [color_of build_tpc];
                      first [ exact: Hoff | (rewrite /pc' Himm0; exact: Hwoff)
                            | (split; [exact: Hcelli | rewrite Hc1d; exact: Hcode_dd]) ].
-                ** (* color_of s1' = color_of s3' *) by rewrite /color_of /build_tpc.
-                ** (* side_of (color_of s1') = Left *)
+                **  by rewrite /color_of /build_tpc.
+                **
                    by rewrite /side_of /color_of /build_tpc Hside.
-                ** (* mem_addr s1' *) exact: s_mem2.
-                ** (* mem_addr s3' *) exact: s'_mem2.
-                ** (* entry_offset *) exact: entry_off2.
-                ** (* reg_addr s2' (the strong side) *)
+                **  exact: s_mem2.
+                **  exact: s'_mem2.
+                **  exact: entry_off2.
+                **
                    have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                    move: (reg_domm_cross Hdu2 rd2) => Hdmm2.
                    move=> v r Hr. have Hrin : r \in domm rs2 by apply/dommP; exists v.
@@ -1475,7 +1362,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_2 => -[<-]. by rewrite /address_correctness. }
                      { have [v1 Hv1] := Hinv2 n Hnr.
                        move: Hr; rewrite Hv1 => -[<-]. by rewrite /address_correctness. } }
-                ** (* reg_addr s3' *)
+                **
                    have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                    move: (reg_domm_cross Hdu3 rd3) => Hdmm3.
                    move=> v r Hr. have Hrin : r \in domm rs3 by apply/dommP; exists v.
@@ -1488,7 +1375,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_3 => -[<-]. by rewrite /address_correctness. }
                      { have [v3 Hv3] := Hinv3 n Hnr.
                        move: Hr; rewrite Hv3 => -[<-]. by rewrite /address_correctness. } }
-                ** (* memory_match *)
+                **
                    have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                      data_match' Right M0 d1 d2 ->
                      data_match' Right (((pc2v+1)%w$(Ret cn), (pc0+1)%w$(Ret cn),
@@ -1501,7 +1388,7 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (mem_match2 w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-                ** (* registers_match *)
+                **
                    have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                    move: (reg_domm_cross Hdu2 rd2) (reg_domm_cross Hdu3 rd3) => Hdmm2 Hdmm3.
                    destruct (proj2 (reg_match2 (as_word (ssrint.Posz 1)) a1) Ha1)
@@ -1550,21 +1437,17 @@ Module StepEventCall (S: RecompositionContext).
   Proof.
     import_context.
     intros s1 comp proc z comp' s1' step_s1 s2 s2' step_s2 s3 M match_st.
-    (* [step_s2] is raw [step_me] (sem' is unrestricted) — characterise directly. *)
     simpl in step_s2.
     pose proof (call_step_inv step_s2) as Hs2.
     destruct Hs2 as
       (ip2 & imm2 & cell2 & Jracv2 & Ja1_2 & Jn2 & Jst2 & Hpc2 & Hdec2 & Hcell2 & Hpn2 & Htc2 & Hbel2 & Hcur2
          & Jrac2 & Jr1_2 & Jic_2 & Jcol_2 & Jcolra_2 & Joth_2 & Jce_2 & _).
-    (* [step_s1] is the 2-ctor UB-restricted Step; [inversion] substitutes the concrete trace
-       index (so the underlying [step1] reduces to [step_me]). *)
     simpl in step_s1.
     inversion step_s1 as [? ? ? smp1 allowed1 | ? ? ? sme1 smp1]; subst.
-    - (* UB-allowed: s1 (the Left/sem run) does allowed UB. *)
+    -
       unfold allowed_UB in allowed1.
       destruct match_st as [ ? ? ? ? common strong weak | ? ? ? ? common weak strong ].
-      + (* match_left: s1 is strongly related (side = Left), but [allowed1] places it on the other
-           side — contradicts the disjoint partition (cf. step_silent_strong1:93-99). *)
+      +
         exfalso.
         inversion strong as
           [m ? ? same_pc color_eq side_eq s_mem_cor s'_mem_cor entry_off s_reg_cor s'_reg_cor mem_match reg_match].
@@ -1572,42 +1455,36 @@ Module StepEventCall (S: RecompositionContext).
           [ inversion Hmergeable_ifaces as [[_ fdisj] _]; exact fdisj
           | exact allowed1
           | unfold side_of in *; unfold_match' side_eq ].
-      + (* match_right: s1 (the context) runs data as a JAL — UB-allowed, [smp1 : step_mp].  This is
-           the genuine recomposition case; the LRC step feeds the SAME match_right helper [secmr] as
-           the non-UB (UB-disallowed) case below (both provide a [step_mp]). *)
+      +
         apply: secmr;
           [ exact: smp1 | exact: step_s2 | exact: common | exact: weak | exact: strong ].
-    - (* [sme1 : step1 tt s1 (ECall..::nil) s1' = step_me s1 s1' (Some (ECall ..))] *)
+    -
       pose proof (call_step_inv sme1) as Hs1.
       destruct Hs1 as
         (ip1 & imm1 & cell1 & Jracv1 & Ja1_1 & Jn1 & Jst1 & Hpc1 & Hdec1 & Hcell1 & Hpn1 & Htc1 & Hbel1 & Hcur1
          & Jrac1 & Jr1_1 & Jic_1 & Jcol_1 & Jcolra_1 & Joth_1 & Jce_1 & _).
       destruct match_st as [ ? ? ? ? common strong weak | ? ? ? ? common weak strong ].
-      + (* match_left: s1 strongly related to s3 — build s3's JAL step and preserve. *)
+      +
         cbn [step1] in sme1.
         inversion sme1; subst s1; simpl in Hpc1.
         all: rewrite Hpc1 in PC.
-        all: try discriminate.   (* refutes syscall: Some ip1 = None *)
+        all: try discriminate.
         all: injection PC as PCeq.
         all: assert (Hvi : vala ip1 = i) by (rewrite PCeq; reflexivity).
         all: rewrite Hvi in Hdec1.
-        all: try (rewrite Hdec1 in INST; discriminate).  (* refutes the 8 non-JAL opcodes *)
-        (* only the JAL case remains *)
+        all: try (rewrite Hdec1 in INST; discriminate).
         inversion strong as
           [ms ? ? same_pc1 color_eq1 side_eq1 s_mem1 s'_mem1 entry_off1 s_reg1 s'_reg1 mem_match1 reg_match1].
         inversion common as
           [mc ? ? ? cn cc tag_pc1 tag_pc2 tag_pc3 wfst rd1 rd2 rd3 gmc1 gmc2 gmc3 cap1 cap2 cap3 codeL codeR].
         destruct s3 as [mem3 regs3 [pc3v pc3t] int3].
-        (* expose the code-structure invariants (col_mem1/end1) and the pc-offset *)
         destruct gmc1 as [mp1 [mp1' [cp1 [ae1 [bnz1 [end1 [col_mem1 [ecode1 cvo1]]]]]]]].
         inversion same_pc1 as [? ? Hpcv Hnone | ? ? vsp off_sp Hmem_sp eq_off Hpc_sp].
         { exfalso. case: Hnone => Hnone _. simpl in Hnone. rewrite Hpc1 in Hnone. discriminate. }
-        (* extract s3's register facts into OUTER hypotheses (shared evars need outer terms) *)
         destruct (proj2 (reg_match1 ra (old$told)) OLD) as [[vo to] [Hdm3 Hold3]].
         destruct (reg_clear_list_total to rd3) as [l3 Hl3].
-        (* derive s3's instruction at pc3v via codeL (combined_codes) *)
-        simpl in tag_pc1; subst tpc0.    (* pc tag = Level cn cc, so pc color = cc *)
-        rewrite PCeq in Hpc1.            (* Hpc1 : mem0 pc0 = Some (i$ti0) *)
+        simpl in tag_pc1; subst tpc0.
+        rewrite PCeq in Hpc1.
         have Himm : imm1 = imm by congruence.
         have Hcelli : mem {| mem := mem0; regs := reg; pc := pc0$(Level cn cc); internal := extra |} pc'
                       = Some cell1.
@@ -1624,14 +1501,12 @@ Module StepEventCall (S: RecompositionContext).
         { exact Hic. }
         { exact Hcolor. }
         specialize (Xpc Hpc1) as [vpc3 [match_dec_pc mem_s3_pc]].
-        (* decode_match: refute no-JAL (Hdec1) + alloc (Hcell1 vs ae1); keep the genuine JAL case *)
         inversion match_dec_pc as
           [Hnoj ? ? | Haj1 Haj2 | imm0 imm' dd dd' Hjd1 Hjd2 Hdd Hdd' Hcode_dd Htag_dd Hoff_dd].
         { exfalso; exact (Hnoj imm1 Hdec1). }
         { exfalso.
           have Himm1 : imm1 = word_of_nat alloc_label by congruence.
           move: Hcell1; rewrite Himm1 swcast_word_of_nat_alloc_label ae1; discriminate. }
-        (* derive s3's next cell (RA) via a second code_left at pc0+1 *)
         assert (Hic_ra : is_code tret).
         { case: (end1 pc0 (i$ti0) Hpc1 Hic) => [Hhalt | [v' [Hmv' Hicv']]].
           - exfalso; move: Hhalt; have -> : vala (i$ti0) = i by []; rewrite INST; done.
@@ -1648,7 +1523,6 @@ Module StepEventCall (S: RecompositionContext).
         { exact Hcolor_ra. }
         specialize (Xra RA) as [vra3 [match_dec_ra mem_s3_ra]].
         simpl in Hpc_sp.
-        (* subst pc3t BEFORE eexists so [cc] (from [Level cn cc]) is in the [s3'] evar's scope. *)
         simpl in tag_pc3; subst pc3t.
         do 2 eexists. split.
         * have COLPROJ : forall (t : tag_type lrc_tags M),
@@ -1680,11 +1554,7 @@ Module StepEventCall (S: RecompositionContext).
             | rewrite -Hcd -Hcc2; exact Hbel1 | rewrite -Hcd; exact Htc1
             | rewrite -Hcd -Hcc2; exact Jce_1 | rewrite -Hcd; exact Hpn1
             | exact Hz | exact Hcc2 ].
-        * (* preserve the three-way match *)
-          (* Pin the metadata evar ?M' NOW, while s2 is still abstract: ?M' was created at
-             [do 2 eexists] (before this bullet), so a frame mentioning [pc2v] (introduced later by
-             [destruct s2]) would escape its scope.  Use [vala (pc s2)] — it becomes [pc2v] after
-             the destruct, matching the wf_stack frame. *)
+        *
           match goal with |- match_states ?M _ _ _ =>
             unify M (((pc0 + 1)%w$(Ret cn), (vala (pc s2) + 1)%w$(Ret cn),
                       (pc3v + 1)%w$(Ret cn), cc) :: M0) end.
@@ -1707,9 +1577,6 @@ Module StepEventCall (S: RecompositionContext).
               (st := {| mem := mem3; regs := regs3; pc := pc3v$(Level cn cc); internal := int3 |})
               (w := (pc3v + 1)%w) tret cn Hcell3 Ha3 Hreg4 Hex3.
           rewrite Hdu3 /=.
-          (* s3' is now the explicit cross-updated state; rs3 reads: r4=(pc3v+1)@Ret cn,
-             r1=(vala a3)@Other (Hr4_3/Hr1_3), the rest @Invalidated (Hinv3). *)
-          (* --- now characterise s1' the same way, by reducing NEXT --- *)
           have Hoth1 : taga a1 = Other.
           { have E := etrans (esym Jr1_1) Ha1. case: E => <-. exact Joth_1. }
           have Hce1 : check_entry cc (Some (taga cell1)) = Some tt by rewrite -Hcc; exact Jce_1.
@@ -1736,8 +1603,6 @@ Module StepEventCall (S: RecompositionContext).
             subst racP nP ipP immP.
             rewrite HsP. have E := etrans (esym HduP) Hdu1. case: E => ->. reflexivity. }
           rewrite -Hs1eq.
-          (* both s1' and s3' are now explicit cross-updated states. *)
-          (* --- reduce s2' from the raw step --- *)
           have [ipP [immP [racP [nP [stP [HpcP [HdecP [HracP [HnP [HduP HsP]]]]]]]]]] :=
             call_step_post step_s2.
           destruct s2 as [mem2 regs2 [pc2v pc2t] int2].
@@ -1771,16 +1636,11 @@ Module StepEventCall (S: RecompositionContext).
                           pc := (swcast imm2)$(build_tpc cn.+1 comp'); internal := int2 |} = s2'.
           { rewrite HsP. have E := etrans (esym HduP) Hdu2. case: E => ->. reflexivity. }
           rewrite -Hs2eq.
-          (* all three states s1'/s2'/s3' are now explicit cross-updated states.
-             The cross-call's MemRead writes the return cell back UNCHANGED, so the memories are
-             identical to the originals: collapse the [setm]s via [setmI]. *)
           have ETA : forall (S : Type) (a : atom (mword mt) S), (vala a)$(taga a) = a
             by move=> S; case.
           rewrite (@setmI _ _ mem0); [|exact: RA].
           rewrite (ETA _ ret) (@setmI _ _ mem2); [|exact: Hret].
           rewrite (@setmI _ _ mem3); [|exact: Hcell3].
-          (* the s2 return cell is code (via [end_condition]); its color is [cc] (via [Hcb2]).
-             Both are needed by [wf_stack]'s PTS_CODE2 and the comp'-Right [reg_addr]. *)
           have Hcoret : is_code (taga ret).
           { have end_s2 : end_condition mem2
               by move: gmc2 => [_ [_ [_ [_ [_ [Hec _]]]]]]; exact: Hec.
@@ -1792,37 +1652,35 @@ Module StepEventCall (S: RecompositionContext).
           { move: Hcb2; rewrite /check_belong /belong.
             case: (taga ret) => vt ct et bt /=.
             case: ifP => // Hbel _. apply/eqP; rewrite eq_sym; exact: Hbel. }
-          (* [common_equiv] is symmetric; prove it once with the (now pinned) metadata, then case
-             on the called component's side for the strong/weak halves. *)
           match goal with |- match_states _ ?S1 ?S2 ?S3 =>
             have HC : common_equiv
               (((pc0 + 1)%w$(Ret cn), (pc2v + 1)%w$(Ret cn), (pc3v + 1)%w$(Ret cn), cc) :: M0)
               S1 S2 S3 end.
           { eapply common_equiv_def;
-              [ by rewrite /build_tpc                                  (* taga s1' *)
-              | by rewrite /build_tpc                                  (* taga s2' *)
-              | by rewrite /build_tpc                                  (* taga s3' *)
+              [ by rewrite /build_tpc
+              | by rewrite /build_tpc
+              | by rewrite /build_tpc
               | exact: (cross_wf_stack side_eq1 eq_off RA Hret Hcell3
-                          Hcolor_ra Hic_ra Hcolret Hcoret Hpc_sp wfst) (* wf_stack *)
-              | exact: (reg_domm_cross Hdu1 rd1)                       (* register_domm s1' *)
-              | exact: (reg_domm_cross Hdu2 rd2)                       (* register_domm s2' *)
-              | exact: (reg_domm_cross Hdu3 rd3)                       (* register_domm s3' *)
+                          Hcolor_ra Hic_ra Hcolret Hcoret Hpc_sp wfst)
+              | exact: (reg_domm_cross Hdu1 rd1)
+              | exact: (reg_domm_cross Hdu2 rd2)
+              | exact: (reg_domm_cross Hdu3 rd3)
               | by repeat first [ exact: mp1 | exact: mp1' | exact: cp1 | exact: ae1
                   | exact: bnz1 | exact: end1 | exact: col_mem1 | exact: ecode1 | exact: cvo1 | split ]
-              | exact: gmc2                                            (* gmc s2' *)
-              | exact: gmc3                                            (* gmc s3' *)
+              | exact: gmc2
+              | exact: gmc3
               | apply: cross_capability_S1;
                   [ exact: cap1 | exact: erefl | exact: wfst | exact: Hr4_1 | exact: Hr1_1
-                  | exact: Hinv1 | exact: (reg_domm_cross Hdu1 rd1) ]    (* capability s1' *)
+                  | exact: Hinv1 | exact: (reg_domm_cross Hdu1 rd1) ]
               | apply: cross_capability_S2;
                   [ exact: cap2 | exact: erefl | exact: wfst | exact: Hr4_2 | exact: Hr1_2
-                  | exact: Hinv2 | exact: (reg_domm_cross Hdu2 rd2) ]    (* capability s2' *)
+                  | exact: Hinv2 | exact: (reg_domm_cross Hdu2 rd2) ]
               | apply: cross_capability_S3;
                   [ exact: cap3 | exact: erefl | exact: wfst | exact: Hr4_3 | exact: Hr1_3
-                  | exact: Hinv3 | exact: (reg_domm_cross Hdu3 rd3) ]    (* capability s3' *)
-              | exact: codeL                                           (* combined_codes Left *)
-              | exact: codeR                                           (* combined_codes Right *)
-              | exact: (running_comp_valid_call col_mem1 Hcell1 Htc1) (* callee comp' valid *)
+                  | exact: Hinv3 | exact: (reg_domm_cross Hdu3 rd3) ]
+              | exact: codeL
+              | exact: codeR
+              | exact: (running_comp_valid_call col_mem1 Hcell1 Htc1)
               | (match goal with |- pc_code_color ?st =>
                    apply: (pc_code_color_entry (s := st) (c := comp'));
                      [ exact: Hcelli | exact: Htc1 | by [] ] end)
@@ -1830,12 +1688,12 @@ Module StepEventCall (S: RecompositionContext).
                    apply: (pc_code_color_entry (s := st) (c := comp'));
                      [ exact: Hcell2 | exact: Htc2 | by [] ] end) ]. }
           case Hside : (comp' \in domm ip).
-          -- (* comp' Left → match_left (s1' strong) *)
+          --
              eapply match_states_left.
              ++ exact: HC.
-             ++ (* strong_equiv Left (s1', s3') *)
+             ++
                 eapply strong_equiv_def.
-                ** (* same_pc *)
+                **
                    have Himm0 : imm = imm0 by congruence.
                    have Hc1d : cell1 = dd.
                    { move: Hcell1 Hdd; rewrite Himm Himm0 => Hca Hcb; congruence. }
@@ -1858,13 +1716,13 @@ Module StepEventCall (S: RecompositionContext).
                    unshelve eapply (same_pc_normal _ _ (v := cell1) (off := off)); cbn [color_of build_tpc];
                      first [ exact: Hoff | (rewrite /pc' Himm0; exact: Hwoff)
                            | (split; [exact: Hcelli | rewrite Hc1d; exact: Hcode_dd]) ].
-                ** (* color_of s1' = color_of s3' *) by rewrite /color_of /build_tpc.
-                ** (* side_of (color_of s1') = Left *)
+                **  by rewrite /color_of /build_tpc.
+                **
                    by rewrite /side_of /color_of /build_tpc Hside.
-                ** (* mem_addr s1' *) exact: s_mem1.
-                ** (* mem_addr s3' *) exact: s'_mem1.
-                ** (* entry_offset *) exact: entry_off1.
-                ** (* reg_addr s1' *)
+                **  exact: s_mem1.
+                **  exact: s'_mem1.
+                **  exact: entry_off1.
+                **
                    have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                    move: (reg_domm_cross Hdu1 rd1) => Hdmm1.
                    move=> v r Hr. have Hrin : r \in domm rs1 by apply/dommP; exists v.
@@ -1877,7 +1735,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_1 => -[<-]. by rewrite /address_correctness. }
                      { have [v1 Hv1] := Hinv1 n Hnr.
                        move: Hr; rewrite Hv1 => -[<-]. by rewrite /address_correctness. } }
-                ** (* reg_addr s3' *)
+                **
                    have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                    move: (reg_domm_cross Hdu3 rd3) => Hdmm3.
                    move=> v r Hr. have Hrin : r \in domm rs3 by apply/dommP; exists v.
@@ -1890,7 +1748,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_3 => -[<-]. by rewrite /address_correctness. }
                      { have [v3 Hv3] := Hinv3 n Hnr.
                        move: Hr; rewrite Hv3 => -[<-]. by rewrite /address_correctness. } }
-                ** (* memory_match *)
+                **
                    have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                      data_match' Left M0 d1 d2 ->
                      data_match' Left (((pc0+1)%w$(Ret cn), (pc2v+1)%w$(Ret cn),
@@ -1903,7 +1761,7 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (mem_match1 w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-                ** (* registers_match *)
+                **
                    have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                    move: (reg_domm_cross Hdu1 rd1) (reg_domm_cross Hdu3 rd3) => Hdmm1 Hdmm3.
                    destruct (proj2 (reg_match1 (as_word (ssrint.Posz 1)) a1) Ha1)
@@ -1940,7 +1798,7 @@ Module StepEventCall (S: RecompositionContext).
                          move: Hw; rewrite WA Hv1 => -[<-].
                          exists (v3$Invalidated); split; last exact: Hv3.
                          by rewrite /data_match; split. }
-             ++ (* weak_equiv Right (s2', s3') *)
+             ++
                 have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                   data_match' Right M0 d1 d2 ->
                   data_match' Right (((pc0+1)%w$(Ret cn), (pc2v+1)%w$(Ret cn),
@@ -1960,10 +1818,10 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (Hmmw w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-          -- (* comp' Right → match_right (s2' strong) *)
+          --
              eapply match_states_right.
              ++ exact: HC.
-             ++ (* weak_equiv Left (s1', s3') *)
+             ++
                 have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                   data_match' Left M0 d1 d2 ->
                   data_match' Left (((pc0+1)%w$(Ret cn), (pc2v+1)%w$(Ret cn),
@@ -1982,7 +1840,7 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (mem_match1 w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-             ++ (* strong_equiv Right (s2', s3') *)
+             ++
                 inversion weak as [mw sw sw' Hcolw Hsidw Hma2 Hma3 Heow Hmmw].
                 have WA : forall m : nat, word_of_nat m = as_word (ssrint.Posz m) by [].
                 have Hva3 : vala a3 = vala a1.
@@ -1995,7 +1853,7 @@ Module StepEventCall (S: RecompositionContext).
                 { rewrite Hva3; apply: convert_int_of_word_inj.
                   move: Hev1z; cbn [rcom_value] => Hz1. by rewrite Hev2 Hz1. }
                 eapply strong_equiv_def.
-                ** (* same_pc *)
+                **
                    have Himm0 : imm = imm0 by congruence.
                    have Hc1d : cell1 = dd.
                    { move: Hcell1 Hdd; rewrite Himm Himm0 => Hca Hcb; congruence. }
@@ -2037,12 +1895,12 @@ Module StepEventCall (S: RecompositionContext).
                    unshelve eapply (same_pc_normal _ _ (v := cell2) (off := off));
                      cbn [color_of build_tpc];
                      first [ exact: Hoff | exact: Hwoff | (split; [exact: Hcell2 | exact: Hcode2t]) ].
-                ** (* color_of *) by rewrite /color_of /build_tpc.
-                ** (* side_of = Right *) by rewrite /side_of /color_of /build_tpc Hside.
-                ** (* mem_addr s2' *) exact: Hma2.
-                ** (* mem_addr s3' *) exact: Hma3.
-                ** (* entry_offset *) exact: Heow.
-                ** (* reg_addr s2' *)
+                **  by rewrite /color_of /build_tpc.
+                **  by rewrite /side_of /color_of /build_tpc Hside.
+                **  exact: Hma2.
+                **  exact: Hma3.
+                **  exact: Heow.
+                **
                    move: (reg_domm_cross Hdu2 rd2) => Hdmm2.
                    move=> v r Hr. have Hrin : r \in domm rs2 by apply/dommP; exists v.
                    move: Hrin Hr; rewrite Hdmm2 in_fset in_cons => /orP[/eqP Hr4 | /mapP[n Hn Hrn]].
@@ -2054,7 +1912,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_2 => -[<-]. by rewrite /address_correctness. }
                      { have [v2 Hv2] := Hinv2 n Hnr.
                        move: Hr; rewrite Hv2 => -[<-]. by rewrite /address_correctness. } }
-                ** (* reg_addr s3' *)
+                **
                    move: (reg_domm_cross Hdu3 rd3) => Hdmm3.
                    move=> v r Hr. have Hrin : r \in domm rs3 by apply/dommP; exists v.
                    move: Hrin Hr; rewrite Hdmm3 in_fset in_cons => /orP[/eqP Hr4 | /mapP[n Hn Hrn]].
@@ -2066,7 +1924,7 @@ Module StepEventCall (S: RecompositionContext).
                      { subst n; move: Hr; rewrite Hr1_3 => -[<-]. by rewrite /address_correctness. }
                      { have [v3 Hv3] := Hinv3 n Hnr.
                        move: Hr; rewrite Hv3 => -[<-]. by rewrite /address_correctness. } }
-                ** (* memory_match Right *)
+                **
                    have INC : forall (d1 d2 : atom (mword mt) (tag_type lrc_tags M)),
                      data_match' Right M0 d1 d2 ->
                      data_match' Right (((pc0+1)%w$(Ret cn), (pc2v+1)%w$(Ret cn),
@@ -2079,7 +1937,7 @@ Module StepEventCall (S: RecompositionContext).
                      by exists d'; split; [apply: INC | exact: Hw']. }
                    { have [d' [Hdm' Hw']] := proj2 (Hmmw w d Hcode Hrel) Hw.
                      by exists d'; split; [apply: INC | exact: Hw']. }
-                ** (* registers_match Right *)
+                **
                    move: (reg_domm_cross Hdu2 rd2) (reg_domm_cross Hdu3 rd3) => Hdmm2 Hdmm3.
                    move=> w d; split=> Hw.
                    { have Hwd : w \in domm rs3 by apply/dommP; exists d.
@@ -2110,24 +1968,9 @@ Module StepEventCall (S: RecompositionContext).
                          move: Hw; rewrite WA Hv2 => -[<-].
                          exists (v3$Invalidated); split; last exact: Hv3.
                          by rewrite /data_match; split. }
-      + (* match_right: extracted to lemma [secmr] (fed the [step_mp] [smp1] from this UB-disallowed
-           step — [secmr] reduces s1 uniformly via LRC for both UB sub-cases).  Use [apply:] not
-           [exact:] — secmr's s1/s2/M0 don't appear in its conclusion, so [exact:] can't infer them. *)
+      +
         apply: secmr;
           [ exact: smp1 | exact: step_s2 | exact: common | exact: weak | exact: strong ].
-  (* DONE — [step_event_call] is proven to [Qed] (NOT Admitted), UB-match_right admit eliminated, all
-     4 cases discharged, 0 [admit].  Whole file compiles in ~30s (was >45min / never-completing).
-     ROOT CAUSE of the historical ~9.4MB-term / impractical-Qed (this lemma was [Admitted] in every
-     prior rev to skip it): `col_mem2 (swcast imm0) cell2 Hcell2` in secmr's comp'-Right same_pc (and
-     the match_left mirror) forced a `swcast imm0 ≡ swcast imm2` word/fmap CONVERSION whose giant
-     eq-proof bloated the term AND cost ~275s CPU per occurrence — in step1 imm0 was syntactically
-     imm2 (free), step_mp made them distinct.  FIX: `col_mem2 _ cell2 Hcell2` (infer the word from the
-     proof, no conversion).  Two more masked bugs this exposed (the col_mem2 wall had hidden them, and
-     the Qed never ran): (a) comp'-Right's reg_addr/registers_match had stale `rs1`/`a2` copy-pasted
-     from comp'-Left — should be `rs2`/`a1` (the strong side is s2'); (b) `eapply same_pc_normal`
-     shelves its state-dependent premises so the trailing `first[...]` never closed them → use
-     `unshelve eapply`.  Also: both [secmr] call-sites use `apply: secmr; [..5 hyps..]` not [exact:]
-     (secmr's s1/s2/M0 are not in its conclusion, so [exact:] cannot infer them). *)
   Qed.
 
 End StepEventCall.

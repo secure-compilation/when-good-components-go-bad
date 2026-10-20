@@ -1,7 +1,3 @@
-(** * MBwdSrc — the source-level backward engine [t2me_H_bwd_src]: an
-    observed me prefix flipped back to a Source behaviour, via the
-    S2T-forward-simulated image of an arbitrary Source behaviour. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -121,9 +117,6 @@ have Hprem : MDefs.t2me_premises L P C a b.
   - by split. }
 exact: (t2me_bwd_assembled_for Hprem HMM0 Hcst0 Huniq0 Hdsy0 Hdp Hrf HbT).
 Qed.
-
-(** The bt_run engine: a Source prefix carried forward to the me machine
-    (S2T forward simulation, then the forward transport). *)
 
 Theorem t2me_bt_run :
   forall (L P C : nat) (sa sb : Source.program)

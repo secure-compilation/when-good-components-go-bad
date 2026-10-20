@@ -1,25 +1,3 @@
-(** * Stage 2, part 1 — retiring the pop-write-back risk.
-
-    See plan-i2t-redo.md §4 (Stage 0b) for the risk this file exists to kill.
-
-    Stage 0b found that T's [Load] rule WRITES BACK a retagged cell, so every
-    POP perturbs memory where the I-level [exec_pop_plus] leaves it alone. The
-    worry was that [frame_temps], [stack_match], [mem_inject] and every other
-    memory-shaped conjunct would then need re-establishing after every pop —
-    a per-pop framing obligation with no I-level counterpart, and pops are
-    everywhere. That was the largest unquantified cost in the plan.
-
-    **It costs one definition and one lemma.** The perturbation is tag-only: the
-    stored value is exactly the loaded value. So if the memory conjuncts are
-    phrased over the VALUE PROJECTION [vload] rather than over raw T memory,
-    the write-back is invisible to them *by construction* — [vload_store_same]
-    below, applied once, discharges all of them.
-
-    This is a design constraint on Stage 2, not just a lemma: every memory
-    conjunct of [tag_inv] / the ported [stack_match] must be stated via [vload]
-    (or via [tload] for the few that genuinely care about tags, which are
-    exactly the RA slots, T2). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Intermediate.Machine.
@@ -43,12 +21,6 @@ Module TMem.
 
 Notation mem := Transitional.Memory.t.
 
-(* ================================================================== *)
-(* Load/store laws for T's memory                                     *)
-(* ================================================================== *)
-
-(** T's [Memory] module ships no reasoning lemmas at all (unlike
-    [Common/Memory.v] for Intermediate's), so the two laws are proved here. *)
 
 Lemma ptr_eq (p q : Pointer.t) :
   Pointer.component q = Pointer.component p ->
@@ -103,8 +75,6 @@ Proof.
   - by rewrite Hoff.
 Qed.
 
-(** [list_upd] succeeds wherever [nth_error] does. `Lib/Extra.v` proves what
-    [list_upd] DOES when it succeeds, but not that it succeeds. *)
 Lemma list_upd_total {A : Type} (l : seq A) k (x y : A) :
   List.nth_error l k = Some x -> exists l', list_upd l k y = Some l'.
 Proof.
@@ -112,10 +82,6 @@ Proof.
   move=> H. case: (IH k H) => [l' Hl']. by rewrite Hl'; exists (a :: l').
 Qed.
 
-(** ★ A loadable cell is storable — the T counterpart of
-    `ComponentMemory.store_after_load`. Needed because the prologue's two
-    pushes must be shown to SUCCEED on the freshly allocated frame; nothing
-    before this had to produce a store rather than consume one. *)
 Lemma store_after_load m p c v :
   Transitional.Memory.load m p = Some c ->
   exists m', Transitional.Memory.store m p v = Some m'.
@@ -131,24 +97,13 @@ Proof.
   by eexists.
 Qed.
 
-(* ================================================================== *)
-(* The value projection                                               *)
-(* ================================================================== *)
 
-(** What the memory conjuncts should be phrased over. *)
 Definition vload (m : mem) (p : Pointer.t) : option value :=
   omap (fun c => Transitional.val c.1) (Transitional.Memory.load m p).
 
-(** The tag view, for the few conjuncts that genuinely care — the RA spill
-    slots (invariant T2). *)
 Definition tload (m : mem) (p : Pointer.t) : option value_tag :=
   omap (fun c => tvtag c.1) (Transitional.Memory.load m p).
 
-(** ★ THE LEMMA. A store that preserves the cell's VALUE is invisible to
-    [vload], everywhere. This is what makes T's load-write-back free. *)
-(** Loadability is store-STABLE: a store never destroys a cell, whatever it
-    writes. Needed by [frame_cap], whose clauses the prologue's pushes overwrite
-    with new values — [vload_store_same] only covers value-PRESERVING stores. *)
 Lemma vload_store_total m p c m' q v :
   Transitional.Memory.store m p c = Some m' ->
   vload m q = Some v -> exists v', vload m' q = Some v'.
@@ -160,9 +115,6 @@ Proof.
   by case: (Transitional.Memory.load m q) => [w|] //= _; exists (Transitional.val w.1).
 Qed.
 
-(** [vload] is defined by projection, so it witnesses the raw load — which is
-    what [store_after_load] consumes. Used to turn [frame_cap] (a [vload] fact)
-    into "the prologue's pushes succeed". *)
 Lemma vload_load m p v :
   vload m p = Some v -> exists w, Transitional.Memory.load m p = Some w.
 Proof.
@@ -170,9 +122,6 @@ Proof.
   by exists w.
 Qed.
 
-(** …and the same for the TAG projection, which the strengthened [frame_temps]
-    needs: the pop's write-back must leave a temp cell [Other]-tagged, not just
-    same-valued. *)
 Lemma tload_store_same m p c c' m' :
   Transitional.Memory.load m p = Some c ->
   tvtag c'.1 = tvtag c.1 ->
@@ -197,12 +146,5 @@ Proof.
   - by rewrite /vload (load_store_neq Hst Hne).
 Qed.
 
-(* ================================================================== *)
-(* Consequence: a [TS] Load step does not move any value              *)
-(* ================================================================== *)
-
-(** Every [TrLoad] — hence every [pop] — leaves the value view of memory
-    completely unchanged, so a memory conjunct phrased over [vload] needs NO
-    per-pop re-establishment. The Stage-0b risk is retired. *)
 
 End TMem.

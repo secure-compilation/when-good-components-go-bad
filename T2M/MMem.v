@@ -1,9 +1,3 @@
-(** * The keystone [memory_lengths_bl_base]: on declared blocks the
-    compile-time base map [Merged.memory_lengths] (baked into pointer
-    immediates) equals the run-time data-segment base [bl_base].  Proved
-    by splitting the sorted association lists at (c, b): a fold half and
-    a count half. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -30,15 +24,10 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ================================================================== *)
-(* 0. Generic helpers.                                                *)
-(* ================================================================== *)
 
-(* extructures' generic strict order, on nat, is ssrnat's *)
 Lemma Ord_lt_nat (x y : nat) : Ord.lt x y = (x < y).
 Proof. by rewrite /Ord.lt /= ltn_neqAle andbC eq_sym. Qed.
 
-(* everything on a strictly ascending path is above its head *)
 Lemma path_all_gt (T : Type) (c : nat) (l : seq (nat * T)) :
   path Ord.lt c (unzip1 l) -> all (fun t => c < t.1) l.
 Proof.
@@ -50,7 +39,6 @@ apply/andP; split.
   move: Hlt. rewrite Ord_lt_nat => Hlt. by lia.
 Qed.
 
-(* keys strictly below [c] never contain [c] *)
 Lemma all_map_fst_notin (T : Type) (l : seq (nat * T)) (c : nat) :
   all (fun t => t.1 < c) l -> c \notin [seq t.1 | t <- l].
 Proof.
@@ -59,8 +47,6 @@ rewrite in_cons negb_or IH // andbT.
 apply/negP => /eqP Ec. by move: Hlt; rewrite Ec ltnn.
 Qed.
 
-(* split a sorted association list at a present key: everything before is
-   strictly smaller, everything after strictly larger *)
 Lemma sorted_assoc_split (T : Type) (l : seq (nat * T)) (c : nat) (v : T) :
   sorted Ord.lt (unzip1 l) ->
   List.In (c, v) l ->
@@ -84,18 +70,13 @@ case: HIn => [Ea | HIn].
     by case/andP: Hall => _ /= /andP [Hac _].
 Qed.
 
-(* keys of an [elementsm] are sorted *)
 Lemma elementsm_sorted (T : Type) (m : NMap T) :
   sorted Ord.lt (unzip1 (Maps.elementsm m)).
 Proof. by case: m. Qed.
 
-(* ================================================================== *)
-(* 1. The fold half.                                                  *)
-(* ================================================================== *)
 
 Section FoldHalf.
 
-(* the inner fold body of [memory_lengths] *)
 Local Notation FB :=
   (fun (acc' : nat) (a : Datatypes_nat__canonical__Ord_Ord * (nat + seq value)) =>
      match a.2 with
@@ -111,7 +92,6 @@ Lemma FB_fst acc (a : nat * (nat + seq value)) :
   (FB acc a).1 = (a.1, acc).
 Proof. by case: a => x [n|s]. Qed.
 
-(* the running total of the inner fold *)
 Lemma flmb_snd acc (bl : seq (nat * (nat + seq value))) :
   (fold_left_map_bis FB acc bl).2
   = sumn [seq bsize a.2 | a <- bl] + acc.
@@ -125,8 +105,6 @@ have -> : aa = bsize a.2 + acc by rewrite -(FB_snd acc a) E.
 by lia.
 Qed.
 
-(* looking up the first occurrence of [b] in the inner fold's output:
-   the assigned base is the accumulated size of the earlier blocks *)
 Lemma flmb_get acc (l1 l2 : seq (nat * (nat + seq value))) b bf :
   b \notin [seq a.1 | a <- l1] ->
   getm_def (fold_left_map_bis FB acc (l1 ++ (b, bf) :: l2)).1 b
@@ -150,7 +128,6 @@ elim: l1 acc => [|a l1 IH] acc /=.
   congr Some. by lia.
 Qed.
 
-(* the outer fold body of [memory_lengths] *)
 Local Notation FOUT :=
   (fun (acc : nat)
        (s : Datatypes_nat__canonical__Ord_Ord
@@ -158,7 +135,6 @@ Local Notation FOUT :=
      let (flat, count) := fold_left_map_bis FB acc s.2 in
      ((s.1, mkfmap flat), count)).
 
-(* size contributed by one component entry *)
 Definition osum (s : nat * seq (nat * (nat + seq value))) : nat :=
   sumn [seq bsize a.2 | a <- s.2].
 
@@ -186,9 +162,6 @@ Qed.
 
 End FoldHalf.
 
-(* ================================================================== *)
-(* 2. The count half.                                                 *)
-(* ================================================================== *)
 
 Section CountHalf.
 
@@ -205,7 +178,6 @@ case: bf {Hb} => [n|l] //=.
 - by rewrite size_map.
 Qed.
 
-(* the linearized keys of a list of (component, block) pairs *)
 Definition keyset (ts : seq (nat * nat)) : seq (nat * nat * nat) :=
   flatten [seq [seq (t.1, t.2, o)
                | o <- iota 0 (size (linearize_buf pb t.1 t.2))]
@@ -254,8 +226,6 @@ elim: ts => [|t ts IH] //=.
 by rewrite size_cat IH size_map size_iota.
 Qed.
 
-(* THE count half: if [ts] lists exactly the declared pairs lexicographically
-   before (c, b), without repetition, then [bl_base] sums their sizes. *)
 Lemma bl_base_count (c b : nat) (ts : seq (nat * nat)) :
   uniq ts ->
   (forall x y,
@@ -287,16 +257,11 @@ Qed.
 
 End CountHalf.
 
-(* ================================================================== *)
-(* 3. Assembly: THE KEYSTONE.                                         *)
-(* ================================================================== *)
 
 Section Keystone.
 
 Variable pb : NMap {fmap Block.id -> nat + seq value}.
 
-(* [all] specialized to List membership (the S-carrying lists here have no
-   eqType — [value] has none — so the boolean \in is unavailable on them) *)
 Local Lemma all_In (T : Type) (p : T -> bool) (l : seq T) x :
   all p l -> List.In x l -> p x.
 Proof.
@@ -304,7 +269,6 @@ elim: l => [|a l IH] //= /andP [Hp Hall] [<- | HIn] //.
 exact: (IH Hall HIn).
 Qed.
 
-(* boolean membership in the (nat-typed) first projection, List-style *)
 Local Lemma unzip1_mem_In (S : Type) (l : seq (nat * S)) y :
   reflect (exists a, List.In a l /\ y = a.1) (y \in [seq a.1 | a <- l]).
 Proof.
@@ -321,7 +285,6 @@ elim: l => [|a l IH] /=.
     * right. apply: (introT IH). by exists a'.
 Qed.
 
-(* membership in the two-level pair flattening *)
 Lemma pairs_flatten_mem (S : Type)
     (L : seq (nat * seq (nat * S)))
     (x y : nat) :
@@ -349,7 +312,6 @@ elim: L => [|s L IH] /=.
     * right. apply: (introT IH). exists s', a'. by split.
 Qed.
 
-(* uniqueness of the two-level pair flattening *)
 Lemma pairs_flatten_uniq (S : Type)
     (L : seq (nat * seq (nat * S))) :
   uniq [seq s.1 | s <- L] ->
@@ -378,7 +340,6 @@ apply/and3P; split.
   move=> s0 Hs0. apply: Hinner. by right.
 Qed.
 
-(* pointwise-equal maps have equal sums (List-membership form) *)
 Local Lemma sumn_map_In_eq (T : Type) (f g : T -> nat) (l : seq T) :
   (forall x, List.In x l -> f x = g x) ->
   sumn [seq f x | x <- l] = sumn [seq g x | x <- l].
@@ -395,7 +356,6 @@ Proof.
 elim: ss => //= s ss IH. by rewrite sumn_cat IH.
 Qed.
 
-(* declared components of the outer list are fmaps with sorted keys *)
 Local Lemma olist_inner_sorted
     (s : Datatypes_nat__canonical__Ord_Ord
          * seq (Datatypes_nat__canonical__Ord_Ord * (nat + seq value))) :
@@ -410,8 +370,6 @@ case E: (pb x) => [bmx|] //= [<-].
 by exists bmx.
 Qed.
 
-(* THE KEYSTONE: on declared blocks, the compile-time base map agrees with
-   the run-time base of the data segment. *)
 Theorem memory_lengths_bl_base c bmap b bf :
   pb c = Some bmap ->
   bmap b = Some bf ->

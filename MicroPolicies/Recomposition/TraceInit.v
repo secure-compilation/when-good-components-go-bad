@@ -1,22 +1,3 @@
-(* Phase 5, tier 3a (part 4): initial-state discharge for trace
-   well-formedness.
-
-   [star_well_formed_trace] (TraceBracket.v) needs two facts about the run's
-   initial state: its memory's entry tags are sanctioned by the interface
-   ([entry_sound]) and it realizes the empty call stack ([bracket_inv
-   stack_state0]).  This file proves both:
-     - generically, for [Merged.initial_state cde pb pi] under syntactic
-       conditions on the code's tags (no Ret value-tags; interface-sound
-       entry tags) — buffer cells and [reg0] are unconditionally benign;
-     - concretely, for the linked linearizer output
-       [program_link (compiler a) (compiler b)], via LinearizeMerged's
-       cell characterization (every cell is a [head_tag] entry cell or a
-       [def_mem_tag] body cell).
-
-   The [encode_code]/[initial_memory] inversion lemmas are reproduced from
-   RecompositionInit.v (functor-internal there), on top of the functor-free
-   EncodeCode.v (re-added to the build). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -62,8 +43,6 @@ Import Types.
 Import Symbolic.
 
 Local Notation state := (@Symbolic.state mt LRC.lrc_tags unit).
-
-(* ==================== initial-memory tag shapes (copies) ==================== *)
 
 Lemma linearize_buf_tag: forall (pb : NMap {fmap Block.id -> nat + seq value}) c b n vt,
   List.nth_error (linearize_buf pb c b) n = Some vt ->
@@ -175,8 +154,6 @@ Proof.
   exists i, t. split; [exact Hin | exact Htag].
 Qed.
 
-(* ==================== the initial register file ==================== *)
-
 Lemma reg0_no_caps : forall (r0 : reg mt) v n,
   Merged.reg0 r0 = Some (v @ (Ret n)) -> False.
 Proof.
@@ -193,8 +170,6 @@ Proof.
   by [].
 Qed.
 
-(* ==================== generic initial-state facts ==================== *)
-
 Section InitGeneric.
 
   Variables (cde : @Merged.code mt) (pb : NMap {fmap Block.id -> nat + seq value}) (pi : Program.interface).
@@ -209,8 +184,6 @@ Section InitGeneric.
   Lemma initial_pc_tag : taga (pc s0) = build_tpc 0 Component.main.
   Proof. by []. Qed.
 
-  (* every cell of the initial memory: from the code (with its listed tag)
-     or a buffer cell (def_mem_tag) *)
   Lemma initial_cell_inv : forall w d,
     mem s0 w = Some d ->
     (exists i t, List.In (i, t) cde /\ taga d = t)
@@ -255,9 +228,6 @@ Section InitGeneric.
 
 End InitGeneric.
 
-(* ==================== rub-run glue ==================== *)
-
-(* every step of the UB-restricted semantics contains a machine step *)
 Lemma rub_step_mp : forall (NCv : nat) pI cI (W : program) s t s',
   Step (rub_sem NCv pI cI W) s t s' -> prog_step_mp NCv tt s t s'.
 Proof. move=> NCv pI cI W s t s' Hstep. by inversion Hstep. Qed.
@@ -270,8 +240,6 @@ Proof.
   - exact: star_refl.
   - eapply star_step; [exact: (rub_step_mp Hstep) | exact: IH | exact: Etw].
 Qed.
-
-(* ==================== discharge for linked linearizer output ==================== *)
 
 Section LinDischarge.
 
@@ -300,8 +268,6 @@ Section LinDischarge.
       by have [_ Hv] := lin_low_tags HIn; rewrite Hv.
   Qed.
 
-  (* a head_tag entry list only sanctions importers declared in the
-     (now JOINT, §3.8) interface it was computed against *)
   Lemma head_tag_entry_sound : forall (PI : Program.interface) c0 p0 p lc c,
     entry (head_tag_gen PI c0 p0) = Some (p, lc) ->
     c \in lc ->
@@ -333,9 +299,6 @@ Section LinDischarge.
       exact: Himp.
   Qed.
 
-  (* THE initial-state trace well-formedness theorem for linked linearizer
-     output: any machine run from the loaded initial state has a
-     well-formed trace for the link interface. *)
   Theorem lin_link_initial_trace_wf : forall (NCv : nat) (s : state) tw (s' : state),
     s = Merged.initial_state (code W) (prog_buffers W) (prog_interface W) ->
     Star (mp_sem NCv W) s tw s' ->
@@ -349,7 +312,6 @@ Section LinDischarge.
       move=> i t Hin n. exact: (lin_link_noret Hin).
   Qed.
 
-  (* the same, for runs of the UB-restricted semantics (any interface split) *)
   Corollary lin_link_rub_trace_wf : forall (NCv : nat) pI cI (s : state) tw (s' : state),
     s = Merged.initial_state (code W) (prog_buffers W) (prog_interface W) ->
     Star (rub_sem NCv pI cI W) s tw s' ->

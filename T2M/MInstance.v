@@ -1,7 +1,3 @@
-(* MInstance.v — the compiler-signature instance: discharges
-   [MPCompilerSig] for the T→Merged compiler [LinearizeMerged.compiler].
-   [K_T2M (I)] is a functor over the input [I : T2M_K_Input]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -52,10 +48,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ================================================================== *)
-(* 1. Glue: the compiler's PB-dependence is [memory_lengths] alone,    *)
-(*    and [memory_lengths] is shape-determined.                        *)
-(* ================================================================== *)
 
 Lemma elementsm_mapm (S S' : Type) (f : S -> S') (m : NMap S) :
   Maps.elementsm (mapm f m)
@@ -68,11 +60,9 @@ Proof.
 apply/eq_fmap => k. rewrite !mapmE. by case: (m k).
 Qed.
 
-(* the per-block shape image *)
 Definition bimg (q : nat * (nat + seq value)) : nat * nat :=
   (q.1, bsize q.2).
 
-(* the inner (per-component) fold only reads the block shapes *)
 Lemma flmb_shape (t1 t2 : seq (nat * (nat + seq value))) :
   map bimg t1 = map bimg t2 ->
   forall acc,
@@ -100,7 +90,6 @@ case: v1 Ev' {Ev} => [n1|s1]; case: v2 => [n2|s2] //= E;
   by case: (fold_left_map_bis _ _ t2).
 Qed.
 
-(* the outer fold only reads the per-component shape images *)
 Lemma flm_shape (l1 l2 : seq (nat * seq (nat * (nat + seq value)))) :
   map (fun p => (p.1, map bimg p.2)) l1
   = map (fun p => (p.1, map bimg p.2)) l2 ->
@@ -135,7 +124,6 @@ congr cons.
 exact: IH El count.
 Qed.
 
-(* the element list of a buffer map, through its shape *)
 Lemma elements_shape (PB : NMap {fmap Block.id -> nat + seq value}) :
   [seq (p.1, map bimg p.2) | p <- Maps.elementsm (mapm Maps.elementsm PB)]
   = Maps.elementsm (mapm Maps.elementsm (bufs_shape PB)).
@@ -174,12 +162,7 @@ rewrite /compiler /compiler_code /compiler_body /compiler_gen
 by rewrite E.
 Qed.
 
-(* ================================================================== *)
-(* 1b. The canonical S2I buffer silhouette.                            *)
-(* ================================================================== *)
 
-(* the S2I output shape: per declared component, block 0 = the user
-   buffer (nonempty) and block 1 = the two-cell scratch+flag *)
 Definition canonical_bufs (x : Intermediate.program) : Prop :=
   bufs_shape (Intermediate.prog_buffers x)
   = mapm (fun n => mkfmap [:: (0 : Block.id, n); (1 : Block.id, 2)])
@@ -187,7 +170,6 @@ Definition canonical_bufs (x : Intermediate.program) : Prop :=
   /\ (forall (C : Component.id) (n : nat),
         block0_sizes (Intermediate.prog_buffers x) C = Some n -> 0 < n).
 
-(* compiled programs are canonical *)
 Lemma compiled_canonical (P : Source.program) (x : Intermediate.program) :
   Source.well_formed_program P ->
   compile_program P = Some x ->
@@ -218,8 +200,6 @@ split.
   + rewrite -size_lengthE. by lia.
 Qed.
 
-(* the compiled back-translation of a CANONICAL program's prescribed
-   block-0 sizes has exactly that program's buffer shape *)
 Lemma prescribed_matches_canonical
     (b : Intermediate.program) (P' : Source.program)
     (bufsz : NMap nat) (ic' : Intermediate.program) :
@@ -265,9 +245,6 @@ case HC: (C \in domm (Intermediate.prog_interface b)); last first.
   by lia.
 Qed.
 
-(* ================================================================== *)
-(* 2. The instance input and the functor.                              *)
-(* ================================================================== *)
 
 Module Type T2M_K_Input.
   Parameter L P C : nat.
@@ -275,11 +252,6 @@ Module Type T2M_K_Input.
   Parameter PI : Program.interface.
 End T2M_K_Input.
 
-(* ---- the finite-machine fit of the back-translation ---- *)
-(* the trace-dependent side conditions of the package: the compiled
-   back-translation exists, meets the label/immediate bounds, and its
-   links and runs fit the machine; plus the observed pair's coherence
-   with the instance maps *)
 Record bt_fit_pack (L P C : nat) (PBW : NMap {fmap Block.id -> nat + seq value})
     (PIW : Program.interface) (a b : Intermediate.program) (t : Events.trace)
     (ip' ic' : Intermediate.program) : Prop := {
@@ -322,13 +294,8 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
   Definition lin (pr : Intermediate.program) : program :=
     compiler I.L I.P I.C PBW PIW pr.
 
-  (* the T2M statics bundle ([t2m_ok]: label-scheme bounds, nonempty
-     procedures, buffer requirements, S2I-output statics) plus buffer
-     canonicity *)
   Definition lin_ok (pr : Intermediate.program) : Prop :=
     MDefs.t2m_ok I.L I.P I.C pr /\ canonical_bufs pr.
-
-  (* ---- static preservation ---- *)
 
   Lemma lin_interface : forall a,
     prog_interface (lin a) = Intermediate.prog_interface a.
@@ -434,9 +401,6 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
       + exact: Hd1.
   Qed.
 
-  (* ---- the pair-level run-fit ---- *)
-  (* the T2M finite-machine fit of the pair's me run, plus coherence of
-     the pair's compilation maps with the instance's *)
   Definition run_ok (a b : Intermediate.program)
       (t : Events.trace) : Prop :=
     [/\ MDefs.link_fits I.L I.P I.C a b,
@@ -444,7 +408,6 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
         memory_lengths (MDefs.PBw a b) = memory_lengths PBW
       & MDefs.PIw a b = PIW].
 
-  (* the instance-vs-canonical compilation agreement, from [run_ok] *)
   Lemma lin_canonical (a b : Intermediate.program) (x : Intermediate.program) :
     memory_lengths (MDefs.PBw a b) = memory_lengths PBW ->
     MDefs.PIw a b = PIW ->
@@ -454,8 +417,6 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
     rewrite /lin -EPI.
     exact: (compiler_msz_eq I.L I.P I.C (MDefs.PIw a b) x (esym Emsz)).
   Qed.
-
-  (* ---- backward compiler correctness (overlay → Source) ---- *)
 
   Lemma H_bwd_src : forall (sa sb : Source.program)
       (a b : Intermediate.program) m,
@@ -506,8 +467,6 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
   Definition bt_fits (a b : Intermediate.program)
       (t : Events.trace) : Prop :=
     t2m_bt_fits I.L I.P I.C PBW PIW a b t.
-
-  (* ---- the back-translation package ---- *)
 
   Lemma H_bt : forall a b (m0 : finpref_behavior),
     Intermediate.well_formed_program a ->
@@ -746,9 +705,6 @@ Module K_T2M (I : T2M_K_Input) <: MPCompilerSig.
 
 End K_T2M.
 
-(* ================================================================== *)
-(* 3. The composed end state.                                          *)
-(* ================================================================== *)
 
 Require Import MicroPolicies.RSC_MD_MP.
 

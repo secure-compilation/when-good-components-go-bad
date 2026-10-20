@@ -418,11 +418,6 @@ Definition matom := (atom (mword mt) mem_tag).
 Definition component_memory_prefix (c: int): word (word_size mt) :=
   shlw (as_word c) (as_word (word_size mt - NC)).
 
-(* [1+n < 2^NC] is essential: component_memory_prefix puts [1+n] in the top NC bits, so for
-   [1+n = 2^NC] it wraps to [prefix 0] and the inequality is FALSE.  Sound for valid component
-   ids (< 2^NC - 1), which is exactly what [colors_bounded] gives. *)
-(* [NC <= word_size] is essential: the prefix shift is [word_size - NC] (an INT subtraction in
-   [component_memory_prefix], so negative — a huge shift that zeroes everything — when NC > ws). *)
 Lemma component_memory_prefix_succ_not_zero:
   forall n,
     NC <= word_size mt ->
@@ -455,9 +450,6 @@ Lemma component_memory_prefix_zero:
   component_memory_prefix (ssrint.Posz 0) = 0%w.
 Proof. rewrite /component_memory_prefix. apply: shlw_zero'. Qed.
 
-(* [component_memory_prefix] puts [c] in the top [NC] bits, so it is injective only on the
-   [< 2^NC] range (the valid component ids); unbounded it wraps.  [NC <= word_size] is needed
-   so the prefix shift [word_size - NC] is non-degenerate (cf. [_succ_not_zero]). *)
 Lemma component_memory_prefix_inj: forall c c',
     NC <= word_size mt ->
     c < expn 2 NC -> c' < expn 2 NC ->
@@ -487,10 +479,6 @@ Definition mask: word (word_size mt) :=
   shlw (as_word (2 ^ (word_size mt) - 1))
     (as_word ((word_size mt) - NC)).
 
-(* [n+1 <= 2^(word_size-NC)] (the range fits in one offset field) is essential: with both
-   endpoints [x] and [x+(n+1)] in prefix [C] but [n+1] spanning a full offset cycle, the
-   intermediate points cross OTHER prefixes and wrap back — the conclusion is then false.
-   The allocator now enforces exactly this bound (see [alloc_fun]). *)
 Lemma mask_range: forall x n C,
     leq (n + 1) (expn 2 (word_size mt - NC)) ->
     andw x mask = component_memory_prefix C ->
@@ -504,7 +492,6 @@ move=> x n C Hsz H1 H2 k Hk.
 have HE : 0 < expn 2 (word_size mt - NC) by rewrite expn_gt0.
 have HM : 0 < expn 2 (word_size mt) by rewrite expn_gt0.
 have HEM : expn 2 (word_size mt - NC) <= expn 2 (word_size mt) by rewrite leq_exp2l // leq_subr.
-(* LRC's [_ ^ _] is [Nat.pow] (stdlib), but the word lemmas use ssrnat's [expn]. *)
 have NatpowE : forall a b, Nat.pow a b = expn a b.
 { move=> a; elim => [|b IH]; first by rewrite expn0.
   by rewrite expnS /= IH. }
@@ -531,11 +518,11 @@ have Hkn : k < n by move: Hk; rewrite mem_iota add0n; case/andP.
 have Hax : (val x : nat) < expn 2 (word_size mt) by apply: ltn_ord.
 rewrite -E1; congr (_ * _).
 case: (leqP (expn 2 (word_size mt)) (expn 2 (word_size mt - NC))) => [HME | EltM].
-- (* degenerate E = M: every value sits in page 0 *)
+-
   have HEMeq : expn 2 (word_size mt - NC) = expn 2 (word_size mt)
     by apply/eqP; rewrite eqn_leq HEM HME.
   rewrite HEMeq (divn_small Hax) divn_small // Haddw; exact: ltn_pmod.
-- (* E < M: the block fits in one page and the endpoints share it, so no carry crosses *)
+-
   have HltNC : word_size mt - NC < word_size mt by move: EltM; rewrite ltn_exp2l.
   have H2E : 2 * expn 2 (word_size mt - NC) <= expn 2 (word_size mt)
     by rewrite -expnS leq_exp2l.
@@ -569,8 +556,6 @@ case: (leqP (expn 2 (word_size mt)) (expn 2 (word_size mt - NC))) => [HME | EltM
   exact: (divn_between (erefl (val x %/ expn 2 (word_size mt - NC))) HQ Hk1).
 Qed.
 
-(* And-ing with [mask] keeps only the top [NC] bits, so a value below the offset window
-   [2^(word_size - NC)] is masked to zero.  (Reusable for the [alloc_label] mask facts.) *)
 Lemma andw_mask_low (w : word (word_size mt)) :
   (val w : nat) < expn 2 (word_size mt - NC) -> andw w mask = 0%w.
 Proof.
@@ -612,11 +597,6 @@ Definition alloc_fun (st : state) : option state :=
                 | Posz x => Some x
                 | Negz _ => None
                 end;
-  (* The block must fit in the component's offset field (the low [word_size - NC] bits):
-     [length + 1 <= 2^(word_size - NC)].  Without this an oversized request could wrap the
-     offset past the prefix boundary and back, silently corrupting another compartment — and
-     [mask_range] (used to prove the block stays in the component's prefix region) would be
-     unsound.  Checking it here makes [alloc_fun = Some] *imply* the bound. *)
   do! _ <- (if leq (length + 1) (expn 2 (word_size mt - NC)) then Some tt else None);
   if negb (prefix_filter (word.addw max_addr (word.as_word (length + 1)))) then
     (* check we're not going past the compartment's memory space *)

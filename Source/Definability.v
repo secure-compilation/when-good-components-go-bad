@@ -35,11 +35,6 @@ Section Definability.
   Variable closed_intf: closed_interface intf.
   Variable has_main: intf Component.main.
 
-  (* Prescribed per-component buffer sizes (floored at 1): the counter needs
-     one cell at offset 0; any extra cells are inert [Int 0] filler.  This
-     lets the back-translated program adopt a TARGET buffer silhouette
-     (cf. MicroPolicies/Recomposition/BufferShape.v) — passing [emptym]
-     recovers the original one-cell buffers. *)
   Variable bufsz : NMap nat.
 
   Definition buf_size (C : Component.id) : nat := maxn (odflt 1 (bufsz C)) 1.
@@ -387,7 +382,7 @@ Section Definability.
       rewrite /has_required_local_buffers /= /buffers_of_sizes mkfmapfE HC /=.
       eexists; eauto=> /=.
       rewrite length_nseq /buf_size. by lia.
-    - (* buffer values: inert [Int 0] filler is well formed *)
+    -
       move=> C buf /=; rewrite /buffers_of_sizes mkfmapfE.
       case: ifP => // _ [<-] /=.
       by elim: (buf_size C) => [|n IH] //=.
@@ -738,11 +733,6 @@ Proof.
   by exists (Terminates nil); rewrite /= E0_right.
 Qed.
 
-(* The same, from a WELL-FORMED TRACE directly — no Intermediate-level run
-   required.  This is the entry point for back-translating traces observed
-   on the MicroPolicies machine (whose trace well-formedness is proven in
-   MicroPolicies/Recomposition/TraceInit.v), where no Intermediate↔MP
-   simulation is available. *)
 Lemma definability_with_linking_trace:
   forall p c m,
     Intermediate.well_formed_program p ->
@@ -800,11 +790,6 @@ Proof.
   by exists (Terminates nil); rewrite /= E0_right.
 Qed.
 
-(* The trace-premised variant with PRESCRIBED buffer sizes: both
-   back-translated sides expose exactly the prescribed silhouette (inert
-   [Int 0] filler), so their compiled images can adopt a target buffer
-   SHAPE — cf. MicroPolicies/Recomposition/BufferShape.v and the weakened
-   recomposition buffer axioms. *)
 Lemma definability_with_linking_trace_bufs:
   forall p c m bufsz,
     Intermediate.well_formed_program p ->

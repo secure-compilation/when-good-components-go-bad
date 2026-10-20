@@ -1,7 +1,3 @@
-(** * T2M sync claims: which registers and memory cells must stay in the
-    SYNCED (non-clobbered) arm (me's BINOP faults on Invalidated operands).
-    Provides [sync_claims], its per-opcode transport lemmas, and [mm_dsync]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -62,7 +58,6 @@ Local Notation reg_syncedS := (reg_synced L P C pra prb PB PI).
 Local Notation svat := (MDisc.svat MM).
 Local Notation asv := (MDisc.asv MM).
 
-(* the cell at (c, b, j) is related through the STRONG arm *)
 Definition cell_synced (amap : amap_t) (tmem : Transitional.Memory.t)
     (mmem : {fmap mword mt -> matom})
     (c : Component.id) (b : Block.id) (j : nat) : Prop :=
@@ -74,9 +69,6 @@ Definition cell_synced (amap : amap_t) (tmem : Transitional.Memory.t)
     mmem (word_of_nat (a + j)) = Some mc ->
     cellrel cmapS amap cell mc.
 
-(* a frame slot class that must stay synced: CU always; CSp only above
-   position 0 (the wrapper's inherited scratch); CArg when the frame
-   owner's caller kept its arg bit (its R_ARG carried through the callee) *)
 Definition synced_slot (parg : bool) (k : class3) (j : nat) : bool :=
   match k with
   | CU => true
@@ -85,8 +77,6 @@ Definition synced_slot (parg : bool) (k : class3) (j : nat) : bool :=
   | CRa => false
   end.
 
-(* the kept arg bit of the head suspension (parg_of), resp. of the
-   provider of chain act i — its caller, act i+1 (parg_at) *)
 Definition parg_of (chain : seq MDisc.act) : bool :=
   match chain with A :: _ => sv_arg (asv A) | [::] => false end.
 Definition parg_at (chain : seq MDisc.act) (i : nat) : bool :=
@@ -95,9 +85,6 @@ Definition parg_at (chain : seq MDisc.act) (i : nat) : bool :=
   | None => false
   end.
 
-(* no CArg slot in flight (callee prologue before the CArg push, or
-   teardown after the pop) — the caller's R_ARG then lives in the
-   register, not the frame *)
 Definition cargfree (v : sv) : bool :=
   ~~ has (fun k => c3_eqb k CArg) (sv_sig v) &&
   match sv_pend v with Some CArg => false | _ => true end.
@@ -150,10 +137,6 @@ Record sync_claims (amap : amap_t) (tmem : Transitional.Memory.t)
     synced_slot (parg_at chain i) k j = true ->
     cell_synced amap tmem mmem (MDisc.a_comp A) (MDisc.a_blk A) j
 }.
-
-(* Transport along a pure pc move (nop/label/bnz, no register/memory writes):
-   successor claims are [sv_le]-weaker, so each re-keys through the lattice.
-   Sync mirror of [MDisc.dinv_pcmove]. *)
 
 Lemma sync_pcmove (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs : Transitional.Register.t)
@@ -210,10 +193,6 @@ constructor.
 - exact: (sy_chain HS).
 Qed.
 
-(* Transport along a register-writing, memory-preserving step: cell claims
-   carry over (sig/pend unchanged by the checker), the caller supplies the
-   register claims at the successor's keying.  Sync mirror of [MDisc.dinv_regw]. *)
-
 Lemma sync_regw (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs tregs' : Transitional.Register.t)
     (mregs mregs' : {fmap reg mt -> @ratom mt})
@@ -263,8 +242,6 @@ constructor.
 - exact: (sy_chain HS).
 Qed.
 
-(* Per-register sync under a both-sides register write. *)
-
 Lemma reg_synced_set_other (amap : amap_t)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt})
@@ -304,10 +281,6 @@ exists (Atom w vt).
 rewrite tget_set_eq setmE eqxx.
 by split.
 Qed.
-
-(* The register-write fleet master: both sides write register [r] with a
-   SYNCED pair, and the checker output's claim columns differ from [v]'s
-   only at [r]'s column.  Covers const/binop/load's register half and mov. *)
 
 Lemma sync_regw_synced (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs : Transitional.Register.t)
@@ -405,10 +378,6 @@ apply: (sync_regw Ev Ew Hle Wsg Wpd) => //.
 - exact: HS.
 Qed.
 
-(* [cell_synced] transport under a store: the written cell is synced iff the
-   stored pair is; every other cell keeps its sync since the me write lands
-   at a different flat address ([addr_sep_offs]/[addr_sep_blocks], [amap_ok]). *)
-
 Lemma cell_synced_store (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
     (mmem : {fmap mword mt -> matom})
@@ -489,8 +458,6 @@ case Etgt: [&& c == Pointer.component ptr, b == Pointer.block ptr
   exact: (HS _ _ _ _ _ Hc0 Hb0 Hnth0 Ha Hmc).
 Qed.
 
-(* The per-opcode fleet: CONST. *)
-
 Lemma sync_const (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt})
@@ -556,10 +523,6 @@ case Esp: (is_r r R_SP).
        case: (is_r r R_ONE); case: (is_r r R_ARG). }
   exact: (sync_regw_synced Ev Ew Hle Wsg Wpd Wa1 Wa2 Warg Wek Hv HS).
 Qed.
-
-(* The push bump (Add R_SP R_ONE R_SP mid-macro): the pending slot becomes
-   the frame top; R_SP carries no claim, the aux deadening preserves AU and
-   refutes ASp. *)
 
 Lemma sync_push (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs : Transitional.Register.t)
@@ -634,10 +597,6 @@ constructor.
   rewrite Epd Wpd. by [].
 - exact: (sy_chain HS).
 Qed.
-
-(* The pop bump (Minus R_SP R_ONE R_SP): the frame top becomes the pending
-   slot; [sv_sig v = rcons (sv_sig v') k] is the clean spelling of the
-   checker's rev-split. *)
 
 Lemma sync_pop (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs : Transitional.Register.t)
@@ -716,10 +675,6 @@ constructor.
   exact: (sy_frame HS Ev Hb Hk Hs).
 - exact: (sy_chain HS).
 Qed.
-
-(* The per-opcode fleet: BINOP.  The vgeneric arm is the register fleet
-   master; the Add/Minus R_SP bumps are [sync_push]/[sync_pop] (R_SP carries
-   no claim, so the written pair needs no [tvrel]). *)
 
 Lemma sync_binop_gen (amap : amap_t) (tmem : Transitional.Memory.t)
     (tregs : Transitional.Register.t)
@@ -911,11 +866,6 @@ move=> Hne E. apply: Hne.
 apply: is_r_eq. by rewrite /is_r E PeanoNat.Nat.eqb_refl.
 Qed.
 
-(* Register-write masters generalized over a memory step: like
-   [sync_regw]/[sync_regw_synced] but the caller supplies (a) a uniform
-   [cell_synced] transport and (b) the successor pend column as a
-   disjunction (the pop arms drop the pend slot). *)
-
 Lemma sync_regw_store (amap amap' : amap_t)
     (tmem tmem' : Transitional.Memory.t)
     (tregs tregs' : Transitional.Register.t)
@@ -1083,9 +1033,6 @@ apply: (sync_regw_store Ev Ew Hle Wsg Wpd') => //.
 - exact: HS.
 Qed.
 
-(* Load-side helpers: the T lookup decomposition and the write-back retag
-   preserving [tvrel]/[cellrel]. *)
-
 Lemma load_shape (mem : Transitional.Memory.t) (ptr : Pointer.t)
     (cell : Transitional.tvalue * mem_tag) :
   Transitional.Memory.load mem ptr = Some cell ->
@@ -1126,11 +1073,6 @@ Lemma tvrel_eta_s (amap : amap_t) (tv : Transitional.tvalue)
   tvrel cmapS amap
     (Transitional.MVal (Transitional.tvtag tv) (Transitional.val tv)) w.
 Proof. by case: tv. Qed.
-
-(* The per-opcode fleet: LOAD, user/scratch arms (address register not R_SP,
-   plus the PPost scratch reload).  The loaded cell sits outside the frame
-   blocks, so [sy_mem] makes it synced, the write-back retag keeps it synced,
-   and the target register gets a synced pair — the fleet master applies. *)
 
 Lemma sync_load_user (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
@@ -1324,11 +1266,6 @@ case Eph: (sv_ph v0) => //.
   + move=> _. exact: erefl.
 Qed.
 
-(* [cell_synced] transport for cells other than the written one, and the
-   pc-preserving cells-only claims transport.  Together they let the
-   frame-pop loads (whose loaded cell may be clobbed and carries no claim)
-   move the memories first and the registers after. *)
-
 Lemma cell_synced_store_other (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
     (mmem : {fmap mword mt -> matom})
@@ -1429,12 +1366,6 @@ constructor.
 - move=> i A j k HA Hk Hs.
   exact: (Hc _ _ _ HA (sy_chain HS HA Hk Hs)).
 Qed.
-
-(* The per-opcode fleet: LOAD, frame-pop arms (address register IS R_SP; the
-   pend slot returns to a register).  CU and the gated deep-CSp reloads read
-   a CLAIMED pend cell (synced pair, fleet master applies); CRa/CArg/pos-0-CSp
-   reloads read an UNCLAIMED cell whose target carries no successor claim, so
-   the transport goes memories-first then registers. *)
 
 Lemma sync_load_pop (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
@@ -1944,7 +1875,6 @@ case Eph: (sv_ph sv0) => //.
   move: Et. by rewrite /rtaint E1sp.
 Qed.
 
-(* a cell cannot be both synced-related and event-clobbed *)
 Lemma cellrel_clob_clash (amap : amap_t)
     (tc : Transitional.tvalue * mem_tag) (mc : @matom mt) :
   cellrel cmapS amap tc mc -> clobcell tc mc -> False.
@@ -1952,11 +1882,6 @@ Proof.
 move=> [_ Htg _] [[_ Hto Hti] _].
 by rewrite Htg Hto in Hti.
 Qed.
-
-(* The clob mirror of [sync_load_pop]: the popped cell is event-clobbed (T
-   Undef/Other vs me Invalidated), so me pops the Invalidated atom.  Only the
-   UNCLAIMED arms survive (CRa, the position-0 teardown CSp, the dead-bit CArg
-   restore); every claimed arm's [cellrel] clashes with the clob shape. *)
 
 Lemma sync_load_pop_clob (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
@@ -2272,11 +2197,6 @@ case Eph: (sv_ph sv0) => //.
   move: Et. by rewrite /rtaint E1sp.
 Qed.
 
-(* Store-side helpers: the written cell's claim establishment (the push
-   creates a fresh pend claim), and the source-register retag transports (T
-   re-tags the stored register Invalidated-if-address; me mirrors with the
-   same tag since the pair is synced). *)
-
 Lemma reg_synced_retag1 (amap : amap_t)
     (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt})
@@ -2338,11 +2258,6 @@ case E2x: (is_r r2 RX).
 - apply: reg_synced_set_other; last exact: Hkeep.
   move=> E. move: E2x. by rewrite /is_r -E PeanoNat.Nat.eqb_refl.
 Qed.
-
-(* The per-opcode fleet: STORE, non-push arms (address register not R_SP: the
-   scratch park/restore and the user/flag data stores).  The stored source is
-   SYNCED (premise), so the written cell stays synced and the source retag
-   preserves every register claim. *)
 
 Lemma sync_store_user (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
@@ -2496,10 +2411,6 @@ case Ert: (rtaint v0 r1) => //.
   apply: (Hrows _ (esym Evv)) => //.
 Qed.
 
-(* The push master: like [sync_regw_store] but the successor creates a pend
-   claim (sv_pend v' = Some k); the caller establishes the freshly-written
-   cell's sync (via [cell_synced_store_new]). *)
-
 Lemma sync_regw_store_push (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
     (tregs tregs' : Transitional.Register.t)
@@ -2558,11 +2469,6 @@ constructor.
 - move=> i A j k1 HA Hk Hs.
   exact: (Hcells _ _ _ (sy_chain HS HA Hk Hs)).
 Qed.
-
-(* The per-opcode fleet: STORE, push arm (address register IS R_SP: the frame
-   push).  The stored source is SYNCED (premise); the fresh pend cell's claim
-   is established outright, the deadened source aux drops its claim, everything
-   else transports. *)
 
 Lemma sync_store_push (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
@@ -2734,11 +2640,6 @@ apply: (sync_regw_store_push Ev Ew Hle (erefl _) (erefl _)).
 - move=> b Hb _. exact: (Hpnew _ Hb).
 - exact: HS.
 Qed.
-
-(* The clob mirror of [sync_store_push]: the pushed source is event-clobbed
-   (T Undef/Other vs me Invalidated) — by the checker gates this can only hit
-   a DEAD slot (CRa; the position-0 CSp park; a dead-kept-bit CArg), so the
-   written cell carries no claim and every register row transports around it. *)
 
 Lemma sync_store_push_clob (amap : amap_t)
     (tmem tmem' : Transitional.Memory.t)
@@ -2992,12 +2893,6 @@ constructor.
   move=> i A j k1 HA Hk Hs.
   exact: (HchainT _ _ _ HA (sy_chain HS HA Hk Hs)).
 Qed.
-
-(* The per-opcode fleet: ALLOC.  The only step where the address map extends
-   (the fresh block gets mapped): stated over an abstract [amap'] with a
-   register-monotonicity premise and the uniform cell transport (which also
-   establishes the fresh block's sy_mem claim).  The me register file is
-   abstract too: the syscall stub writes only [rptr] among the user registers. *)
 
 Lemma reg_synced_alloc_new (amap' : amap_t)
     (tregs : Transitional.Register.t)
@@ -3369,12 +3264,6 @@ constructor.
   exact: (Hcells _ _ _ (sy_chain HS HA Hk Hs)).
 Qed.
 
-(* The per-opcode fleet: internal JAL.  The target label carries the literal
-   [sv0_one] column (jal_target), so every keyed register claim at the target
-   is dead; the current frame's claims move onto the freshly pushed chain
-   entry (whose [asv] is the resume column, sig-equal to the jal site's);
-   memory untouched.  R_RA is written on both sides but carries no claim. *)
-
 Lemma sync_jal (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt})
@@ -3435,12 +3324,6 @@ constructor.
   + move: HA0 => /= HA0.
     exact: (sy_chain HS HA0 Hk Hs).
 Qed.
-
-(* The per-opcode fleet: internal JUMP (the TrJump return to a JalNat resume).
-   No register or memory changes on either side; the head chain act pops — its
-   sy_chain claims become the resumed frame's sy_frame claims; the resume
-   column's aux claims are dead (premises from dinv's per-act record), and the
-   kept arg claim comes from the interim R_ARG premise. *)
 
 Lemma sync_jump (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
@@ -3512,13 +3395,6 @@ constructor.
   { exact: HA0. }
   exact: (sy_chain HS Hnth' Hk Hs).
 Qed.
-
-(* The per-opcode fleet: the CROSS events.  Both machines invalidate the
-   register file (T writes tUndef, me re-tags Invalidated), so the me register
-   file is abstract and the only register premise is the post-state R_COM sync.
-   CALL pushes the caller's window act (target = literal [sv0], all keyed
-   claims dead); RETURN pops the window act (its resume column's aux/arg claims
-   are dead — premises from the act record). *)
 
 Lemma sync_call (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
@@ -3651,11 +3527,6 @@ constructor.
   { exact: HA0. }
   exact: (sy_chain HS Hnth' Hk Hs).
 Qed.
-
-(* The per-opcode fleet: MOV.  T does two chained writes (copy to r2 with the
-   travelling tag, then r1 retagged Invalidated-if-address); the me term is
-   stated r1-outer.  [reg_synced_mov_any] absorbs the row split (copy target /
-   retagged source / untouched). *)
 
 Lemma reg_synced_mov_copy (amap : amap_t)
     (tregs : Transitional.Register.t)
@@ -4147,10 +4018,6 @@ case E1sp: (is_r r1 R_SP).
          exact: (sy_argp HS Ev Hpg Hcf').
     * exact: HS.
 Qed.
-
-(* The carried relational invariant: the discipline ([MDisc.dinv]) and the
-   sync claims share one ghost pack (cur/chain/F/cs) — the per-case threading
-   consumes [dinv_step_X] and [sync_X] on the same witnesses and repacks. *)
 
 Definition mm_dsync (amap : amap_t) (ts : TS.state)
     (ms : @Symbolic.state mt lrc_tags unit) : Prop :=

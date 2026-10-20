@@ -1,10 +1,3 @@
-(** * T2M — the INITIAL match: the T base initial state (memory from
-    [prepare_procedures_initial_memory], pc at main's header, [Level 0])
-    matches me's [Merged.initial_state] under the static map [amap0].
-    The pc pin holds because [Procedure.main = 0] is the Ord-minimum of
-    the procedure ids, so me's first main-coloured cell and T's header
-    coincide. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -48,9 +41,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ================================================================== *)
-(* 0. The Ord-minimum heads a sorted fset.                            *)
-(* ================================================================== *)
 
 Lemma domm_head_zero (T' : Type) (m : NMap T') :
   0 \in domm m ->
@@ -73,9 +63,6 @@ case E: (\val (domm m)) => [|h t].
   by rewrite Ord_lt_nat ltn0.
 Qed.
 
-(* ================================================================== *)
-(* 1. The initial match.                                              *)
-(* ================================================================== *)
 
 Section InitialMatch.
 
@@ -115,8 +102,6 @@ Hypothesis Hwfb : Intermediate.well_formed_program prb.
 Hypothesis Hlinkable :
   linkable (Intermediate.prog_interface pra) (Intermediate.prog_interface prb).
 
-(* -------- the T side: main's entry header is cell 0 of its segment  *)
-
 Lemma find_plabel_main (pr : Intermediate.program)
     (Cp : NMap Machine.code) :
   Intermediate.prog_procedures pr Component.main = Some Cp ->
@@ -140,9 +125,6 @@ rewrite /Transitional.find_plabel_in_code i2t_getm Hmain_procs /=.
 by rewrite (find_plabel_main Hmain_procs Hmain_proc).
 Qed.
 
-(* -------- the me side: the first main-coloured cell is main's base  *)
-
-(* the two spellings of the colour predicate *)
 Let colp : (@Merged.instr mt * mem_tag) -> bool :=
   fun cell => color cell.2 == Component.main.
 
@@ -153,14 +135,11 @@ apply: eq_find => cell.
 by case: cell.
 Qed.
 
-(* -------- registers -------- *)
-
 Lemma init_tregs_get r :
   Transitional.Register.get r Transitional.Register.init
   = Transitional.tUndef.
 Proof. by case: r. Qed.
 
-(* the me initial register file carries the system registers too *)
 Lemma reg0_sysregs : sysregs_ok (reg0 (mt := mt)).
 Proof.
 move=> k.
@@ -169,8 +148,6 @@ rewrite !inE => /orP[/eqP ->|/orP[/eqP ->|/orP[/eqP ->|/orP[/eqP ->|/eqP ->]]]];
   rewrite !(won_eqE (small_lt_reg _) (small_lt_reg _)) //=;
   by eexists.
 Qed.
-
-(* -------- the theorem -------- *)
 
 Theorem match_initial (ts : TS.state) :
   TSim.t_initial_base
@@ -292,8 +269,6 @@ constructor.
     by lia. }
   have Hsz : size (initial_memory (mt := mt) PB) = size (linearize_bufs PB).
   { apply: initial_memory_size_eq. by lia. }
-  (* every [lia] must run BEFORE [Hcode0]/[Hdata0] enter the context:
-     zify chokes traversing their word-typed statements *)
   have Hcode0 : encode_code codeW (size (initial_memory (mt := mt) PB))
                   (@word_of_nat (word_size mt) Merged.alloc_label) = None.
   { case E: (encode_code _ _ _) => [v|]; last by [].
@@ -313,12 +288,6 @@ constructor.
   by rewrite Hcode0 Hdata0.
 Qed.
 
-(* ================================================================== *)
-(* 4. The initial SYNC pack: every register                          *)
-(*    claim is dead at [sv0], and the memories relate cell-by-cell    *)
-(*    through the STATIC map (the me data tags are [def]-tagged, so   *)
-(*    the weak arm's clob shape is refuted).                          *)
-(* ================================================================== *)
 
 Theorem sync_initial (MM : Component.id -> seq sv) (pcM : Pointer.t) :
   (forall c S, getm cdeW c = Some S -> comp_ok (c, 1, Z0) S (MM c)) ->

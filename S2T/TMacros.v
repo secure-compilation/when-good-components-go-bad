@@ -1,22 +1,3 @@
-(** * Stage 4, part 1 — the macro archetype.
-
-    See plan-i2t-redo.md §4 (Stage 4).
-
-    Stage 4 is the bulk of the campaign: `S2I/Simulation.v` retargeted at T.
-    This file builds the piece every one of its 14 diagrams will call, and it
-    is the first thing to put the two halves of the work together:
-
-      - `S2T/TSem.v`  — the machine steps  (Stage 1)
-      - `S2T/TInv.v`  — the invariant transitions (Stage 2)
-
-    A *macro lemma* does both at once: "executing this compiler macro from a
-    state satisfying `tag_inv` reaches a state satisfying `tag_inv`, in this
-    many steps". The diagrams then never touch a rule constructor or a
-    `tag_inv` clause directly — they chain macro lemmas.
-
-    `push R_RA` is the archetype, because it is the one that MOVES a
-    capability. If the two halves fit here, they fit. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import CompCert.Events.
@@ -51,9 +32,6 @@ Section WithCode.
 
 Variable cde : Transitional.code.
 
-(* ================================================================== *)
-(* T9 — code_at over the flattened per-component array                *)
-(* ================================================================== *)
 
 Definition code_at (pc : Pointer.t) (c : tcode) : Prop :=
   exists C_code pre post,
@@ -83,9 +61,6 @@ Proof.
     by rewrite size_cat /= Nat2Z.inj_add.
 Qed.
 
-(** T8: the successor obligation, discharged whenever the residual code has one
-    more instruction. For compiled code that is always — every procedure ends
-    with a control instruction, which carries no [check_pc] premise. *)
 Lemma check_pc_at pc x y c :
   code_at pc (x :: y :: c) -> Transitional.check_pc cde pc x.2.
 Proof.
@@ -94,20 +69,7 @@ Proof.
   by apply: PcFall Hex.
 Qed.
 
-(* ================================================================== *)
-(* code_at for the IMAGE of Intermediate code                         *)
-(* ================================================================== *)
 
-(** `S2I/Simulation.v`'s `stack_match` and `cont_matchJ` pin residual code as
-    Intermediate `code` (`code_at G ret (pop R_RA ++ rest')`). At T the same
-    clauses hold of that code's IMAGE under the Pass-1 opcode map, so the
-    retarget needs `code_at` in that form plus mirrors of
-    `S2I/SimCode.v`'s four `code_at` lemmas (`:64`, `:74`, `:87`, `:95`).
-
-    Note what this means for `cont_matchJ` itself: it mentions memory ZERO
-    times — it relates a source continuation to Intermediate code and
-    `val_inject`ed temps — so it needs **no port at all**. Only its consumption
-    site changes, from `code_at` to `code_at_I`. *)
 Definition code_at_I (C : Component.id) (pc : Pointer.t)
                      (c : Intermediate.Machine.code) : Prop :=
   code_at pc [seq Transitional.instr_to_transitional C i | i <- c].
@@ -126,7 +88,6 @@ Lemma code_at_I_tail C pc i c :
   code_at_I C pc (i :: c) -> code_at_I C (Pointer.inc pc) c.
 Proof. rewrite /code_at_I /=. exact: code_at_tail. Qed.
 
-(** T8 at the [code_at_I] level. *)
 Lemma check_pc_at_I C pc i j c :
   code_at_I C pc (i :: j :: c) ->
   Transitional.check_pc cde pc (Transitional.instr_to_transitional C i).2.
@@ -135,23 +96,13 @@ Proof.
   by case: (Transitional.instr_to_transitional C i) => x y /check_pc_at.
 Qed.
 
-(* ================================================================== *)
-(* The compiler's macros, viewed at T                                 *)
-(* ================================================================== *)
 
-(* the image of S2I's own [push]/[pop] under the Pass-1 opcode map — defining
-   them this way is what keeps the file tied to the actual compiler *)
 Definition push_T (C : Component.id) (r : register) : tcode :=
   [seq Transitional.instr_to_transitional C i | i <- push r].
 
 Definition pop_T (C : Component.id) (r : register) : tcode :=
   [seq Transitional.instr_to_transitional C i | i <- pop r].
 
-(** The bridge the diagrams actually use: compiled code is presented as
-    Intermediate code via [code_at_I], while the macros ask for [push_T]/[pop_T]
-    at [Pointer.component pc]. Both directions are definitional — [push_T C r]
-    IS the image of [push r] — so these are just the [map]-over-[cat]
-    bookkeeping, done once here instead of in every diagram. *)
 Lemma code_at_I_push C pc r nxt rest :
   Pointer.component pc = C ->
   code_at_I C pc (push r ++ nxt :: rest) ->
@@ -168,11 +119,6 @@ Lemma code_at_I_pop C pc r nxt rest :
                  :: [seq Transitional.instr_to_transitional C i | i <- rest]).
 Proof. by move=> Hc; rewrite /code_at_I map_cat /= /pop_T Hc. Qed.
 
-(** ★ Where a forward [Bnz] lands. The T machine resolves a label by scanning
-    the whole COMPONENT array from offset 0, so "the label is in the residual
-    code" is not enough — it must be the ONLY one in the component. That is the
-    premise here, in the form `S2I/LabelUniq.v`'s `compiled_labels_unique`
-    produces (see `S2T/TLabel.v`). *)
 Lemma code_at_I_label_find C pc c1 l rest :
   code_at_I C pc (c1 ++ ILabel l :: rest) ->
   Pointer.component pc = C ->
@@ -198,11 +144,7 @@ Proof.
   - exists C_code, (pre ++ img1), post. by split.
 Qed.
 
-(* ================================================================== *)
-(* Machine steps                                                      *)
-(* ================================================================== *)
 
-(** [push r], as two [TS] steps. Ported from the spike onto [TS.step]. *)
 Lemma exec_push m rs pc pct r nxt c C0 fb0 sp m' vt :
   code_at pc (push_T (Pointer.component pc) r ++ nxt :: c) ->
   Transitional.Register.get_tag r rs = Some vt ->
@@ -245,8 +187,6 @@ Proof.
       by rewrite /rs1 TInv.get_set_neq // HSP.
     have HONE1 : Transitional.Register.get R_ONE rs1 = MVal Other (Int 1)
       by rewrite /rs1 TInv.get_set_neq // HONE.
-    (* [TS.BinOp] states its result inline, so the goal must be put into the
-       rule's shape before applying it *)
     have -> : Ptr (C0, fb0, (sp + 1)%Z)
             = eval_binop Add
                 (Transitional.val (Transitional.Register.get R_SP rs1))
@@ -259,21 +199,7 @@ Proof.
     + by rewrite HONE1.
 Qed.
 
-(* ================================================================== *)
-(* ★ The archetype: machine steps AND invariant transition            *)
-(* ================================================================== *)
 
-(** [push R_RA] — the macro that spills a live capability.
-
-    This is the shape every Stage-4 diagram consumes: hypotheses about the
-    source-derived state, a [plus] of target steps, and [tag_inv] carried
-    across with the ledger updated. The diagram never sees a rule constructor
-    or a [tag_inv] clause.
-
-    Note what the proof is: [exec_push] for the steps, then
-    [tag_inv_push_ra] followed by [tag_inv_setreg] for the invariant. The two
-    halves compose without any glue — which is the thing this file exists to
-    check. *)
 Lemma push_ra_macro L m rs pc pct nxt c C0 fb0 sp m' t :
   code_at pc (push_T (Pointer.component pc) R_RA ++ nxt :: c) ->
   Pointer.component pc = C0 ->
@@ -308,12 +234,6 @@ Proof.
     exact: (TInv.tag_inv_push_ra Et Hfresh Hstore HI).
 Qed.
 
-(** [pop r], as two [TS] steps: the [R_SP] decrement, then the load.
-
-    Note the conclusion carries [m'], not [m]: T's [Load] writes the cell back
-    retagged. That is Stage-0b's discovery, and it is harmless only because
-    every memory clause of [tag_inv] goes through [TMem.vload] (Stage 2
-    part 1). *)
 Lemma exec_pop m rs pc pct r nxt c C0 fb0 sp v m' :
   code_at pc (pop_T (Pointer.component pc) r ++ nxt :: c) ->
   Transitional.Register.get R_SP rs = MVal Other (Ptr (C0, fb0, sp)) ->
@@ -358,9 +278,6 @@ Proof.
     + by rewrite Hcomp1; exact: Hstore.
 Qed.
 
-(** ★ [pop R_RA] — the mirror of [push_ra_macro]. The capability moves back
-    from the spill slot into [R_RA], and the vacated cell is left
-    [Invalidated], i.e. dead. *)
 Lemma pop_ra_macro L m rs pc pct nxt c C0 fb0 sp v m' :
   code_at pc (pop_T (Pointer.component pc) R_RA ++ nxt :: c) ->
   Pointer.component pc = C0 ->
@@ -390,13 +307,7 @@ Proof.
     by apply: TInv.tag_inv_setreg.
 Qed.
 
-(* ================================================================== *)
-(* The data macros: ledger unchanged                                  *)
-(* ================================================================== *)
 
-(** [push r] for a DATA register — [push R_COM], [push R_ARG], [push R_AUX1],
-    [push R_AUX2]. The stored cell is [Other]-tagged, so it is not a
-    capability and the ledger is untouched. *)
 Lemma push_data_macro L m rs pc pct r nxt c C0 fb0 sp m' :
   code_at pc (push_T (Pointer.component pc) r ++ nxt :: c) ->
   Pointer.component pc = C0 ->
@@ -424,7 +335,7 @@ Proof.
     rewrite /Transitional.Register.get_tag /Transitional.Register.get.
     by case: (getm rs _) => [tv|] //= [] ->. }
   rewrite /=. split.
-  - (* [is_address Other] computes, so the rule's shape IS the stated one *)
+  -
     exact: (@exec_push m rs pc pct r nxt c C0 fb0 sp m' Other
               Hcode Htag HSP HONE HSPr HONEr Hcomp Hstore).
   - apply: TInv.tag_inv_setreg; first by [].
@@ -433,10 +344,6 @@ Proof.
     by rewrite /= Et.
 Qed.
 
-(** [pop r] into a DATA register. The source cell must not be a live site —
-    otherwise the pop would move a capability into a data register, which
-    [ti_regs] forbids. Compiled code respects this by the push/pop
-    bracketing. *)
 Lemma pop_data_macro L m rs pc pct r nxt c C0 fb0 sp v m' :
   code_at pc (pop_T (Pointer.component pc) r ++ nxt :: c) ->
   Pointer.component pc = C0 ->
@@ -473,13 +380,7 @@ Proof.
     by apply: TInv.tag_inv_setreg.
 Qed.
 
-(* ================================================================== *)
-(* The control transfers                                              *)
-(* ================================================================== *)
 
-(* ================================================================== *)
-(* The intra-component call bracket — the first diagram's skeleton     *)
-(* ================================================================== *)
 
 End WithCode.
 

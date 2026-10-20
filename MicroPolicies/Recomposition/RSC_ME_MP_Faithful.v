@@ -1,7 +1,3 @@
-(* RSC_ME_MP_Faithful : the faithful me->mp RSC^DC_MD.  Observed Merged
-   program/context are arbitrary but recomposition-ready ([wf_mp]); the
-   back-translated pair is derived by compilation ([compiler_wf_mp]). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -41,16 +37,10 @@ Set Bullet Behavior "Strict Subproofs".
 
 Import Types.
 
-(* ==================================================================== *)
-(*  Recomposition-readiness of a MERGED program: [lin_output_wf] +       *)
-(*  label-scheme discipline.                                             *)
-(* ==================================================================== *)
 
 Section Discipline.
   Variables L P C : nat.
 
-  (* Every defined label is a bounded canonical scheme label of a DECLARED
-     component. *)
   Definition labels_in_scheme (q : program) : Prop :=
     forall n l t,
       nth_error (code q) n = Some (@MrLabel mt l, t) ->
@@ -61,8 +51,6 @@ Section Discipline.
           [/\ cid \in domm (prog_interface q), cid < C, Pid < P
             & l = mk_entry L P C cid Pid]).
 
-  (* A foreign (unresolved, non-alloc) jal is a DECLARED cross-component
-     call: it carries its canonical entry label and its import. *)
   Definition foreign_jal_entry (q : program) : Prop :=
     forall n l t,
       nth_error (code q) n = Some (@MrJal mt l, t) -> l <> alloc_label ->
@@ -72,16 +60,11 @@ Section Discipline.
             imported_procedure (prog_interface q) (color t) cid Pid
           & color t <> cid].
 
-  (* EXPORTED procedures have their entry label defined (export-keyed:
-     the compiler only emits entries for procedures that exist). *)
   Definition entries_present (q : program) : Prop :=
     forall cid Pid,
       exported_procedure (prog_interface q) cid Pid ->
       findopt (is_label_def (mk_entry L P C cid Pid)) (code q) <> None.
 
-  (* The cell defining an entry label carries the canonical head tag of
-     the JOINT interface [PIW] (the tag's entry list mentions all
-     importers across the linked pair, so it is a whole-pair datum). *)
   Definition entry_tag_canonical (PIW : Program.interface) (q : program)
       : Prop :=
     forall cid Pid m i t,
@@ -112,7 +95,6 @@ Section Discipline.
     wfmp_eh     : entry_heads PIW q
   }.
 
-  (* LABEL DISJOINTNESS (from mk_*-injectivity + interface-disjointness). *)
   Lemma wfmp_labels_disjoint (PIWa PIWb : Program.interface)
       (qa qb : program) :
     wf_mp PIWa qa -> wf_mp PIWb qb ->
@@ -143,8 +125,6 @@ Section Discipline.
       move: (fdisjointP Hdis _ Hd1). by rewrite Ec Hd2.
   Qed.
 
-  (* CROSS-SIDE JAL: a foreign jal of [qa] resolves at the canonical entry
-     cell in both [qb] and [qb'] (equal interfaces), with the same tag. *)
   Lemma wfmp_jal_cross (PIWa PIWb : Program.interface)
       (qa qb qb' : program) :
     wf_mp PIWa qa -> wf_mp PIWb qb -> wf_mp PIWb qb' ->
@@ -293,9 +273,6 @@ Section Discipline.
 
 End Discipline.
 
-(* ==================================================================== *)
-(*  Per-trace back-translation output.                                   *)
-(* ==================================================================== *)
 
 Record bt_me_package (L P C NC : nat) (p c : program) (m0 : finpref_behavior) : Type := {
   bt_pp : program;
@@ -360,9 +337,6 @@ Module Type ObservedRun (Lft : MEtoMP_Left) (BT : H_bt_me Lft).
   Axiom fits : BT.bt_fits (finpref_trace fm).
 End ObservedRun.
 
-(* ==================================================================== *)
-(*  The functor + theorem.                                               *)
-(* ==================================================================== *)
 
 Module RSC_ME_MP_Faithful
     (Lft : MEtoMP_Left) (BT : H_bt_me Lft) (Obs : ObservedRun Lft BT).
@@ -380,7 +354,6 @@ Module RSC_ME_MP_Faithful
     closed_interface (unionm (prog_interface Lft.c) (prog_interface Lft.p)).
   Proof. rewrite unionmC; [exact: closed_pc | rewrite fdisjointC; exact: disjoint_pc]. Qed.
 
-  (* ---- diagonal context (p,c,p,c) for the max-prefix ---- *)
   Module Sd <: RecompositionContext.
     Definition p  : program := Lft.p.
     Definition c  : program := Lft.c.
@@ -542,7 +515,6 @@ Module RSC_ME_MP_Faithful
   Definition wfmp_pp0 := wfmp_pp.
   Definition wfmp_cc0 := wfmp_cc.
 
-  (* ---- real context (p, c, bt_pp, bt_cc) ---- *)
   Module Srec <: RecompositionContext.
     Definition p  : program := Lft.p.
     Definition c  : program := Lft.c.
@@ -573,7 +545,6 @@ Module RSC_ME_MP_Faithful
     Module D := RecompositionDefinitions Srec.
     Import D.
 
-    (* interfaces of the primed pair equal those of p/c (compiler preserves interface) *)
     Lemma iface_pp : prog_interface (bt_pp pkg) = prog_interface Lft.p.
     Proof. exact: (esym (bt_ifacep pkg)). Qed.
     Lemma iface_cc : prog_interface (bt_cc pkg) = prog_interface Lft.c.

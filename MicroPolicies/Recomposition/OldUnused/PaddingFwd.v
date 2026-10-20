@@ -1,7 +1,3 @@
-(* ===== Forward single-step padding simulation (split out of PaddingSim.v so each file stays within
-   the per-compile budget).  Re-opens the [CodeShift] section context and re-exposes the q/q'-
-   parametrized definitions/lemmas (proved in PaddingSim) via local notations, then proves the
-   per-opcode forward step correspondence [pad_step_fwd]. ===== *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -73,14 +69,12 @@ Hypothesis bnz_labels_resolved : forall n r l t,
 
 Variable NC : nat.
 
-(* well-formedness facts the allocator (syscall) bullet needs — padding analogues of [colors_bounded]. *)
 Hypothesis alloc_label_lt_NC : alloc_label < 2 ^ (word_size mt - NC).
 Hypothesis code_colors_bounded : forall w a,
   encode_code (code q) pc0 w = Some a -> 1 + color (taga a) < 2 ^ NC.
 
 Local Notation st := (@Symbolic.state mt lrc_tags unit).
 
-(* re-expose the q/q'-parametrized definitions proved in PaddingSim *)
 Local Notation match_pad  := (@PaddingSim.match_pad q q').
 Local Notation pad_valid  := (@PaddingSim.pad_valid q q').
 Local Notation phia       := (@PaddingSim.phia q q').
@@ -90,8 +84,6 @@ Local Notation memwk      := (@PaddingSim.memwk q q').
 Local Notation memwk_bwd  := (@PaddingSim.memwk_bwd q q').
 Local Notation wregs      := (@PaddingSim.wregs q q').
 
-(* re-expose the q/q'-parametrized helper lemmas — [q]/[q'] are implicit (inferred from args), so
-   only the well-formedness hypotheses are pre-applied; the lemma-own args stay implicit. *)
 Local Notation code_cell_q      := (PaddingSim.code_cell_q Hcount Hbound Hbound').
 Local Notation phia_addr_code   := (PaddingSim.phia_addr_code Hcount Hbound Hbound').
 Local Notation pc_succ_corr     := (PaddingSim.pc_succ_corr Hcount Hbound Hbound' fallthrough_aligned).
@@ -115,7 +107,7 @@ Lemma pad_step_fwd (s1 s2 s1' : st) (ev : option event) :
   exists s2', step_me (NC := NC) s2 s2' ev /\ match_pad s1' s2'.
 Proof.
   move=> Hm Hvalid Hstep. inversion Hstep; subst.
-  - (* nop *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -132,7 +124,6 @@ Proof.
     have Hn1 : n.+1 < size (code q) by apply: (nonterm_succ_lt Hnlt Hnth Hterm).
     have [v2 [Henc2 [Htag2 Hdec2]]] := code_cell_padc Hnlt Hnth.
     have Hbw : pc0 + size (code q) < 2 ^ word_size mt by exact: (ltn_trans Hbound alloc_label_lt_word).
-    (* the successor cell [n+1] exists and has the same tag in both runs (for [transfer]'s [tni]). *)
     have Hpw1 : (pcw + 1)%w = word_of_nat (n.+1 + pc0).
     { rewrite Hpweq [X in X = _] word_of_nat_succ. congr word_of_nat. by lia. }
     have [v1n Henc1n] := encode_code_dom Hbw Hn1.
@@ -142,7 +133,6 @@ Proof.
       have Hb2 : n' + pc0 < 2 ^ word_size mt by move: Hn'lt Hbw; lia.
       have := word_of_nat_inj Hb1 Hb2 Hpw'. by lia. }
     have [v2n [Henc2n [Htag2n _]]] := code_cell_padc Hn'lt Hnth'.
-    (* current padded cell + its decode = Nop *)
     have Hm2pc : Symbolic.mem s2 (phia pcw) = Some ((vala v2) @ (taga v2)).
     { rewrite atom_etaE.
       have -> : phia pcw = word_of_nat (shift_pos sizes n + pc0).
@@ -160,16 +150,13 @@ Proof.
       have -> : (phia pcw + 1)%w = word_of_nat (shift_pos sizes (n.+1) + pc0).
       { rewrite Hpweq (pc_succ_corr Hn1 Hnth Hterm). exact: (phia_addr_code Hn1). }
       rewrite En'. exact: (Hc2' _ _ Henc2n). }
-    (* recover [s1']'s shape, [ev = None], and the two LRC colour checks from [NEXT] *)
     have [Hs1' [Hev [Hcur [Hbel [ei1 Hevi1]]]]] := merged_nop_inv Hic Hm1n NEXT.
     subst s1' ev.
-    (* [evi s2] is defined: its [rcom] register exists (register relation preserves the domain) *)
     have [a1 Ha1] : exists a1, reg rcom = Some a1.
     { case E: (reg rcom) => [a1|]; first by exists a1.
       move: Hevi1; rewrite /Symbolic.evi E /=. by move=> []. }
     have [ei2 Hevi2] : exists ei, Symbolic.evi s2 = Some ei.
     { have [vrc Hrc] := reg_some Hreg Ha1. rewrite /Symbolic.evi Hrc /=. by eexists. }
-    (* the current padded cell is code, same instr-tag colour and successor colour as [q]'s *)
     have Hic2 : is_code (taga v2) by rewrite Htag2 -Htm.
     have Hcur2 : color (taga v2) == match taga (Symbolic.pc s2) with Level _ c => c end.
     { rewrite Htag2 -Htm Hpct. exact: Hcur. }
@@ -179,13 +166,13 @@ Proof.
     exists (@Symbolic.State mt lrc_tags unit (Symbolic.mem s2) (Symbolic.regs s2)
               ((vala (Symbolic.pc s2) + 1)%w @ (taga (Symbolic.pc s2))) (Symbolic.internal s2)).
     split.
-    - (* the padded run mirrors the NOP step *)
+    -
       eapply step_nop.
       + exact: (Symbolic.state_eta s2).
       + rewrite /Symbolic.pcv Hpcv. exact: Hm2pc.
       + exact: Hnop2.
       + exact: (merged_nop_intro Hic2 Hm2n Hcur2 Hbel2 Hevi2).
-    - (* [match_pad] is preserved: memory/registers unchanged, pc advances under φ *)
+    -
       split.
       { rewrite /= Hpcv.
         have Hpcc := pc_succ_corr Hn1 Hnth Hterm. rewrite -Hpweq -Hpw1 in Hpcc. exact: Hpcc. }
@@ -198,7 +185,7 @@ Proof.
       split; first exact: Hc2'.
       split; first exact: Hnc1.
       exact: Hnc2.
-  - (* const *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -281,7 +268,7 @@ Proof.
       split; first exact: Hc2'.
       split; first exact: Hnc1.
       exact: Hnc2.
-  - (* mov *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -378,7 +365,7 @@ Proof.
       split; first exact: Hc2'.
       split; first exact: Hnc1.
       exact: Hnc2.
-  - (* binop *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -467,7 +454,7 @@ Proof.
       split; first exact: Hc2'.
       split; first exact: Hnc1.
       exact: Hnc2.
-  - (* load *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -573,7 +560,7 @@ Proof.
           rewrite taga_at switch_val_vtag; case Ea: (is_address (vtag t2));
           [ move=> Hni; by case: (Hni erefl)
           | move=> _; have Et2 := is_addrF_Other Ea; rewrite Et2 in Hvm; apply: Hvm; discriminate ]. }
-  - (* store *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -681,7 +668,7 @@ Proof.
       { apply: (memrel_bwd Hnc2); first by rewrite !taga_at.
         move=> Hni; rewrite !vala_at taga_at switch_val_vtag; move: Hni;
           rewrite taga_at switch_val_vtag; exact: Hv2r. }
-  - (* jump *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     have Hmp := Hm.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
@@ -706,18 +693,15 @@ Proof.
       exact: (Hc2' _ _ Henc2). }
     have Hic2 : is_code (taga v2) by rewrite Htag2 -Htm.
     have Hdec2c : decode_instr (vala v2) = Some (Jump r) by rewrite Hdec2 Hmmp.
-    (* evi: the comm register [rcom] is read; extract it (else [evi]=None ⟹ NEXT=None). *)
     have [a1 Ha1] : exists a1, reg rcom = Some a1.
     { case E: (reg rcom) => [a1|]; first by exists a1. exfalso.
       move: NEXT. by rewrite /next_state_updates_and_pc /next_state /Symbolic.evi E /=. }
     have [ei2 Hevi2] : exists ei, Symbolic.evi s2 = Some ei.
     { have [vrc Hrc] := reg_some Hreg Ha1. rewrite /Symbolic.evi Hrc /=. by eexists. }
-    (* the s2-side register-clear list is defined (same register domain via the weak match). *)
     have [l2 Hl2] : exists l2, Symbolic.reg_clear_list (Symbolic.regs s2) t1 = Some l2.
     { apply: reg_clear_list_aux_total => e He.
       have [a Ha] := reg_clear_list_aux_dom CLEAR He.
       have [b Hb] := reg_some Hreg Ha. by exists (b @ (taga a)). }
-    (* s2-side values of the jumped register [r] and [ra]. *)
     have [v2r [HRs2 Hv2r]] := reg_get Hreg RW.
     have [rav2 HRas2] := reg_some Hreg RA.
     have Hevi1 : Symbolic.evi (@Symbolic.State mt lrc_tags unit mem0 reg (pcw @ tpc0) extra)
@@ -728,7 +712,7 @@ Proof.
     have Hcoltv2 : color (taga v2) = color ti by rewrite Htag2 -Htm.
     have Hpct' : taga (Symbolic.pc s2) = Level level ctpc by rewrite Hpct.
     case: Hdisj => [[Hbel1 Ht1] | [n0 [celltgt [rcv [Hmw0 [Hbel1 [Ht1 [Hlvl Hrcom]]]]]]]].
-    + (* internal jump: [t1 = InternalJump]; the [s2] run mirrors it to [φ w] *)
+    +
       have HN1 : @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit
                    (@Symbolic.State mt lrc_tags unit mem0 reg
                       (pcw@((Level level ctpc) : Symbolic.tag_type lrc_tags Symbolic.P)) extra)
@@ -780,7 +764,7 @@ Proof.
         split; first exact: Hc2'.
         split; first exact: Hnc1.
         exact: Hnc2.
-    + (* return jump: cross-component, registers invalidated, [ERet] event *)
+    +
       have Ht1' : t1 = Ret level.-1 by rewrite Ht1 Hlvl.
       have Hlv0 : 0 < level by rewrite Hlvl.
       have Hbelne : color ti != color (taga celltgt) by move: Hbel1; rewrite belong_someE.
@@ -792,7 +776,6 @@ Proof.
         := return_clear (s1 := @Symbolic.State mt lrc_tags unit mem0 reg
                                   (pcw@((Level level ctpc) : Symbolic.tag_type lrc_tags Symbolic.P)) extra)
              (s2 := s2) Hwreg RA RW Hrcom Hrne Harne CLEAR.
-      (* the s1 (unpadded) NEXT result: cross-component RETURN *)
       have HN1 : @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit
                    (@Symbolic.State mt lrc_tags unit mem0 reg
                       (pcw@((Level level ctpc) : Symbolic.tag_type lrc_tags Symbolic.P)) extra)
@@ -815,7 +798,6 @@ Proof.
         - exact: Hevi1.
         - exact: Hsd1. }
       move: NEXT; rewrite HN1 => -[= Hs1eq Heveq].
-      (* the s2 (padded) target cell + register reads + event input *)
       have [celltgt2 [Hm2tgt Htceq]] := jump_target_corr Hc1 Hc1' Hc2' Hnc1 Hmw0.
       have Hrcom2 : Symbolic.regs s2 rcom = Some (rcv @ Other) := reg_otherE Hreg Hrcom erefl.
       have Ha1v : vala a1 = rcv.
@@ -827,7 +809,6 @@ Proof.
       have HRs2r : Symbolic.regs s2 r = Some ((phia w) @ (Ret level.-1)).
       { by rewrite HRs2 Ev2r Ht1'. }
       have Hbelne2 : color (taga v2) != color (taga celltgt2) by rewrite Hcoltv2 Htceq.
-      (* the s2 (padded) NEXT result *)
       have HN2 : @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit
                    s2 (IVec (OP JUMP) (taga (Symbolic.pc s2)) (taga v2) (HSeqCons rat l2))
                    [:: RegRead ra, RegRead r & reg_clear_read] (phia w)
@@ -847,7 +828,6 @@ Proof.
         - by rewrite -Ht1'; exact: Hl2.
         - exact: Hevi2v.
         - exact: Hsd2. }
-      (* projections of [s1'] (kept abstract) *)
       have Em1 : Symbolic.mem s1' = mem0 by rewrite -Hs1eq; exact: Hmsd1.
       have Er1 : Symbolic.regs s1' = Symbolic.regs sd1 by rewrite -Hs1eq.
       have Epc1 : Symbolic.pc s1' = (w @ (build_tpc level.-1 (color (taga celltgt)))) by rewrite -Hs1eq.
@@ -857,7 +837,7 @@ Proof.
       have Em2 : Symbolic.mem s2w = Symbolic.mem s2 := Hmsd2.
       exists s2w.
       split.
-      * (* the padded run mirrors the RETURN step *)
+      *
         rewrite -Heveq.
         eapply step_jump.
         - exact: (Symbolic.state_eta s2).
@@ -867,7 +847,7 @@ Proof.
         - exact: HRas2.
         - by rewrite -Ht1'; exact: Hl2.
         - by rewrite HN2 Hcoltv2 Ha1v -Htceq.
-      * (* [match_pad s1' s2w] *)
+      *
         split; first (rewrite Epc1 /s2w !vala_at; reflexivity).
         split; first by rewrite Epc1 /s2w !taga_at Htceq.
         split; first by rewrite Ei1 /s2w Hisd2 Hisd1 Hint.
@@ -878,7 +858,7 @@ Proof.
         split; first by move=> w0 a; rewrite Em2; exact: (Hc2' w0 a).
         split; first by rewrite Em1 Em2; exact: Hnc1.
         by rewrite Em1 Em2; exact: Hnc2.
-  - (* bnz *)
+  -
     rename pc0 into pcw; rename ti0 into ti.
     move: Hm => [Hpcv [Hpct [Hint [Hreg [Hc1 [Hc1' [Hc2 [Hc2' [Hnc1 Hnc2]]]]]]]]].
     have Hic : is_code ti.
@@ -910,7 +890,6 @@ Proof.
     have Hic2 : is_code (taga v2) by rewrite Htag2 -Htm.
     have Hdec2c : decode_instr (vala v2) = Some (Bnz r OFFp).
     { rewrite Hdec2. have H := Hmmq. move: H => /= [= <- _]. by []. }
-    (* fall-through (not-taken) successor machinery, shared with the nop recipe *)
     have Hterm : is_term (MrBnz r0 l0) = false by [].
     have Hk1 : k.+1 < size (code q) by apply: (nonterm_succ_lt Hklt Hnth Hterm).
     have Hpw1 : (pcw + 1)%w = word_of_nat (k.+1 + pc0).
@@ -931,7 +910,6 @@ Proof.
     have Hvn : taga v2n = taga v1n by rewrite Htag2n Htm'.
     have Hpcc : (phia pcw + 1)%w = phia (pcw + 1)%w.
     { have H := pc_succ_corr Hk1 Hnth Hterm. rewrite -Hpweq -Hpw1 in H. exact: H. }
-    (* per-case target cell + φ pc-correspondence, bundled to avoid a top-level branch *)
     have [celln [celln2 [Hmem0pc' [Hmem2pc' [Hcol Hpccorr]]]]] :
       exists celln celln2,
         mem0 (pcw + (if w == 0%w then 1%w else swcast n))%w = Some celln /\
@@ -940,13 +918,13 @@ Proof.
         (vala (Symbolic.pc s2) + (if w == 0%w then 1%w else swcast OFFp))%w
           = phia (pcw + (if w == 0%w then 1%w else swcast n))%w.
     { destruct (w == 0%w) eqn:Hw0.
-      - (* not taken: fall through to the successor cell *)
+      -
         exists v1n, v2n.
         split; first exact: Hm1n.
         split; first exact: Hm2n.
         split; first by rewrite Hvn.
         rewrite Hpcv. exact: Hpcc.
-      - (* taken: the branch label resolves to an in-code target cell *)
+      -
         have [mtgt Hfind] := bnz_labels_resolved Hnth.
         have Hmlt : mtgt < size (code q) by exact: (findopt_lt Hfind).
         have Hlpfq : lpf (code q) l0 (pc0 + k) = pc0 + mtgt by rewrite Hfind.
@@ -1012,9 +990,9 @@ Proof.
       split; first exact: Hc2'.
       split; first exact: Hnc1.
       exact: Hnc2.
-  - (* jal *)
+  -
     exact: (pad_step_fwd_jal Hm Hvalid PC RA INST OLD CLEAR NEXT).
-  - (* syscall *)
+  -
     exact: (pad_step_fwd_sys Hm Hvalid PC GETCALL CALL).
 Qed.
 

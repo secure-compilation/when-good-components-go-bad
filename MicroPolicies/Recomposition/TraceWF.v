@@ -1,24 +1,3 @@
-(* Phase 5, tier 3a (part 1): event-level facts for MP trace
-   well-formedness.
-
-   Every event emitted by the micro-policy machine ([step_mp], and hence by
-   the overlay/UB-restricted runs) satisfies, at the point of emission:
-     - its source component is the running colour,
-     - it is CROSS-component (the [belong]-false branches of the LRC
-       JUMP/JAL rules are the only event emitters),
-     - a call's procedure and allowed-caller list come from the target
-       cell's ENTRY tag, with the caller listed.
-
-   These are the per-event ingredients of [well_formed_event]; combined
-   with the entry-tag soundness invariant (part 2, forthcoming) they give
-   the import condition, and with the shadow-stack invariant (part 3) the
-   bracketing condition of [well_formed_trace].
-
-   This file is deliberately S-FREE (no [RecompositionContext]): the
-   handful of functor-internal helpers it needs from PcColor.v
-   ([nsuap_event_inv], [get_tni_color_eq], [run_syscall_event_none]) are
-   reproduced verbatim. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -57,8 +36,6 @@ Import Types.
 Import Symbolic.
 
 Local Notation state := (@Symbolic.state mt LRC.lrc_tags unit).
-
-(* ==================== functor-free helper copies ==================== *)
 
 Lemma get_tni_color_eq : forall t : tag_type lrc_tags Symbolic.M,
   get_tni_color (Some t) = Some (color t).
@@ -103,9 +80,6 @@ Proof.
     split; [exact Htr | split; [exact: Edsu | by []]].
 Qed.
 
-(* ==================== small monitor-level helpers ==================== *)
-
-(* the component of a pc tag *)
 Definition pct_comp (t : tag_type lrc_tags Symbolic.P) : Component.id :=
   match t with Level _ c => c end.
 
@@ -128,8 +102,6 @@ Proof.
   exact: Hmem.
 Qed.
 
-(* the [tni] fed to the transfer function is the tag of an existing
-   next-instruction memory cell *)
 Lemma tni_cell : forall (s : state) (w : mword mt) tn,
   (match mem s w with
    | Some ni => Some (taga ni)
@@ -140,9 +112,6 @@ Proof.
   move=> s w tn. case: (mem s w) => [[iv it]|] //= [->]. by exists iv.
 Qed.
 
-(* ==================== memory-effect helpers (functor-free copies) ==================== *)
-
-(* generic (any-event) version of [nsuap_event_inv] *)
 Lemma nsuap_inv : forall (st s' : state) (op : opcode) tpc ti
     (ts : hseq (tag_type lrc_tags) (inputs op)) updts pc' ev,
   @next_state_updates_and_pc mt ops lrc_tags LRC.transfer unit st
@@ -309,10 +278,6 @@ Proof.
   by case: (obind_inv H) => s0 [Hs0] [= <-].
 Qed.
 
-(* ==================== cell-shape preservation ==================== *)
-
-(* the step-invariant part of a memory tag: its colour, entry data, and
-   code flag (only the value tag [vtag] ever changes, via [switch_val]) *)
 Definition tag_shape (t : tag_type lrc_tags Symbolic.M)
     : Component.id * option (Procedure.id * seq Component.id) * bool :=
   (color t, entry t, is_code t).
@@ -321,7 +286,6 @@ Lemma switch_val_shape : forall (t : tag_type lrc_tags Symbolic.M) v a c,
   switch_val t v = (a, c) -> tag_shape a = tag_shape t.
 Proof. by move=> [vt col ent icd] v a c /= [<- _]. Qed.
 
-(* every new memory cell of the allocator carries [def_mem_tag _ false] *)
 Lemma alloc_cell_shape : forall (N : nat) (s s' : state),
   alloc_fun (NC:=N) s = Some s' ->
   forall w d, mem s' w = Some d ->
@@ -350,8 +314,6 @@ Proof.
     move=> p /mapP [n _ ->] /=. by [].
 Qed.
 
-(* the LOAD transfer re-tags the loaded cell through [switch_val]: the
-   output M tag has the shape of the input cell tag *)
 Lemma transfer_load_shape :
   forall (tpc : tag_type lrc_tags Symbolic.P) (ti : tag_type lrc_tags Symbolic.M)
          (t1 : tag_type lrc_tags Symbolic.R) (t2 : tag_type lrc_tags Symbolic.M)
@@ -375,8 +337,6 @@ Proof.
   - exact: (switch_val_shape E).
 Qed.
 
-(* the STORE transfer writes the target cell with a [switch_val]-derived
-   tag: the written M tag has the shape of the old cell tag *)
 Lemma transfer_store_shape :
   forall (tpc : tag_type lrc_tags Symbolic.P) (ti : tag_type lrc_tags Symbolic.M)
          (t1 t2 : tag_type lrc_tags Symbolic.R) (told : tag_type lrc_tags Symbolic.M)
@@ -399,7 +359,6 @@ Proof.
   - exact: (switch_val_shape E).
 Qed.
 
-(* concrete memory effect of the LOAD update list *)
 Lemma ndsu_load_mem : forall (st st0 : state)
     (ta : tag_type lrc_tags Symbolic.R) (tm : tag_type lrc_tags Symbolic.M)
     (tb : tag_type lrc_tags Symbolic.R) (r1 r2 : reg mt) (w1 wv v1 : mword mt)
@@ -428,7 +387,6 @@ Proof.
   by rewrite -Est3 -E3 /= -E2 /= (updm_set Hmm) Hm1 Ea2 /=.
 Qed.
 
-(* concrete memory effect of the STORE update list *)
 Lemma ndsu_store_mem : forall (st st0 : state)
     (ta tb : tag_type lrc_tags Symbolic.R) (tm : tag_type lrc_tags Symbolic.M)
     (r1 r2 : reg mt) (w1 w2 : mword mt),
@@ -454,18 +412,12 @@ Proof.
   by rewrite -Est3 -E3 /= (updm_set Hmm) Hm2 Hm1.
 Qed.
 
-(* the reflexive-transitive cell-shape relation carried along runs *)
 Definition mem_shape_extends
     (m0 m1 : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)}) : Prop :=
   forall w d, m1 w = Some d ->
     (exists d0, m0 w = Some d0 /\ tag_shape (taga d) = tag_shape (taga d0))
     \/ (entry (taga d) = None /\ is_code (taga d) = false).
 
-(* ==================== entry-tag interface soundness ==================== *)
-
-(* every allowed-caller list recorded in an entry tag is sanctioned by the
-   interface: this is the invariant that turns [step_event_facts]'s call
-   conclusion into [well_formed_event]'s import condition *)
 Definition entry_sound (intf : Program.interface)
     (m : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)}) : Prop :=
   forall w iv tn p lc c,
@@ -482,13 +434,6 @@ Proof.
     rewrite E1. apply: (Hsnd _ _ _ _ _ _ Hd0 _ Hc). by rewrite -E2.
 Qed.
 
-(* ==================== transfer-level event facts ==================== *)
-
-(* An event-producing LRC transfer emits a CROSS-component event whose
-   source is the running (pc) component and whose target is the colour of
-   the (present) next-instruction cell; a call's procedure and
-   allowed-caller list come from that cell's entry tag, with the caller
-   listed. *)
 Lemma transfer_event_facts :
   forall (op : opcode) (tpc : tag_type lrc_tags Symbolic.P)
          (ti : tag_type lrc_tags Symbolic.M)
@@ -536,7 +481,7 @@ Proof.
     case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
     move: H. case: ifP => // _ H.
     move: H. case E: (switch_val _ _) => [a c] /=. by move=> [=].
-  - (* JUMP — the cross-component return branch emits *)
+  -
     rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts))) in H.
     case: (obind_inv H) => u0 [Hcc {}H].
@@ -557,7 +502,7 @@ Proof.
   - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
     case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
     by move: H => [=].
-  - (* JAL — the cross-component call branch emits *)
+  -
     rewrite (hseq_eta ts) (hseq_eta (hsbehead ts))
             (hseq_eta (hsbehead (hsbehead ts))) in H.
     case: (obind_inv H) => u0 [Hcc {}H].
@@ -590,10 +535,6 @@ Proof.
   - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
 Qed.
 
-(* ==================== step-level event facts ==================== *)
-
-(* the common body of the instruction cases of [step_event_facts], on a
-   destructured pre-state *)
 Lemma step_event_facts_aux :
   forall (m : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)})
          (r : {fmap reg mt -> atom (mword mt) (tag_type lrc_tags Symbolic.R)})
@@ -630,10 +571,6 @@ Section StepEventFacts.
 
   Variable NC : nat.
 
-  (* Every event of the micro-policy machine is a cross-component event out
-     of the running component; a call's procedure and allowed-caller list
-     come from the entry tag of an existing memory cell of the target's
-     colour. *)
   Lemma step_event_facts : forall (s s' : state) e,
     step_mp s s' (Some e) (NC := NC) ->
     [/\ cur_comp_of_event e = rsc_color_of s,
@@ -644,49 +581,43 @@ Section StepEventFacts.
               & exists lc, entry tn = Some (p, lc) /\ c \in lc]].
   Proof.
     move=> s s' e Hstep. inversion Hstep.
-    - (* nop *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* const *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* mov *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* binop *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* load *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* store *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* jump *)
+    -
       unfold mvec in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* bnz *)
+    -
       unfold mvec, pc' in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* jal *)
+    -
       unfold mvec, pc' in NEXT.
       rewrite ST in NEXT *. exact: (step_event_facts_aux NEXT).
-    - (* syscall: run_syscall never emits an event *)
+    -
       have Hev := run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* -------- cell-shape preservation along ANY machine step -------- *)
-
-  (* A machine step never changes the colour, entry data, or code flag of
-     an existing memory cell, and only the allocator creates cells — all of
-     them entry-free non-code.  (Only LOAD/STORE re-tag a cell, both via
-     [switch_val]; JAL rewrites the return cell with its own tag.) *)
   Lemma step_cell_shape : forall (s s' : state) ev,
     step_mp s s' ev (NC := NC) ->
     mem_shape_extends (mem s) (mem s').
   Proof.
     move=> s s' ev Hstep. inversion Hstep.
-    - (* nop *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -699,7 +630,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* const *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -712,7 +643,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* mov *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -725,7 +656,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* binop *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -738,7 +669,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* load *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have [ta [tm [tb [Etr Esh]]]] := transfer_load_shape Htr.
@@ -750,7 +681,7 @@ Section StepEventFacts.
       + left. exists (w2 @ t2). split; first exact: Hcell.
         by rewrite /= Esh.
       + left. by exists d.
-    - (* store *)
+    -
       rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have [ta [tb [tm [Etr Esh]]]] := transfer_store_shape Htr.
@@ -762,7 +693,7 @@ Section StepEventFacts.
       + left. exists (old @ told). split; first exact: Hcell.
         by rewrite /= Esh.
       + left. by exists d.
-    - (* jump *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -775,7 +706,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w0 d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* bnz *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hms : mem s' = mem s.
@@ -788,7 +719,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w0 d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* jal *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem _]]]]]] := nsuap_inv NEXT.
       have Hcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -806,7 +737,7 @@ Section StepEventFacts.
             (case: Hin || exact: (no_mr_reg_clear_read Hin))). }
       move=> w0 d Hd. left. exists d. split; last by [].
       by rewrite -Hms.
-    - (* syscall: alloc *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       move=> w d Hd.
       case: (alloc_cell_shape Halloc Hd) => [Hold | Hfresh].
@@ -814,10 +745,6 @@ Section StepEventFacts.
       + by right.
   Qed.
 
-  (* -------- star-level corollaries -------- *)
-
-  (* Every event of a machine run is well-formed for any interface whose
-     import relation sanctions the entry tags of the initial memory. *)
   Lemma star_events_wf : forall (W : program) (intf : Program.interface)
       (s : state) tw (s' : state),
     Star (mp_sem NC W) s tw s' ->
@@ -828,9 +755,9 @@ Section StepEventFacts.
     elim: Hstar => [//| s1 t1 s2 t2 s3 tw0 Hstep Hstar IH Etw Hsnd].
     rewrite Etw {Etw}. move: Hstep. rewrite /= /prog_step_mp.
     case: t1 => [|e [|??]] // Hstep.
-    - (* silent step *)
+    -
       apply: IH. exact: (entry_sound_extends (step_cell_shape Hstep) Hsnd).
-    - (* event step *)
+    -
       rewrite /=. apply/andP. split; last first.
       + apply: IH. exact: (entry_sound_extends (step_cell_shape Hstep) Hsnd).
       + have [Hcur Hneq Hcall] := step_event_facts Hstep.

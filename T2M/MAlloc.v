@@ -1,8 +1,3 @@
-(** * T2M — the ALLOC diagram: one T [Alloc] step is six me steps (the
-    compiled [mov/jal alloc_label/mov] stub, the jal landing on the
-    unmapped syscall entry so [step_syscall] runs [alloc_fun]).  Holds
-    the mask/val region-arithmetic toolkit and the [sim_alloc] assembly. *)
-
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -81,9 +76,6 @@ Hypothesis Hsmall :
 Hypothesis HNCws : NC <= word_size mt.
 Hypothesis HNCal : Merged.alloc_label < 2 ^ (word_size mt - NC).
 
-(* ================================================================== *)
-(* 1. The mask/val toolkit: region membership as a val interval.      *)
-(* ================================================================== *)
 
 Lemma prefix_val (m : nat) :
   m < 2 ^ NC ->
@@ -138,7 +130,6 @@ congr (_ %/ 2 ^ _ * 2 ^ _).
 - exact: Evsh.
 Qed.
 
-(* region membership IS a val interval *)
 Lemma pfilter_val (c0 : nat) (w : word (word_size mt)) :
   1 + c0 < 2 ^ NC ->
   (word.andw w (LRC.mask (NC := NC))
@@ -176,12 +167,10 @@ apply/idP/idP.
             (esym (prefix_val Hc))).
 Qed.
 
-(* the word order IS the val order (for [domm_filter_last_max]) *)
 Lemma word_leq_val (k : nat) (w1 w2 : word k) :
   Ord.leq w1 w2 = ((\val w1 : nat) <= (\val w2 : nat)).
 Proof. by []. Qed.
 
-(* addw is nat addition when the sum fits *)
 Lemma val_addw_small (w : word (word_size mt)) (n : nat) :
   \val w + n < 2 ^ word_size mt ->
   (\val (addw w (word.as_word (ssrint.Posz n))) : nat) = \val w + n.
@@ -191,7 +180,6 @@ have HnW : n < 2 ^ word_size mt by lia.
 by rewrite valw_addw valw_as_word modnDmr (modn_small H).
 Qed.
 
-(* an in-region endpoint EXCLUDES wrap-around *)
 Lemma addw_region_nowrap (c0 : nat) (w : word (word_size mt)) (n : nat) :
   1 + c0 < 2 ^ NC ->
   n <= 2 ^ (word_size mt - NC) ->
@@ -217,13 +205,11 @@ rewrite Hval in Hep.
 by lia.
 Qed.
 
-(* the allocator's let-bound filter and bump pointer, named *)
 Definition pfilterC (c0 : nat) : pred (mword mt) :=
   fun mw => word.andw mw (LRC.mask (NC := NC))
             == LRC.component_memory_prefix (NC := NC)
                  (ssrint.Posz (1 + c0)).
 
-(* Coq's List.last/List.filter (the allocator's spelling) vs seq's *)
 Lemma List_filter_seq (T : Type) (p : pred T) (l : seq T) :
   List.filter p l = filter p l.
 Proof. by elim: l => //= a l ->. Qed.
@@ -237,14 +223,12 @@ have E1 : List.last [:: a, b & l'] d = List.last (b :: l') d by [].
 by rewrite E1 (IH d).
 Qed.
 
-(* the allocator's OWN spelling, so its do-chain matches syntactically *)
 Definition maxaddr (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 : nat) : mword mt :=
   List.last
     (List.filter (pfilterC c0) (domm m))
     (LRC.component_memory_prefix (NC := NC) (ssrint.Posz (1 + c0))).
 
-(* …but reason over the seq forms *)
 Lemma maxaddrE (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 : nat) :
   maxaddr m c0
@@ -254,7 +238,6 @@ Proof.
 by rewrite /maxaddr List_filter_seq List_last_seq.
 Qed.
 
-(* the bump pointer sits in the component's region *)
 Lemma maxaddr_lo (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 : nat) :
   1 + c0 < 2 ^ NC ->
@@ -286,7 +269,6 @@ case E: (filter (pfilterC c0) (domm m)) => [|x s].
   by rewrite E0.
 Qed.
 
-(* strictly above the bump pointer, inside the region: UNMAPPED *)
 Lemma above_max_none (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 : nat) (w : mword mt) :
   1 + c0 < 2 ^ NC ->
@@ -315,9 +297,6 @@ have Habs := leq_ltn_trans Hle Hmax.
 by rewrite ltnn in Habs.
 Qed.
 
-(* ================================================================== *)
-(* 2. The pc relation K cells later (the ALLOC stub spans five).      *)
-(* ================================================================== *)
 
 Lemma pc_rel_nextK (K : nat) (tpc : Pointer.t) (w : mword mt)
     (i : Transitional.instr) (tg : mem_tag) :
@@ -380,11 +359,7 @@ case: Hpc => cseg Hside Hseg Hle Hw.
 Qed.
 
 
-(* ================================================================== *)
-(* 3. The allocator, characterized.                                   *)
-(* ================================================================== *)
 
-(* every fresh-block key is nat-addition on the bump pointer *)
 Lemma bloc_key_val (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 len n : nat) :
   1 + c0 < 2 ^ NC ->
@@ -408,11 +383,9 @@ by lia.
 Qed.
 
 
-(* user registers live below the syscall bank *)
 Lemma to_nat_le6 (r : register) : Intermediate.Register.to_nat r <= 6.
 Proof. by case: r. Qed.
 
-(* register-key disequality, once and for all *)
 Lemma wkey_neq (i j : nat) :
   i < 32 -> j < 32 -> i <> j ->
   (@word_of_nat (reg_field_size mt) i
@@ -423,7 +396,6 @@ rewrite (won_eqE (small_lt_reg Hi) (small_lt_reg Hj)).
 apply/negP => /eqP E. by lia.
 Qed.
 
-(* the allocator, fully characterized against a fitting request *)
 Lemma alloc_fun_spec (st : @Symbolic.state mt lrc_tags unit)
     (c0 lvl : nat) (wret wsz : mword mt) (len : nat)
     (rc : atom (mword mt) mem_tag) (a16 : @ratom mt) :
@@ -494,9 +466,6 @@ case: ifP => [Hneg|Hneg].
 Qed.
 
 
-(* ================================================================== *)
-(* 4. Glue: the allocator's block in [minj_alloc]'s spelling.         *)
-(* ================================================================== *)
 
 Lemma region_end_le (c0 : nat) :
   1 + c0 < 2 ^ NC ->
@@ -508,7 +477,6 @@ rewrite -{2}(subnKC HNCws) expnD.
 exact: leq_mul H2 (leqnn _).
 Qed.
 
-(* the endpoint's val, and hence every key's, in nat form *)
 Lemma alloc_end_val
     (m : {fmap mword mt -> atom (mword mt) mem_tag}) (c0 len : nat) :
   1 + c0 < 2 ^ NC ->
@@ -532,7 +500,6 @@ have Hhi : \val (word.addw (maxaddr m c0)
 by rewrite Ev in Hhi.
 Qed.
 
-(* a key outside the association list is unmapped *)
 Lemma mkfmap_notin_None (T : ordType) (S : Type)
     (kvs : seq (T * S)) (k : T) :
   k \notin [seq p.1 | p <- kvs] ->
@@ -544,7 +511,6 @@ rewrite setmE (negbTE Hne).
 exact: IH.
 Qed.
 
-(* the allocator's block, re-keyed to [word_of_nat (newbase + o)] *)
 Lemma alloc_block_rekey
     (m : {fmap mword mt -> atom (mword mt) mem_tag}) (c0 len : nat) :
   1 + c0 < 2 ^ NC ->
@@ -583,9 +549,6 @@ by rewrite Ekey.
 Qed.
 
 
-(* ================================================================== *)
-(* 5. The diagram: one T Alloc step is SIX me steps.                  *)
-(* ================================================================== *)
 
 Lemma sim_alloc (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)

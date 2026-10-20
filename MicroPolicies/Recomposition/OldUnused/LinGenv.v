@@ -1,13 +1,3 @@
-(* Task #14 (I→Merged correctness): the GENV block↔procedure-id layer.
-
-   The Intermediate machine's pc addresses procedures by the BLOCK id
-   reserved for them ([reserve_component_blocks] zips consecutive fresh
-   blocks against the procedure list), while the linearizer's position
-   machinery (LinPos) is keyed by PROCEDURE id.  This file characterizes
-   [prepare_global_env]'s procedure map and entry points: block
-   [nb0 + j] holds the j-th procedure's code (elementsm order), and an
-   entry point of P is the block at P's index. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -28,8 +18,6 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
-
-(* ==================== reserved blocks are consecutive ==================== *)
 
 Lemma map_iota_rcons (f : nat -> nat) (n : nat) :
   [seq f i | i <- iota 0 n.+1] = rcons [seq f i | i <- iota 0 n] (f n).
@@ -56,8 +44,6 @@ elim: n => [|n IH] m' bs.
   + rewrite Ebs Eb En map_iota_rcons cats1. by [].
   + rewrite En' En. by rewrite addnS.
 Qed.
-
-(* ==================== small toolkit ==================== *)
 
 Lemma nth_error_iota (m n j : nat) :
   j < n -> List.nth_error (iota m n) j = Some (m + j).
@@ -150,9 +136,6 @@ Qed.
 Lemma length_sizeE (T : Type) (l : seq T) : length l = size l.
 Proof. by elim: l => //= x l ->. Qed.
 
-(* ==================== the genv procedure map ==================== *)
-
-(* the first block reserved for component C's procedures *)
 Definition proc_nb0 (p : program) (C : Component.id) : Block.id :=
   ComponentMemory.next_block
     (ComponentMemory.prealloc (odflt emptym (prog_buffers p C))).
@@ -194,7 +177,7 @@ have Egv : genv_procedures (prepare_global_env p) C
   by rewrite Er /=. }
 exists (mkfmap (zip bs (unzip2 (elementsm Cprocs_src)))).
 split=> //.
-- (* forward: the j-th procedure sits at block nb0 + j *)
+-
   move=> j P Pcode Hj.
   have Hjn : j < size (elementsm Cprocs_src)
     := nth_error_size_list Hj.
@@ -208,7 +191,7 @@ split=> //.
     by [].
   + have := map_nth_error_g snd Hj.
     by [].
-- (* inverse: every block entry is some procedure's code *)
+-
   move=> b Pcode Hb0.
   move: Hb0. rewrite mkfmapE. move=> Hb0.
   have Hb := getm_def_In Hb0.
@@ -228,8 +211,6 @@ split=> //.
   + rewrite Hpair. by rewrite /= in Epc; rewrite Epc.
 Qed.
 
-(* ==================== the entry points ==================== *)
-
 Lemma In_pmap_inv (A B : Type) (f : A -> option B) (s : seq A) (y : B) :
   List.In y (pmap f s) ->
   exists x, List.In x s /\ f x = Some y.
@@ -246,7 +227,6 @@ case Ef: (f x) => [y0|] /=.
   exists x0. split; [by right | exact: H2].
 Qed.
 
-(* an entry point of P is the block at P's position in the procedure list *)
 Lemma genv_entry_spec (p : program) (C : Component.id)
     (Cprocs_src : NMap code) (P : Procedure.id) (b : Block.id) :
   C \in domm (prog_interface p) ->

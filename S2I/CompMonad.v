@@ -51,7 +51,6 @@ Instance compilation_monad {env} : Monad (Comp.t env) := {
   bind := Comp.bind env
 }.
 
-(* Success inversions: the peeling toolkit for reasoning about compiled output. *)
 Section CompInv.
   Variable env: Type.
 

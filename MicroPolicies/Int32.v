@@ -23,8 +23,6 @@ Program Definition concrete_int_32_mt : machine_types := {|
 
 Definition mt := concrete_int_32_mt.
 
-(* Field sizes of the concrete machine, exposed as equations so downstream files can use them
-   without making [mt] transparent (which would let [simpl] explode the word operations). *)
 Lemma reg_field_size_mt : reg_field_size mt = 5.
 Proof. by []. Qed.
 Lemma word_size_mt : word_size mt = 32.

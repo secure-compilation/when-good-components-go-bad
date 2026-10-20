@@ -1,10 +1,3 @@
-(** * T2M disc_inv: compiler coherence for the stack-class map.
-
-    [compile_expr_frag]: every compiled expression fragment carries a
-    class map passing the fragment check, entering and leaving at
-    (PBody, sg, None) (expressions have net-zero stack effect);
-    assembled with MSig's frag algebra, E_if discharging promises. *)
-
 Require Import Common.Definitions.
 Require Import Lib.Extra.
 
@@ -29,13 +22,10 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* the top mid-body value (top taints + top custody), and the
-   general-taint one *)
 Local Notation bv sg :=
   (SV PBody sg None ADead ADead SCused true true true).
 Local Notation bvt sg a b c := (SV PBody sg None a b c true true true).
 
-(* exits weaken to the tops *)
 Lemma sv_le_topt (ph : sphase) (sg : seq class3) (pd : option class3)
     (a1 a2 : taint) (c : scst) (o ek ag : bool) :
   sv_le (SV ph sg pd a1 a2 c o ek ag) (SV ph sg pd ADead ADead SCused o ek ag).
@@ -43,18 +33,15 @@ Proof.
 exact: sv_le_taint (t_le_top a1) (t_le_top a2) (sc_le_top c).
 Qed.
 
-(* CU pushes preserve RA-freeness *)
 Lemma nocra_rcons_u (sg : seq class3) :
   nocra sg -> nocra (rcons sg CU).
 Proof. by rewrite /nocra has_rcons. Qed.
 
-(* pushes preserve the body-baseline CArg at position 1 *)
 Lemma bc_rcons (sg : seq class3) (k : class3) :
   nth_error sg 1 = Some CArg ->
   nth_error (rcons sg k) 1 = Some CArg.
 Proof. by case: sg => [|x [|y r]]. Qed.
 
-(* the emitted generic binop, at its post-pop taints *)
 Lemma frag_binop_aux (scr0 : Pointer.t) (L : label -> option sv)
     (op : Values.binop) (tg : mem_tag) (sg : seq class3) (b : taint)
     (c : scst) :
@@ -379,11 +366,7 @@ Qed.
 
 Arguments compile_expr_frag [e s c s'] _ sg a1 a2 sc L _ _.
 
-(* ------------------------------------------------------------------ *)
-(* The whole-procedure spine.                                         *)
-(* ------------------------------------------------------------------ *)
 
-(* the non-main wrapper (external entry) as an I-level literal *)
 Local Notation wrapNM sz pl :=
   ([:: IConst (IInt 1) R_ONE; IMov R_SP R_AUX1;
        IConst (IInt sz) R_SP; IAlloc R_SP R_SP;
@@ -397,26 +380,22 @@ Local Notation wrapNM sz pl :=
        IConst (IPtr scr) R_AUX2; IStore R_AUX2 R_AUX1;
        IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_SP;
        IReturn]).
-(* the internal-entry head *)
 Local Notation ihead sz pl :=
   ([:: ILabel pl; IMov R_SP R_AUX1;
        IConst (IInt sz) R_SP; IAlloc R_SP R_SP;
        IStore R_SP R_AUX1; IBinOp Add R_SP R_ONE R_SP;
        IStore R_SP R_ARG; IBinOp Add R_SP R_ONE R_SP;
        IMov R_COM R_ARG]).
-(* the internal-entry head minus its label *)
 Local Notation iheadRest sz :=
   ([:: IMov R_SP R_AUX1;
        IConst (IInt sz) R_SP; IAlloc R_SP R_SP;
        IStore R_SP R_AUX1; IBinOp Add R_SP R_ONE R_SP;
        IStore R_SP R_ARG; IBinOp Add R_SP R_ONE R_SP;
        IMov R_COM R_ARG]).
-(* the body tail *)
 Local Notation itail :=
   ([:: IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_ARG;
        IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_SP;
        IJump]).
-(* the main wrapper *)
 Local Notation wrapM sz pl lm lr :=
   ([:: IConst (IInt 1) R_ONE; IMov R_SP R_AUX1;
        IConst (IInt sz) R_SP; IAlloc R_SP R_SP;
@@ -442,9 +421,6 @@ Local Notation wrapM sz pl lm lr :=
        ILabel lr;
        IReturn]).
 
-(* the explicit class maps for the wrappers (mkmap would jam simpl:
-   a vstep stuck on [ptr_eqb scr scr] would duplicate the tail into
-   both match branches) *)
 Local Notation mapNM :=
   ([:: sv0;
        SV PProlA [::] None ADead ADead SCnone true false false;
@@ -669,7 +645,6 @@ move=> [<- _].
     exact: HL.
 Qed.
 
-(* compiled procedures end terminally (the trailing IJump) *)
 Lemma compile_proc_ends (P : Procedure.id) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
   compile_proc C0 lbp scr P_labels P e s = Some (c, s') ->
@@ -693,7 +668,6 @@ do !(apply: ends_term_cons; first by []);
 apply: ends_term_catr; by [].
 Qed.
 
-(* compiled procedures are nonempty *)
 Lemma compile_proc_nonempty (P : Procedure.id) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
   compile_proc C0 lbp scr P_labels P e s = Some (c, s') ->
@@ -713,15 +687,11 @@ case: (immediately_final e) => /=;
 by move=> [<- _].
 Qed.
 
-(* ---- the Jal inventory: every emitted IJal targets a P_labels
-   entry ---- *)
-
 Definition jalbad (i0 : Machine.instr) : bool :=
   if i0 is IJal l
   then ~~ has (fun kv => Nat.eqb kv.2 l) (elementsm P_labels)
   else false.
 
-(* a successful find_proc_label yields a range member *)
 Lemma find_proc_range (P : Procedure.id) (l : label) (s s' : comp_env) :
   find_proc_label P_labels P s = Some (l, s') ->
   has (fun kv => Nat.eqb kv.2 l) (elementsm P_labels).
@@ -827,12 +797,7 @@ Qed.
 
 End Coh.
 
-(* ------------------------------------------------------------------ *)
-(* The component-level origin: ONE label map for all of a             *)
-(* component's procedures.                                            *)
-(* ------------------------------------------------------------------ *)
 
-(* the gen-fold's domain: only listed procedures get labels *)
 Lemma gen_labels_aux_keys (comp : Component.id)
     (ps : list (Procedure.id * expr)) :
   forall (acc : NMap label) (s : comp_env) (m : NMap label)
@@ -931,7 +896,6 @@ exists plm. split.
   by rewrite domm_mkfmap.
 Qed.
 
-(* List.In to ssr membership on nat-like seqs, and back *)
 Lemma In_mem (T : eqType) (s : seq T) (x : T) :
   List.In x s -> x \in s.
 Proof.
@@ -947,8 +911,6 @@ rewrite in_cons => /orP [/eqP ->|Hx]; first by left.
 by right; exact: IH.
 Qed.
 
-(* the full component package: the frag, the shared origin, and the
-   entry-label witnesses transported to the component level *)
 Theorem component_full (p : Source.program) (tp : Intermediate.program)
     (PI : Program.interface) (C : Component.id)
     (Cprocs : NMap Machine.code) :
@@ -1020,7 +982,6 @@ apply: HLM Epl'.
 exact: mem_In HP'.
 Qed.
 
-(* the In-to-getm converse (keys are unique in an fmap's elements) *)
 Lemma In_getm (A : Type) (m : NMap A) (k : nat) (v : A) :
   List.In (k, v) (elementsm m) -> getm m k = Some v.
 Proof.
@@ -1042,7 +1003,6 @@ rewrite -[in LHS](fmvalK m) mkfmapE.
 exact: Hgen Huniq HIn.
 Qed.
 
-(* ...and ends terminally *)
 Theorem component_ends (p : Source.program) (tp : Intermediate.program)
     (PI : Program.interface) (C : Component.id)
     (Cprocs : NMap Machine.code) :
@@ -1065,7 +1025,6 @@ apply: ends_term_cons.
 - exact: compile_proc_ends Hcp.
 Qed.
 
-(* the component check itself: the Jal obligation discharged *)
 Theorem component_comp_ok (p : Source.program)
     (tp : Intermediate.program) (PI : Program.interface)
     (C : Component.id) (Cprocs : NMap Machine.code) :
@@ -1130,7 +1089,6 @@ apply: (comp_ok_of_frag FM).
   exact: (HL _ _ HP'' Egetm).
 Qed.
 
-(* the linearizer's component list, inverted *)
 Lemma ccl_In (PI : Program.interface) (cenv : Intermediate.program)
     (T : Type) (l : list (Component.id * T)) (c : Component.id) S :
   List.In (c, S) (compile_component_list_gen PI cenv l) ->

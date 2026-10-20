@@ -371,8 +371,6 @@ Definition binop_denote (f : binop) : mword mt -> mword mt -> mword mt :=
   | MUL => mulw
   | EQ  => fun w1 w2 => as_word (w1 == w2)
   | LEQ => fun w1 w2 => as_word ((int_of_word w1 <= int_of_word w2)%O)
-      (* signed comparison via two's-complement [int_of_word]
-         (was an unsigned stub; LEQU is the unsigned opcode) *)
   | LEQU => fun w1 w2 => as_word (w1 <= w2)%ord
   | AND => andw
   | OR => orw

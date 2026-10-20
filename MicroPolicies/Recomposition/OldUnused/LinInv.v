@@ -1,13 +1,3 @@
-(* The SINV instance, part 1: position classes of compiled code.
-
-   The compiled calling convention keeps the running procedure's return
-   capability in R_RA everywhere EXCEPT inside a call window — the span
-   after a push-R_RA ([IStore _ R_RA]) up to and including the matching
-   pop-R_RA ([ILoad _ R_RA]).  S2I's windows never nest.  [dead_at c o]
-   scans the first [o] instructions of [c] and reports whether position
-   [o] is inside such a window (R_RA "dead", the capability parked in the
-   frame's stack cell). *)
-
 Require Import Common.Definitions.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
@@ -22,15 +12,12 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* the scan itself ([ra_dead_step]/[ra_dead_scan]/[dead_at]) lives in
-   LinSim, where the [ss_push_jal] clause states its window premise *)
 Require Import MicroPolicies.Recomposition.LinSim.
 
 Lemma ra_dead_scan0 (c : code) (dead : bool) :
   ra_dead_scan c dead 0 = dead.
 Proof. by case: c. Qed.
 
-(* the scan's one-step unfolding at a fetched instruction *)
 Lemma ra_dead_scan_S (c : code) (dead : bool) (o : nat) (i : instr) :
   List.nth_error c o = Some i ->
   ra_dead_scan c dead o.+1 = ra_dead_step i (ra_dead_scan c dead o).
@@ -50,15 +37,12 @@ Proof. exact: ra_dead_scan_S. Qed.
 Lemma dead_at0 (c : code) : dead_at c 0 = false.
 Proof. by rewrite /dead_at ra_dead_scan0. Qed.
 
-(* the class is untouched by instructions that don't move the
-   capability *)
 Lemma dead_at_S_skip (c : code) (o : nat) (i : instr) :
   List.nth_error c o = Some i ->
   ra_dead_step i = id ->
   dead_at c o.+1 = dead_at c o.
 Proof. by move=> Hnth Hi; rewrite (dead_at_S Hnth) Hi. Qed.
 
-(* skip-shape: everything except Load/Store into R_RA *)
 Lemma ra_dead_step_skip (i : instr) :
   match i with
   | IStore _ r2 => r2 <> R_RA
@@ -71,8 +55,6 @@ case: i => //=.
 - by move=> r1 r2; case: r2.
 - by move=> r1 r2; case: r2.
 Qed.
-
-(* ==================== part 2: the frame chain ==================== *)
 
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -105,11 +87,6 @@ Local Notation pbW :=
   (unionm (Intermediate.prog_buffers pra)
           (Intermediate.prog_buffers prb)).
 
-(* the flat code word a frame pointer denotes, together with its
-   position-validity bundle (exactly what ss_frame_jump/ret extract).
-   [deep] records whether the frame sits above another one; only such
-   frames must return into a call window (the wrap-main stub's bottom
-   frame returns onto its live IHalt) *)
 Definition frame_pos_spec (deep : bool) (p : Pointer.t) (w : mword mt)
   : Prop :=
   exists (Cprocs : NMap Machine.code) (j : nat) (P0 : Procedure.id)
@@ -125,31 +102,24 @@ Definition frame_pos_spec (deep : bool) (p : Pointer.t) (w : mword mt)
                + size (initial_memory (mt := mt) pbW))]
     /\ (exists i,
           List.nth_error Pcode (Z.to_nat (Pointer.offset p)) = Some i)
-    (* non-bottom return positions are inside their call window *)
     /\ (deep -> dead_at Pcode (Z.to_nat (Pointer.offset p)) = true).
 
-(* the capability tag of a frame, seen from the component running above
-   it: intra frames carry InternalJump, cross frames the Ret level *)
 Definition frame_tag (cur : Component.id) (p : Pointer.t)
     (rest : list Pointer.t) : LRC.value_tag :=
   if Pointer.component p == cur then LRC.InternalJump
   else LRC.Ret (cross_frames (Pointer.component p) rest).
 
-(* the tags a live capability may carry — never Other *)
 Lemma frame_tag_address (cur : Component.id) (p : Pointer.t)
     (rest : list Pointer.t) :
   LRC.is_address (frame_tag cur p rest) = true.
 Proof. by rewrite /frame_tag; case: eqP. Qed.
 
-(* a parked capability cell for frame [p]: the frame word under the
-   frame's tag, any owner colour/entry, data cell *)
 Definition cap_cell (mmem : {fmap mword mt -> matom})
     (ad : mword mt) (w : mword mt) (tg : LRC.value_tag) : Prop :=
   exists (c0 : Component.id)
          (e : option (Procedure.id * seq Component.id)),
     getm mmem ad = Some (w@(LRC.MTag tg c0 e false)).
 
-(* the deep chain: every frame below the top sits parked in a cell *)
 Fixpoint frames_cells (cur : Component.id) (gps : list Pointer.t)
     (ads : list (mword mt))
     (mmem : {fmap mword mt -> matom}) {struct gps} : Prop :=
@@ -162,9 +132,6 @@ Fixpoint frames_cells (cur : Component.id) (gps : list Pointer.t)
   | _, _ => False
   end.
 
-(* ---- transport lemmas: the chain survives the diagram's writes ---- *)
-
-(* monotone memory growth (alloc) *)
 Lemma frames_cells_grow (cur : Component.id) (gps : list Pointer.t)
     (ads : list (mword mt)) (mmem mmem' : {fmap mword mt -> matom}) :
   (forall w a, getm mmem w = Some a -> getm mmem' w = Some a) ->
@@ -178,8 +145,6 @@ exists w; split; first exact Hpos.
 exists c0, e. exact: (Hmono _ _ Hget).
 Qed.
 
-(* a store over an Other-vtag cell never hits a parked capability
-   (capability cells carry address vtags) *)
 Lemma frames_cells_store (cur : Component.id) (gps : list Pointer.t)
     (ads : list (mword mt)) (mmem : {fmap mword mt -> matom})
     (addr : mword mt) (w oldv : mword mt) (c0 : Component.id)
@@ -206,9 +171,6 @@ have HA := frame_tag_address cur p rest.
 by rewrite -Evt in HA.
 Qed.
 
-(* ==================== part 3: the assembled invariant ============== *)
-
-(* the running position's code: the procedure body [ipc] executes in *)
 Definition running_code (ipc : Pointer.t) (Pcode : Machine.code)
   : Prop :=
   exists (Cprocs : NMap Machine.code) (j : nat) (P0 : Procedure.id),
@@ -217,11 +179,6 @@ Definition running_code (ipc : Pointer.t) (Pcode : Machine.code)
         Pointer.block ipc = proc_nb0 ilp (Pointer.component ipc) + j
       & List.nth_error (elementsm Cprocs) j = Some (P0, Pcode)].
 
-(* the top frame's capability placement, conditioned on the position
-   class of the RUNNING code: outside a call window it is live in R_RA;
-   inside a window it is parked in some cell.  (The SP-tie pinning the
-   parked cell's address to the I-side stack pointer is added as a
-   strengthening when the pop case is proven.) *)
 Definition top_ok (gps : list Pointer.t)
     (ipc : Pointer.t)
     (mmem : {fmap mword mt -> matom})
@@ -245,7 +202,6 @@ Definition top_ok (gps : list Pointer.t)
                = Some (w@(frame_tag (Pointer.component ipc) p rest))
   end.
 
-(* the deep frames sit parked in cells *)
 Definition deep_ok (gps : list Pointer.t)
     (mmem : {fmap mword mt -> matom}) : Prop :=
   match gps with
@@ -254,9 +210,6 @@ Definition deep_ok (gps : list Pointer.t)
       exists ads, frames_cells (Pointer.component p) rest ads mmem
   end.
 
-(* THE instance (v1: chain layer; the SP-tie and the dead-cell
-   discipline conjuncts are added as strengthenings with the clauses
-   that need them) *)
 Definition sinv_inst (bmap : addr_map) (gps : list Pointer.t)
     (imem : Memory.Memory.t) (iregs : Intermediate.Register.t)
     (ipc : Pointer.t)
@@ -265,11 +218,9 @@ Definition sinv_inst (bmap : addr_map) (gps : list Pointer.t)
       top_ok gps ipc (Symbolic.mem ms) (Symbolic.regs ms)
     & deep_ok gps (Symbolic.mem ms)].
 
-(* the linked program is closed, so main is interfaced *)
 Hypothesis Hmainiface :
   Component.main \in domm (Intermediate.prog_interface ilp).
 
-(* the empty-stack case — [sr_init]'s shape *)
 Lemma sinv_inst_init (bmap : addr_map) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (bM : Block.id)
     (ms0 : @Symbolic.state mt lrc_tags unit) :
@@ -278,8 +229,6 @@ Proof. by split. Qed.
 
 Local Notation G := (Intermediate.GlobalEnv.prepare_global_env ilp).
 
-(* an executing position inside a known running procedure fetches from
-   THAT procedure's code (the genv block-map correspondence) *)
 Lemma running_fetch (ipc : Pointer.t) (Pcode : Machine.code)
     (i : Machine.instr) :
   Pointer.component ipc \in domm (Intermediate.prog_interface ilp) ->
@@ -301,7 +250,6 @@ case: Hnth' => _ ->.
 exact: Hfetch.
 Qed.
 
-(* running-position bundles are unique per pc *)
 Lemma running_code_uniq (ipc : Pointer.t) (Pc1 Pc2 : Machine.code) :
   running_code ipc Pc1 -> running_code ipc Pc2 -> Pc1 = Pc2.
 Proof.
@@ -315,7 +263,6 @@ rewrite HC1 in HC2.
 by case: HC2.
 Qed.
 
-(* [Pointer.inc] preserves the running procedure *)
 Lemma running_code_inc (ipc : Pointer.t) (Pcode : Machine.code) :
   running_code ipc Pcode -> running_code (Pointer.inc ipc) Pcode.
 Proof.
@@ -325,10 +272,6 @@ case: ipc HA HB HC => [[c b] o] /= HA HB HC.
 by split.
 Qed.
 
-(* ---- preservation: the silent pc-advance cases ---- *)
-
-(* the shared transport: any instruction whose [ra_dead_step] is the
-   identity advances the class unchanged; the state is untouched *)
 Lemma sinv_inst_skip (bmap : addr_map) (gps : list Pointer.t)
     (imem : Memory.Memory.t) (iregs : Intermediate.Register.t)
     (ipc : Pointer.t) (ms : @Symbolic.state mt lrc_tags unit)
@@ -362,11 +305,6 @@ rewrite (dead_at_S Hnth) Hskip.
 exact: (Htop _ Hrun Hoff).
 Qed.
 
-(* ---- preservation: non-RA register writes (Const/Mov/BinOp/Load) ---- *)
-
-(* the instance is (so far) blind to the I-state, so the I-side memory
-   and registers may change arbitrarily; the ME write is at a non-RA
-   register key *)
 Lemma sinv_inst_reg_write (bmap bmap2 : addr_map)
     (gps : list Pointer.t)
     (imem imem2 : Memory.Memory.t)
@@ -418,7 +356,6 @@ case: (dead_at Pcode (Z.to_nat oI)) Htop' => Htop'.
   exact Hra.
 Qed.
 
-(* a parked capability cell survives a store over an Other-vtag cell *)
 Lemma cap_cell_store (mmem : {fmap mword mt -> matom})
     (addr : mword mt) (w oldv : mword mt) (c0 : Component.id)
     (ent : option (Procedure.id * seq Component.id))
@@ -440,7 +377,6 @@ case: Evt => Evt.
 by rewrite -Evt in Htg.
 Qed.
 
-(* ---- preservation: the generic data store (IStore, r2 <> R_RA) ---- *)
 Lemma sinv_inst_store (bmap bmap2 : addr_map)
     (gps : list Pointer.t)
     (imem imem2 : Memory.Memory.t)
@@ -492,8 +428,6 @@ split; first exact: Hin.
   exact: (frames_cells_store _ _ Hold Hcells).
 Qed.
 
-(* ---- find_label target characterization ---- *)
-
 Lemma find_label_aux_nth (c : Machine.code) (l : label) (o0 o : Z) :
   find_label_aux c l o0 = Some o ->
   (o0 <= o)%Z
@@ -525,8 +459,6 @@ split; first by lia.
 by rewrite Z.sub_0_r in Hnth.
 Qed.
 
-(* the in-procedure label search lands on the label cell of the SAME
-   running procedure *)
 Lemma find_label_in_procedure_nth (ipc tpc : Pointer.t) (l : label)
     (Pcode : Machine.code) :
   Pointer.component ipc \in domm (Intermediate.prog_interface ilp) ->
@@ -549,11 +481,7 @@ have [Hle Hnth'] := find_label_nth E.
 by split => //=.
 Qed.
 
-(* ---- the compiled-code window shape (discharged from compiledness
-   by the scan-shape campaign; consumed here as a hypothesis) ---- *)
 Record code_shape (c : Machine.code) : Prop := CodeShape {
-  (* a branch and its targeted label share a window class (both live in
-     expression code; both dead for the entry stub's started-flag test) *)
   cs_bnz_label_same : forall o r l o',
       List.nth_error c o = Some (IBnz r l) ->
       List.nth_error c o' = Some (ILabel l) ->
@@ -562,15 +490,10 @@ Record code_shape (c : Machine.code) : Prop := CodeShape {
       List.nth_error c o = Some IJump -> dead_at c o = false;
   cs_ret_live : forall o,
       List.nth_error c o = Some IReturn -> dead_at c o = false;
-  (* cross-calls sit INSIDE their window (jals need not: the wrap-main
-     stub's jal is naked — its deadness above a nonempty stack is the
-     run-level [ss_push_jal] window premise instead) *)
   cs_call_dead : forall o C' P',
       List.nth_error c o = Some (ICall C' P') -> dead_at c o = true;
-  (* push sites live outside windows (windows don't nest) *)
   cs_storera_live : forall o r,
       List.nth_error c o = Some (IStore r R_RA) -> dead_at c o = false;
-  (* non-terminal instructions have a successor cell *)
   cs_next : forall o i,
       List.nth_error c o = Some i ->
       i <> IHalt -> i <> IReturn -> i <> IJump ->
@@ -582,8 +505,6 @@ Hypothesis Hshape : forall cid Cprocs P0 Pcode,
   getm Cprocs P0 = Some Pcode ->
   code_shape Pcode.
 
-(* jal-targeted labels (procedure entry labels) are live, across the
-   component's procedures *)
 Hypothesis Hjal_target : forall cid Cprocs P1 Pcode1 o1 (l : label)
     P2 Pcode2 o2,
   Intermediate.prog_procedures ilp cid = Some Cprocs ->
@@ -602,7 +523,6 @@ apply: BufferLayout.In_fmap_getm.
 exact: (List.nth_error_In _ _ HC).
 Qed.
 
-(* ---- preservation: the taken branch (IBnz, nonzero) ---- *)
 Lemma sinv_inst_bnz_nz (bmap bmap2 : addr_map) (gps : list Pointer.t)
     (imem imem2 : Memory.Memory.t)
     (iregs iregs2 : Intermediate.Register.t)
@@ -651,7 +571,6 @@ case: (dead_at Pcode (Z.to_nat (Pointer.offset ipc))) Htop' => Htop'.
   by rewrite -Ecomp.
 Qed.
 
-(* ---- wf bridges: interface and procedure domains agree ---- *)
 Hypothesis Hprociface : forall cid,
   cid \in domm (Intermediate.prog_interface ilp) ->
   exists Cprocs, Intermediate.prog_procedures ilp cid = Some Cprocs.
@@ -659,7 +578,6 @@ Hypothesis Hdommi : forall cid,
   cid \in domm (Intermediate.prog_procedures ilp) ->
   cid \in domm (Intermediate.prog_interface ilp).
 
-(* an interfaced executing position determines its running procedure *)
 Lemma executing_running (ipc : Pointer.t) (i : Machine.instr) :
   Pointer.component ipc \in domm (Intermediate.prog_interface ilp) ->
   Intermediate.GlobalEnv.executing G ipc i ->
@@ -679,8 +597,6 @@ split => //.
 by exists Cprocs, j', P'.
 Qed.
 
-(* the popped frame's own bundle IS a running_code at the pop target;
-   a deep frame's position is moreover inside its call window *)
 Lemma frame_pos_running (deep : bool) (p : Pointer.t) (w : mword mt) :
   frame_pos_spec deep p w ->
   exists Pcode,
@@ -696,8 +612,6 @@ split.
 - exact Hdead.
 Qed.
 
-(* probe form of the in-procedure label search: the target's procedure
-   is produced rather than consumed *)
 Lemma find_label_in_procedure_nth' (qpc tpc : Pointer.t) (l : label) :
   Pointer.component qpc \in domm (Intermediate.prog_interface ilp) ->
   Intermediate.GlobalEnv.find_label_in_procedure G qpc l = Some tpc ->
@@ -721,8 +635,6 @@ split => //=.
 by exists Cprocs, j', P'.
 Qed.
 
-(* the in-component label search: same component, and the target is a
-   label cell of one of the component's procedures *)
 Lemma find_label_in_component_nth (ipc tpc : Pointer.t) (l : label) :
   Pointer.component ipc \in domm (Intermediate.prog_interface ilp) ->
   Intermediate.GlobalEnv.find_label_in_component G ipc l = Some tpc ->
@@ -747,7 +659,6 @@ apply: (find_label_in_procedure_nth' _ Hf).
 by rewrite /=.
 Qed.
 
-(* ---- preservation: the intra-component return (IJump pop) ---- *)
 Lemma sinv_inst_pop_jump (bmap bmap2 : addr_map)
     (gps' : list Pointer.t)
     (imem imem2 : Memory.Memory.t)
@@ -773,9 +684,9 @@ have [w Hpos] : exists w, frame_pos_spec (~~ nilp gps') tpc w.
   - case: Htop' => w [Hpos _]. by exists w. }
 have [PcodeT [HrunT HinT HdeadT]] := frame_pos_running Hpos.
 split.
-- (* interface membership at the target *)
+-
   exact: HinT.
-- (* the new top's placement *)
+-
   move: Hdeep HdeadT; rewrite /top_ok /deep_ok.
   case: gps' Htop Htop' {Hpos} => [|q rest] //= _ _ Hdeep HdeadT.
   move=> PcodeT' HrunT' _.
@@ -785,7 +696,7 @@ split.
   case: Hdeep => [[|ad ads'] Hcells] //=.
   case: Hcells => [[wq [Hposq Hcapq]] _].
   by exists ad, wq.
-- (* the tail chain *)
+-
   move: Hdeep; rewrite /deep_ok.
   case: gps' Htop Htop' {Hpos HdeadT} => [|q rest] //= _ _ Hdeep.
   case: Hdeep => [[|ad ads'] Hcells] //=.
@@ -793,7 +704,6 @@ split.
   by exists ads'.
 Qed.
 
-(* ---- preservation: the cross-component return (IReturn pop) ---- *)
 Lemma sinv_inst_pop_ret (bmap bmap2 : addr_map)
     (gps' : list Pointer.t)
     (imem imem2 : Memory.Memory.t)
@@ -835,7 +745,6 @@ split.
   by exists ads'.
 Qed.
 
-(* ---- preservation: the intra-component call (IJal push) ---- *)
 Lemma sinv_inst_push_jal (bmap : addr_map) (gps : list Pointer.t)
     (imem : Memory.Memory.t) (iregs : Intermediate.Register.t)
     (ipc tpc : Pointer.t) (l : nat)
@@ -932,7 +841,6 @@ split.
     by split.
 Qed.
 
-(* ---- preservation: the cross-component call (ICall push) ---- *)
 Lemma sinv_inst_push_call (bmap : addr_map) (gps : list Pointer.t)
     (imem : Memory.Memory.t) (iregs : Intermediate.Register.t)
     (ipc : Pointer.t) (C' : Component.id) (b : Block.id)
@@ -1012,7 +920,6 @@ split.
     by split.
 Qed.
 
-(* ---- extraction: the live capability at an IJump site ---- *)
 Lemma sinv_inst_frame_jump (bmap : addr_map) (gps' : list Pointer.t)
     (tpc ipc : Pointer.t) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t)
@@ -1066,7 +973,6 @@ split.
 - by exists i''.
 Qed.
 
-(* ---- extraction: the live capability at an IReturn site ---- *)
 Lemma sinv_inst_frame_ret (bmap : addr_map) (gps' : list Pointer.t)
     (tpc ipc : Pointer.t) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t)
@@ -1120,7 +1026,6 @@ split.
 - by exists i''.
 Qed.
 
-(* ---- preservation: the allocation (IAlloc) ---- *)
 Lemma sinv_inst_alloc (bmap : addr_map) (gps : list Pointer.t)
     (imem imem' : Memory.Memory.t) (iregs : Intermediate.Register.t)
     (ipc : Pointer.t) (rptr rsize : register) (szZ : Z)
@@ -1190,8 +1095,6 @@ Lemma frame_tag_not_inv (cur : Component.id) (p : Pointer.t)
   frame_tag cur p rest <> LRC.Invalidated.
 Proof. rewrite /frame_tag. by case: eqP. Qed.
 
-(* store survival with an {Other, Invalidated} old tag — live caps carry
-   InternalJump/Ret, disjoint from both *)
 Lemma frames_cells_store2 (cur : Component.id) (gps : list Pointer.t)
     (ads : list (mword mt)) (mmem : {fmap mword mt -> matom})
     (addr : mword mt) (w oldv : mword mt) (c0 : Component.id)
@@ -1221,7 +1124,6 @@ case: Hovt => Hovt; rewrite Hovt in Evt.
 - exact: (frame_tag_not_inv (esym Evt)).
 Qed.
 
-(* ---- preservation: the push-R_RA store (IStore _ R_RA) ---- *)
 Lemma sinv_inst_store_ra (bmap : addr_map) (gps : list Pointer.t)
     (imem imem' : Memory.Memory.t) (iregs : Intermediate.Register.t)
     (ipc : Pointer.t) (r1 : register) (bp : Block.id) (op : Z)
@@ -1293,10 +1195,6 @@ split; first exact: Hin.
   exact: (frames_cells_store2 _ _ Hcell Hovt Hcells0).
 Qed.
 
-(* ==================== the record assembly ==================== *)
-
-(* the one remaining dynamic obligation: the pop-R_RA clause (the SP-tie
-   strengthening campaign discharges it) *)
 Hypothesis Hload_ra_inst :
   forall bmap gps imem iregs ipc ms r1 (bp : Block.id) (op : Z)
          (v : value) (base : nat) (w2 : mword mt)
@@ -1350,88 +1248,88 @@ Hypothesis Hload_ra_inst :
 Theorem sinv_inst_spec : sinv_spec L P C pra prb sinv_inst.
 Proof.
 constructor.
-- (* nop *)
+-
   move=> bmap gps imem iregs ipc ms mpc' Hex HS0.
   exact: (sinv_inst_skip _ Hex (fun _ => erefl) HS0).
-- (* label *)
+-
   move=> bmap gps imem iregs ipc l ms mpc' Hex HS0.
   exact: (sinv_inst_skip _ Hex (fun _ => erefl) HS0).
-- (* const *)
+-
   move=> bmap gps imem iregs ipc v0 r ms mpc' Hex Hra HS0.
   exact: (sinv_inst_reg_write _ _ _ _ _ Hex (fun _ => erefl) Hra HS0).
-- (* mov *)
+-
   move=> bmap gps imem iregs ipc r1 r2 w1 ms mpc' Hex Hra1 Hra2 Hw1
          HS0.
   exact: (sinv_inst_reg_write _ _ _ _ _ Hex (fun _ => erefl) Hra2 HS0).
-- (* mov, invalidated source *)
+-
   move=> bmap gps imem iregs ipc r1 r2 w1 ms mpc' Hex Hra1 Hra2 Hu1
          Hw1 HS0.
   exact: (sinv_inst_reg_write _ _ _ _ _ Hex (fun _ => erefl) Hra2 HS0).
-- (* binop *)
+-
   move=> bmap gps imem iregs ipc op r1 r2 r3 w1 w2 ms mpc' Hex Hra3
          Hw1 Hw2 HS0.
   exact: (sinv_inst_reg_write _ _ _ _ _ Hex (fun _ => erefl) Hra3 HS0).
-- (* load *)
+-
   move=> bmap gps imem iregs ipc r1 r2 bp op v base w ent ms mpc' Hex
          Hra2 Hget Hload Hamap Hcell HS0.
   apply: (sinv_inst_reg_write _ _ _ _ _ Hex _ Hra2 HS0).
   move=> dead.
   exact: (ra_dead_step_skip (i := ILoad r1 r2) Hra2 dead).
-- (* load, invalidated cell *)
+-
   move=> bmap gps imem iregs ipc r1 r2 bp op v base w ent ms mpc' Hex
          Hra2 Hget Hload Hu Hamap Hcell HS0.
   apply: (sinv_inst_reg_write _ _ _ _ _ Hex _ Hra2 HS0).
   move=> dead.
   exact: (ra_dead_step_skip (i := ILoad r1 r2) Hra2 dead).
-- (* store *)
+-
   move=> bmap gps imem imem' iregs ipc r1 r2 bp op base w oldv ent ms
          mpc' Hex Hra2 Hget Hstore Hamap Hw Hcell HS0.
   apply: (sinv_inst_store _ _ _ _ _ _ Hex _ Hcell HS0).
   move=> dead.
   exact: (ra_dead_step_skip (i := IStore r1 r2) Hra2 dead).
-- (* store, invalidated source *)
+-
   move=> bmap gps imem imem' iregs ipc r1 r2 bp op base w oldv ent
          ms mpc' Hex Hra2 Hu2 Hget Hstore Hamap Hw Hcell HS0.
   apply: (sinv_inst_store _ _ _ _ _ _ Hex _ Hcell HS0).
   move=> dead.
   exact: (ra_dead_step_skip (i := IStore r1 r2) Hra2 dead).
-- (* alloc *)
+-
   move=> bmap gps imem imem' iregs ipc rptr rsize szZ bI base' ms mem'
          mregs' mpc' Hex Hrptr Hsz HA Hmono Hres HS0.
   exact: (sinv_inst_alloc _ _ Hex Hrptr Hsz HA Hmono Hres HS0).
-- (* bnz_z *)
+-
   move=> bmap gps imem iregs ipc r l ms mpc' Hex Hz HS0.
   exact: (sinv_inst_skip _ Hex (fun _ => erefl) HS0).
-- (* bnz_nz *)
+-
   move=> bmap gps imem iregs ipc tpc r l zv ms mpc' Hex Hfind Hnz Hz
          HS0.
   exact: (sinv_inst_bnz_nz _ _ _ _ Hex Hfind HS0).
-- (* pop_jump *)
+-
   move=> bmap gps' imem iregs ipc tpc ms mpc' Hex Hcmp HS0.
   exact: (sinv_inst_pop_jump _ _ _ _ Hex Hcmp HS0).
-- (* pop_ret *)
+-
   move=> bmap gps' imem iregs ipc tpc ms mregs' mpc' Hex Hneq HS0.
   exact: (sinv_inst_pop_ret _ _ _ _ _ Hex Hneq HS0).
-- (* push_jal *)
+-
   move=> bmap gps imem iregs ipc tpc l ms Cprocs j P0 Pcode mpc' Hex
          Hfind Hilp Hblk Hjnth Hoff HS0.
   exact: (sinv_inst_push_jal _ Hex Hfind Hilp Hblk Hjnth Hoff HS0).
-- (* push_call *)
+-
   move=> bmap gps imem iregs ipc C' b ms mregs' mpc' Cprocs j P0 Pcode
          p Hne HCin Hex Hilp Hblk Hjnth Hoff Hra HS0.
   exact: (sinv_inst_push_call _ _ Hne HCin Hex Hilp Hblk Hjnth Hoff
             Hra HS0).
-- (* frame_jump *)
+-
   move=> bmap gps' tpc imem iregs ipc ms Hm Hex Hcmp Cprocs Hilp.
   exact: (sinv_inst_frame_jump (lm_stack Hm) Hex Hcmp Hilp).
-- (* frame_ret *)
+-
   move=> bmap gps' tpc imem iregs ipc ms Hm Hex Hneq.
   exact: (sinv_inst_frame_ret (lm_stack Hm) Hex Hneq).
-- (* load_ra *)
+-
   move=> bmap gps imem iregs ipc ms r1 bp op v base w2 cvt ent mpc'
          Hm Hex Hget Hload Hamap Hcell.
   by apply: Hload_ra_inst; eassumption.
-- (* store_ra *)
+-
   move=> bmap gps imem imem' iregs ipc ms r1 bp op base w2 ts oldv
          oldvt ent mpc' Hm Hex Hget Hstore Hamap Hra Hcell Hovt.
   exact: (sinv_inst_store_ra _ Hex Hget Hstore Hamap Hra Hcell Hovt
@@ -1440,8 +1338,6 @@ Qed.
 
 End LinInv.
 
-(* every component's side is one of the two programs — feeds the
-   [sr_ra] discharge through [compiled_side_ra_free] *)
 Lemma side_of_cases (pra prb : Intermediate.program)
     (cid : Component.id) :
   side_of pra prb cid = pra \/ side_of pra prb cid = prb.
@@ -1452,11 +1348,6 @@ case: (cid \in domm (Intermediate.prog_procedures pra)).
 - by right.
 Qed.
 
-(* ==================== wf/closedness discharges ==================== *)
-
-(* the three domain bridges follow from well-formedness and closedness
-   of the linked program; the spec then rests on the shape facts and the
-   pop clause only *)
 Theorem sinv_inst_spec_wf (L P C : nat)
     (pra prb : Intermediate.program) :
   Intermediate.well_formed_program (Intermediate.program_link pra prb) ->
@@ -1534,18 +1425,18 @@ Theorem sinv_inst_spec_wf (L P C : nat)
 Proof.
 move=> Hwf Hcl Hshape Hjal Hload.
 apply: sinv_inst_spec.
-- (* main is interfaced *)
+-
   have [mp [_ [Hget _]]] := Intermediate.cprog_main_existence Hcl.
   rewrite (Intermediate.wfprog_defined_procedures Hwf).
   by rewrite mem_domm Hget.
 - exact: Hshape.
 - exact: Hjal.
-- (* interface -> procedures *)
+-
   move=> cid Hin.
   rewrite (Intermediate.wfprog_defined_procedures Hwf) mem_domm in Hin.
   case E: (Intermediate.prog_procedures _ cid) Hin => [Cprocs|] //.
   move=> _. by exists Cprocs.
-- (* procedures -> interface *)
+-
   move=> cid Hin.
   by rewrite (Intermediate.wfprog_defined_procedures Hwf).
 - exact: Hload.

@@ -43,16 +43,10 @@ Require Import MicroPolicies.Recomposition.StepEventCall.
 
 Module StepEventReturn (S: RecompositionContext).
 
-  (* Chain off StepEventCall so the whole recomposition shares ONE Defs instance. *)
   Include StepEventCall S.
 
-  (* PERF: keep [pc_code_color] folded so the giant-state pcc goals don't normalise in Qed. *)
   Local Opaque pc_code_color.
 
-  (* The post-RETURN pc lands on the popped frame's saved return address, whose cell the wf_stack
-     head's [points_to_comp_code(')] guarantees is running ([C = comp']) coloured.  So pc_code_color
-     holds of the post-return state.  [pts'] handles the [points_to_comp_code'] (m1) slot, [pts] the
-     plain [points_to_comp_code] (m2/m3) slots; both expose [color (taga cell) = C] as 1st conjunct. *)
   Lemma pc_code_color_pts' : forall (s : state) i jj C n,
       points_to_comp_code' i jj (mem s) (vala (pc s)) C ->
       taga (pc s) = build_tpc n C -> pc_code_color s.
@@ -71,9 +65,6 @@ Module StepEventReturn (S: RecompositionContext).
     rewrite Hcol. move: Hpts; rewrite /points_to_comp_code Hd /= => -[Hc _]; exact Hc.
   Qed.
 
-  (* SPEED: stack-level fact, proved once in a CLEAN context (vs the old per-bullet
-     [induction WF_ST] inside the huge return context, which was the >16min blow-up).
-     Every entry of a [wf_stack ... cn] has [Ret]-level < cn. Copied from StepEventCall. *)
   Lemma wf_stack_levels_lt' :
     forall (m1 m2 m3 : memory) (cn : nat) (M : stack),
       wf_stack m1 m2 m3 cn M ->
@@ -101,9 +92,6 @@ Module StepEventReturn (S: RecompositionContext).
         by rewrite addn1; apply: (ltn_trans Hk); exact: ltnSn.
   Qed.
 
-  (* [data_match] closer for the cleared-register chains: two atoms with equal tags agree under
-     [data_match i] whenever the (only non-trivial) [Other] case has equal values — which is all
-     a return needs, since every register is re-tagged [Invalidated] except reg 1 ([Other]). *)
   Lemma dmc : forall (i : side) (c : Component.id) (m : metadata) (da db : atom (mword mt) value_tag),
       Types.taga da = Types.taga db ->
       (Types.taga da = Other -> Types.vala da = Types.vala db) ->
@@ -115,11 +103,6 @@ Module StepEventReturn (S: RecompositionContext).
     case: Ht => Ht; rewrite Ht /=; [done | exact: (Ev Ht)].
   Qed.
 
-  (* [registers_match] for a return's two cleared register chains, stated abstractly: given equal
-     domains, a per-register tag classification of each side (reg 1 -> Other, else Invalidated) and
-     the coinciding reg-1 value, the chains are register-matched.  Discharges the substantive
-     [registers_match] obligation from the [s3'] exports + the concrete [s1'] chain, without
-     re-deriving the (expensive) merged post-state. *)
   Lemma registers_match_clear :
     forall (i : side) (m : metadata) (s s' : state) (v : mword mt),
       domm (regs s) = domm (regs s') ->
@@ -158,19 +141,12 @@ Module StepEventReturn (S: RecompositionContext).
       + case: (Hs _ _ Hw) => [[_ H] | [_ H]]; [by right | by left].
   Qed.
 
-  (* SPEED INFRASTRUCTURE (mirrors StepEventCall's killcond/rrstep): resolve [as_word i == as_word j]
-     by the precomputed [reg_index_neq] (no per-rewrite side-condition discharge), and peel one
-     register read of [next_state_do_updates] in a clean context. *)
   Local Ltac killcond_r :=
     repeat (match goal with |- context[as_word (ssrint.Posz ?a) == as_word (ssrint.Posz ?b)] =>
       rewrite (introF eqP (@reg_index_neq a b ltac:(move=> ?; discriminate)
                             ltac:(by []) ltac:(by []))) end).
   Local Ltac rrstep_r Hr := rewrite ?setmE; killcond_r; rewrite Hr /=.
 
-  (* The reg-clear suffix [reg_clear_read] characterised ONCE in a CLEAN context (opaque [st]): it
-     reads only the concrete [as_word]-keys of [reg_list] off [st], so there is NO [r0] aliasing.
-     Re-tags reg 1 -> [top], the [reg_list] tail -> [Invalidated], preserves everything else (in
-     particular reg 4 ∉ reg_list). *)
   Lemma reg_clear_read_props :
     forall (st : state) (top : tag_type lrc_tags R),
       (forall n, n \in reg_list -> regs st (as_word (ssrint.Posz n)) <> None) ->
@@ -219,12 +195,6 @@ Module StepEventReturn (S: RecompositionContext).
       reflexivity.
   Qed.
 
-  (* The FULL return register clear ([RegRead 4 :: RegRead r0 :: reg_clear_read] with tags
-     [Inv :: Inv :: Other :: reg_invalidate]) characterised in a CLEAN context: a single [r0]-case
-     for the [RegRead r0] prefix (the only abstract read), then the [r0]-free [reg_clear_read_props].
-     Gives: the do_updates succeeds with
-     [mem]/[pc]/[internal] preserved; reg 1 keeps its value (com register); EVERY register is
-     [Invalidated] except reg 1 ([Other]). *)
   Lemma return_do_updates_props :
     forall (st : state) (r0 : reg mt) cell4 cellr0,
       r0 <> as_word (ssrint.Posz 1) ->
@@ -248,10 +218,7 @@ Module StepEventReturn (S: RecompositionContext).
     { move=> n Hn. rewrite Hdomm in_fset inE; apply/orP; right; apply/mapP; by exists n. }
     have Hexst : forall n, n \in reg_list -> regs st (as_word (ssrint.Posz n)) <> None.
     { move=> n Hn; move: (keyin n Hn); rewrite mem_domm; by case: (regs st _). }
-    (* reduce the [RegRead 4 :: RegRead r0] prefix to a state [st2]; one [r0]-case. *)
     Local Transparent next_state_do_update.
-    (* The prefix [RegRead 4 :: RegRead r0] reduced to a state [st3]; the only [r0]-aliasing is
-       isolated to this small [have] (a single [case Er4]), and reg 1 is untouched ([Hr0], 1<>4). *)
     have [st3 [Hpre1 [Hpre2 [Hm3 [Hp3 [Hi3 [H43 [H13 [Hex3 Hpres3]]]]]]]]] :
       exists st3,
         next_state_do_update st (Invalidated : tag_type lrc_tags R)
@@ -279,7 +246,6 @@ Module StepEventReturn (S: RecompositionContext).
       { rewrite setmE; case: ifP => [_|_]; [ by eexists | by rewrite Hcellr0; eexists ]. }
       rewrite !Hrv /=.
       eexists; do 2 (split; first reflexivity). do 3 (split; first reflexivity).
-      (* [regs st3] = [setm (setm (regs st) (as_word 4) cell4@Inv) r0 rv@Inv] *)
       split.
       { rewrite setmE; case: ifP => [_|_]; first by []. by rewrite setmE eqxx. }
       split.
@@ -295,10 +261,8 @@ Module StepEventReturn (S: RecompositionContext).
     exists rs.
     rewrite ndsu_cons Hpre1 obindE ndsu_cons Hpre2 obindE Hrs Hm3 Hp3 Hi3.
     split; first reflexivity.
-    (* reg 1 value preserved *)
     split.
     { rewrite Hrs1 H13. by case: (regs st (as_word (ssrint.Posz 1))). }
-    (* tag class: reg 1 -> Other, every other key -> Invalidated; fall-through by [register_domm]. *)
     move=> w d Hw.
     case: (eqVneq w (as_word (ssrint.Posz 1))) => [Ew | Ew].
     - subst w. left; split=> //. move: Hw; rewrite Hrs1 H13.
@@ -310,7 +274,7 @@ Module StepEventReturn (S: RecompositionContext).
       + case Ewl: (w \in [seq as_word (ssrint.Posz n) | n <- [:: 0; 2; 3; 5; 6; 7; 16; 17; 18; 19]]).
         * move/mapP: Ewl => [n Hn Ewn]; subst w.
           have [v Hv] := Hrsinv n Hn. move: Hw; rewrite Hv. by move=> [= <-].
-        * (* w not a key: rs w = regs st3 w = regs st w = None by register_domm — contradiction. *)
+        *
           exfalso.
           have Hw4 : w <> as_word (ssrint.Posz 4) by move/eqP: (negbT Ew4).
           have Hwd : w \notin domm (regs st).
@@ -328,9 +292,6 @@ Module StepEventReturn (S: RecompositionContext).
 
 
 
-  (* [combined_codes] reads only the two memories, so it transports across any states with equal
-     memories.  Combined with [nsuap_mem_proj] ([mem s3' = mem3]) this discharges the codeL/codeR
-     match_states obligations from the input [code_left]/[code_right]. *)
   Lemma combined_codes_mem_cong :
     forall (i : side) (s s' t t' : state),
       mem s = mem s' -> mem t = mem t' ->
@@ -339,11 +300,6 @@ Module StepEventReturn (S: RecompositionContext).
     move=> i s s' t t' Hs Ht H. rewrite /combined_codes -Hs -Ht. exact: H.
   Qed.
 
-  (* Plumbing (fset/register_domm arithmetic, per the admit policy — cf. StepEventCall.reg_domm_cross):
-     a single step / the merged next_state only re-tags registers it reads, so it preserves the
-     register domain.  Admitted so the substantive obligations stay on track. *)
-  (* GENERIC (any transfer [tf]): [next_state_updates_and_pc] only [updm]s register/memory keys
-     (via [next_state_do_updates]), so it preserves the register domain. *)
   Lemma nsuap_domm_gen (tf : _) (st : state) (kiv : k_ivec lrc_tags) (updts : seq update)
         (pc' : mword mt) (s' : state) (ev : option event) :
     @next_state_updates_and_pc mt ops lrc_tags tf unit st kiv updts pc' = Some (s', ev) ->
@@ -358,7 +314,6 @@ Module StepEventReturn (S: RecompositionContext).
     by move=> [= Hs Hev]; subst s'; cbn; exact: (next_state_do_updates_regs_domm Edsu).
   Qed.
 
-  (* The allocator syscall only [updm]s [syscall_ret], so it preserves the register domain. *)
   Lemma alloc_fun_regs_domm (N : nat) (st st' : state) :
     LRC.alloc_fun (NC := N) st = Some st' -> domm (regs st') = domm (regs st).
   Proof.
@@ -384,7 +339,7 @@ Module StepEventReturn (S: RecompositionContext).
   Proof.
     destruct st as [smem sreg [spc stpc] sextra]; rewrite /Exec.stepf.
     case Ef: (smem spc) => [[i ti]|]; last first.
-    - (* syscall: [sem sc = alloc_fun] (table_sem_alloc), [run_syscall] gives [sem sc st = Some st'] *)
+    -
       move=> H; apply obind_inv in H as [sc [Et H]].
       have Hsem := table_sem_alloc Et.
       have Hsemst := PCCM.run_syscall_sem_gen H.
@@ -446,9 +401,6 @@ Module StepEventReturn (S: RecompositionContext).
   Proof.
     intros s s' comp z comp' H.
     apply Exec.stepP in H.
-    (* Abbreviate the goal to a single token [G] so the ~30 [destruct]/[case]s in the peel each
-       carry [G] (not the conclusion) as their match return-type — without this a 3-conjunct goal
-       blows the peel from ~8s to a 45-min timeout. *)
     match goal with |- ?Goal => set (G := Goal) end.
     destruct s as [smem sreg [spc stpc] sextra].
     destruct stpc as [slvl scol].
@@ -463,8 +415,6 @@ Module StepEventReturn (S: RecompositionContext).
     all: unfold next_state_updates, next_state_updates_and_pc, next_state in H.
     all: cbv zeta in H; mcbn H.
     all: try unfold run_syscall in H.
-    (* peel 1: strip the [evi]/[transfer]/register-read [do!]s, leaving [H] as the small
-       [match op IVEC with ...] continuation (the [transfer] equation moves to a side hyp). *)
     all: repeat (lazymatch type of H with
            | obind _ (transfer _ _) = _ => fail
            | _ => first
@@ -474,22 +424,11 @@ Module StepEventReturn (S: RecompositionContext).
                    match type of H with context[a] => destruct a end end
                ]; mcbn H
            end).
-    (* discharge the syscall branch (event is [None]) and any immediately-contradictory
-       opcode branch before the (relatively pricey) [case]s. *)
     all: try (exfalso; congruence).
-    (* [H] now stops at [obind _ (transfer IVEC _)]: [transfer]'s result is NOT yet extracted,
-       so the dependent type [vovec (op IVEC)] has no free witness to block [case].  Guard on
-       [DEC] so the [case] skips the syscall branch ([case]ing [smem] there forces [Symbolic.sem]). *)
     all: try (match type of H with context[if ?c then _ else _] =>
                 let e := fresh in destruct c eqn:e end; mcbn H).
     all: try (match goal with _ : decode_instr _ = Some _ |- _ =>
                 move: H; case Ejt: (smem _) => [[niv nit]|]; move=> H; mcbn H end).
-    (* peel 2: strip the [transfer]/[next_state_do_updates] [do!]s down to the event.  For JAL
-       this leaves [H : Some (st', o0) = Some (s', Some (ECall ...))] (event [o0] = the JAL-cross
-       event) plus the side hyp [transfer ... = Some (ov, o0)] still to be characterised. *)
-    (* op is concrete now, so unfolding [transfer]/[instr_rules] is safe; [mcbn] keeps the
-       12-register OVec frozen.  Peel EVERY [do!]-hyp (not just [H]): the [instr_rules] equation
-       is a side hyp whose event must resolve too. *)
     all: unfold transfer, instr_rules, LRC.instr_rules, check_belong, check_entry in H.
     all: cbv zeta in H; mcbn H.
     all: repeat (first
@@ -505,9 +444,6 @@ Module StepEventReturn (S: RecompositionContext).
                let e := fresh "Eif" in revert HH; destruct c eqn:e; intro HH; mcbn HH end
            | match goal with HH : context[let (_, _) := ?x in _] |- _ => destruct x; mcbn HH end ]).
     all: mcbn H.
-    (* All 8 silent opcodes are refuted here (their event is [None] <> [ECall]); exactly ONE goal
-       survives — the genuine JAL cross-component call, with [H : Some (jal_state, do! p <-
-       get_proc_name; Some (ECall current p z c')) = Some (s', Some (ECall comp proc z comp'))]. *)
     all: try (exfalso; congruence).
     all: try (injection H as ? Hev; apply obind_inv in Hev as [? [_ Hev]]; discriminate Hev).
     all: try (match goal with E : belong _ None = false |- _ => discriminate E end).
@@ -833,14 +769,12 @@ Module StepEventReturn (S: RecompositionContext).
                           gmc1 gmc2 gmc3 capa_cor1 capa_cor2 capa_cor3 code_left code_right Hcval wpcc1 wpcc2].
     inversion weak as [? ? ? color_eq2 side_eq2 w_mem_cor2 w_mem_cor3 entry_off2 mem_match2].
     clear H1 H2.
-    (* A: tag / pc relation between s1 and s3 *)
     have [En Ec] : n = n1.+1 /\ c = comp by move: tag_pc1; rewrite Htpc1 => -[-> ->].
     subst n c.
     have Hcol_s1 : color_of s1 = comp by rewrite (color_of_pc_tag s1) Htpc1.
     inversion pc_s1_s3 as [? ? _ [Hnone _] | ? ? v0 off [Hv0 _] Hoff Hpc3v].
     { exfalso. by rewrite Hpc1 in Hnone. }
     rewrite Hcol_s1 in Hoff.
-    (* B: s3's pc cell decodes to the same Jump *)
     have Hrel1 : is_relevant_comp Left comp.
     { move: side_eq; rewrite Hcol_s1 /side_of /is_relevant_comp; by case: (comp \in domm ip). }
     move: Hpc1 Hdec1 Hcode1 Hcol1; case: ip1 => i1 ti1 /= Hpc1 Hdec1 Hcode1 Hcol1.
@@ -851,13 +785,11 @@ Module StepEventReturn (S: RecompositionContext).
       - rewrite -Heq. exact Hdec1.
       - exfalso. have E := etrans (esym Hdec1) Ha. discriminate E.
       - exfalso. have E := etrans (esym Hdec1) Hj. discriminate E. }
-    (* C: registers of s3 *)
     have [d3 [Hdm3 Hr3]] := proj2 (reg_match r1 (w1 @ (Ret n1))) Hr1.
     move: d3 Hdm3 Hr3 => [v3 t3] [Et3 [sv' [cf Hin]]] Hr3. subst t3.
     move: a11 Hrcom1 Hoth1 Hz1 => [va11 ta11] Hrcom1 /= Hoth1 Hz1. subst ta11.
     have [d13 [Hdm13 Hr13]] := proj2 (reg_match (as_word (ssrint.Posz 1)) (va11 @ Other)) Hrcom1.
     move: d13 Hdm13 Hr13 => [v13 t13] [Et13 Ev13] Hr13. subst t13 v13.
-    (* D: pop the return frame *)
     have [M' [x1 [x2 [x3 [offc [EM [WF' [Ex1 [Ex2 [Ex3 [Hoffrel [PTS1 [PTS2 PTS3]]]]]]]]]]]]] :=
       pop_frame wfst Hin (or_introl erefl).
     move: Ex1 Ex3 => [Ex1] [Ex3]. subst x1 x3.
@@ -870,14 +802,12 @@ Module StepEventReturn (S: RecompositionContext).
       - by inversion Hmergeable_ifaces as [[_ fdisj] _].
       - exact: Hrr.
       - exact: ip_comp'. }
-    (* E: s3's target cell *)
     have [cell3 [Hcell3 [Hccol3 Hcode3c]]] :
         exists cell3, mem s3 v3 = Some cell3 /\ color (taga cell3) = comp' /\ is_code (taga cell3).
     { move: PTS3; rewrite /points_to_comp_code; case: (mem s3 v3) => [c3|] //= [? ?]; by exists c3. }
     have Hbel3 : belong comp (Some (taga cell3)) = false.
     { move: Hbel1 Hccol1 Hccol3; rewrite /belong.
       case: (taga cell1) => ? c1 ? ?; case: (taga cell3) => ? c3 ? ? /= Hb E1 E3. by rewrite E3 -E1. }
-    (* F: s3's step *)
     have Hrne1 : r1 <> as_word (ssrint.Posz 1).
     { move=> E. rewrite E Hrcom1 in Hr1. discriminate Hr1. }
     have [rac3 Hra3] : exists rac3, regs s3 (as_word (ssrint.Posz 4)) = Some rac3.
@@ -894,7 +824,6 @@ Module StepEventReturn (S: RecompositionContext).
     exists {| mem := mem3; regs := rs3; pc := v3 @ (Level n1 comp'); internal := int3 |}, M'.
     split.
     { apply: plus_one. exact: Hstep3. }
-    (* G0: explicit post states s1', s2' *)
     rewrite EM in capa_cor1 capa_cor2 capa_cor3.
     have Hlev : forall ws v k,
         in_stack ([:: ((w1 @ (Ret n1) : stack_value), sv', (v3 @ (Ret n1) : stack_value), comp')] : stack) ws v k -> k = n1.
@@ -1013,14 +942,12 @@ Module StepEventReturn (S: RecompositionContext).
                           gmc1 gmc2 gmc3 capa_cor1 capa_cor2 capa_cor3 code_left code_right Hcval wpcc1 wpcc2].
     inversion weak as [? ? ? color_eq2 side_eq2 w_mem_cor2 w_mem_cor3 entry_off2 mem_match2].
     clear H1 H2.
-    (* A: tag / pc relation between s1 and s3 *)
     have [En Ec] : n = n1.+1 /\ c = comp by move: tag_pc1; rewrite Htpc1 => -[-> ->].
     subst n c.
     have Hcol_s1 : color_of s1 = comp by rewrite (color_of_pc_tag s1) Htpc1.
     inversion pc_s1_s3 as [? ? _ [Hnone _] | ? ? v0 off [Hv0 _] Hoff Hpc3v].
     { exfalso. by rewrite Hpc1 in Hnone. }
     rewrite Hcol_s1 in Hoff.
-    (* B: s3's pc cell decodes to the same Jump *)
     have Hrel1 : is_relevant_comp Left comp.
     { move: side_eq; rewrite Hcol_s1 /side_of /is_relevant_comp; by case: (comp \in domm ip). }
     move: Hpc1 Hdec1 Hcode1 Hcol1; case: ip1 => i1 ti1 /= Hpc1 Hdec1 Hcode1 Hcol1.
@@ -1031,13 +958,11 @@ Module StepEventReturn (S: RecompositionContext).
       - rewrite -Heq. exact Hdec1.
       - exfalso. have E := etrans (esym Hdec1) Ha. discriminate E.
       - exfalso. have E := etrans (esym Hdec1) Hj. discriminate E. }
-    (* C: registers of s3 *)
     have [d3 [Hdm3 Hr3]] := proj2 (reg_match r1 (w1 @ (Ret n1))) Hr1.
     move: d3 Hdm3 Hr3 => [v3 t3] [Et3 [sv' [cf Hin]]] Hr3. subst t3.
     move: a11 Hrcom1 Hoth1 Hz1 => [va11 ta11] Hrcom1 /= Hoth1 Hz1. subst ta11.
     have [d13 [Hdm13 Hr13]] := proj2 (reg_match (as_word (ssrint.Posz 1)) (va11 @ Other)) Hrcom1.
     move: d13 Hdm13 Hr13 => [v13 t13] [Et13 Ev13] Hr13. subst t13 v13.
-    (* D: pop the return frame *)
     have [M' [x1 [x2 [x3 [offc [EM [WF' [Ex1 [Ex2 [Ex3 [Hoffrel [PTS1 [PTS2 PTS3]]]]]]]]]]]]] :=
       pop_frame wfst Hin (or_introl erefl).
     move: Ex1 Ex3 => [Ex1] [Ex3]. subst x1 x3.
@@ -1053,14 +978,12 @@ Module StepEventReturn (S: RecompositionContext).
     have [_ [Hoffc Ev3]] : is_relevant_comp Right comp' /\ get_offset Right comp' = Some offc /\ v3 = (x2 + as_word offc)%w.
     { case: Hoffrel => [[Hrl _]|Hright]; last exact Hright.
       exfalso. move: Hrl; rewrite /is_relevant_comp Hnip. by []. }
-    (* E: s3's target cell *)
     have [cell3 [Hcell3 [Hccol3 Hcode3c]]] :
         exists cell3, mem s3 v3 = Some cell3 /\ color (taga cell3) = comp' /\ is_code (taga cell3).
     { move: PTS3; rewrite /points_to_comp_code; case: (mem s3 v3) => [c3|] //= [? ?]; by exists c3. }
     have Hbel3 : belong comp (Some (taga cell3)) = false.
     { move: Hbel1 Hccol1 Hccol3; rewrite /belong.
       case: (taga cell1) => ? c1 ? ?; case: (taga cell3) => ? c3 ? ? /= Hb E1 E3. by rewrite E3 -E1. }
-    (* F: s3's step *)
     have Hrne1 : r1 <> as_word (ssrint.Posz 1).
     { move=> E. rewrite E Hrcom1 in Hr1. discriminate Hr1. }
     have [rac3 Hra3] : exists rac3, regs s3 (as_word (ssrint.Posz 4)) = Some rac3.
@@ -1077,7 +1000,6 @@ Module StepEventReturn (S: RecompositionContext).
     exists {| mem := mem3; regs := rs3; pc := v3 @ (Level n1 comp'); internal := int3 |}, M'.
     split.
     { apply: plus_one. exact: Hstep3. }
-    (* G0: explicit post states s1', s2' *)
     rewrite EM in capa_cor1 capa_cor2 capa_cor3.
     have Hlev : forall ws v k,
         in_stack ([:: ((w1 @ (Ret n1) : stack_value), sv', (v3 @ (Ret n1) : stack_value), comp')] : stack) ws v k -> k = n1.
@@ -1127,7 +1049,7 @@ Module StepEventReturn (S: RecompositionContext).
       + apply: (pc_code_color_pts' (s := {| mem := mem s1; regs := rs1; pc := w1 @ (Level n1 comp'); internal := internal s1 |}));
           [ exact: PTS1 | reflexivity ].
       + apply: (pc_code_color_pts (C := comp')); last reflexivity. exact: PTS2.
-    - (* weak Left M' s1' s3' *)
+    -
       rewrite EM in mem_match.
       apply: weak_equiv_def.
       + reflexivity.
@@ -1141,7 +1063,7 @@ Module StepEventReturn (S: RecompositionContext).
         { exists (taga d). split; last exact Et. by rewrite Hd; case: d {Hd Ev Et}. }
         have [_ uni] := capa_cor1 (vala d) n1 (inr w) prem.
         exact: (uni (inl r1) w1 Hr1).
-    - (* strong Right M' s2' s3' *)
+    -
       inversion weak as [? ? ? color_eq2' side_eq2' w_mem_cor2' w_mem_cor3' entry_off2' mem_match2'].
       rewrite EM in mem_match2'.
       have [rs2b [Hdu2b [Hval2 _]]] := return_do_updates_props Hr2ne1 reg_domm2 Hra2 Hr2.
@@ -1199,7 +1121,6 @@ Module StepEventReturn (S: RecompositionContext).
                           gmc1 gmc2 gmc3 capa_cor1 capa_cor2 capa_cor3 code_left code_right Hcval wpcc1 wpcc2].
     inversion weak as [? ? ? color_eq1 side_eq1 w_mem_cor1 w_mem_cor3 entry_off1 mem_match1].
     clear H1 H2.
-    (* A: tag / pc relation between s2 and s3 *)
     have [En Ec] : n = n2.+1 /\ c = comp by move: tag_pc2; rewrite Htpc2 => -[-> ->].
     subst n c.
     have En1 : n1 = n2 by move: tag_pc1; rewrite Htpc1 => -[].
@@ -1208,7 +1129,6 @@ Module StepEventReturn (S: RecompositionContext).
     inversion pc_s2_s3 as [? ? _ [Hnone _] | ? ? v0 off [Hv0 _] Hoff Hpc3v].
     { exfalso. by rewrite Hpc2 in Hnone. }
     rewrite Hcol_s2 in Hoff.
-    (* B: s3's pc cell decodes to the same Jump *)
     have Hrel2 : is_relevant_comp Right comp.
     { move: side_eq; rewrite Hcol_s2 /side_of /is_relevant_comp.
       case Eip: (comp \in domm ip) => // _.
@@ -1221,13 +1141,11 @@ Module StepEventReturn (S: RecompositionContext).
       - rewrite -Heq. exact Hdec2.
       - exfalso. have E := etrans (esym Hdec2) Ha. discriminate E.
       - exfalso. have E := etrans (esym Hdec2) Hj. discriminate E. }
-    (* C: registers of s3 *)
     have [d3 [Hdm3 Hr3]] := proj2 (reg_match r2 (w2 @ (Ret n2))) Hr2.
     move: d3 Hdm3 Hr3 => [v3 t3] [Et3 [sv' [cf Hin]]] Hr3. subst t3.
     move: a12 Hrcom2 Hoth2 Hz2 => [va12 ta12] Hrcom2 /= Hoth2 Hz2. subst ta12.
     have [d13 [Hdm13 Hr13]] := proj2 (reg_match (as_word (ssrint.Posz 1)) (va12 @ Other)) Hrcom2.
     move: d13 Hdm13 Hr13 => [v13 t13] [Et13 Ev13] Hr13. subst t13 v13.
-    (* D: pop the return frame *)
     have [M' [x1 [x2 [x3 [offc [EM [WF' [Ex1 [Ex2 [Ex3 [Hoffrel [PTS1 [PTS2 PTS3]]]]]]]]]]]]] :=
       pop_frame wfst Hin (or_intror erefl).
     move: Ex2 Ex3 => [Ex2] [Ex3]. subst x2 x3.
@@ -1240,14 +1158,12 @@ Module StepEventReturn (S: RecompositionContext).
       - by inversion Hmergeable_ifaces as [[_ fdisj] _].
       - exact: Hrr.
       - exact: ip_comp'. }
-    (* E: s3's target cell *)
     have [cell3 [Hcell3 [Hccol3 Hcode3c]]] :
         exists cell3, mem s3 v3 = Some cell3 /\ color (taga cell3) = comp' /\ is_code (taga cell3).
     { move: PTS3; rewrite /points_to_comp_code; case: (mem s3 v3) => [c3|] //= [? ?]; by exists c3. }
     have Hbel3 : belong comp (Some (taga cell3)) = false.
     { move: Hbel2 Hccol2 Hccol3; rewrite /belong.
       case: (taga cell2) => ? c2 ? ?; case: (taga cell3) => ? c3 ? ? /= Hb E2 E3. by rewrite E3 -E2. }
-    (* F: s3's step *)
     have Hr2ne1 : r2 <> as_word (ssrint.Posz 1).
     { move=> E. rewrite E Hrcom2 in Hr2. discriminate Hr2. }
     have [rac3 Hra3] : exists rac3, regs s3 (as_word (ssrint.Posz 4)) = Some rac3.
@@ -1264,7 +1180,6 @@ Module StepEventReturn (S: RecompositionContext).
     exists {| mem := mem3; regs := rs3; pc := v3 @ (Level n2 comp'); internal := int3 |}, M'.
     split.
     { apply: plus_one. exact: Hstep3. }
-    (* G0: explicit post states s1', s2' *)
     rewrite EM in capa_cor1 capa_cor2 capa_cor3.
     have Hlev : forall ws v k,
         in_stack ([:: (sv', (w2 @ (Ret n2) : stack_value), (v3 @ (Ret n2) : stack_value), comp')] : stack) ws v k -> k = n2.
@@ -1314,7 +1229,7 @@ Module StepEventReturn (S: RecompositionContext).
       + apply: (pc_code_color_pts' (s := {| mem := mem s1; regs := rs1; pc := w1 @ (Level n2 comp'); internal := internal s1 |}));
           [ exact: PTS1 | reflexivity ].
       + apply: (pc_code_color_pts (C := comp')); last reflexivity. exact: PTS2.
-    - (* strong Left M' s1' s3' *)
+    -
       rewrite EM in mem_match1.
       have [rs1b [Hdu1b [Hval1 _]]] := return_do_updates_props Hr1ne1 reg_domm1 Hra1 Hr1.
       have Ers1 : rs1b = rs1 by have E := etrans (esym Hdu1b) Hdu1'; case: E.
@@ -1349,7 +1264,7 @@ Module StepEventReturn (S: RecompositionContext).
         * exact: Htc3.
         * by rewrite /= Hval1 Hrcom1 /= Hva.
         * by rewrite /= Hval3 Hr13.
-    - (* weak Right M' s2' s3' *)
+    -
       rewrite EM in mem_match.
       apply: weak_equiv_def.
       + reflexivity.
@@ -1384,7 +1299,6 @@ Module StepEventReturn (S: RecompositionContext).
                           gmc1 gmc2 gmc3 capa_cor1 capa_cor2 capa_cor3 code_left code_right Hcval wpcc1 wpcc2].
     inversion weak as [? ? ? color_eq1 side_eq1 w_mem_cor1 w_mem_cor3 entry_off1 mem_match1].
     clear H1 H2.
-    (* A: tag / pc relation between s2 and s3 *)
     have [En Ec] : n = n2.+1 /\ c = comp by move: tag_pc2; rewrite Htpc2 => -[-> ->].
     subst n c.
     have En1 : n1 = n2 by move: tag_pc1; rewrite Htpc1 => -[].
@@ -1393,7 +1307,6 @@ Module StepEventReturn (S: RecompositionContext).
     inversion pc_s2_s3 as [? ? _ [Hnone _] | ? ? v0 off [Hv0 _] Hoff Hpc3v].
     { exfalso. by rewrite Hpc2 in Hnone. }
     rewrite Hcol_s2 in Hoff.
-    (* B: s3's pc cell decodes to the same Jump *)
     have Hrel2 : is_relevant_comp Right comp.
     { move: side_eq; rewrite Hcol_s2 /side_of /is_relevant_comp.
       case Eip: (comp \in domm ip) => // _.
@@ -1406,13 +1319,11 @@ Module StepEventReturn (S: RecompositionContext).
       - rewrite -Heq. exact Hdec2.
       - exfalso. have E := etrans (esym Hdec2) Ha. discriminate E.
       - exfalso. have E := etrans (esym Hdec2) Hj. discriminate E. }
-    (* C: registers of s3 *)
     have [d3 [Hdm3 Hr3]] := proj2 (reg_match r2 (w2 @ (Ret n2))) Hr2.
     move: d3 Hdm3 Hr3 => [v3 t3] [Et3 [sv' [cf Hin]]] Hr3. subst t3.
     move: a12 Hrcom2 Hoth2 Hz2 => [va12 ta12] Hrcom2 /= Hoth2 Hz2. subst ta12.
     have [d13 [Hdm13 Hr13]] := proj2 (reg_match (as_word (ssrint.Posz 1)) (va12 @ Other)) Hrcom2.
     move: d13 Hdm13 Hr13 => [v13 t13] [Et13 Ev13] Hr13. subst t13 v13.
-    (* D: pop the return frame *)
     have [M' [x1 [x2 [x3 [offc [EM [WF' [Ex1 [Ex2 [Ex3 [Hoffrel [PTS1 [PTS2 PTS3]]]]]]]]]]]]] :=
       pop_frame wfst Hin (or_intror erefl).
     move: Ex2 Ex3 => [Ex2] [Ex3]. subst x2 x3.
@@ -1428,14 +1339,12 @@ Module StepEventReturn (S: RecompositionContext).
     have [_ [Hoffc Ev3]] : is_relevant_comp Right comp' /\ get_offset Right comp' = Some offc /\ v3 = (w2 + as_word offc)%w.
     { case: Hoffrel => [[Hrl _]|Hright]; last exact Hright.
       exfalso. move: Hrl; rewrite /is_relevant_comp Hnip. by []. }
-    (* E: s3's target cell *)
     have [cell3 [Hcell3 [Hccol3 Hcode3c]]] :
         exists cell3, mem s3 v3 = Some cell3 /\ color (taga cell3) = comp' /\ is_code (taga cell3).
     { move: PTS3; rewrite /points_to_comp_code; case: (mem s3 v3) => [c3|] //= [? ?]; by exists c3. }
     have Hbel3 : belong comp (Some (taga cell3)) = false.
     { move: Hbel2 Hccol2 Hccol3; rewrite /belong.
       case: (taga cell2) => ? c2 ? ?; case: (taga cell3) => ? c3 ? ? /= Hb E2 E3. by rewrite E3 -E2. }
-    (* F: s3's step *)
     have Hr2ne1 : r2 <> as_word (ssrint.Posz 1).
     { move=> E. rewrite E Hrcom2 in Hr2. discriminate Hr2. }
     have [rac3 Hra3] : exists rac3, regs s3 (as_word (ssrint.Posz 4)) = Some rac3.
@@ -1452,7 +1361,6 @@ Module StepEventReturn (S: RecompositionContext).
     exists {| mem := mem3; regs := rs3; pc := v3 @ (Level n2 comp'); internal := int3 |}, M'.
     split.
     { apply: plus_one. exact: Hstep3. }
-    (* G0: explicit post states s1', s2' *)
     rewrite EM in capa_cor1 capa_cor2 capa_cor3.
     have Hlev : forall ws v k,
         in_stack ([:: (sv', (w2 @ (Ret n2) : stack_value), (v3 @ (Ret n2) : stack_value), comp')] : stack) ws v k -> k = n2.
@@ -1502,7 +1410,7 @@ Module StepEventReturn (S: RecompositionContext).
       + apply: (pc_code_color_pts' (s := {| mem := mem s1; regs := rs1; pc := w1 @ (Level n2 comp'); internal := internal s1 |}));
           [ exact: PTS1 | reflexivity ].
       + apply: (pc_code_color_pts (C := comp')); last reflexivity. exact: PTS2.
-    - (* weak Left M' s1' s3' *)
+    -
       rewrite EM in mem_match1.
       apply: weak_equiv_def.
       + reflexivity.
@@ -1516,7 +1424,7 @@ Module StepEventReturn (S: RecompositionContext).
         { exists (taga d). split; last exact Et. by rewrite Hd; case: d {Hd Ev Et}. }
         have [_ uni] := capa_cor1 (vala d) n2 (inr w) prem.
         exact: (uni (inl r1) w1 Hr1).
-    - (* strong Right M' s2' s3' *)
+    -
       rewrite EM in mem_match.
       have [rs2b [Hdu2b [Hval2 _]]] := return_do_updates_props Hr2ne1 reg_domm2 Hra2 Hr2.
       have Ers2 : rs2b = rs2 by have E := etrans (esym Hdu2b) Hdu2'; case: E.

@@ -1,5 +1,3 @@
-(* SCRATCH (not in _CoqProject): develop stepf_reflect against RecBackward.vo.
-   Admits allowed here; port the finished proof into RecBackward.v. *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -51,8 +49,6 @@ Module RBScratch_Binop (S : RecompositionContext).
     color_of s0 = match taga (pc s0) with Level _ c => c end.
   Proof. by move=> [m r [v tp] e]. Qed.
 
-  (* [evi] succeeds on the strong side whenever it succeeds on the merged side (same [rcom] register
-     domain via [reg_reflect]). *)
   Lemma rb_evi_reflect : forall i M s s3,
     registers_match i M s s3 -> (exists a3, regs s3 rcom = Some a3) -> exists ei, evi s = Some ei.
   Proof.
@@ -61,15 +57,10 @@ Module RBScratch_Binop (S : RecompositionContext).
     rewrite /evi Ha'. by eexists.
   Qed.
 
-  (* [updm] succeeds (and equals a [setm]) on any in-domain key. *)
   Lemma rb_updm_some {St : Type} (m : {fmap reg mt -> St}) k a v :
     m k = Some a -> updm m k v = Some (setm m k v).
   Proof. by rewrite /updm => ->. Qed.
 
-  (* From a successful merged BINOP transfer, the two source-operand tags pass the [is_other]
-     gates.  Mirror [merged_transfer_iscode]: peel gate1 (is_code ti), gate2 (BINOP not
-     STORE/LOAD ⟹ Some tt), then LRC.instr_rules's [current==current'] gate, then the two
-     [is_other] obinds. *)
   Lemma rb_binop_is_other : forall b tpc ti (t1 t2 told : tag_type lrc_tags R) tni i r,
     Merged.transfer (IVec (OP (BINOP b)) tpc ti [hseq t1; t2; told] tni) i = Some r ->
     is_other t1 = Some tt /\ is_other t2 = Some tt.
@@ -77,11 +68,8 @@ Module RBScratch_Binop (S : RecompositionContext).
     move=> b tpc ti t1 t2 told tni [rc] r.
     cbn [Merged.transfer Merged.instr_rules] => H.
     apply obind_inv in H; destruct H as [out [Hir _]].
-    (* peel gate1: is_code ti *)
     apply obind_inv in Hir; destruct Hir as [u1 [_ Hir]].
-    (* peel gate2: BINOP ⟹ Some tt *)
     apply obind_inv in Hir; destruct Hir as [u2 [_ Hir]].
-    (* now Hir : (do! out <- LRC.instr_rules ... ; ...) = Some out *)
     apply obind_inv in Hir; destruct Hir as [lout [Hlrc _]].
     move: Hlrc; clear r out u1 u2; rewrite /LRC.instr_rules.
     move: lout; case: ti => vti cti eti icti; case: tpc => lpc cpc => lout; cbv zeta.
@@ -92,8 +80,6 @@ Module RBScratch_Binop (S : RecompositionContext).
     by rewrite Ho1 Ho2; move: Ho1 Ho2; case: v1 => _; case: v2 => _.
   Qed.
 
-  (* From a successful merged [next_state_updates_and_pc] (BINOP form), the two source operand
-     tags pass [is_other].  Mirrors [nsu_transfer_iscode]. *)
   Lemma nsu_binop_is_other : forall (s : @Symbolic.state mt lrc_tags unit) b tpc ti
       (t1 t2 told : tag_type lrc_tags R) updts pc' res,
     @next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -126,7 +112,7 @@ Module RBScratch_Binop (S : RecompositionContext).
     suff [s' [ev' Hf]] : exists s' ev', step_eval_me (NC := NC) s = Some (s', ev').
     { exists s', ev'. by apply/Exec.stepP. }
     case: ev Hstep => [e|] Hstep.
-    { (* ev = Some e: cross-component Jump/Jal *) admit. }
+    {  admit. }
     inversion Hstep
       as [mem3 reg3 pc3 tpc3 i3 ti3 extra3 ST3 PC3 INST3 mv3 NEXT3
          |mem3 reg3 pc3 tpc3 i3 ti3 n3 r3 old3 told3 extra3 ST3 PC3 INST3 OLD3 mv3 NEXT3
@@ -138,7 +124,7 @@ Module RBScratch_Binop (S : RecompositionContext).
          |mem3 reg3 pc3 i3 r n w tpc3 ti3 t1 extra3 ST3 PC3 INST3 RW3 mv3 NEXT3
          |mem3 reg3 pc3 i3 imm tpc3 ti3 old3 told3 extra3 l vret tret ST3 PC3 RA3 INST3 OLD3 CLEAR3 mv3 NEXT3
          |mem3 reg3 pc3 sc tpc3 extra3 ST3 PC3 GETCALL3 CALL3 ].
-    - (* Nop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -162,7 +148,6 @@ Module RBScratch_Binop (S : RecompositionContext).
       have [v' Hmems] := succ_code_reflect Hcc Hrel Hcode3s Hcolc Hd3s.
       have Hmems' : mem s (vala (pc s) + 1)%w = Some (v' @ t3s)
         by rewrite Hpcaddr.
-      (* builder: s mirrors the Nop step *)
       have [a3 Hrcom3] : exists a3, regs s3 rcom = Some a3.
       { move: NEXT3; rewrite /next_state_updates /next_state_updates_and_pc /next_state /evi.
         by case: (regs s3 rcom) => [a3|] /=; [exists a3 | ]. }
@@ -184,7 +169,7 @@ Module RBScratch_Binop (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         by rewrite Hcd Hpccol Hcolc eqxx /=.
-    - (* Const *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -231,7 +216,7 @@ Module RBScratch_Binop (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hold /=.
         by [].
-    - (* Mov *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -282,7 +267,7 @@ Module RBScratch_Binop (S : RecompositionContext).
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /= /updm Hr1 /= setmE.
         by case: (r2 =P r1) => Hr21 /=; rewrite ?Hr2 //=.
-    - (* Binop *)
+    -
       have Hd3 : mem s3 (vala (pc s3)) = Some (i3 @ ti3) by rewrite ST3 /=.
       have Hcode3 : is_code ti3 by apply: (nsu_transfer_iscode NEXT3).
       have [d [Hd [Hdec Htag]]] := pc_cell_reflect Hcc Hsp Hcoleq Hside Hval Hpci Hd3 Hcode3.
@@ -338,11 +323,9 @@ Module RBScratch_Binop (S : RecompositionContext).
         case: (pct s) Hpccol => ltpc ctpc /= Hpccol.
         case: t3s Hcolc {Hcode3s Hmems' Hd3s Hmems} => vt3 ct3 et3 ic3 /= Hcolc.
         rewrite Hcd Hpccol Hcolc eqxx /=.
-        (* resolve read 1 (r1) and its updm via Hr1 *)
         rewrite Hr1 /= (rb_updm_some _ Hr1) /=.
-        (* read 2 (r2) on [setm (regs s) r1 (w1'@t1)]: only the read VALUE can alias r1 *)
         case: (r2 =P r1) => [Hr21|Hr21].
-        { (* r2 = r1: re-read of r1's freshly-written value forces w1' = w2' *)
+        {
           have Hw12 : w1' = w2'.
           { by move: Hr2; rewrite Hr21 Hr1 => -[] ->. }
           rewrite Hr21.
@@ -354,7 +337,6 @@ Module RBScratch_Binop (S : RecompositionContext).
           { rewrite !setmE; case: (r3 == r1); first by eauto.
             by rewrite Hr3; eauto. }
           rewrite (rb_updm_some _ Hb3) /=. by rewrite Hw12. }
-        (* r2 <> r1: read r2 gives [regs s r2] = w2'@t2 *)
         rewrite setmE; move: Hr21 => /eqP/negbTE Hr21; rewrite Hr21 Hr2 /=.
         rewrite (rb_updm_some _ (a := w2' @ t2)); last by rewrite setmE Hr21 Hr2.
         rewrite /=.
@@ -363,12 +345,12 @@ Module RBScratch_Binop (S : RecompositionContext).
         { rewrite !setmE; case: (r3 == r2); first by eauto.
           case: (r3 == r1); first by eauto. by rewrite Hr3; eauto. }
         by rewrite (rb_updm_some _ Hb3) /=.
-    - (* Load *) admit.
-    - (* Store *) admit.
-    - (* Jump *) admit.
-    - (* Bnz *) admit.
-    - (* Jal *) admit.
-    - (* Syscall *) admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
+    -  admit.
   Admitted.
 
 End RBScratch_Binop.

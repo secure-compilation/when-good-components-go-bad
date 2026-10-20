@@ -1,10 +1,3 @@
-(** * T2M — the dynamic tag-discipline invariant [disc_inv].
-
-    Consumes the static per-component class maps [MM c] (each passing
-    [comp_ok]): [svat]/[exec_sv] read a pc's class value with its
-    [vstep] transfer, [dinv]/[disc_inv] state the register/frame/phase
-    invariant, and the [dinv_*] lemmas transport it along [TS.step].             *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
@@ -50,12 +43,9 @@ Hypothesis Huniq : forall (c : Component.id) (S : TS.tcode) (l : label)
   nth_error S m' = Some (TrLabel (inl l), t2) ->
   m = m'.
 
-(* the state's class value at a pc *)
 Definition svat (pc : Pointer.t) : option sv :=
   nth_error (MM (Pointer.component pc)) (Z.to_nat (Pointer.offset pc)).
 
-(* an executing instruction has a class value, a defined transfer, and
-   (unless terminal) the successor carries the transferred value *)
 Lemma exec_sv (pc : Pointer.t) (i : Transitional.instr)
     (tg : mem_tag) (c : Component.id) :
   Transitional.executing cde pc i tg c ->
@@ -81,7 +71,6 @@ rewrite EcI EoI Ew.
 by exists w.
 Qed.
 
-(* [find_label]'s result is a position holding the label *)
 Lemma find_label_some (S : seq (Transitional.instr * mem_tag))
     (l : label) (o : Z) :
   Transitional.find_label S l = Some o ->
@@ -134,7 +123,6 @@ case E: (Nat.eqb l l').
     [exact: Htg | by lia].
 Qed.
 
-(* the Bnz target carries a weakening of the branch-site value *)
 Lemma bnz_target (pc pc' : Pointer.t) (l : label) (tg : mem_tag)
     (c : Component.id) (r : register) (v : sv) :
   Transitional.executing cde pc (TrBnz r l) tg c ->
@@ -168,7 +156,6 @@ rewrite /svat -Epc' /=.
 by rewrite Em EwM.
 Qed.
 
-(* the internal-Jal target is the procedure label carrying [sv0_one] *)
 Lemma jal_target (pc pc' : Pointer.t) (l : label) (tg : mem_tag)
     (c : Component.id) (v : sv) :
   Transitional.executing cde pc (TrJalNat l) tg c ->
@@ -201,7 +188,6 @@ rewrite /svat -Epc' /=.
 by rewrite Em EwM.
 Qed.
 
-(* [find_plabel]'s result is a position holding the procedure label *)
 Lemma find_plabel_some (S : seq (Transitional.instr * mem_tag))
     (c0 : Component.id) (p0 : Procedure.id) (o : Z) :
   Transitional.find_plabel S c0 p0 = Some o ->
@@ -256,7 +242,6 @@ case E: (Nat.eqb c0 c' && Nat.eqb p0 p').
     [exact: Htg | by lia].
 Qed.
 
-(* the cross-call target is the procedure header carrying [sv0] *)
 Lemma plabel_target (c' : Component.id) (pid : Procedure.id)
     (pc' : Pointer.t) :
   Transitional.find_plabel_in_code cde c' pid = Some pc' ->
@@ -278,7 +263,6 @@ rewrite /svat -Epc' /=.
 by rewrite EvM.
 Qed.
 
-(* the register wipe at cross calls/returns *)
 Lemma tget_invalidate (r : register)
     (regs : Transitional.Register.t) :
   r <> R_COM -> r <> R_RA ->
@@ -294,12 +278,7 @@ Lemma tget_invalidate_com (regs : Transitional.Register.t) :
   = Transitional.Register.get R_COM regs.
 Proof. by []. Qed.
 
-(* ================================================================== *)
-(* The dynamic invariant                                              *)
-(* ================================================================== *)
 
-(* one suspended activation: component, frame block, resume pc, and
-   the saved inherited-scratch value *)
 Record act := Act {
   a_comp : Component.id;
   a_blk  : Block.id;
@@ -307,17 +286,13 @@ Record act := Act {
   a_scr  : value
 }.
 
-(* the class value a suspended activation resumes at *)
 Definition asv (A : act) : sv := odflt sv0 (svat (a_ret A)).
 
-(* cross-suspended: inside a call window *)
 Definition in_window (A : act) : bool := ph_eqb (sv_ph (asv A)) PPost.
 
-(* the activation's structural stack pointer *)
 Definition sp_of (A : act) : value :=
   Ptr (a_comp A, a_blk A, Z.of_nat (size (sv_sig (asv A)))).
 
-(* topmost chain entry of a component / topmost in-window entry *)
 Fixpoint topc (c : Component.id) (ch : seq act) : option act :=
   match ch with
   | [::] => None
@@ -332,21 +307,18 @@ Fixpoint topw (c : Component.id) (ch : seq act) : option act :=
       else topw c ch'
   end.
 
-(* the parent carry: what the prologue's Mov parks *)
 Definition carry0 (ch : seq act) : value :=
   match ch with
   | [::] => Undef
   | A :: _ => if in_window A then Undef else sp_of A
   end.
 
-(* the scratch pin of a component over a chain suffix *)
 Definition scrpin (c : Component.id) (ch : seq act) : value :=
   match topw c ch with
   | Some X => sp_of X
   | None => Undef
   end.
 
-(* the return capability of the activation running above [ch] *)
 Definition cap (ch : seq act) : Transitional.tvalue :=
   match ch with
   | [::] => Transitional.tUndef
@@ -357,7 +329,6 @@ Definition cap (ch : seq act) : Transitional.tvalue :=
       else Transitional.MVal InternalJump (Ptr (a_ret A))
   end.
 
-(* the chain-head window test (vacuously true when empty) *)
 Definition hdwin (ch : seq act) : bool :=
   match ch with B :: _ => in_window B | [::] => true end.
 
@@ -377,15 +348,11 @@ elim: ch => [|A0 ch IH] //=.
 by case E: (Nat.eqb (a_comp A0) c).
 Qed.
 
-(* a pointer names an allocated block of its component *)
 Definition vblock_ok (mem : Transitional.Memory.t) (p : Pointer.t)
   : Prop :=
   exists cm, getm mem (Pointer.component p) = Some cm /\
     Pointer.block p < Transitional.Memory.nextblock cm.
 
-(* user values: an allocated block outside the frames, never the
-   hidden block 1 (validity is what lets a fresh frame block join F
-   without colliding with any live user value) *)
 Definition goodu (mem : Transitional.Memory.t)
     (F : Component.id -> seq Block.id) (v : value) : Prop :=
   forall p, v = Ptr p ->
@@ -405,9 +372,6 @@ Definition cell_at (mem : Transitional.Memory.t) (c : Component.id)
   | None => None
   end.
 
-(* one frame's slot claims: CU slots are Other-tagged user cells,
-   CSp slots carry the parked SPs (slot 0 = the parent carry, the
-   wrapper's slot 1 = the inherited scratch), CRa the capability *)
 Definition frame_ok (F : Component.id -> seq Block.id)
     (mem : Transitional.Memory.t) (c : Component.id) (b : Block.id)
     (sg : seq class3) (carry cscr : value)
@@ -423,7 +387,6 @@ Definition frame_ok (F : Component.id -> seq Block.id)
       | CRa => cv = rcap
       end.
 
-(* the aux registers' value claims, per taint *)
 Definition aux_claim (mem : Transitional.Memory.t)
     (F : Component.id -> seq Block.id)
     (ch : seq act) (curscr : value) (v : sv) (t : taint)
@@ -442,20 +405,15 @@ Definition aux_claim (mem : Transitional.Memory.t)
   | ADead => True
   end.
 
-(* the scratch cell of component [c] holds value [x] *)
 Definition scr_val (mem : Transitional.Memory.t) (c : Component.id)
     (x : value) : Prop :=
   exists cv tg, cell_at mem c 1 0 = Some (cv, tg) /\
     Transitional.val cv = x.
 
-(* the internally-entered (ek = true) body-sig discipline: CRa slots
-   sit at depth >= 2, below the baseline CArg at position 1 *)
 Definition bodycarg (sg : seq class3) : Prop :=
   forall j, nth_error sg j = Some CRa ->
     2 <= j /\ nth_error sg 1 = Some CArg.
 
-(* the pend-inclusive sig: the in-flight push-macro slot counts as
-   part of the frame string *)
 Definition pend_sig (v : sv) : seq class3 :=
   match sv_pend v with
   | Some k => rcons (sv_sig v) k
@@ -640,11 +598,6 @@ Definition disc_inv (s : TS.state) : Prop :=
   let '(mem, regs, pc, pct) := s in
   exists cur chain F curscr, dinv cur chain F curscr mem regs pc pct.
 
-(* ================================================================== *)
-(* Preservation: transport helpers and the step lemma.                *)
-(* ================================================================== *)
-
-(* ---- register and pointer facts ---- *)
 
 Lemma t_to_nat_inj (r r' : register) :
   Transitional.Register.to_nat r = Transitional.Register.to_nat r' ->
@@ -736,7 +689,6 @@ rewrite /wone.
 by case: (is_r r R_ONE).
 Qed.
 
-(* the R_ARG-bit writer touches no other field *)
 Lemma warg_w_fields (r : register) (v : sv) :
   [/\ sv_ph (warg_w r v) = sv_ph v,
       sv_sig (warg_w r v) = sv_sig v,
@@ -751,7 +703,6 @@ rewrite /warg_w /warg.
 by case: (is_r r R_ARG); do !split.
 Qed.
 
-(* both writes of a Mov carry the same value; Other tags *)
 Lemma get_write2 (r1 r2 r0 : register) (x : value)
     (regs : Transitional.Register.t) :
   Transitional.Register.get r0
@@ -769,7 +720,6 @@ case E1: (is_r r0 r1) => /=.
   + by rewrite (tget_set_neq _ _ _ (is_r_neq E2)).
 Qed.
 
-(* binops preserve GOODU (pointer rows keep component/block) *)
 Lemma eval_binop_goodu (mem : Transitional.Memory.t)
     (F : Component.id -> seq Block.id)
     (op : Values.binop) (x y : value) :
@@ -800,7 +750,6 @@ Lemma nth_error_nil (A : Type) (j : nat) :
   nth_error (@nil A) j = None.
 Proof. by case: j. Qed.
 
-(* an indexed CRa contradicts nocra *)
 Lemma nth_error_hasCRa (sg : seq class3) (j : nat) :
   nth_error sg j = Some CRa -> has (fun k => c3_eqb k CRa) sg.
 Proof.
@@ -809,7 +758,6 @@ elim: sg j => [|x sg IH] [|j] //=.
 - move=> H. by rewrite (IH _ H) orbT.
 Qed.
 
-(* nth_error into an rcons *)
 Lemma nth_error_rcons (A : Type) (s : seq A) (x : A) (j : nat) :
   nth_error (rcons s x) j
   = if j < size s then nth_error s j
@@ -821,7 +769,6 @@ elim: s j => [|y s IH] j /=.
 - by case: j => [|j] //=.
 Qed.
 
-(* the converse of [nth_error_hasCRa] *)
 Lemma hasCRa_nth_error (sg : seq class3) :
   has (fun k => c3_eqb k CRa) sg ->
   exists j, nth_error sg j = Some CRa.
@@ -832,12 +779,9 @@ case/orP => [Hx|Hs].
 - have [j Hj] := IH Hs. by exists j.+1.
 Qed.
 
-(* ---- [bodycarg] transport kit ---- *)
-
 Lemma bodycarg_nil : bodycarg [::].
 Proof. by move=> j; rewrite nth_error_nil. Qed.
 
-(* a non-CRa push preserves the discipline *)
 Lemma bodycarg_rcons_u (sg : seq class3) (k : class3) :
   c3_eqb k CRa = false -> bodycarg sg -> bodycarg (rcons sg k).
 Proof.
@@ -853,7 +797,6 @@ case Hlt: (j < size sg).
   by rewrite Hkk c3_eqb_refl in Hk.
 Qed.
 
-(* the gated CRa push establishes it *)
 Lemma bodycarg_rcons_ra (sg : seq class3) :
   nth_error sg 1 = Some CArg -> bodycarg sg -> bodycarg (rcons sg CRa).
 Proof.
@@ -870,7 +813,6 @@ case Hlt: (j < size sg).
   by rewrite nth_error_rcons Hlt1.
 Qed.
 
-(* pops preserve it *)
 Lemma bodycarg_pop (sg : seq class3) (k : class3) :
   bodycarg (rcons sg k) -> bodycarg sg.
 Proof.
@@ -884,7 +826,6 @@ have Hlt1 : 1 < size sg := ltnW (leq_ltn_trans Hj2 Hlt).
 by move: H1; rewrite nth_error_rcons Hlt1.
 Qed.
 
-(* the consumer form: a CRa-holding ek-sig has the baseline CArg *)
 Lemma bodycarg_nocra (sg : seq class3) :
   ~~ nocra sg -> bodycarg sg -> nth_error sg 1 = Some CArg.
 Proof.
@@ -892,8 +833,6 @@ rewrite /nocra negbK => /hasCRa_nth_error [j Hj] HB.
 have [_ H1] := HB _ Hj.
 exact: H1.
 Qed.
-
-(* ---- [pend_sig] transport kit ---- *)
 
 Lemma pend_sig_eq (v w : sv) :
   sv_sig w = sv_sig v -> sv_pend w = sv_pend v ->
@@ -920,8 +859,6 @@ case/and5P => /ph_eqbP Eph Hon /Bool.eqb_prop Hek _
 by do !split.
 Qed.
 
-(* an aux claim survives weakening of the taint at unchanged
-   ph/sig/pend *)
 Lemma aux_claim_le_nopd (mem0 : Transitional.Memory.t)
     (F : Component.id -> seq Block.id) (ch : seq act)
     (cs : value) (v w : sv) (t t' : taint) (c : Component.id)
@@ -935,8 +872,6 @@ rewrite /aux_claim Eph Esg.
 by case: t Ht; case: t' => //=.
 Qed.
 
-(* the 4-premise spelling for the call sites; the pend premise is
-   unused ([aux_claim] no longer keys on it) *)
 Lemma aux_claim_le (mem0 : Transitional.Memory.t)
     (F : Component.id -> seq Block.id) (ch : seq act)
     (cs : value) (v w : sv) (t t' : taint) (c : Component.id)
@@ -949,7 +884,6 @@ move=> Eph Esg _ Ht.
 exact: aux_claim_le_nopd Eph Esg Ht.
 Qed.
 
-(* every non-ASp aux row is independent of the sv keys *)
 Lemma aux_claim_nsp (mem0 : Transitional.Memory.t)
     (F : Component.id -> seq Block.id) (ch : seq act)
     (cs : value) (v w : sv) (t : taint) (c : Component.id)
@@ -960,7 +894,6 @@ Proof.
 by case: t.
 Qed.
 
-(* the scratch claim survives custody weakening at equal phase *)
 Lemma scr_claim_le (mem : Transitional.Memory.t) (c : Component.id)
     (cs rsp : value) (v w : sv) :
   sv_ph w = sv_ph v -> sc_le (sv_sc v) (sv_sc w) ->
@@ -982,8 +915,6 @@ rewrite Eph.
 by case: (sv_sc v) Hsc; case: (sv_sc w).
 Qed.
 
-(* a silent pc move within the component, the map value weakening
-   along sv_le: every keyed claim transports *)
 Lemma dinv_pcmove (cur : option Block.id) (chain : seq act)
     (F : Component.id -> seq Block.id) (curscr : value)
     (mem : Transitional.Memory.t) (regs : Transitional.Register.t)
@@ -1064,7 +995,6 @@ constructor.
 - exact: (di_chain2 HI).
 Qed.
 
-(* what a non-SP non-RA register read is worth, per its taint *)
 Lemma rtaint_claim (cur : option Block.id) (chain : seq act)
     (F : Component.id -> seq Block.id) (curscr : value)
     (mem : Transitional.Memory.t) (regs : Transitional.Register.t)
@@ -1110,10 +1040,6 @@ case E1: (is_r r1 R_AUX1).
          ++ exact: is_r_neq E2.
 Qed.
 
-(* the master transport for a silent register-writing step: the sv
-   moves by a structure-preserving transfer (ph/sig/pend/sc equal),
-   R_RA and R_SP's value survive, and the caller supplies the four
-   register obligations *)
 Lemma dinv_regw (cur : option Block.id) (chain : seq act)
     (F : Component.id -> seq Block.id) (cs : value)
     (mem : Transitional.Memory.t)
@@ -1222,9 +1148,6 @@ constructor.
 - exact: (di_chain2 HI).
 Qed.
 
-(* ================================================================== *)
-(* Memory-step helpers: allocation.                                   *)
-(* ================================================================== *)
 
 Lemma nth_error_repeat_inv (A : Type) (x y : A) (n j : nat) :
   nth_error (repeat x n) j = Some y -> y = x.
@@ -1348,9 +1271,6 @@ Qed.
 
 End AllocFacts.
 
-(* ================================================================== *)
-(* Memory-step helpers: stores.                                       *)
-(* ================================================================== *)
 
 Lemma store_shape (mem : Transitional.Memory.t) (ptr : Pointer.t)
     (cell : Transitional.tvalue * mem_tag)
@@ -1529,8 +1449,6 @@ Qed.
 
 End StoreFacts.
 
-(* the generic binop arm: both operands AU, the result a fresh AU
-   value in a non-structural register *)
 Lemma dinv_binop_gen (cur : option Block.id) (chain : seq act)
     (F : Component.id -> seq Block.id) (cs : value)
     (mem : Transitional.Memory.t) (regs : Transitional.Register.t)

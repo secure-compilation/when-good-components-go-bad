@@ -1,19 +1,3 @@
-(** * Stage 4, part 4 — `ext_frame_match` and the scratch map, retargeted.
-
-    See plan-i2t-redo.md §4 (Stage 4).
-
-    Ports of `S2I/Simulation.v:261-288` (`ext_frame_match`) and of `expr_inv`'s
-    `ei_scrs` / `ei_scr_all` / `ei_flag` clauses (`:415-419`). Both are
-    `Memory.load` → `TMem.vload` ports plus `code_at` → `TMacros.code_at_I`.
-
-    **The one substantive change is T2.** `ext_frame_match`'s slot 2 is the
-    wrapper's spilled `R_RA` — loaded but left unconstrained as `v2` at the I
-    level, because at the I level there is nothing there. In T it holds the
-    wrapper's live return capability, so the constructor carries a
-    `TStack.ra_slot` for it. That is the same upgrade `SM_internal`/`SM_external`'s
-    `junkRA` gets, and the reason it can be made is that the slot address was
-    already pinned. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -47,15 +31,7 @@ Module TSM.
 
 Notation mem := Transitional.Memory.t.
 
-(* ================================================================== *)
-(* ext_frame_match                                                    *)
-(* ================================================================== *)
 
-(** The suspended EXTERNAL-entry activation of the callee. Slot layout is
-    unchanged from `Simulation.v`: 0 = caller's `R_SP`, 1 = inherited scratch,
-    2 = spilled `R_RA`, (main only) 3 = context marker.
-
-    The extra parameter is slot 2's capability (T2). *)
 Inductive ext_frame_match (cde : Transitional.code) (m : mem)
                           (C : Component.id)
   : Block.id -> Pointer.t -> Z -> TStack.ra_slot -> Prop :=
@@ -66,10 +42,8 @@ Inductive ext_frame_match (cde : Transitional.code) (m : mem)
          ++ pop R_SP ++ [:: IReturn]) ->
     TMem.vload m (C, fbE, 0%Z) = Some v0 ->
     TMem.vload m (C, fbE, 1%Z) = Some v1 ->
-    (* the wrapper's linkage slots are DATA — its epilogue pops them *)
     TMem.tload m (C, fbE, 0%Z) = Some Other ->
     TMem.tload m (C, fbE, 1%Z) = Some Other ->
-    (* T2: slot 2 holds the wrapper's live return capability *)
     TStack.ra_addr s = (C, fbE, 2%Z) ->
     TStack.slots_ok m [:: s] ->
     ext_frame_match cde m C fbE jal_ret 3%Z s
@@ -90,10 +64,6 @@ Inductive ext_frame_match (cde : Transitional.code) (m : mem)
     z <> 0%Z ->
     ext_frame_match cde m C fbE jal_ret 4%Z s.
 
-(** The port of `ext_frame_match_transport` (`Simulation.v:997`): if every cell
-    of the frame keeps its value AND slot 2 keeps its tag, the relation
-    transfers. The tag side is new (T2); at the I level there was nothing to
-    keep. *)
 Lemma ext_frame_match_transport cde m m' C fbE jal_ret spE s :
   ext_frame_match cde m C fbE jal_ret spE s ->
   (forall (o : Z) w, TMem.vload m (C, fbE, o) = Some w ->
@@ -113,9 +83,6 @@ Proof.
                       (Ttr _ _ T1) Ea Hs (Ltr _ _ L3) (Ttr _ _ T3) Hz.
 Qed.
 
-(** The two flavours, as a disjunction. Casing on [ext_frame_match] inside a
-    diagram means generalising its indices by hand; doing it here — where the
-    context is three variables — hands the caller a plain `\/`. *)
 Lemma ext_frame_cases cde m C fbE jal_ret spE s :
   ext_frame_match cde m C fbE jal_ret spE s ->
   (exists v0 v1,
@@ -148,21 +115,16 @@ Proof.
   - by right; exists lret, v0, v1, z.
 Qed.
 
-(** The wrapper's return site is in the wrapper's own component. *)
 Lemma ext_frame_comp cde m C fbE jal_ret spE s :
   ext_frame_match cde m C fbE jal_ret spE s ->
   Pointer.component jal_ret = C.
 Proof. by case. Qed.
 
-(** slot 2's address and contents, extracted from either constructor. *)
 Lemma ext_frame_slot cde m C fbE jal_ret spE s :
   ext_frame_match cde m C fbE jal_ret spE s ->
   TStack.ra_addr s = (C, fbE, 2%Z) /\ TStack.slots_ok m [:: s].
 Proof. by case. Qed.
 
-(** The port of `ext_frame_match_store` (`Simulation.v:821`): a store that
-    misses the whole frame preserves it. Both the value clauses (via
-    `load_store_neq`) and the tag clause (via `slots_ok_store`) follow. *)
 Lemma ext_frame_match_store cde m m' C fbE jal_ret spE s p c :
   ext_frame_match cde m C fbE jal_ret spE s ->
   Transitional.Memory.store m p c = Some m' ->
@@ -183,24 +145,7 @@ Proof.
   by rewrite -Eaddr -Es Ea.
 Qed.
 
-(* ================================================================== *)
-(* stack_match, retargeted                                            *)
-(* ================================================================== *)
 
-(** The port of `Simulation.v:295-383`. Three changes:
-
-    - `Memory.load` → `TMem.vload`, `code_at` → `TMacros.code_at_I`,
-      `frame_temps`/`frame_cap`/`ext_frame_match` → their T versions;
-    - the `I.CS.stack` (`gps`) argument is REPLACED by an explicit current
-      return address plus a chain of spilled slots. `gps`'s HEAD is the
-      current activation's return, which at T lives in `R_RA` (T1), so it
-      travels as [ret]; every deeper entry is SPILLED, so it is an
-      [TStack.ra_slot] (T2). The recursion reads the caller's return off its
-      slot — [ra_ret s] — which is what makes the chain self-describing;
-    - `junkRA` becomes that slot's contents.
-
-    The induced ledger is `(CReg, τ) :: TStack.ledger_of S`, which is why
-    Stage 2 needed three `ti_lvl` variants. *)
 Inductive stack_match (cde : Transitional.code) (labelsP : NMap (NMap label))
                       (a : renaming) (m : mem)
   : NMap value -> Component.id -> Block.id
@@ -210,22 +155,14 @@ Inductive stack_match (cde : Transitional.code) (labelsP : NMap (NMap label))
     TMem.vload m (Component.main, fb, 0%Z)
       = Some (Ptr (Component.main, fb_ext, 4%Z)) ->
     TMem.vload m (Component.main, fb, 1%Z) = Some vs1 ->
-    (* the two linkage slots are DATA: the pops of the epilogue are data pops,
-       and MP's [BinOp]/[Load] refuse a non-[Other] operand *)
     TMem.tload m (Component.main, fb, 0%Z) = Some Other ->
     TMem.tload m (Component.main, fb, 1%Z) = Some Other ->
     TMem.vload m (Component.main, fb_ext, 0%Z) = Some v0 ->
     TMem.vload m (Component.main, fb_ext, 1%Z) = Some v1 ->
-    (* the wrapper's own linkage slots are DATA — its epilogue pops them, and
-       for [main] that epilogue ends at the [IHalt] *)
     TMem.tload m (Component.main, fb_ext, 0%Z) = Some Other ->
     TMem.tload m (Component.main, fb_ext, 1%Z) = Some Other ->
-    (* slot 2 stays JUNK even at T: main's initial activation is entered by the
-       machine and leaves via [IHalt], so there is no capability here. This is
-       the one [gps] entry with no memory slot behind it. *)
     TMem.vload m (Component.main, fb_ext, 2%Z) = Some vx ->
     TMem.vload m (Component.main, fb_ext, 3%Z) = Some (Int 0) ->
-    (* the CONTEXT MARKER, and it is data too: the wrapper's [IBnz] reads it *)
     TMem.tload m (Component.main, fb_ext, 3%Z) = Some Other ->
     frame_priv a Component.main fb_ext ->
     Pointer.component ret_ext = Component.main ->
@@ -250,10 +187,8 @@ Inductive stack_match (cde : Transitional.code) (labelsP : NMap (NMap label))
     val_inject a oldarg targ ->
     frame_priv a C fb' ->
     TStack.frame_temps m C fb' temps' ->
-    (* T2: the caller's own capability, spilled by its [push R_RA] *)
     TStack.ra_addr s = (C, fb', Z.of_nat (2 + size temps')) ->
     TStack.ra_tag s = InternalJump ->
-    (* the whole chain from here down, so the projection below is free *)
     TStack.slots_ok m (s :: Sl) ->
     TStack.frame_cap m C fb' cap' ->
     3 + kneed k' (size temps') <= cap' ->
@@ -267,14 +202,8 @@ Inductive stack_match (cde : Transitional.code) (labelsP : NMap (NMap label))
                        junkARG sE s'' Sl cap'',
     C'' <> C ->
     getm labelsP C'' = Some plm'' ->
-    (* the callee-side wrapper activation; [sE] is its spilled [Ret n] *)
     ext_frame_match cde m C fbE jal_ret spE sE ->
     TStack.ra_ret sE = icall_ret ->
-    (* ★ the wrapper's capability is the MAXIMUM live level: its [Ret] index is
-       the number of live [Ret]s in the chain BELOW it. With [ti_lvl] (which
-       fixes the multiset to [0 .. level pct - 1]) this is what makes
-       `TS.JumpRet` fire — the rule demands `Ret (level pct - 1)` exactly, and
-       the multiset alone does not say which slot holds it. *)
     TStack.ra_tag sE = Ret (size (TStack.ext_levels Sl)) ->
     frame_priv a C fbE ->
     TMem.vload m (C, fb, 0%Z) = Some (Ptr (C, fbE, spE)) ->
@@ -289,11 +218,7 @@ Inductive stack_match (cde : Transitional.code) (labelsP : NMap (NMap label))
     cont_matchJ a C'' plm'' k'' rest'' temps'' ->
     frame_priv a C'' fb'' ->
     TStack.frame_temps m C'' fb'' temps'' ->
-    (* T2: the caller's own capability *)
     TStack.ra_addr s'' = (C'', fb'', Z.of_nat (2 + size temps'')) ->
-    (* the CALLER's own capability is an [InternalJump] — its body was entered
-       by an [IJal] like every other body — so it contributes no level, and the
-       chain's [Ret] count is [sE]'s plus the deeper chain's *)
     TStack.ra_tag s'' = InternalJump ->
     TStack.slots_ok m (sE :: s'' :: Sl) ->
     TMem.vload m (C'', fb'', Z.of_nat (2 + size temps'' + 1)) = Some targ ->
@@ -312,9 +237,6 @@ Inductive stack_match (cde : Transitional.code) (labelsP : NMap (NMap label))
       ((C, fbE) :: (C'', fb'') :: prot)
       (S.CS.Frame C'' oldarg k'' :: stk) jal_ret (sE :: s'' :: Sl).
 
-(** Every slot the chain mentions really is a live capability slot — the
-    ingredient the macros' freshness premises are discharged against. Free,
-    because each constructor asserts it for the chain below it. *)
 Lemma stack_match_slots cde lP a m scrs C fb prot stk ret Sl :
   stack_match cde lP a m scrs C fb prot stk ret Sl ->
   TStack.slots_ok m Sl.
@@ -325,14 +247,6 @@ Proof.
   - move=> *. assumption.
 Qed.
 
-(** ★ Every slot the chain mentions lives in a PROTECTED frame. Each
-    constructor puts the frame it suspends into [prot] and recurses with the
-    smaller list, so this is a direct induction — and it is the fact that makes
-    "no ledger site is in the CURRENT frame" free (see [stack_match_nosite]).
-
-    That is the premise every push into the current frame needs, and without it
-    a diagram would have to carry frame-disjointness of the whole spill chain
-    as a separate invariant. *)
 Lemma stack_match_slots_prot cde lP a m scrs C0 fb0 prot stk ret Sl :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   forall s, List.In s Sl ->
@@ -340,14 +254,14 @@ Lemma stack_match_slots_prot cde lP a m scrs C0 fb0 prot stk ret Sl :
     \in prot.
 Proof.
   elim=> {C0 fb0 prot stk ret Sl scrs}.
-  - (* SM_init: the chain is empty *)
+  -
     by move=> *; contradiction.
-  - (* SM_internal *)
+  -
     move=> scrs C fb fb' prot stk oldarg targ k' rest' temps' plm ret s Sl cap'
       _ _ _ _ _ _ _ _ _ _ _ Es _ _ _ _ _ _ _ IH s0 [Es0|Hin].
     + by rewrite -Es0 Es /= in_cons eqxx.
     + by rewrite in_cons; apply/orP; right; exact: IH.
-  - (* SM_external *)
+  -
     move=> scrs C C'' fb fbE spE fb'' prot stk oldarg targ k'' rest'' temps''
       plm'' jal_ret icall_ret vscr junkARG sE s'' Sl cap''
       _ _ Hext _ _ _ _ _ _ _ _ _ _ _ _ _ Es'' _ _ _ _ _ _ _ _ _ _ _ _ IH s0.
@@ -359,8 +273,6 @@ Proof.
     + rewrite !in_cons. apply/orP; right. apply/orP; right. exact: IH.
 Qed.
 
-(** The source counterpart of `TStack.vload_alloc_fresh_eq`, at the [Memory]
-    level (`Common/Memory.v` states it per COMPONENT memory). *)
 Lemma memory_load_alloc_eq ms C n ms' bs (j : Z) :
   Common.Memory.Memory.alloc ms C n = Some (ms', (C, bs, 0%Z)) ->
   Common.Memory.Memory.load ms' (C, bs, j)
@@ -373,16 +285,6 @@ Proof.
   exact: (ComponentMemory.load_after_alloc_eq _ _ _ _ E2).
 Qed.
 
-(** ★ The LOCK-STEP allocation: the source allocates, so must the target, and
-    the injection extends onto the two fresh blocks.
-
-    This is `SimInject.v:366`'s `alloc_inject` with the T-side laws substituted.
-    The pieces it needs mostly existed already — `alloc_fresh_notin`,
-    `load_alloc_other`, `alloc_fresh_outside` — but the two source-side `minj`
-    fields did not: freshness of the new SOURCE block is
-    `ComponentMemory.alloc_fresh` against `mj_wf_s`, and `a C bs = None` (which
-    `extend_rle` needs) is `mj_dom` contrapositive. That is the whole reason
-    those fields went in. *)
 Lemma minj_alloc_ext a ms mt C n ms' bs :
   TInject.minj a ms mt ->
   Common.Memory.Memory.alloc ms C n = Some (ms', (C, bs, 0%Z)) ->
@@ -394,7 +296,6 @@ Lemma minj_alloc_ext a ms mt C n ms' bs :
       & TInject.minj (extend a C bs bt) ms' mt'].
 Proof.
   move=> HI Hal.
-  (* dissect the source allocation *)
   have [cms [cms' [Ecms [Ecal Ems']]]] :
     exists cms cms', [/\ getm ms C = Some cms,
                         ComponentMemory.alloc cms n = (cms', bs)
@@ -403,7 +304,6 @@ Proof.
     case E1: (getm ms C) => [cms|] //=.
     case E2: (ComponentMemory.alloc cms n) => [cms0 b0] [<- E3].
     by exists cms, cms0; rewrite E3 in E2 *. }
-  (* the target has the component, so its allocation succeeds *)
   case: (TInject.mj_domm HI Ecms) => [cmt Ecmt].
   have [mt' [bt Halt]] :
     exists mt' bt, Transitional.Memory.alloc mt C n = Some (mt', (C, bt, 0%Z)).
@@ -411,7 +311,6 @@ Proof.
   have Hfresht := TStack.alloc_fresh_unloadable HI Halt.
   have Hbtfresh : forall b0, a C b0 <> Some bt
     by exact: (TInject.alloc_fresh_outside HI Halt).
-  (* the new SOURCE block was not in the old domain, so it is outside [a] *)
   have Hbs : bs \notin ComponentMemory.domm cms
     by exact: (ComponentMemory.alloc_fresh _ _ _ _
                  (TInject.mj_wf_s HI Ecms) Ecal).
@@ -432,13 +331,12 @@ Proof.
   - exact: Hfresht.
   - split.
     + exact: (extend_ok (TInject.mj_ok HI) Hbsl Hnone Hbtfresh).
-    + (* the load clause *)
+    +
       move=> Cx b0 bx i Hab.
       case: (Hnew _ _ _ Hab) => [Hold|[EC [Eb0 Ebx]]]; last first.
       { subst Cx b0 bx.
         rewrite (TStack.vload_alloc_fresh_eq i Halt) (memory_load_alloc_eq i Hal).
         by case: (((0 <=? i) && (i <? Z.of_nat n))%Z); constructor. }
-      (* an old pair: both allocations miss it *)
       have Hnes : (Cx, b0) <> (C, bs).
       { move=> [E1 E2]. move: Hnone. by rewrite -E1 -E2 Hold. }
       have Hnet : Pointer.component ((Cx, bx, i) : Pointer.t) <> C
@@ -449,24 +347,23 @@ Proof.
       rewrite /TMem.vload (TStack.load_alloc_other Halt Hnet).
       rewrite (memory_load_after_alloc _ _ _ _ _ _ _ _ Hal);
         last by move=> E; apply: Hnes; move: E => /= [-> ->].
-      (* transport the [option_rel] along the extension *)
       move: (TInject.mj_load HI i Hold). rewrite /TMem.vload.
       case: (Common.Memory.Memory.load ms (Cx, b0, i)) => [v0|];
         case: (Transitional.Memory.load mt (Cx, bx, i)) => [w1|] //=.
       exact: (val_inject_rle a (extend a C bs bt) v0 (Transitional.val w1.1)
                 (extend_rle Hnone)).
-    + (* target wf *)
+    +
       move=> C0 cm0. case: (TInject.alloc_shape Halt) => [cm1 [Hcm1 _ Emt']].
       rewrite Emt' setmE. case: (C0 =P C) => [_|_];
         last exact: (TInject.mj_wf_t HI).
       move=> [<-]. exact: TInject.alloc_b_cwf (TInject.mj_wf_t HI Hcm1).
-    + (* target local *)
+    +
       move=> C0 cm0. case: (TInject.alloc_shape Halt) => [cm1 [Hcm1 _ Emt']].
       rewrite Emt' setmE. case: (C0 =P C) => [_|_];
         last exact: (TInject.mj_local_t HI).
       move=> [<-]. rewrite TInject.alloc_b_cdomm_in.
       by apply/orP; right; exact: (TInject.mj_local_t HI Hcm1).
-    + (* target range *)
+    +
       move=> C0 b0 b0' Hab Hb0.
       case: (TInject.alloc_shape Halt) => [cm1 [Hcm1 Ept Emt']].
       case: (Hnew _ _ _ Hab) => [Hold|[EC [Eb0 Ebx]]].
@@ -481,18 +378,18 @@ Proof.
       have Ebt : bt = Transitional.Memory.nextblock cm1
         by move: (f_equal Pointer.block Ept).
       by rewrite Ebt.
-    + (* source wf *)
+    +
       move=> C0 cm0. rewrite Ems' setmE. case: (C0 =P C) => [_|_];
         last exact: (TInject.mj_wf_s HI).
       move=> [<-]. exact: (ComponentMemory.wf_alloc _ _ _ _
                              (TInject.mj_wf_s HI Ecms) Ecal).
-    + (* the source's local block survives the allocation *)
+    +
       move=> C0 cm0. rewrite Ems' setmE. case: (C0 =P C) => [_|_];
         last exact: (TInject.mj_local_s HI).
       move=> [<-]. rewrite (ComponentMemory.domm_alloc_eq _ _ _ _ Ecal)
                            in_fsetU1.
       by apply/orP; right; exact: (TInject.mj_local_s HI Ecms).
-    + (* source domain *)
+    +
       move=> C0 b0 b0' Hab Hb0.
       case: (Hnew _ _ _ Hab) => [Hold|[EC [Eb0 Ebx]]].
       { case: (TInject.mj_dom HI Hold Hb0) => [cm0 [Hcm0 Hin]].
@@ -504,13 +401,13 @@ Proof.
       exists cms'. split; first by [].
       rewrite (ComponentMemory.domm_alloc_eq _ _ _ _ Ecal) in_fsetU1.
       by apply/orP; left.
-    + (* the target still has every source component *)
+    +
       move=> C0 cm0. rewrite Ems' setmE.
       case: (TInject.alloc_shape Halt) => [cm1 [Hcm1 _ Emt']].
       rewrite Emt' setmE.
       case: (C0 =P C) => [_|_]; first by move=> _; eexists.
       move=> HC0. exact: (TInject.mj_domm HI HC0).
-    + (* the tag clause: fresh cells are [tUndef], old ones unchanged *)
+    +
       move=> C0 b0 b0' i w Hab.
       case: (Hnew _ _ _ Hab) => [Hold|[EC [Eb0 Ebx]]]; last first.
       { subst C0 b0 b0' => Hl.
@@ -526,16 +423,6 @@ Proof.
       exact: (TInject.mj_data HI Hold).
 Qed.
 
-(** ★ No chain site is in a cell the INJECTION can reach.
-
-    `E_deref` and `E_assign` touch a cell in the injection's range, and the
-    macros need to know it is not a live capability slot. Each constructor
-    carries a [frame_priv] for the frame it suspends — "no source block maps
-    here" — so this is a direct induction on the chain, with no `\in`/`prot`
-    bookkeeping at all. (Stating it via `prot` membership instead runs into
-    the pair-eqType instance: `in_cons`/`inE` do not rewrite a
-    `seq (Component.id * Block.id)` membership whose eqType arrives through
-    extructures' `Ord`.) *)
 Lemma stack_match_nosite_rng cde lP a m scrs C0 fb0 prot stk ret Sl
       Cx b0 bx (i : Z) :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
@@ -549,8 +436,6 @@ Proof.
     by rewrite /TInv.sites /TStack.ledger_of /=.
   - move=> scrs1 C fb fb' prot1 stk1 oldarg targ k' rest' temps' plm ret1 s Sl1
       cap' _ _ _ _ _ _ _ _ _ Hpriv _ Es _ _ _ _ _ _ _ IH Hab.
-    (* [sites (ledger_of (s :: Sl))] must be simplified to expose the cons
-       before the [In] can be cased *)
     rewrite /TInv.sites /TStack.ledger_of /= => -[E|Hin];
       last exact: IH Hab Hin.
     have Ea : TStack.ra_addr s = (Cx, bx, i) by congruence.
@@ -571,10 +456,6 @@ Proof.
       by move: (proj2 Hpriv2 b0); rewrite EC Eb; apply.
 Qed.
 
-(** A cell the injection can reach is in no PROTECTED frame either — the form
-    `stack_match_store` wants. (`in_cons`/`inE` do not rewrite this membership,
-    but it COMPUTES on a cons, so `case/orP` splits it; note the view must be
-    applied on its own — `[/eqP [-> ->]|…]` in one pattern does not elaborate.) *)
 Lemma stack_match_rng_notin_prot cde lP a m scrs C0 fb0 prot stk ret Sl
       Cx b0 bx :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
@@ -602,7 +483,6 @@ Proof.
     case: E => EC Eb. by move: Hab; rewrite EC Eb; exact: (proj2 Hpriv2 b0).
 Qed.
 
-(** …hence no ledger site of the chain is in the current frame. *)
 Lemma stack_match_nosite cde lP a m scrs C0 fb0 prot stk ret Sl :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   (C0, fb0) \notin prot ->
@@ -622,14 +502,6 @@ Lemma slots_ok_cons m x Sl :
   TStack.slots_ok m (x :: Sl) -> TStack.slots_ok m Sl.
 Proof. by move=> H y Hin; apply: H; right. Qed.
 
-(** ★ A memory change that is invisible to [vload] and [tload] is invisible to
-    the WHOLE relation — no `prot` reasoning, no per-frame side conditions.
-
-    Every clause of [stack_match] (and of [ext_frame_match] and [slots_ok]) is a
-    `vload`, a `tload`, or memory-free, so the derivation transfers cell for
-    cell. This is the lemma the pop diagrams want: T's load-write-back rewrites
-    a cell with the SAME tvalue, so it lands here rather than in
-    [stack_match_store]. *)
 Lemma stack_match_same cde lP a m m' scrs C0 fb0 prot stk ret Sl :
   (forall q, TMem.vload m' q = TMem.vload m q) ->
   (forall q, TMem.tload m' q = TMem.tload m q) ->
@@ -686,20 +558,6 @@ Proof.
     + exact: Hc Hcap.
 Qed.
 
-(** ★ The BLOCK-LEVEL transport, which is what a multi-store run needs.
-
-    `stack_match_same` wants the two memories to agree everywhere; a run that
-    writes anything at all cannot supply that. But every address the relation
-    reads lies in the CURRENT frame or in one of the PROTECTED frames — that is
-    exactly what `prot` is for — so agreeing on the complement of a set of
-    BLOCKS is enough. [bad] is that set, as a predicate on
-    `(component, block)` pairs.
-
-    The induction is the reason this is stated over blocks rather than
-    addresses: at the recursive call the current frame becomes one of [prot]'s
-    entries and [prot] shrinks, so both premises are inherited verbatim. The
-    chain's slots below the top two are not argued about at all — they come out
-    of the recursive result via [stack_match_slots]. *)
 Lemma stack_match_raw cde lP a m m' scrs C0 fb0 prot stk ret Sl
       (bad : Component.id * Block.id -> bool) :
   (forall q, ~~ bad (Pointer.component q, Pointer.block q) ->
@@ -720,7 +578,7 @@ Proof.
   { move=> Cx bx o Hb. exact: (Hrt (Cx, bx, o) Hb). }
   move=> Hb0 Hbp Hsm. move: Hb0 Hbp.
   elim: Hsm.
-  - (* SM_init *)
+  -
     move=> scrs0 fb fb_ext ret_ext lret v0 v1 vx vs1
            L0 L1 T0 T1 E0 E1 TE0 TE1 E2 E3 TE3 Hpriv Hcret Hcode Hne Hb0 Hbp.
     have Hbe : ~~ bad (Component.main, fb_ext)
@@ -753,7 +611,7 @@ Proof.
     + exact: Hcret.
     + exact: Hcode.
     + exact: Hne.
-  - (* SM_internal *)
+  -
     move=> scrs1 C fb fb' prot1 stk1 oldarg targ k' rest' temps' plm ret1 s Sl1
            cap' Hplm Hcret Hcode Hcont L0 L1 T0 T1 Hinj Hpriv Htemps Ea Etag
            Hslots Hcap Hbud Hnp Hne _ IH Hb0 Hbp.
@@ -799,7 +657,7 @@ Proof.
     + exact: Hnp.
     + exact: Hne.
     + exact: Hsm'.
-  - (* SM_external *)
+  -
     move=> scrs1 C C'' fb fbE spE fb'' prot1 stk1 oldarg targ k'' rest'' temps''
            plm'' jal_ret icall_ret vscr junkARG sE s'' Sl1 cap''
            HneC Hplm Hext EretE EtagE HprivE L0 LE1 L1 T0 T1 Eic Hcode Hcont
@@ -880,9 +738,6 @@ Proof.
     + exact: Hsm'.
 Qed.
 
-(** Every protected frame is a real activation frame, so none of them is the
-    hidden scratch block. Free: each constructor asserts [frame_priv] for the
-    frame it adds, and [frame_priv] says exactly that. *)
 Lemma stack_match_prot_nonscr cde lP a m scrs C0 fb0 prot stk ret Sl :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   forall p, p \in prot -> p.2 <> 1.
@@ -904,10 +759,6 @@ Proof.
     + by move: E => ->; case: Hpriv.
 Qed.
 
-(** Every protected frame is ALLOCATED — it has at least one loadable cell.
-    Free for the same reason as [stack_match_prot_nonscr]: each constructor
-    asserts a [vload] in the frame it adds. This is what a fresh [IAlloc] block
-    is checked against: the callee's new frame cannot already be protected. *)
 Lemma stack_match_prot_loaded cde lP a m scrs C0 fb0 prot stk ret Sl :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   forall p, p \in prot ->
@@ -933,13 +784,6 @@ Proof.
       exists (Z.of_nat (2 + size temps'' + 1)), w. by rewrite E.
 Qed.
 
-(** The two scratch-map facts (`Simulation.v:1164` / `:1522`). The relation
-    reads the scratch map in exactly ONE place — `SM_external`'s
-    `getm scrs C'' = Some (parked R_SP)`, for the CALLER — so updating the
-    entry of the component that is currently RUNNING is free, and so is adding
-    an entry that was absent. Both are what a cross-component call needs: it
-    parks the caller's `R_SP` (an update at the running component) and then
-    hands the relation to the callee. *)
 Lemma stack_match_scrs_update cde lP a m scrs C0 fb0 prot stk ret Sl w :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   stack_match cde lP a m (setm scrs C0 w) C0 fb0 prot stk ret Sl.
@@ -1020,15 +864,6 @@ Proof.
               Htail').
 Qed.
 
-(** The port of `stack_match_store` (`Simulation.v:844`): a store outside the
-    relation's footprint preserves it. Footprint = the protected frames, plus
-    the current frame's three linkage slots (a push ABOVE them is fine, which
-    is why the condition is `2 <= offset` rather than a blanket exclusion).
-
-    The chain's validity at [m'] is taken as a PREMISE rather than derived. A
-    diagram has it from `TStack.slots_ok_store` already, and taking it here
-    avoids having to carry "every slot lives in a protected frame" as a
-    separate invariant. *)
 Lemma stack_match_store cde lP a m m' scrs C0 fb0 prot stk ret Sl p c :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   Transitional.Memory.store m p c = Some m' ->
@@ -1044,7 +879,6 @@ Proof.
   { move=> q Hq. exact: (TMem.load_store_neq Hst Hq). }
   have Lneq : forall q, q <> p -> TMem.vload m' q = TMem.vload m q.
   { move=> q Hq. by rewrite /TMem.vload Lneqr. }
-  (* the two frame predicates transfer whenever the touched cell is elsewhere *)
   have Ftemps : forall Cx bx tps,
       (forall o : Z, (Cx, bx, o) <> p) ->
       TStack.frame_temps m Cx bx tps -> TStack.frame_temps m' Cx bx tps.
@@ -1056,7 +890,7 @@ Proof.
   { move=> Cx bx cp Hne H j Hj. case: (H j Hj) => w Hw. exists w.
     by rewrite (Lneq _ (Hne _)). }
   elim: Hsm.
-  - (* SM_init *)
+  -
     move=> scrs0 fb fb_ext ret_ext lret v0 v1 vx vs1
             L0 L1 T0 T1 E0 E1 TE0 TE1 E2 E3 TE3 HprivE Hrc Hcode Hne Hprot
             Hcur Hs.
@@ -1076,7 +910,7 @@ Proof.
     + rewrite Lneq; last exact: NEext. exact: E2.
     + rewrite Lneq; last exact: NEext. exact: E3.
     + rewrite /TMem.tload Lneqr; last exact: NEext. exact: TE3.
-  - (* SM_internal *)
+  -
     move=> scrsI C fb fb' prot' stk' oldarg targ k' rest' temps' plm ret' s Sl'
             cap' HgetP Hrc Hcode Hcont L0 L1 T0 T1 Hvi Hpriv Htemps Ea Et
             Hslots Hcap Hbud Hnp Hne Htail IH Hprot Hcur Hs.
@@ -1095,7 +929,7 @@ Proof.
     + apply: IH => //.
       * by move=> [E1 E2]; move: Hprot1; rewrite E1 E2 eqxx.
       * exact: slots_ok_cons Hs.
-  - (* SM_external *)
+  -
     move=> scrsE C C'' fb fbE spE fb'' prot' stk' oldarg targ k'' rest'' temps''
             plm'' jal_ret icall_ret vscr junkARG sE s'' Sl' cap''
             HneC HgetP'' Hext EretE Etag HprivE L0 L1 L2 T0 T1 Hic Hcode''
@@ -1124,14 +958,6 @@ Proof.
       * exact: slots_ok_cons (slots_ok_cons Hs).
 Qed.
 
-(** The port of `stack_match_alloc` (`Simulation.v:1016`): allocation preserves
-    the relation along an extended renaming. Shorter than `_store` because
-    allocation touches NO existing cell, so the transfers are global — no
-    per-constructor disequalities.
-
-    The fresh-block argument the original gets from `memory_alloc_fresh` is
-    supplied here by the same premise shape; `TInject.alloc_fresh_notin` is what
-    a caller discharges it with. *)
 Lemma stack_match_alloc cde lP a a' m m' scrs C0 fb0 prot stk ret Sl Ca n p :
   stack_match cde lP a m scrs C0 fb0 prot stk ret Sl ->
   Transitional.Memory.alloc m Ca n = Some (m', p) ->
@@ -1144,8 +970,6 @@ Lemma stack_match_alloc cde lP a a' m m' scrs C0 fb0 prot stk ret Sl Ca n p :
   stack_match cde lP a' m' scrs C0 fb0 prot stk ret Sl.
 Proof.
   move=> Hsm Ha Hrle Hnew Hfresh.
-  (* raw-load transport, so BOTH projections ([vload] and the strengthened
-     [frame_temps]' [tload]) follow *)
   have Ltrr : forall q w, Transitional.Memory.load m q = Some w ->
       Transitional.Memory.load m' q = Some w.
   { move=> q w Hl.
@@ -1185,7 +1009,7 @@ Proof.
       TStack.frame_cap m Cx bx cp -> TStack.frame_cap m' Cx bx cp.
   { move=> Cx bx cp H j Hj. case: (H j Hj) => w Hw. by exists w; exact: Ltr Hw. }
   elim: Hsm.
-  - (* SM_init *)
+  -
     move=> scrs0 fb fb_ext ret_ext lret v0 v1 vx vs1
             L0 L1 T0 T1 E0 E1 TE0 TE1 E2 E3 TE3 HprivE Hrc Hcode Hne Hs.
     apply: SM_init; try eassumption.
@@ -1203,7 +1027,7 @@ Proof.
     + split; first by case: HprivE.
       apply: Hprv; first by case: HprivE.
       by exists 0%Z, v0.
-  - (* SM_internal *)
+  -
     move=> scrsI C fb fb' prot' stk' oldarg targ k' rest' temps' plm ret' s Sl'
             cap' HgetP Hrc Hcode Hcont L0 L1 T0 T1 Hvi Hpriv Htemps Ea Et
             Hslots Hcap Hbud Hnp Hne Htail IH Hs.
@@ -1222,7 +1046,7 @@ Proof.
     + exact: Ft Htemps.
     + exact: Fc Hcap.
     + apply: IH. exact: slots_ok_cons Hs.
-  - (* SM_external *)
+  -
     move=> scrsE C C'' fb fbE spE fb'' prot' stk' oldarg targ k'' rest'' temps''
             plm'' jal_ret icall_ret vscr junkARG sE s'' Sl' cap''
             HneC HgetP'' Hext EretE Etag HprivE L0 L1 L2 T0 T1 Hic Hcode''
@@ -1257,20 +1081,6 @@ Proof.
     + apply: IH. exact: slots_ok_cons (slots_ok_cons Hs).
 Qed.
 
-(** ★ Inversion at a stack whose top frame belongs to ANOTHER component — the
-    shape a cross-component return faces, and the mirror of
-    [stack_match_internal_inv].
-
-    It also delivers THE LEVEL FACT that `TS.JumpRet` needs. `ti_lvl` alone
-    gives only the MULTISET of live levels (`0 .. level pct - 1`); it does not
-    say which slot holds the maximum. The two tag premises supply the missing
-    half — the wrapper's own tag counts the chain BELOW it, and the caller's is
-    an `InternalJump` and so counts for nothing — so with [levels_ok_size] the
-    wrapper's capability is pinned to `Ret (level pct - 1)` exactly.
-
-    Note the level fact CANNOT be stated about the chain alone: a chain
-    `sE :: s'' :: Sl` can equally arise from `SM_internal`, whose head is an
-    `InternalJump`. It is the external SHAPE that carries it. *)
 Lemma stack_match_external_inv cde lP a m scrs C fb prot Cf oldarg k'' stk ret
       Sl :
   C <> Cf ->
@@ -1320,8 +1130,6 @@ Proof.
     by split; try eassumption.
 Qed.
 
-(** ★ …and the level arithmetic it feeds: the wrapper's capability is exactly
-    `Ret (level pct - 1)`. *)
 Lemma ext_level_max sE s'' Sl k :
   TStack.ra_tag sE = Ret (size (TStack.ext_levels Sl)) ->
   TStack.ra_tag s'' = InternalJump ->
@@ -1335,19 +1143,6 @@ Proof.
   by move: (TStack.levels_ok_size Hlv); rewrite Eext /=.
 Qed.
 
-(** ★ Inversion at a stack whose top frame belongs to the CURRENT component.
-
-    `SM_init` is excluded because its stack is empty and `SM_external` because
-    its top frame is in a DIFFERENT component, so this is the internal case —
-    and it hands the diagram the caller's whole frame description in one go.
-    Bundled with plain `/\` rather than `[/\ ]` because there are more
-    components than ssreflect's `and5` admits. *)
-(** ★ The BOTTOM of the chain: an empty source stack means main's initial
-    activation, and `SM_init` is the only constructor that produces it. What
-    comes out is main's wrapper — including slot 3's CONTEXT MARKER, which is
-    `Int 0` exactly when the machine entered `main` directly rather than
-    through a cross-component call. That is what makes the wrapper's `IBnz`
-    fall through to its `IHalt`. *)
 Lemma stack_match_init_inv cde lP a m scrs C fb prot ret Sl :
   stack_match cde lP a m scrs C fb prot [::] ret Sl ->
   exists fb_ext lret v0 v1 vx vs1,
@@ -1410,38 +1205,23 @@ Lemma stack_match_internal_inv cde lP a m scrs C fb prot oldarg k' stk ret Sl :
 Proof.
   move=> H. inversion H; subst.
   - by exists fb', prot0, targ, rest', temps', plm, s, Sl0, cap'.
-  - (* SM_external is impossible: its top frame is in another component *)
+  -
     by [].
 Qed.
 
-(* ================================================================== *)
-(* The scratch map                                                    *)
-(* ================================================================== *)
 
-(** `expr_inv`'s scratch clauses (`ei_scrs`, `ei_scr_all`, `ei_flag`) at T.
-    The scratch cell is `(C, 1, 0)` and the "started" flag `(main, 1, 1)`;
-    both are hidden-block cells, so they are `vload` facts. *)
 Definition scrs_ok (m : mem) (iface : Program.interface)
                    (scrs : NMap value) : Prop :=
   [/\ forall C' v, getm scrs C' = Some v ->
         TMem.vload m (C', 1, 0%Z) = Some v,
-      (* ★ the FLAG, value AND tag. The tag half is forced by main's dual
-         entry: its `ILoad R_AUX1 R_AUX2` copies this cell's tag into a
-         register the following `IBnz` inspects, and MP's `Bnz` refuses a
-         non-[Other] operand — so an `Invalidated` flag would wedge every
-         genuine cross-component call to `(main, main)`. Kept as ONE clause
-         (a pair) rather than a fifth conjunct so that the [and4] shape, and
-         every `[_ _ S3 _]` pattern in the diagrams, survives. *)
       TMem.vload m (Component.main, 1, 1%Z) = Some (Int 1)
       /\ TMem.tload m (Component.main, 1, 1%Z) = Some Other,
       forall C', C' \in domm iface ->
         exists v, TMem.vload m (C', 1, 0%Z) = Some v
-    & (* the scratch cell is DATA: the caller's [reload_sp] loads it into
-         [R_SP], and MP refuses a non-[Other] operand *)
+    &
       forall C', C' \in domm iface ->
         TMem.tload m (C', 1, 0%Z) = Some Other].
 
-(** A store outside the hidden blocks preserves the scratch clauses. *)
 Lemma scrs_ok_store m m' iface scrs p c :
   scrs_ok m iface scrs ->
   Transitional.Memory.store m p c = Some m' ->
@@ -1466,7 +1246,6 @@ Proof.
                      exact: H4 HC.
 Qed.
 
-(** …and so does a value-preserving store anywhere (the pop write-back). *)
 Lemma scrs_ok_store_same m m' iface scrs p cc c' :
   scrs_ok m iface scrs ->
   Transitional.Memory.load m p = Some cc ->

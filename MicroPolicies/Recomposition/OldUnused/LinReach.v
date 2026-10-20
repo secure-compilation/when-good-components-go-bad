@@ -1,11 +1,3 @@
-(* I-side reachability invariants for the linked compiled program.
-
-   Phase 1: the stub-bottom invariant — the wrap-main stub only ever
-   runs at the bottom of the call stack, discharging the naked-jal
-   window oracle [sr_jal_dead].  Two interface Hypotheses isolate the
-   entry/label exclusion facts (verified true of the compiled layout;
-   discharged by a later increment). *)
-
 Require Import Common.Definitions.
 Require Import Common.Memory.
 
@@ -43,7 +35,6 @@ Variables pra prb : Intermediate.program.
 Local Notation ilp := (Intermediate.program_link pra prb).
 Local Notation G := (Intermediate.GlobalEnv.prepare_global_env ilp).
 
-(* a stub block: its procedure body is the wrap-main literal *)
 Definition stub_blk (cid : Component.id) (b : Block.id) : Prop :=
   exists (Cprocs : NMap Machine.code) (j : nat) (P0 : Procedure.id)
          (lab : label),
@@ -59,8 +50,6 @@ Lemma stub_pc_inc (pc : Pointer.t) :
   stub_pc (Pointer.inc pc) <-> stub_pc pc.
 Proof. by case: pc => [[c b] o]. Qed.
 
-(* the invariant: the stub only runs, and only sits framed, at the
-   bottom of the stack *)
 Definition sb_inv (s : CS.state) : Prop :=
   match s with
   | (gps, _, _, pc) =>
@@ -78,7 +67,6 @@ split; first by [].
 by move=> [|x gps1] f gps2.
 Qed.
 
-(* silent pc-increment steps preserve the invariant *)
 Lemma sb_inv_inc (gps : CS.stack)
     (mem mem' : Memory.Memory.t)
     (regs regs' : Intermediate.Register.t) (pc : Pointer.t) :
@@ -90,7 +78,6 @@ split; last exact: H2.
 move=> /stub_pc_inc Hs. exact: H1.
 Qed.
 
-(* label targets are never in the stub (it has no labels) *)
 Hypothesis Hstub_nolabel_c :
   forall (pc : Pointer.t) (l : label) (pc' : Pointer.t),
     Pointer.component pc \in domm (Intermediate.prog_interface ilp) ->
@@ -103,7 +90,6 @@ Hypothesis Hstub_nolabel_p :
     Intermediate.GlobalEnv.find_label_in_procedure G pc l = Some pc' ->
     ~ stub_pc pc'.
 
-(* an executing pc's component is interfaced *)
 Lemma executing_domm (pc : Pointer.t) (i : Machine.instr) :
   Intermediate.GlobalEnv.executing G pc i ->
   Pointer.component pc \in domm (Intermediate.prog_interface ilp).
@@ -113,8 +99,6 @@ rewrite -(Intermediate.GlobalEnv.domm_genv_procedures ilp).
 by rewrite mem_domm HgC.
 Qed.
 
-(* cross-component calls never enter the stub (its fresh procedure id
-   is not exported) *)
 Hypothesis Hstub_noentry :
   forall (C0 : Component.id) (C' : Component.id) (P : Procedure.id)
          (b : Block.id),
@@ -128,30 +112,30 @@ Lemma sb_step (s : CS.state) (t : Events.trace) (s' : CS.state) :
   CS.step G s t s' -> sb_inv s -> sb_inv s'.
 Proof.
 case=> {s t s'}.
-- (* Nop *)
+-
   move=> gps mem regs pc _.
   exact: sb_inv_inc.
-- (* Label *)
+-
   move=> gps mem regs pc l _.
   exact: sb_inv_inc.
-- (* Const *)
+-
   move=> gps mem regs regs' pc r v _ _.
   exact: sb_inv_inc.
-- (* Mov *)
+-
   move=> gps mem regs regs' pc r1 r2 _ _.
   exact: sb_inv_inc.
-- (* BinOp *)
+-
   move=> gps mem regs regs' pc r1 r2 r3 op _.
   cbv zeta. move=> _ [H1 H2].
   split; last exact: H2.
   move=> /stub_pc_inc Hs. exact: H1.
-- (* Load *)
+-
   move=> gps mem regs regs' pc r1 r2 ptr v _ _ _ _ _.
   exact: sb_inv_inc.
-- (* Store *)
+-
   move=> gps mem mem' regs pc ptr r1 r2 _ _ _ _.
   exact: sb_inv_inc.
-- (* Jal *)
+-
   move=> gps mem regs regs' pc pc' l Hex HF _ [H1 H2].
   split.
   + move=> Hs'. exfalso.
@@ -163,25 +147,25 @@ case=> {s t s'}.
       apply/stub_pc_inc.
       by rewrite Ef.
     * case: Edec => _ Eg. exact: (H2 _ _ _ Eg Hf).
-- (* Jump *)
+-
   move=> gps mem regs pc pc' _ _ [H1 H2].
   split.
   + move=> Hs'. exact: (H2 [::] pc' gps erefl Hs').
   + move=> gps1 f gps2 Eg Hf.
     apply: (H2 (pc' :: gps1) f gps2 _ Hf).
     by rewrite /= Eg.
-- (* BnzNZ *)
+-
   move=> gps mem regs pc pc' r l val Hex _ _ HFp [H1 H2].
   split; last exact: H2.
   move=> Hs'. exfalso.
   exact: (Hstub_nolabel_p (executing_domm Hex) HFp Hs').
-- (* BnzZ *)
+-
   move=> gps mem regs pc r l _ _.
   exact: sb_inv_inc.
-- (* Alloc *)
+-
   move=> gps mem mem' regs regs' pc rsize rptr size ptr _ _ _ _ _.
   exact: sb_inv_inc.
-- (* Call *)
+-
   move=> gps mem regs pc b C' P call_arg _ _ Himp Hep _ [H1 H2].
   split.
   + move=> Hs'. exfalso. exact: (Hstub_noentry Himp Hep Hs').
@@ -192,7 +176,7 @@ case=> {s t s'}.
       apply/stub_pc_inc.
       by rewrite Ef.
     * case: Edec => _ Eg. exact: (H2 _ _ _ Eg Hf).
-- (* Return *)
+-
   move=> gps' mem regs pc pc' ret_arg _ _ _ [H1 H2].
   split.
   + move=> Hs'. exact: (H2 [::] pc' gps' erefl Hs').
@@ -201,7 +185,6 @@ case=> {s t s'}.
     by rewrite /= Eg.
 Qed.
 
-(* the initial state has an empty stack, whatever its shape *)
 Lemma sb_init : sb_inv (CS.initial_machine_state ilp).
 Proof.
 rewrite /CS.initial_machine_state.
@@ -210,7 +193,6 @@ case: (Intermediate.prog_main ilp).
 - exact: sb_inv_nilstack.
 Qed.
 
-(* every reachable state satisfies the invariant *)
 Theorem ireach_sb (s : CS.state) :
   ireach pra prb s -> sb_inv s.
 Proof.
@@ -221,18 +203,6 @@ elim: Hst => [s1 Hinv | s1 t1 s2 t2 s3 tt Hstep Hstar IH Et Hinv].
 - exact: Hinv.
 - apply: IH. exact: (sb_step Hstep Hinv).
 Qed.
-
-(* ==================== phase 2: the slot model ==================== *)
-
-(* The compiled stack frame is a FRESH ALLOCATED BLOCK (the prologue's
-   IAlloc R_SP R_SP), so slot separation is block-level: user stores
-   target the static buffers or data allocations, never a frame block,
-   except through R_SP itself at the compiled push/pop sites.
-
-   [sp_delta] mirrors [dead_at]: inside a call window it tracks the
-   offset of R_SP above the window's RA slot (the push stores at the
-   slot then increments; pushes/pops of other registers move it; the
-   closing pop's preceding decrement returns it to 0). *)
 
 Definition sp_step (i : Machine.instr) (d : Z) : Z :=
   match i with
@@ -249,7 +219,6 @@ Fixpoint sp_scan (c : Machine.code) (d : Z) (o : nat) : Z :=
   | o'.+1, i :: c' => sp_scan c' (sp_step i d) o'
   end.
 
-(* the running window's slot: R_SP sits [sp_scan] above the RA slot *)
 Definition win_slot (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (cur : Component.id)
     (Pcode : Machine.code) (o : nat) : Prop :=
@@ -258,7 +227,6 @@ Definition win_slot (imem : Memory.Memory.t)
       & Memory.Memory.load imem
           (cur, fb, (spo - sp_scan Pcode 0%Z o)%Z) = Some Undef].
 
-(* basic scan algebra *)
 Lemma sp_scan0 (c : Machine.code) (d : Z) : sp_scan c d 0 = d.
 Proof. by case: c. Qed.
 
@@ -274,14 +242,6 @@ elim: c d o => [|i0 c' IH] d o.
   + move=> Hnth. exact: (IH _ _ Hnth).
 Qed.
 
-(* the per-instruction SP-discipline condition: pushes open windows
-   live, the closing pop reads at offset zero, in-window frame stores
-   stay above the RA slot, and nothing else writes R_SP in-window *)
-(* Note: cross-call windows legitimately rewrite R_SP in-window (it is
-   parked in the scratch cell across the callee and reloaded — IConst
-   (IPtr scr) R_SP; ILoad R_SP R_SP — restoring exactly the tracked
-   offset), so only the push/pop discipline itself is enforced here;
-   the run-level invariant carries the reload semantics. *)
 Definition spd_cond (i : Machine.instr) (dead : bool) (d : Z) : bool :=
   match i with
   | IStore r1 r2 =>
@@ -323,8 +283,6 @@ elim: c => [|i0 c' IH] dead d.
   + move=> Hnth. exact: (IH _ _ Hrest _ _ Hnth).
 Qed.
 
-(* inside a window the offset is canonical: the opening push resets it,
-   so scans from different seeds agree at every dead position *)
 Lemma sp_scan_dead_irrel (c : Machine.code) :
   forall (dead : bool) (d d' : Z) (o : nat),
   (dead -> d = d') ->
@@ -359,13 +317,10 @@ Lemma sp_scan_cat_r (c1 c2 : Machine.code) (d : Z) (o : nat) :
   = sp_scan c2 (sp_scan c1 d (size c1)) o.
 Proof. by elim: c1 d => [|i c1' IH] d //=. Qed.
 
-(* at live positions the condition ignores the offset *)
 Lemma spd_cond_live_irrel (i : Machine.instr) (d d' : Z) :
   spd_cond i false d = spd_cond i false d'.
 Proof. by case: i => //=. Qed.
 
-(* the compositional form: window-balanced, and every position obeys
-   the discipline relative to a live entry with canonical offsets *)
 Record spd_ok (c : Machine.code) : Prop := SpdOk {
   spdo_bal : ra_dead_scan c false (size c) = false;
   spdo_cond : forall (o : nat) (i : Machine.instr),
@@ -396,13 +351,13 @@ constructor.
     rewrite Eo ra_dead_scan_cat_r B1 sp_scan_cat_r.
     have Hcond := F2 _ _ Hn2.
     case Edead: (ra_dead_scan c2 false (o - size c1)).
-    * (* dead: the offset is canonical *)
+    *
       have Eirr : sp_scan c2 (sp_scan c1 0%Z (size c1)) (o - size c1)
                   = sp_scan c2 0%Z (o - size c1).
       { by apply: (sp_scan_dead_irrel (dead := false)) => //. }
       rewrite Eirr.
       by rewrite Edead in Hcond.
-    * (* live: the condition ignores the offset *)
+    *
       rewrite Edead in Hcond.
       by rewrite (spd_cond_live_irrel _ _ 0%Z).
 Qed.
@@ -417,7 +372,6 @@ elim: c => [|i c IH] dead d /=.
 - move=> /andP [_ Hrest]. exact: (IH _ _ Hrest).
 Qed.
 
-(* checked literals satisfy the compositional form *)
 Lemma spd_check_okP (c : Machine.code) :
   spd_check c false 0%Z = true -> spd_ok c.
 Proof.
@@ -427,7 +381,6 @@ constructor.
 - move=> o i Hnth. exact: (spd_check_sound Hc Hnth).
 Qed.
 
-(* a live, window-neutral head preserves the form *)
 Lemma spd_ok_cons (i : Machine.instr) (c : Machine.code) :
   spd_cond i false 0%Z = true ->
   ra_dead_step i false = false ->
@@ -445,7 +398,6 @@ have H1 : spd_ok [:: i].
 exact: (spd_ok_cat H1 H).
 Qed.
 
-(* compiled expressions obey the SP discipline *)
 Lemma compile_expr_spd (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
@@ -454,13 +406,13 @@ Lemma compile_expr_spd (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _]; by apply: spd_check_okP.
-- (* E_arg *)
+-
   move: Hc => /= [<- _]. by apply: spd_check_okP.
-- (* E_local *)
+-
   move: Hc => /= [<- _]. by apply: spd_check_okP.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -473,7 +425,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: spd_ok_cons => //.
   apply: spd_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: spd_check_okP; case: bop.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -482,7 +434,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (spd_ok_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -504,21 +456,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: spd_ok_cons => //.
   apply: spd_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: spd_check_okP.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: spd_ok_cat; first exact: (IH _ _ _ E1).
   by apply: spd_check_okP.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: spd_ok_cat; first exact: (IH _ _ _ E1).
   by apply: spd_check_okP.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -531,7 +483,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: spd_ok_cons => //.
   apply: spd_ok_cat; first exact: (IH1 _ _ _ E1).
   by apply: spd_check_okP.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -545,7 +497,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: spd_ok_cat; first exact: (IH _ _ _ E1).
     by apply: spd_check_okP.
-- (* E_exit *)
+-
   move: Hc => /= [<- _]. by apply: spd_check_okP.
 Qed.
 
@@ -557,7 +509,6 @@ move=> -> H1 H2 H3.
 exact: (spd_ok_cat H1 (spd_ok_cat H2 H3)).
 Qed.
 
-(* whole compiled procedures obey the SP discipline *)
 Lemma compile_proc_spd (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : Machine.code) (s' : comp_env) :
@@ -614,7 +565,6 @@ case Hm: (Component.eqb C0 Component.main
     apply: spd_check_okP.
 Qed.
 
-(* every procedure of a compiled program obeys the SP discipline *)
 Theorem compiled_spd (p : Source.program) (tp : Intermediate.program) :
   compile_program p = Some tp ->
   forall (C : Component.id) (Cprocs : NMap Machine.code)
@@ -631,9 +581,6 @@ case: (Hper _ _ HgetP)
 - subst cd. by apply: spd_check_okP.
 Qed.
 
-(* frame lemmas: stores by other components or into other blocks leave
-   a cell untouched (I-stores are component-local by the step relation,
-   so cross-component callees can never reach a caller's frame) *)
 Lemma load_store_other_comp (mem mem' : Memory.Memory.t)
     (ptr : Pointer.t) (v : value)
     (C : Component.id) (b : Block.id) (o : Z) :
@@ -673,7 +620,6 @@ case: ptr Hst Hne => [[cp bp] op] _ Hne E.
 by case: E Hne => _ _ <-.
 Qed.
 
-(* cross-boundary register clearing, per register *)
 Lemma invalidate_get (regs : Intermediate.Register.t)
     (r : Machine.register) :
   Intermediate.Register.get r (Intermediate.Register.invalidate regs)
@@ -683,8 +629,6 @@ Lemma invalidate_get (regs : Intermediate.Register.t)
     end.
 Proof. by case: r. Qed.
 
-(* the post-call phase: between a cross ICall and the R_SP reload the
-   stack pointer is parked in the scratch cell *)
 Definition ph_step (i : Machine.instr) (ph : bool) : bool :=
   match i with
   | ICall _ _ => true
@@ -699,9 +643,6 @@ Fixpoint ph_scan (c : Machine.code) (ph : bool) (o : nat) : bool :=
   | o'.+1, i :: c' => ph_scan c' (ph_step i ph) o'
   end.
 
-(* the running window's slot, phase-aware: in the normal phase R_SP
-   itself locates the RA slot; in the post-call phase the parked R_SP
-   sits in the scratch cell *)
 Definition win_state (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (scr : Pointer.t)
     (cur : Component.id) (Pcode : Machine.code) (o : nat) : Prop :=
@@ -714,9 +655,6 @@ Definition win_state (imem : Memory.Memory.t)
                 Pointer.offset scr) = Some (Ptr (cur, fb, spo))
         else Intermediate.Register.get R_SP iregs = Ptr (cur, fb, spo)).
 
-(* the parked frames' RA slots all hold Undef; a [None] entry is a
-   frameless push (the bottom stub's live jal — its return target is
-   live, so the pop never needs a window to re-open) *)
 Fixpoint iframes (imem : Memory.Memory.t) (gps : list Pointer.t)
     (fbs : list (option (Block.id * Z))) : Prop :=
   match gps, fbs with
@@ -760,11 +698,6 @@ Lemma ph_scan_cat_r (c1 c2 : Machine.code) (p : bool) (o : nat) :
   = ph_scan c2 (ph_scan c1 p (size c1)) o.
 Proof. by elim: c1 p => [|i c1' IH] p //=. Qed.
 
-(* ==================== the position classifier ==================== *)
-
-(* the joint static classification consumed by the run invariant: per
-   instruction, what the R_RA window state (dead), the in-window SP
-   offset (d) and the post-call phase (ph) must look like *)
 Definition cls_cond (i : Machine.instr) (dead : bool) (d : Z)
     (ph : bool) : bool :=
   match i with
@@ -813,7 +746,6 @@ Definition cls_cond (i : Machine.instr) (dead : bool) (d : Z)
   | _ => true
   end.
 
-(* the propositional reading, matching the run invariant's uses *)
 Lemma cls_condP (i : Machine.instr) (dead ph : bool) (d : Z) :
   cls_cond i dead d ph = true ->
   match i with
@@ -838,50 +770,49 @@ Lemma cls_condP (i : Machine.instr) (dead ph : bool) (d : Z) :
   end.
 Proof.
 case: i => //=.
-- (* IConst *)
+-
   move=> v r.
   case: r => //= H.
   split => // Ed Ep.
   by move: H; rewrite Ed Ep /=.
-- (* IMov *)
+-
   by move=> r1 r2; case: r2.
-- (* IBinOp *)
+-
   move=> op r1 r2 r3.
   case: r3 => //= H; split => // _.
   case: r1 H => //=; case: r2 => //=; case: op => //= H.
   + by split=> //; [left | exact: (negbTE H)].
   + by split=> //; [right | exact: (negbTE H)].
-- (* ILoad *)
+-
   move=> r1 r2.
   case: r2 => //=.
-  + (* R_RA *)
+  +
     case: r1 => //= /and3P [Hd Hd0 Hp].
     split=> // _.
     by split;
       [ | exact: Hd | move: Hd0 => /Z.eqb_eq | exact: (negbTE Hp)].
-  + (* R_SP *)
+  +
     move=> H.
     split=> // _ Ed.
     move: H; rewrite Ed /=.
     by case: r1.
-- (* IStore *)
+-
   move=> r1 r2.
   case: r2 => //=;
     try by move=> H; split=> [|_]; [ | exact: (negbTE H)].
-  (* R_RA *)
   case: r1 => //= /andP [H1 H2].
   split.
   + move=> _.
     by split=> //; [exact: (negbTE H1) | exact: (negbTE H2)].
   + move=> HN. by case: (HN erefl).
-- (* IAlloc *)
+-
   move=> r sz.
   case: r => //= H; split=> //; exact: (negbTE H).
-- (* IJal *)
+-
   move=> l H Ed.
   move: H; rewrite Ed /=.
   exact: negbTE.
-- (* ICall *)
+-
   move=> C' P' /andP [H1 H2].
   by split; [ | exact: (negbTE H2)].
 Qed.
@@ -932,14 +863,12 @@ elim: c => [|i c IH] dead d ph /=.
 - move=> /andP [_ Hrest]. exact: (IH _ _ _ Hrest).
 Qed.
 
-(* at live positions the condition ignores the SP offset *)
 Lemma cls_cond_live_irrel (i : Machine.instr) (d d' : Z) (ph : bool) :
   cls_cond i false d ph = cls_cond i false d' ph.
 Proof.
 by case: i => //= r1 r2; case: r2 => //=; case: r1.
 Qed.
 
-(* the compositional form *)
 Record cls_ok (c : Machine.code) : Prop := ClsOk {
   clso_bal : ra_dead_scan c false (size c) = false;
   clso_phbal : ph_scan c false (size c) = false;
@@ -977,18 +906,17 @@ constructor.
             ph_scan_cat_r PB1.
     have Hcond := F2 _ _ Hn2.
     case Edead: (ra_dead_scan c2 false (o - size c1)).
-    * (* dead: the offset is canonical *)
+    *
       have Eirr : sp_scan c2 (sp_scan c1 0%Z (size c1)) (o - size c1)
                   = sp_scan c2 0%Z (o - size c1).
       { by apply: (sp_scan_dead_irrel (dead := false)) => //. }
       rewrite Eirr.
       by rewrite Edead in Hcond.
-    * (* live: the condition ignores the offset *)
+    *
       rewrite Edead in Hcond.
       by rewrite (cls_cond_live_irrel _ _ 0%Z).
 Qed.
 
-(* checked literals satisfy the compositional form *)
 Lemma cls_check_okP (c : Machine.code) :
   cls_check c false 0%Z false = true -> cls_ok c.
 Proof.
@@ -999,7 +927,6 @@ constructor.
 - move=> o i Hnth. exact: (cls_check_sound Hc Hnth).
 Qed.
 
-(* a live, window- and phase-neutral head preserves the form *)
 Lemma cls_ok_cons (i : Machine.instr) (c : Machine.code) :
   cls_cond i false 0%Z false = true ->
   ra_dead_step i false = false ->
@@ -1027,7 +954,6 @@ move=> -> H1 H2 H3.
 exact: (cls_ok_cat H1 (cls_ok_cat H2 H3)).
 Qed.
 
-(* compiled expressions are classified *)
 Lemma compile_expr_cls (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
@@ -1036,13 +962,13 @@ Lemma compile_expr_cls (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _]; by apply: cls_check_okP.
-- (* E_arg *)
+-
   move: Hc => /= [<- _]. by apply: cls_check_okP.
-- (* E_local *)
+-
   move: Hc => /= [<- _]. by apply: cls_check_okP.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1055,7 +981,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: cls_ok_cons => //.
   apply: cls_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: cls_check_okP; case: bop.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1064,7 +990,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (cls_ok_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1086,21 +1012,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: cls_ok_cons => //.
   apply: cls_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: cls_check_okP.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: cls_ok_cat; first exact: (IH _ _ _ E1).
   by apply: cls_check_okP.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: cls_ok_cat; first exact: (IH _ _ _ E1).
   by apply: cls_check_okP.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1113,7 +1039,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: cls_ok_cons => //.
   apply: cls_ok_cat; first exact: (IH1 _ _ _ E1).
   by apply: cls_check_okP.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1127,11 +1053,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: cls_ok_cat; first exact: (IH _ _ _ E1).
     by apply: cls_check_okP.
-- (* E_exit *)
+-
   move: Hc => /= [<- _]. by apply: cls_check_okP.
 Qed.
 
-(* compiled procedure wrappers are classified *)
 Lemma compile_proc_cls (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : Machine.code) (s' : comp_env) :
@@ -1188,8 +1113,6 @@ case Hm: (Component.eqb C0 Component.main
     apply: cls_check_okP.
 Qed.
 
-(* every procedure of a compiled program is classified — the bottom
-   stub included *)
 Theorem compiled_cls (p : Source.program) (tp : Intermediate.program) :
   compile_program p = Some tp ->
   forall (C : Component.id) (Cprocs : NMap Machine.code)
@@ -1206,11 +1129,6 @@ case: (Hper _ _ HgetP)
 - subst cd. by apply: cls_check_okP.
 Qed.
 
-(* ==================== the R_ONE arming scan ==================== *)
-
-(* R_ONE surely holds [Int 1]: armed by [IConst (IInt 1) R_ONE],
-   killed by any other write to R_ONE and by cross calls (invalidate);
-   the compiled ± push/pop binops only sit at armed positions *)
 Definition rone_step (i : Machine.instr) (armed : bool) : bool :=
   match i with
   | IConst v r =>
@@ -1273,9 +1191,6 @@ Lemma rone_scan_cat_r (c1 c2 : Machine.code) (s : bool) (o : nat) :
   = rone_scan c2 (rone_scan c1 s (size c1)) o.
 Proof. by elim: c1 s => [|i c1' IH] s //=. Qed.
 
-(* the condition: SP-adjusting binops require the armed flag, and so
-   do all intra control-transfer sites (jal/jump/bnz) — making the
-   run-invariant's transfer cases local (source-armed) *)
 Definition rone_cond (i : Machine.instr) (armed : bool) : bool :=
   match i with
   | IBinOp _ _ _ r3 =>
@@ -1317,8 +1232,6 @@ elim: c1 s => [|i c1' IH] s /=.
 - by rewrite IH andbA.
 Qed.
 
-(* the compositional form for fragments: armed-in gives checked
-   positions and armed-out *)
 Record rone_ok (c : Machine.code) : Prop := ROneOk {
   ro_check : rone_check c true = true;
   ro_end : rone_scan c true (size c) = true
@@ -1352,7 +1265,6 @@ Lemma rone_check_okP (c : Machine.code) :
   rone_ok c.
 Proof. by move=> Hc He; constructor. Qed.
 
-(* compiled expression fragments preserve the arming *)
 Lemma compile_expr_rone (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
@@ -1361,13 +1273,13 @@ Lemma compile_expr_rone (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _]; by apply: rone_check_okP.
-- (* E_arg *)
+-
   move: Hc => /= [<- _]. by apply: rone_check_okP.
-- (* E_local *)
+-
   move: Hc => /= [<- _]. by apply: rone_check_okP.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1380,7 +1292,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: rone_ok_cons => //.
   apply: rone_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: rone_check_okP; case: bop.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1389,7 +1301,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (rone_ok_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1411,21 +1323,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: rone_ok_cons => //.
   apply: rone_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: rone_check_okP.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: rone_ok_cat; first exact: (IH _ _ _ E1).
   by apply: rone_check_okP.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: rone_ok_cat; first exact: (IH _ _ _ E1).
   by apply: rone_check_okP.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1438,7 +1350,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: rone_ok_cons => //.
   apply: rone_ok_cat; first exact: (IH1 _ _ _ E1).
   by apply: rone_check_okP.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1452,12 +1364,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: rone_ok_cat; first exact: (IH _ _ _ E1).
     by apply: rone_check_okP.
-- (* E_exit *)
+-
   move: Hc => /= [<- _]. by apply: rone_check_okP.
 Qed.
 
-(* whole compiled procedures check from the cold seed: the wrapper's
-   first cell arms R_ONE *)
 Lemma compile_proc_rone (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : Machine.code) (s' : comp_env) :
@@ -1512,8 +1422,6 @@ case Hm: (Component.eqb C0 Component.main
 - by apply: (KEY (EEN ++ PROL)).
 Qed.
 
-(* program level: every ±SP binop of a compiled procedure sits at an
-   armed position (from the cold seed) *)
 Theorem compiled_rone (p : Source.program) (tp : Intermediate.program) :
   compile_program p = Some tp ->
   forall (C : Component.id) (Cprocs : NMap Machine.code)
@@ -1530,10 +1438,6 @@ case: (Hper _ _ HgetP)
 - by subst cd.
 Qed.
 
-(* ==================== the R_SP constant track ==================== *)
-
-(* the last constant written to R_SP, if still current: [IConst v R_SP]
-   sets it, any other write to R_SP (and cross calls) clears it *)
 Definition rsp_step (i : Machine.instr) (tr : option imvalue)
   : option imvalue :=
   match i with
@@ -1575,7 +1479,6 @@ elim: c tr o => [|i0 c' IH] tr o.
   + move=> Hnth. exact: (IH _ _ Hnth).
 Qed.
 
-(* pointer literal equality *)
 Definition ptr_eqb (p q : Pointer.t) : bool :=
   match p, q with
   | (c, b, o), (c', b', o') =>
@@ -1595,8 +1498,6 @@ case: p => [[c b] o] /=.
 by rewrite !eqxx Z.eqb_refl.
 Qed.
 
-(* the condition: post-call reloads see the scratch pointer; labels and
-   jal sites carry no live track (so every transfer target is clean) *)
 Definition rspt_cond (scr : Pointer.t) (i : Machine.instr)
     (tr : option imvalue) (ph : bool) : bool :=
   match i with
@@ -1672,7 +1573,6 @@ elim: c1 tr o => [|i c1' IH] tr o /=.
   exact: IH.
 Qed.
 
-(* fragment form: clean-in/clean-out on both threads *)
 Record rspt_ok (scr : Pointer.t) (c : Machine.code) : Prop := RsptOk {
   rso_check : rspt_check scr c None false = true;
   rso_end : rsp_track c None (size c) = None;
@@ -1713,7 +1613,6 @@ Lemma rspt_check_okP (scr : Pointer.t) (c : Machine.code) :
   rspt_ok scr c.
 Proof. by move=> Hc He Hp; constructor. Qed.
 
-(* compiled expression fragments *)
 Lemma compile_expr_rspt (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
@@ -1722,13 +1621,13 @@ Lemma compile_expr_rspt (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _]; by apply: rspt_check_okP.
-- (* E_arg *)
+-
   move: Hc => /= [<- _]. by apply: rspt_check_okP.
-- (* E_local *)
+-
   move: Hc => /= [<- _]. by apply: rspt_check_okP.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1741,7 +1640,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: rspt_ok_cons => //.
   apply: rspt_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: rspt_check_okP; case: bop.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1750,7 +1649,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (rspt_ok_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1772,21 +1671,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: rspt_ok_cons => //.
   apply: rspt_ok_cat; first exact: (IH2 _ _ _ E2).
   by apply: rspt_check_okP.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: rspt_ok_cat; first exact: (IH _ _ _ E1).
   by apply: rspt_check_okP.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: rspt_ok_cat; first exact: (IH _ _ _ E1).
   by apply: rspt_check_okP.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -1799,7 +1698,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: rspt_ok_cons => //.
   apply: rspt_ok_cat; first exact: (IH1 _ _ _ E1).
   by apply: rspt_check_okP.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -1813,11 +1712,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: rspt_ok_cat; first exact: (IH _ _ _ E1).
     by apply: rspt_check_okP; rewrite /= ?ptr_eqb_refl.
-- (* E_exit *)
+-
   move: Hc => /= [<- _]. by apply: rspt_check_okP.
 Qed.
 
-(* whole compiled procedures from the cold seed *)
 Lemma compile_proc_rspt (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : Machine.code) (s' : comp_env) :
@@ -1873,7 +1771,6 @@ case Hm: (Component.eqb C0 Component.main
 - by apply: (KEY (EEN ++ PROL)).
 Qed.
 
-(* program level, at the concrete per-component scratch pointer *)
 Theorem compiled_rspt (p : Source.program)
     (tp : Intermediate.program) :
   compile_program p = Some tp ->
@@ -1891,12 +1788,6 @@ case: (Hper _ _ HgetP)
 - by subst cd.
 Qed.
 
-(* ==================== the R_AUX1 dirty scan ==================== *)
-
-(* whether R_AUX1 may hold a frame/scratch pointer: set by the
-   prologue's SP copy, by scratch-pointer constants and by the
-   re-entrant scr load ([ILoad R_AUX1 R_AUX1]); cleared by frame-temp
-   pops ([ILoad R_SP R_AUX1]), integer constants and cross calls *)
 Definition aux1_step (i : Machine.instr) (dirty : bool) : bool :=
   match i with
   | IMov _ r2 =>
@@ -1916,9 +1807,6 @@ Definition aux1_step (i : Machine.instr) (dirty : bool) : bool :=
   | IAlloc r _ =>
       match r with R_AUX1 => true | _ => dirty end
   | ICall _ _ => false
-  (* conservative joins: everything after a label (a possible branch
-     target) or a jal fall-through (a return point) counts dirty; the
-     run invariant additionally skips the label position itself *)
   | ILabel _ => true
   | IJal _ => true
   | _ => dirty
@@ -1964,7 +1852,6 @@ Lemma aux1_scan_cat_r (c1 c2 : Machine.code) (s : bool) (o : nat) :
   = aux1_scan c2 (aux1_scan c1 s (size c1)) o.
 Proof. by elim: c1 s => [|i c1' IH] s //=. Qed.
 
-(* the compiled expression fragments never return *)
 Fixpoint jump_free (c : Machine.code) : bool :=
   match c with
   | [::] => true
@@ -2051,9 +1938,6 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
 - by move: Hc => /= [<- _].
 Qed.
 
-(* jumps in a compiled procedure only sit in the epilogue, where the
-   frame-temp pop has just cleaned R_AUX1 — regardless of the body's
-   abstract flow *)
 Lemma aux1_scan_jump_free (c : Machine.code) (d : bool) (o : nat) :
   jump_free c = true ->
   List.nth_error c o <> Some IJump.
@@ -2136,9 +2020,6 @@ case Hm: (Component.eqb C0 Component.main
 - by apply: (KEY (EEN ++ PROL)).
 Qed.
 
-(* ==================== generic positional checker ==================== *)
-
-(* a per-position boolean condition over the three running scans *)
 Fixpoint pos_check
     (f : Machine.instr -> bool -> Z -> bool -> bool)
     (c : Machine.code) (dead : bool) (d : Z) (ph : bool) : bool :=
@@ -2167,8 +2048,6 @@ elim: c => [|i0 c' IH] dead d ph.
   + by move=> [<-].
   + move=> Hnth. exact: (IH _ _ _ Hrest _ _ Hnth).
 Qed.
-
-(* ==================== body labels are live ==================== *)
 
 Fixpoint llive_check (c : Machine.code) (dead : bool) : bool :=
   match c with
@@ -2257,7 +2136,6 @@ constructor.
 - move=> o l Hnth. exact: (llive_check_sound Hc Hnth).
 Qed.
 
-(* compiled expression fragments hold every label live *)
 Lemma compile_expr_lab_live (C : Component.id) (lbp scr : Pointer.t)
     (P_labels : NMap label) (e : expr) :
   forall (s : comp_env) (c : Machine.code) (s' : comp_env),
@@ -2266,13 +2144,13 @@ Lemma compile_expr_lab_live (C : Component.id) (lbp scr : Pointer.t)
 Proof.
 elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
            |e IH|e IH|e1 IH1 e2 IH2|C' P' e IH|] s c s' Hc.
-- (* E_val *)
+-
   case: v Hc => [i|p|] //= [<- _]; by apply: llive_check_okP.
-- (* E_arg *)
+-
   move: Hc => /= [<- _]. by apply: llive_check_okP.
-- (* E_local *)
+-
   move: Hc => /= [<- _]. by apply: llive_check_okP.
-- (* E_binop *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -2285,7 +2163,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: lab_live_cons => //.
   apply: lab_live_cat; first exact: (IH2 _ _ _ E2).
   by apply: llive_check_okP.
-- (* E_seq *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -2294,7 +2172,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
     last by [].
   rewrite /=. move=> [<- _].
   exact: (lab_live_cat (IH1 _ _ _ E1) (IH2 _ _ _ E2)).
-- (* E_if *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -2316,21 +2194,21 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: lab_live_cons => //.
   apply: lab_live_cat; first exact: (IH2 _ _ _ E2).
   by apply: llive_check_okP.
-- (* E_alloc *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: lab_live_cat; first exact: (IH _ _ _ E1).
   by apply: llive_check_okP.
-- (* E_deref *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
   rewrite /=. move=> [<- _].
   apply: lab_live_cat; first exact: (IH _ _ _ E1).
   by apply: llive_check_okP.
-- (* E_assign *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e1 s) => [[c1 s1]|];
     last by [].
@@ -2343,7 +2221,7 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   apply: lab_live_cons => //.
   apply: lab_live_cat; first exact: (IH1 _ _ _ E1).
   by apply: llive_check_okP.
-- (* E_call *)
+-
   move: Hc; rewrite /= /Comp.bind /Comp.ret.
   case E1: (compile_expr C lbp scr P_labels e s) => [[c1 s1]|];
     last by [].
@@ -2357,15 +2235,10 @@ elim: e => [v| | |bop e1 IH1 e2 IH2|e1 IH1 e2 IH2|e1 IH1 e2 IH2 e3 IH3
   + move=> [<- _].
     apply: lab_live_cat; first exact: (IH _ _ _ E1).
     by apply: llive_check_okP.
-- (* E_exit *)
+-
   move: Hc => /= [<- _]. by apply: llive_check_okP.
 Qed.
 
-(* ==================== the branch-target theorem ==================== *)
-
-(* a taken branch in a compiled procedure lands on a live label, or —
-   the entry wrapper's flag dispatch — stays in the same window with
-   the same scan values *)
 Lemma compile_proc_bnztgt (C0 : Component.id) (lbp scr : Pointer.t)
     (plm : NMap label) (P0 : Procedure.id) (e : expr)
     (s : comp_env) (cd : Machine.code) (s' : comp_env) (pl0 : label) :
@@ -2533,8 +2406,6 @@ case Hm: (Component.eqb C0 Component.main
   + by rewrite -Ecd.
 Qed.
 
-(* the I-side run invariant, v1: the return register is clear, and
-   inside call windows the RA slot is pinned and cleared *)
 Definition iinv (scr_of : Component.id -> Pointer.t) (s : CS.state)
   : Prop :=
   match s with
@@ -2555,10 +2426,6 @@ Definition iinv (scr_of : Component.id -> Pointer.t) (s : CS.state)
       /\ (exists fbs, iframes imem gps fbs)
   end.
 
-(* ---- preservation: neutral pc-increment steps ---- *)
-
-(* covers every case that advances the pc without touching memory, the
-   stack, R_RA, R_SP, or the window/offset/phase classes *)
 Lemma iinv_step_neutral (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs iregs' : Intermediate.Register.t) (pc : Pointer.t)
@@ -2611,8 +2478,6 @@ split; [|split].
 - exact: H3.
 Qed.
 
-(* parked frames live in other components or other blocks than a given
-   store target *)
 Fixpoint frames_sep (gps : list Pointer.t)
     (fbs : list (option (Block.id * Z)))
     (cp : Component.id) (bp : Block.id) : Prop :=
@@ -2643,8 +2508,6 @@ elim: gps fbs => [|p rest IH] [|[[fb sl]|] fbs'] //=; last first.
   + by rewrite (@load_store_other_block _ _ _ _ _ _ _ Hst
         (not_eq_sym Hd)).
 Qed.
-
-(* ---- preservation: the window-opening push of R_RA ---- *)
 
 Lemma iinv_step_push_ra (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem imem' : Memory.Memory.t)
@@ -2699,8 +2562,6 @@ split; [|split].
   exact: (Hsepall _ Hfr).
 Qed.
 
-(* ---- preservation: the window-closing pop of R_RA ---- *)
-
 Lemma get_set_eq (regs : Intermediate.Register.t)
     (r : Machine.register) (v : value) :
   Intermediate.Register.get r (Intermediate.Register.set r v regs) = v.
@@ -2720,8 +2581,6 @@ by rewrite /Intermediate.Register.get /Intermediate.Register.set
   setmE; case: eqP => // E; rewrite E in Hne.
 Qed.
 
-(* the pop reads the pinned slot, so R_RA comes back Undef and the
-   window closes *)
 Lemma iinv_step_pop_ra (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc : Pointer.t)
@@ -2774,8 +2633,6 @@ split; [|split].
   by [].
 - exact: H3.
 Qed.
-
-(* ---- preservation: general stores (window-neutral targets) ---- *)
 
 Lemma iinv_step_store (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem imem' : Memory.Memory.t)
@@ -2841,11 +2698,6 @@ split; [|split].
   exact: (Hsepf _ Hfr).
 Qed.
 
-(* ---- preservation: live-position silent steps and branches ---- *)
-
-(* outside a window ANY register write is fine: the successor of a
-   window-neutral live position is live, so the window conjunct is
-   vacuous *)
 Lemma iinv_step_live_any (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs iregs' : Intermediate.Register.t) (pc : Pointer.t)
@@ -2886,8 +2738,6 @@ split; [|split].
 - exact: H3.
 Qed.
 
-(* a silent branch/jump landing on a LIVE position of the same
-   procedure keeps everything (memory, registers, stack unchanged) *)
 Lemma iinv_step_live_jump (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc pc' : Pointer.t)
@@ -2918,9 +2768,6 @@ split; [|split].
 - exact: H3.
 Qed.
 
-(* a branch inside a window whose target stays in the SAME window with
-   the same scan values (the entry wrapper's flag dispatch): the open
-   window's data transfers verbatim *)
 Lemma iinv_step_window_jump (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc pc' : Pointer.t)
@@ -2958,8 +2805,6 @@ split; [|split].
   exact: (H2 _ _ _ _ Hilp Hblk Hjnth Hoff Hd).
 - exact: H3.
 Qed.
-
-(* ---- preservation: the cross-window R_SP reload ---- *)
 
 Lemma iinv_step_reload (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
@@ -3020,9 +2865,6 @@ split; [|split].
 - exact: H3.
 Qed.
 
-(* ---- preservation: allocation ---- *)
-
-(* allocation leaves every cell outside the fresh block untouched *)
 Lemma load_after_alloc_other (mem mem' : Memory.Memory.t)
     (C0 : Component.id) (n : nat) (ptr : Pointer.t)
     (C : Component.id) (b : Block.id) (o : Z) :
@@ -3060,7 +2902,6 @@ elim: gps fbs => [|p rest IH] [|[[fb sl]|] fbs'] //=; last first.
   by rewrite (@load_after_alloc_other _ _ _ _ _ _ _ _ Hal) //.
 Qed.
 
-(* live-position allocation: the fresh block misses every slot *)
 Lemma iinv_step_alloc_live (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem imem' : Memory.Memory.t)
     (iregs iregs' : Intermediate.Register.t) (pc : Pointer.t)
@@ -3110,10 +2951,6 @@ split; [|split].
   exact: (Hsepall _ Hfr).
 Qed.
 
-(* ---- preservation: the pushes (Jal / Call) ---- *)
-
-(* an intra-component call: R_RA is clobbered, the open window's slot
-   parks into the frame chain, and the entry label target is live *)
 Lemma iinv_step_jal (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc pc' : Pointer.t)
@@ -3157,8 +2994,6 @@ split; [|split].
   exact: Hslot.
 Qed.
 
-(* a cross-component call: registers are invalidated, the target entry
-   position is live by construction *)
 Lemma iinv_step_call (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc : Pointer.t)
@@ -3195,9 +3030,6 @@ split; [|split].
   exact: Hslot.
 Qed.
 
-(* a live jal (the bottom stub's dispatch): no window is open, so the
-   pushed return address carries no frame; its target is live, so the
-   matching pop never needs one *)
 Lemma iinv_step_jal_live (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc pc' : Pointer.t) :
@@ -3224,11 +3056,6 @@ split; [|split].
   by exists (None :: fbs).
 Qed.
 
-(* ---- preservation: the pops (Jump / Return) ---- *)
-
-(* an intra-component return: the popped frame's slot re-opens as the
-   running window; the restored R_SP locates it (given here as a
-   run-level premise, discharged by the restore-chain model) *)
 Lemma iinv_step_jump (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc pc' : Pointer.t) :
@@ -3276,8 +3103,6 @@ split; [|split].
   by case: f => [[fb sl]|] /= => [[_ H]|H].
 Qed.
 
-(* a cross-component return: registers are invalidated; the caller sits
-   in its post-call phase with R_SP parked in the scratch cell *)
 Lemma iinv_step_return (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc pc' : Pointer.t) :
@@ -3331,10 +3156,6 @@ split; [|split].
   by case: f => [[fb sl]|] /= => [[_ H]|H].
 Qed.
 
-(* ---- preservation: the in-window SP moves ---- *)
-
-(* the push/pop increments: R_SP and the tracked offset move together,
-   so the located slot is unchanged *)
 Lemma iinv_step_spmove (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc : Pointer.t)
@@ -3393,8 +3214,6 @@ split; [|split].
 - exact: H3.
 Qed.
 
-(* during the post-call phase the slot is located through the scratch
-   cell, so even R_SP writes are free *)
 Lemma iinv_step_neutral_ph (scr_of : Component.id -> Pointer.t)
     (gps : CS.stack) (imem : Memory.Memory.t)
     (iregs iregs' : Intermediate.Register.t) (pc : Pointer.t)
@@ -3443,9 +3262,6 @@ split; [|split].
 - exact: H3.
 Qed.
 
-(* ---- the assembly layer ---- *)
-
-(* an executing pc decomposes into the linked position bundle *)
 Lemma executing_bundle (pc : Pointer.t) (i : Machine.instr) :
   Intermediate.well_formed_program ilp ->
   Intermediate.GlobalEnv.executing G pc i ->
@@ -3478,7 +3294,6 @@ split=> //.
 by lia.
 Qed.
 
-(* the initial state satisfies the invariant *)
 Lemma iinv_init (scr_of : Component.id -> Pointer.t) :
   iinv scr_of (CS.initial_machine_state ilp).
 Proof.
@@ -3498,7 +3313,6 @@ case: (Intermediate.prog_main ilp).
   + by exists [::].
 Qed.
 
-(* step-shape helpers for abstract registers *)
 Lemma reg_sp_dec (r : Machine.register) : r = R_SP \/ r <> R_SP.
 Proof. by case: r; [right|right|right|right|right|left|right]. Qed.
 
@@ -3538,8 +3352,6 @@ Section IInvAssembly.
 Variable scr_of : Component.id -> Pointer.t.
 Hypothesis Hwf : Intermediate.well_formed_program ilp.
 
-(* static class facts of compiled code at the fetched instruction
-   (discharged from the shape/discipline theorems + a phase checker) *)
 Hypothesis Hclass :
   forall (pc : Pointer.t) (i : Machine.instr)
          (Cprocs : NMap Machine.code) (j : nat)
@@ -3589,8 +3401,6 @@ Hypothesis Hclass :
         r <> R_RA
         /\ dead_at Pcode (Z.to_nat (Pointer.offset pc)) = false
     | IJal _ =>
-        (* NOT dead ∧ ¬ph: the bottom stub's jal is live.  In a window
-           the phase is off; live jals push no frame. *)
         dead_at Pcode (Z.to_nat (Pointer.offset pc)) = true ->
         ph_scan Pcode false (Z.to_nat (Pointer.offset pc)) = false
     | ICall _ _ =>
@@ -3599,7 +3409,6 @@ Hypothesis Hclass :
     | _ => True
     end.
 
-(* run-level residuals (the chain/taint model) *)
 Hypothesis Hone :
   forall (gps : CS.stack) (imem : Memory.Memory.t)
          (iregs : Intermediate.Register.t) (pc : Pointer.t)
@@ -3612,8 +3421,6 @@ Hypothesis Hone :
       (Intermediate.Register.get R_ONE iregs)
     = Ptr (c, b, (o + match op with Add => 1 | _ => -1 end)%Z).
 
-(* only the POST-CALL reload (phase on) — the epilogue's pop of the
-   saved SP is also an [ILoad R_SP R_SP] but reads a frame slot *)
 Hypothesis Hreload :
   forall (gps : CS.stack) (imem : Memory.Memory.t)
          (iregs : Intermediate.Register.t) (pc : Pointer.t)
@@ -3644,11 +3451,6 @@ Hypothesis Hjaltgt :
       (0 <= Pointer.offset pc')%Z ->
       dead_at Pcode' (Z.to_nat (Pointer.offset pc')) = false.
 
-(* a taken branch either leaves every window (the expression-level
-   forward branches) or stays inside the SAME window with the same
-   scan values (the entry wrapper's flag dispatch, [IBnz _ lmain]) —
-   both stated over the SOURCE bundle, valid since the target shares
-   its component and block *)
 Hypothesis Hbnztgt :
   forall (pc : Pointer.t) (r : Machine.register) (l : label)
          (pc' : Pointer.t),
@@ -3757,7 +3559,6 @@ Hypothesis Hallocsep :
     forall fbs, iframes imem gps fbs ->
       frames_sep gps fbs (Pointer.component pc) (Pointer.block ptr).
 
-(* the dispatcher *)
 Lemma iinv_step (s : CS.state) (t : Events.trace) (s' : CS.state) :
   ireach pra prb s ->
   CS.step G s t s' ->
@@ -3765,21 +3566,21 @@ Lemma iinv_step (s : CS.state) (t : Events.trace) (s' : CS.state) :
 Proof.
 move=> Hreach Hstep.
 case: Hstep Hreach => {s t s'}.
-- (* Nop *)
+-
   move=> gps mem regs pc Hex _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   exact: (@iinv_step_neutral scr_of gps mem regs regs pc INop
             Cp j P0 Pc Hilp Hblk Hjnth Hoff Hnth
             erefl erefl erefl erefl erefl).
-- (* Label *)
+-
   move=> gps mem regs pc l Hex _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   exact: (@iinv_step_neutral scr_of gps mem regs regs pc (ILabel l)
             Cp j P0 Pc Hilp Hblk Hjnth Hoff Hnth
             erefl erefl erefl erefl erefl).
-- (* Const *)
+-
   move=> gps mem regs regs' pc r v Hex Hset _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -3800,7 +3601,7 @@ case: Hstep Hreach => {s t s'}.
               (IConst v r) Cp j P0 Pc Hilp Hblk Hjnth Hoff Hnth
               erefl Hd).
     by rewrite -Hset get_set_neq //; apply: not_eq_sym.
-- (* Mov *)
+-
   move=> gps mem regs regs' pc r1 r2 Hex Hset _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -3810,7 +3611,7 @@ case: Hstep Hreach => {s t s'}.
             erefl erefl erefl).
   + by rewrite -Hset get_set_neq //; apply: not_eq_sym.
   + by rewrite -Hset get_set_neq //; apply: not_eq_sym.
-- (* BinOp *)
+-
   move=> gps mem regs regs' pc r1 r2 r3 op Hex.
   cbv zeta. move=> Hset Hreach.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -3853,7 +3654,7 @@ case: Hstep Hreach => {s t s'}.
               (@sp_step_binop_other op r1 r2 r3 HrSP) erefl).
     * by rewrite -Hset get_set_neq //; apply: not_eq_sym.
     * by rewrite -Hset get_set_neq //; apply: not_eq_sym.
-- (* Load *)
+-
   move=> gps mem regs regs' pc r1 r2 ptr v Hex Hget Hcomp Hload Hset
     Hreach.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -3911,7 +3712,7 @@ case: Hstep Hreach => {s t s'}.
                    Hilp Hblk Hjnth Hoff Hnth _ Hd).
          ++ exact: (ra_dead_step_load_other _ Hne2).
          ++ by rewrite get_set_neq //; apply: not_eq_sym.
-- (* Store *)
+-
   move=> gps mem mem' regs pc ptr r1 r2 Hex Hget Hcomp Hst Hreach.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -3934,7 +3735,7 @@ case: Hstep Hreach => {s t s'}.
               _ _ Hph Hst Hsl Hfs).
     * exact: (ra_dead_step_store_other _ Hne2).
     * exact: (sp_step_store_other _ Hne2).
-- (* Jal *)
+-
   move=> gps mem regs regs' pc pc' l Hex HF Hset _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -3946,11 +3747,11 @@ case: Hstep Hreach => {s t s'}.
               (Hjaltgt Hex HF)).
   + exact: (@iinv_step_jal_live scr_of gps mem regs pc pc'
               (Hjaltgt Hex HF)).
-- (* Jump *)
+-
   move=> gps mem regs pc pc' Hex Hcomp Hreach.
   exact: (@iinv_step_jump scr_of gps mem regs pc pc'
             (Hjumptie Hreach Hex)).
-- (* BnzNZ *)
+-
   move=> gps mem regs pc pc' r l val Hex Hget Hnz HFp _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -3967,14 +3768,14 @@ case: Hstep Hreach => {s t s'}.
     * move=> _. exact: Hlive.
   + exact: (@iinv_step_window_jump scr_of gps mem regs pc pc'
               Cp j P0 Pc Hilp Hblk Hjnth Hoff Hcm Hbk Hd Esp Eph).
-- (* BnzZ *)
+-
   move=> gps mem regs pc r l Hex Hget _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   exact: (@iinv_step_neutral scr_of gps mem regs regs pc (IBnz r l)
             Cp j P0 Pc Hilp Hblk Hjnth Hoff Hnth
             erefl erefl erefl erefl erefl).
-- (* Alloc *)
+-
   move=> gps mem mem' regs regs' pc rsize rptr size ptr Hex Hget Hpos
     Hal Hset Hreach.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -3988,20 +3789,19 @@ case: Hstep Hreach => {s t s'}.
   + by rewrite get_set_neq //; apply: not_eq_sym.
   + move=> fbs Hfr.
     exact: (Hallocsep Hreach Hal Hfr).
-- (* Call *)
+-
   move=> gps mem regs pc b C' P call_arg Hex Hne Himp Hep Hcom _.
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   have [Hd Hph] := Hclass Hilp Hblk Hjnth Hoff Hnth.
   exact: (@iinv_step_call scr_of gps mem regs pc C' b
             Cp j P0 Pc Hilp Hblk Hjnth Hoff Hd Hph).
-- (* Return *)
+-
   move=> gps' mem regs pc pc' ret_arg Hex Hne Hcom Hreach.
   exact: (@iinv_step_return scr_of gps' mem regs pc pc'
             (Hreturntie Hreach Hex)).
 Qed.
 
-(* the invariant holds along every reachable run *)
 Theorem ireach_iinv (s : CS.state) :
   ireach pra prb s -> iinv scr_of s.
 Proof.
@@ -4018,11 +3818,6 @@ Qed.
 
 End IInvAssembly.
 
-(* ==================== the R_ONE run invariant ==================== *)
-
-(* [Int 1] sits in R_ONE at every armed position; armed stack entries
-   share their component with the frame above (so cross returns only
-   pop unarmed entries) *)
 Definition r1main (iregs : Intermediate.Register.t) (pc : Pointer.t)
   : Prop :=
   forall (Cprocs : NMap Machine.code) (j : nat)
@@ -4072,7 +3867,6 @@ Section ROneInv.
 
 Hypothesis Hwf : Intermediate.well_formed_program ilp.
 
-(* the static half: every bundle checks from the cold seed *)
 Hypothesis Hrone :
   forall (C0 : Component.id) (Cprocs : NMap Machine.code)
          (P0 : Procedure.id) (Pcode : Machine.code),
@@ -4080,8 +3874,6 @@ Hypothesis Hrone :
     getm Cprocs P0 = Some Pcode ->
     rone_check Pcode false = true.
 
-(* sequential helper: the target bundle at [inc pc] is the source
-   bundle one position further *)
 Lemma r1main_inc (iregs' : Intermediate.Register.t) (pc : Pointer.t)
     (i : Machine.instr)
     (Cprocs : NMap Machine.code) (j : nat)
@@ -4114,13 +3906,11 @@ move: Harm'. rewrite Hoffi (rone_scan_S _ Hnth) /=.
 exact: Harm.
 Qed.
 
-(* unconditional helper *)
 Lemma r1main_any (iregs' : Intermediate.Register.t) (pc' : Pointer.t) :
   Intermediate.Register.get R_ONE iregs' = Int 1 ->
   r1main iregs' pc'.
 Proof. by move=> H Cprocs' j' P0' Pcode' _ _ _ _ _. Qed.
 
-(* entry helper: offset 0 is never armed *)
 Lemma r1main_entry (iregs' : Intermediate.Register.t)
     (C' : Component.id) (b' : Block.id) :
   r1main iregs' (C', b', 0%Z).
@@ -4129,7 +3919,6 @@ move=> Cprocs' j' P0' Pcode' _ _ _ _ /=.
 by rewrite rone_scan0.
 Qed.
 
-(* the source-armed fact at a checked control site *)
 Lemma r1_source_armed (pc : Pointer.t) (i : Machine.instr)
     (Cprocs : NMap Machine.code) (j : nat)
     (P0 : Procedure.id) (Pcode : Machine.code) :
@@ -4154,7 +3943,7 @@ Lemma r1inv_step (s : CS.state) (t : Events.trace) (s' : CS.state) :
 Proof.
 move=> Hstep.
 case: Hstep => {s t s'}.
-- (* Nop *)
+-
   move=> gps mem regs pc Hex [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4163,7 +3952,7 @@ case: Hstep => {s t s'}.
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
   + apply: (rchain_prev_comp _ H2).
     by rewrite Pointer.inc_preserves_component.
-- (* Label *)
+-
   move=> gps mem regs pc l Hex [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4172,7 +3961,7 @@ case: Hstep => {s t s'}.
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
   + apply: (rchain_prev_comp _ H2).
     by rewrite Pointer.inc_preserves_component.
-- (* Const *)
+-
   move=> gps mem regs regs' pc r v Hex Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4185,13 +3974,12 @@ case: Hstep => {s t s'}.
     (move=> Harm;
      rewrite get_set_neq //;
      exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm)).
-  (* R_ONE *)
   case: v Hnth Hex Hset => [z|p] //= Hnth Hex Hset.
   case Ez: (z =? 1)%Z => //= _.
   rewrite get_set_eq /=.
   move: Ez => /Z.eqb_eq ->.
   by [].
-- (* Mov *)
+-
   move=> gps mem regs regs' pc r1 r2 Hex Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4203,7 +3991,7 @@ case: Hstep => {s t s'}.
   case: r2 Hnth Hex Hset => //= Hnth Hex Hset Harm;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
-- (* BinOp *)
+-
   move=> gps mem regs regs' pc r1 r2 r3 op Hex.
   cbv zeta. move=> Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4216,7 +4004,7 @@ case: Hstep => {s t s'}.
   case: r3 Hnth Hex Hset => //= Hnth Hex Hset Harm;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
-- (* Load *)
+-
   move=> gps mem regs regs' pc r1 r2 ptr v Hex Hget Hcomp Hload Hset
     [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4229,7 +4017,7 @@ case: Hstep => {s t s'}.
   case: r2 Hnth Hex Hset => //= Hnth Hex Hset Harm;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
-- (* Store *)
+-
   move=> gps mem mem' regs pc ptr r1 r2 Hex Hget Hcomp Hst [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4238,7 +4026,7 @@ case: Hstep => {s t s'}.
     by rewrite Pointer.inc_preserves_component. }
   apply: (r1main_inc Hilp Hblk Hjnth Hoff Hnth) => /= Harm.
   exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
-- (* Jal *)
+-
   move=> gps mem regs regs' pc pc' l Hex HF Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4256,7 +4044,7 @@ case: Hstep => {s t s'}.
       by rewrite Pointer.inc_preserves_component Hcm.
     * apply: (rchain_prev_comp _ H2).
       by rewrite Pointer.inc_preserves_component.
-- (* Jump *)
+-
   move=> gps mem regs pc pc' Hex Hcomp [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4267,7 +4055,7 @@ case: Hstep => {s t s'}.
   split.
   + exact: r1main_any.
   + exact: Hrest.
-- (* BnzNZ *)
+-
   move=> gps mem regs pc pc' r l val Hex Hget Hnz HFp [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4280,7 +4068,7 @@ case: Hstep => {s t s'}.
   split.
   + exact: r1main_any.
   + exact: (rchain_prev_comp Hcm H2).
-- (* BnzZ *)
+-
   move=> gps mem regs pc r l Hex Hget [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4289,7 +4077,7 @@ case: Hstep => {s t s'}.
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
   + apply: (rchain_prev_comp _ H2).
     by rewrite Pointer.inc_preserves_component.
-- (* Alloc *)
+-
   move=> gps mem mem' regs regs' pc rsize rptr size ptr Hex Hget Hpos
     Hal Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4302,7 +4090,7 @@ case: Hstep => {s t s'}.
   case: rptr Hnth Hex Hset => //= Hnth Hex Hset Harm;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ Hilp Hblk Hjnth Hoff Harm).
-- (* Call *)
+-
   move=> gps mem regs pc b C' P' call_arg Hex Hne Himp Hep Hcom
     [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4332,7 +4120,7 @@ case: Hstep => {s t s'}.
       by [].
     * apply: (rchain_prev_comp _ H2).
       by rewrite Pointer.inc_preserves_component.
-- (* Return *)
+-
   move=> gps' mem regs pc pc' ret_arg Hex Hne Hcom [H1 H2].
   case: H2 => /= [Hhead Hrest].
   split.
@@ -4370,9 +4158,6 @@ Qed.
 
 End ROneInv.
 
-(* ==================== the R_SP constant-track invariant ============ *)
-
-(* wherever the track records a constant, R_SP holds it *)
 Definition rspmain (iregs : Intermediate.Register.t) (pc : Pointer.t)
   : Prop :=
   forall (Cprocs : NMap Machine.code) (j : nat)
@@ -4436,7 +4221,6 @@ case E: (Intermediate.prog_procedures _ cid) Hin0 => [Cprocs0|] //.
 move=> _. by exists Cprocs0.
 Qed.
 
-(* sequential helper *)
 Lemma rspmain_inc (iregs' : Intermediate.Register.t) (pc : Pointer.t)
     (i : Machine.instr)
     (Cprocs : NMap Machine.code) (j : nat)
@@ -4471,7 +4255,6 @@ move: Htr'. rewrite Hoffi (rsp_track_S _ Hnth).
 exact: Harm.
 Qed.
 
-(* vacuity: the target position carries no track *)
 Lemma rspmain_vac (iregs' : Intermediate.Register.t)
     (pc' : Pointer.t) :
   (forall (Cprocs : NMap Machine.code) (j : nat)
@@ -4488,7 +4271,6 @@ move=> Hnone Cprocs' j' P0' Pcode' v Hilp' Hblk' Hjnth' Hoff' Htr'.
 by rewrite (Hnone _ _ _ _ Hilp' Hblk' Hjnth' Hoff') in Htr'.
 Qed.
 
-(* label positions carry no track: from the checker's ILabel arm *)
 Lemma rsp_track_at_label (pc' : Pointer.t) (l : label)
     (Cprocs : NMap Machine.code) (j : nat)
     (P0 : Procedure.id) (Pcode : Machine.code) :
@@ -4509,7 +4291,6 @@ rewrite /rspt_cond.
 by case: (rsp_track Pcode None (Z.to_nat (Pointer.offset pc'))).
 Qed.
 
-(* jal sites carry no track *)
 Lemma rsp_track_at_jal (pc : Pointer.t) (l : label)
     (Cprocs : NMap Machine.code) (j : nat)
     (P0 : Procedure.id) (Pcode : Machine.code) :
@@ -4530,7 +4311,6 @@ rewrite /rspt_cond.
 by case: (rsp_track Pcode None (Z.to_nat (Pointer.offset pc))).
 Qed.
 
-(* the label-resolution targets are label positions: vacuity *)
 Lemma rspmain_flc (iregs' : Intermediate.Register.t)
     (pc pc' : Pointer.t) (l : label) :
   Pointer.component pc \in domm (Intermediate.prog_interface ilp) ->
@@ -4577,7 +4357,6 @@ case: EQ => E1 E2. subst P0' Pcode'.
 exact: (rsp_track_at_label HA HC0 Hlbl).
 Qed.
 
-(* pushed return addresses carry no track *)
 Lemma rspstack_push (pc : Pointer.t) (i : Machine.instr)
     (Cprocs : NMap Machine.code) (j : nat)
     (P0 : Procedure.id) (Pcode : Machine.code) :
@@ -4622,21 +4401,21 @@ Lemma rspinv_step (s : CS.state) (t : Events.trace) (s' : CS.state) :
 Proof.
 move=> Hstep.
 case: Hstep => {s t s'}.
-- (* Nop *)
+-
   move=> gps mem regs pc Hex [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   split=> //.
   apply: (rspmain_inc Hilp Hblk Hjnth Hoff Hnth) => v /= Htr.
   exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Label *)
+-
   move=> gps mem regs pc l Hex [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   split=> //.
   apply: (rspmain_inc Hilp Hblk Hjnth Hoff Hnth) => v /= Htr.
   exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Const *)
+-
   move=> gps mem regs regs' pc r v Hex Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4647,10 +4426,9 @@ case: Hstep => {s t s'}.
     (move=> Htr;
      rewrite get_set_neq //;
      exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr)).
-  (* R_SP *)
   move=> [<-].
   by rewrite get_set_eq.
-- (* Mov *)
+-
   move=> gps mem regs regs' pc r1 r2 Hex Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4660,7 +4438,7 @@ case: Hstep => {s t s'}.
   case: r2 Hnth Hex Hset => //= Hnth Hex Hset Htr;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* BinOp *)
+-
   move=> gps mem regs regs' pc r1 r2 r3 op Hex.
   cbv zeta. move=> Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4671,7 +4449,7 @@ case: Hstep => {s t s'}.
   case: r3 Hnth Hex Hset => //= Hnth Hex Hset Htr;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Load *)
+-
   move=> gps mem regs regs' pc r1 r2 ptr v Hex Hget Hcomp Hload Hset
     [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4682,14 +4460,14 @@ case: Hstep => {s t s'}.
   case: r2 Hnth Hex Hset => //= Hnth Hex Hset Htr;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Store *)
+-
   move=> gps mem mem' regs pc ptr r1 r2 Hex Hget Hcomp Hst [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   split=> //.
   apply: (rspmain_inc Hilp Hblk Hjnth Hoff Hnth) => v /= Htr.
   exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Jal *)
+-
   move=> gps mem regs regs' pc pc' l Hex HF Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
@@ -4701,25 +4479,25 @@ case: Hstep => {s t s'}.
     have Hnone := rsp_track_at_jal Hilp Hjnth Hnth.
     apply: (rspstack_push Hilp Hblk Hjnth Hoff Hnth).
     by rewrite Hnone.
-- (* Jump *)
+-
   move=> gps mem regs pc pc' Hex Hcomp [H1 H2].
   case: H2 => /= [Hhead Hrest].
   split=> //.
   apply: rspmain_vac => Cprocs' j' P0' Pcode' Hilp' Hblk' Hjnth' Hoff'.
   exact: (Hhead _ _ _ _ Hilp' Hblk' Hjnth' Hoff').
-- (* BnzNZ *)
+-
   move=> gps mem regs pc pc' r l val Hex Hget Hnz HFp [H1 H2].
   have Hin := executing_domm Hex.
   split=> //.
   exact: (rspmain_flp _ Hin HFp).
-- (* BnzZ *)
+-
   move=> gps mem regs pc r l Hex Hget [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
     := executing_bundle Hwf Hex.
   split=> //.
   apply: (rspmain_inc Hilp Hblk Hjnth Hoff Hnth) => v /= Htr.
   exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Alloc *)
+-
   move=> gps mem mem' regs regs' pc rsize rptr size ptr Hex Hget Hpos
     Hal Hset [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4730,7 +4508,7 @@ case: Hstep => {s t s'}.
   case: rptr Hnth Hex Hset => //= Hnth Hex Hset Htr;
     rewrite get_set_neq //;
     exact: (H1 _ _ _ _ _ Hilp Hblk Hjnth Hoff Htr).
-- (* Call *)
+-
   move=> gps mem regs pc b C' P' call_arg Hex Hne Himp Hep Hcom
     [H1 H2].
   have [Cp [j [P0 [Pc [Hilp Hblk Hjnth Hoff Hnth]]]]]
@@ -4742,7 +4520,7 @@ case: Hstep => {s t s'}.
   + rewrite /=; split=> //.
     apply: (rspstack_push Hilp Hblk Hjnth Hoff Hnth).
     by [].
-- (* Return *)
+-
   move=> gps' mem regs pc pc' ret_arg Hex Hne Hcom [H1 H2].
   case: H2 => /= [Hhead Hrest].
   split=> //.
@@ -4777,11 +4555,6 @@ Qed.
 
 End RspInv.
 
-(* ==================== memory well-formedness ==================== *)
-
-(* every component memory keeps its allocation cursor above its blocks;
-   this makes freshly allocated blocks disjoint from every loadable
-   cell — in particular from every parked frame slot *)
 Definition memwf (imem : Memory.Memory.t) : Prop :=
   forall (C : Component.id) (memC : ComponentMemory.t),
     getm imem C = Some memC -> ComponentMemory.wf memC.
@@ -4867,20 +4640,15 @@ elim: Hst => [s1 Hi
 - apply: IH.
   clear Hstar Et.
   case: Hstep Hi => {s1 t1 s2} //=.
-  + (* Store *)
+  +
     move=> gps mem mem' regs pc ptr r1 r2 _ _ _ Hst Hi.
     exact: (memwf_store Hst Hi).
-  + (* Alloc *)
+  +
     move=> gps mem mem' regs regs' pc rsize rptr size ptr _ _ _
       Hal _ Hi.
     exact: (memwf_alloc Hal Hi).
 Qed.
 
-(* ==================== the absolute SP offset scan ==================== *)
-
-(* R_SP's offset within the current frame: reset by the frame alloc,
-   stepped by the ± pushes/pops, parked across the cross-call reload
-   pair, killed by the epilogue's own pop of the saved SP *)
 Inductive spabs_state : Type :=
 | SATracked : nat -> spabs_state
 | SAParked : nat -> spabs_state
@@ -4975,9 +4743,6 @@ Lemma spabs_scan_cat_r (c1 c2 : Machine.code) (k : spabs_state)
   = spabs_scan c2 (spabs_scan c1 k (size c1)) o.
 Proof. by elim: c1 k => [|i c1' IH] k //=. Qed.
 
-(* the fragment checker: run the scan from the zero probe and demand
-   it never dies and ends where it started — the shift lemma then
-   gives balance at every seed *)
 Definition spabs_shift (j : nat) (k : spabs_state) : spabs_state :=
   match k with
   | SATracked n => SATracked (j + n)
@@ -4986,9 +4751,6 @@ Definition spabs_shift (j : nat) (k : spabs_state) : spabs_state :=
   | SADead => SADead
   end.
 
-(* checked code never frame-allocates and only reloads R_SP from the
-   parked state (the epilogue's own pop, which restores from a tracked
-   zero, lives outside fragments) — both arms break shift equivariance *)
 Definition spabs_ok_ik (i : Machine.instr) (k : spabs_state) : bool :=
   match i with
   | IAlloc r _ => match r with R_SP => false | _ => true end
@@ -5016,15 +4778,15 @@ Lemma spabs_step_shift (i : Machine.instr) (j : nat)
   spabs_step i (spabs_shift j k) = spabs_shift j (spabs_step i k).
 Proof.
 case: i => //=.
-- (* IConst *)
+-
   move=> v r _.
   case: r => //=.
   case: v => [z|p] /=; case: k => [n|n||] /= H; try by case: (H erefl).
   by [].
-- (* IMov *)
+-
   move=> r1 r2 _.
   by case: r2 => //=.
-- (* IBinOp *)
+-
   move=> op r1 r2 r3 _.
   case: r3 => //=.
   case: k => [n|n||] /= H; try by case: (H erefl).
@@ -5033,11 +4795,11 @@ case: i => //=.
   + by rewrite addnS.
   + case: n H => [|n'] /= H; first by case: (H erefl).
     by rewrite addnS.
-- (* ILoad *)
+-
   move=> r1 r2.
   case: r2 => //=.
   by case: k => [n|n||] //=.
-- (* IAlloc *)
+-
   move=> r sz.
   by case: r => //=; case: k.
 Qed.
@@ -5092,10 +4854,6 @@ rewrite (IH _ _ Hrest) andbT.
 by case: (spabs_step i0 k0) Hnd => [n|n||] //=.
 Qed.
 
-(* ==================== the canonical frame chain ==================== *)
-
-(* a saved-SP value anchors the record below: if the resume point is
-   inside a window, the value locates that record's slot *)
 Definition canchor (rv : value) (gps : list Pointer.t)
     (ch : list (option (Block.id * Z * value))) : Prop :=
   match gps, ch with
@@ -5114,10 +4872,6 @@ Definition canchor (rv : value) (gps : list Pointer.t)
   | _, _ => True
   end.
 
-(* one record per pushed return address: the pushing activation's
-   frame block, its RA-slot offset, and the saved-SP cell's content
-   (frame offset 0).  [None] marks the stub's frameless push, whose
-   return target is live. *)
 Fixpoint cchain (imem : Memory.Memory.t) (gps : list Pointer.t)
     (ch : list (option (Block.id * Z * value))) : Prop :=
   match gps, ch with
@@ -5142,7 +4896,6 @@ Fixpoint cchain (imem : Memory.Memory.t) (gps : list Pointer.t)
   | _, _ => False
   end.
 
-(* block-level separation from a chain (both slots live in [fb]) *)
 Fixpoint cchain_sep (gps : list Pointer.t)
     (ch : list (option (Block.id * Z * value)))
     (cp : Component.id) (bp : Block.id) : Prop :=
@@ -5200,7 +4953,6 @@ elim: gps ch => [|p rest IH] [|[[[fb sl] rv]|] ch'] //=; last first.
   + by rewrite (@load_after_alloc_other _ _ _ _ _ _ _ _ Hal) //.
 Qed.
 
-(* the chain's slots are loadable, so fresh allocations miss them *)
 Lemma cchain_alloc_sep (imem imem' : Memory.Memory.t)
     (C0 : Component.id) (n : nat) (ptr : Pointer.t)
     (gps : list Pointer.t)
@@ -5235,7 +4987,6 @@ elim: gps ch => [|p rest IH] [|[[[fb sl] rv]|] ch'] //=.
   exact: (IH _ Hrest).
 Qed.
 
-(* the Hallocsep tie, outright: fresh blocks miss every parked slot *)
 Theorem ireach_allocsep (gps : CS.stack) (imem imem' : Memory.Memory.t)
     (iregs : Intermediate.Register.t) (pc : Pointer.t)
     (n : nat) (ptr : Pointer.t) :

@@ -1,26 +1,3 @@
-(* RSC_ME_MP : the paper's headline micro-policies theorem — RSC^DC_MD between the
-   OVERLAY semantics ([me]) and the low-level micro-policy machine ([mp]) — as a
-   STANDALONE theorem over an abstract recomposition-ready overlay quadruple
-   [S : RecompositionContext] (+ its static [LinearizerFacts]).
-
-   THE REDUCTION (three ingredients, two PROVEN + one assumed):
-     1. MAX-PREFIX  [PROVEN HERE — [maximum_prefix], reproduced generically over [T]]:
-        the observed [mp_sem] run of [p ⋈ c] replays on the UB-restricting/overlay side
-        ([T.sem]), either in full (as [fm]) or up to a program-side divergence (a UB of
-        [p] at a prefix [t']).
-     2. BACK-TRANSLATION MP→ME  [THE assumption, "H_bt_me"]: an overlay run of the primed
-        pair [p' ⋈ c'] ([T.sem']) realizes that same observed-side prefix.
-     3. RECOMPOSITION  [PROVEN — RecompositionTop.recomposition_blame / _blame']:
-        recombines (1) and (2) into an overlay run of [p ⋈ c'] ([T.sem'']).
-
-   The conclusion is the paper's claim: the overlay context [c'] explains the observed
-   prefix, or the overlay program [p] is BLAMED — and the blame closes OVERLAY-LOCALLY
-   via [recomposition_blame'] (a [Goes_wrong] of [T.sem'']); no [H_bwd], no source [Blame].
-
-   The max-prefix machinery below (halt_no_step_mp .. maximum_prefix) is the [RSC_MP]-local
-   argument from RSC_MD_MP.v, reproduced generically over [T = RecTop S A] (it only uses
-   [T]/[RecTop] members + the [mp] observation, never anything [lin]-specific). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -67,7 +44,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
   Local Notation icL  := (prog_interface S.c).
   Local Open Scope word_scope.
 
-  (* [Component.main] is in the linked interface (from closedness of [p ⋈ c]). *)
   Lemma main_in_link :
     Component.main \in domm (unionm (prog_interface S.p) (prog_interface S.c)).
   Proof.
@@ -79,7 +55,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     - right. by case: (wfprog_main_existence S.Hwfc) => _ H2; apply: H2.
   Qed.
 
-  (* a state halted on a decoded [Halt] takes no machine step *)
   Lemma halt_no_step_mp :
     forall (s s' : state) ev i tg,
       step_mp (NC := S.NC) s s' ev ->
@@ -93,7 +68,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     by rewrite Hm in PC.
   Qed.
 
-  (* functionality of the machine step *)
   Lemma step_mp_functional : forall (s s' s'' : state) ev ev',
     step_mp (NC := S.NC) s s' ev -> step_mp (NC := S.NC) s s'' ev' ->
     s' = s'' /\ ev = ev'.
@@ -104,7 +78,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     rewrite H1 in H2. by case: H2 => <- <-.
   Qed.
 
-  (* inverting a UB-restricted step *)
   Lemma rub_step_inv : forall (s : state) t (s' : state),
     Step T.sem s t s' ->
     (T.step2 tt s t s' /\ T.allowed_UB s)
@@ -116,7 +89,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     - by right.
   Qed.
 
-  (* event steps leave the memory untouched *)
   Lemma event_step_mem : forall (s s' : state) e,
     step_mp (NC := S.NC) s s' (Some e) -> mem s' = mem s.
   Proof.
@@ -139,7 +111,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jump *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
         TraceWF.nsuap_event_inv NEXT.
@@ -151,11 +123,11 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
             (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
-    - (* bnz *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jal *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] :=
         TraceWF.nsuap_event_inv NEXT.
@@ -171,11 +143,10 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       + by (move=> w' Hin; cbn in Hin;
             repeat (move: Hin => [Hin|Hin]; [by discriminate|]);
             (case: Hin || exact: (TraceWF.no_mr_reg_clear_read Hin))).
-    - (* syscall: no event *)
+    -
       have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* an event step's target colour is the colour of an existing memory cell *)
   Lemma event_step_valid : forall (s s' : state) e,
     step_mp (NC := S.NC) s s' (Some e) ->
     T.color_in_memory (mem s) ->
@@ -202,7 +173,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jump: the target cell is [mem s w] *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := T.event_nextcomp_and_some Htr.
@@ -212,11 +183,11 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       have Hcell : mem s w = Some ni by rewrite ST.
       case: (Hcim _ _ Hcell) => HIn; apply/orP; [left | right];
         exact/Extra.In_in.
-    - (* bnz *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       case: (T.transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jal: the target cell is [mem s (swcast imm)] *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := TraceWF.nsuap_event_inv NEXT.
       have [tn [Htni Hnc]] := T.event_nextcomp_and_some Htr.
@@ -226,11 +197,10 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       have Hcell : mem s (swcast imm) = Some ni by rewrite ST.
       case: (Hcim _ _ Hcell) => HIn; apply/orP; [left | right];
         exact/Extra.In_in.
-    - (* syscall *)
+    -
       have Hev := TraceWF.run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* the run-local invariant of the machine run *)
   Definition Jinv (s : state) : Prop :=
     T.general_memory_correctness (mem s)
     /\ ((T.color_of s \in domm ipL) || (T.color_of s \in domm icL)).
@@ -249,7 +219,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       + by rewrite (T.PCCM.silent_step_color_preserved Hstep).
   Qed.
 
-  (* the initial state: main's colour, and correct memory *)
   Lemma initial_color :
     T.color_of (Merged.initial_state (code T.prog)
                   (prog_buffers T.prog) (prog_interface T.prog))
@@ -280,7 +249,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
         apply/orP; [left | right]; by [].
   Qed.
 
-  (* splitting the machine run at the first program-side divergence *)
   Lemma star_rub_split : forall (s0 : state) t (s' : state),
     Star (mp_sem S.NC W) s0 t s' ->
     Jinv s0 ->
@@ -304,7 +272,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       case: Hraw => ev [Hmp Hev].
       have HJ2 : Jinv s2 := step_mp_J Hmp HJ.
       case Hic: (T.color_of s1 \in domm icL).
-      + (* context side: the raw machine step is allowed *)
+      +
         have HstepR : Step T.sem s1 t1 s2.
         { apply: step_UB_allowed; last exact: Hic.
           move: Hstep. by rewrite /=. }
@@ -318,13 +286,13 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
           -- by split.
           -- exact: F5.
           -- by rewrite Ht F6 Eapp_assoc.
-      + (* program side *)
+      +
         have Hip : T.color_of s1 \in domm ipL.
         { case: HJ => _ /orP [|] //. by rewrite Hic. }
         case: (classic (exists (s2' : state) ev',
                           step_me (NC := S.NC) s1 s2' ev'))
           => [[s2' [ev' Hme]] | Hnome].
-        * (* the overlay agrees: functionality forces the same step *)
+        *
           have Hmp' := T.PCCM.step_me_mp Hme.
           have [E1 E2] := step_mp_functional Hmp' Hmp.
           subst s2' ev'.
@@ -344,20 +312,20 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
              ++ by split.
              ++ exact: F5.
              ++ by rewrite Ht F6 Eapp_assoc.
-        * (* first divergence: an observational UB of the program *)
+        *
           right. exists E0, tw, s1.
           split.
           -- exact: star_refl.
           -- exact: HJ.
           -- split.
-             ++ (* no UB-restricted step *)
+             ++
                 move=> t' s'' /rub_step_inv [[HmpT Hall] | [HmeS HmpT]].
                 ** suff: T.color_of s1 \in domm icL by rewrite Hic.
                    exact: Hall.
                 ** move: HmeS. rewrite /T.step1.
                    case: (t') => [|e [|? ?]] //= HmeS;
                      by apply: Hnome; eexists; eexists; exact: HmeS.
-             ++ (* not an overlay-final state either *)
+             ++
                 move=> Hfin.
                 destruct s1 as [m0 r0 [pcv tpc0] ex0].
                 move: Hfin. rewrite /T.final_state_rUB.
@@ -367,8 +335,6 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
           -- by [].
   Qed.
 
-  (* THE maximum prefix lemma: the machine run replays in the UB-restricting
-     semantics, in full or up to a blamable program-side divergence *)
   Lemma maximum_prefix : forall (fm : finpref_behavior),
     does_prefix (mp_sem S.NC W) fm ->
     not_wrong_finpref fm ->
@@ -392,7 +358,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
       { by rewrite (T.star_color_last Hst) initial_color. }
       exact: Hip. }
     case: fm Hdp Hnw => [t|t|t] Hdp Hnw //.
-    - (* FTerminates *)
+    -
       inversion Hdp as [| |s s' t0 Hini Hstar Hfin| |]; subst.
       move: Hini. rewrite /= /prog_initial => ?; subst s.
       case: (star_rub_split Hstar initial_J)
@@ -401,7 +367,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
         * left. apply/DPE.
           eapply does_FTerminates;
             [reflexivity | exact: HstarR | exact: HfinR].
-        * (* halted on program-coloured data: blame *)
+        *
           right. exists t.
           have Hpci : T.pc_color_inv s' :=
             T.reachable_pc_color (erefl _) HstarR.
@@ -444,7 +410,7 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
             [reflexivity | exact: F1 | exact: F3 | exact: F4].
         * by exists tb; rewrite F6.
         * exact: (Hundef _ _ F1 F5).
-    - (* FTbc *)
+    -
       inversion Hdp as [s s' t0 Hini Hstar| | | |Hnoinit]; subst; last first.
       + by have := Hnoinit _ (erefl _).
       + move: Hini. rewrite /= /prog_initial => ?; subst s.
@@ -471,19 +437,10 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
     - by have := Hnoinit _ (erefl _).
   Qed.
 
-  (* ==================================================================== *)
-  (* [me]/[mp] RSC^DC_MD.  From the observed [mp_sem] run of [p ⋈ c], the
-     max-prefix (proven above) transfers it to the overlay side; the
-     BACK-TRANSLATION MP→ME [Hbt] supplies the primed pair's overlay run;
-     recomposition recombines them.  Conclusion (overlay-local): the
-     overlay context [c'] explains the observed prefix [fm], or the overlay
-     program [p] is BLAMED.  The "∃ overlay context" of RSC^DC_MD is
-     discharged by the module parameter [S], which supplies [c']. *)
   Theorem rsc_dc_md_me_mp :
     forall (fm : finpref_behavior),
       does_prefix (mp_sem S.NC W) fm ->
       not_wrong_finpref fm ->
-      (* BACK-TRANSLATION MP→ME ("H_bt_me"), as an oracle over the observed-side prefix *)
       (forall m0, does_prefix T.sem m0 -> not_wrong_finpref m0 -> does_prefix T.sem' m0) ->
       does_prefix T.sem'' fm
       \/ (exists m', does_prefix T.sem'' (FGoes_wrong m')
@@ -492,9 +449,9 @@ Module RSC_ME_MP (S : RecompositionContext) (A : LinearizerFacts S).
   Proof.
     move=> fm Hobs Hsafe Hbt.
     case: (maximum_prefix Hobs Hsafe) => [Hfull | [t' [Hgw Hpref Hundef]]].
-    - (* full replay: [c'] reproduces the whole observed prefix *)
+    -
       left. exact: (T.recomposition_blame Hfull (Hbt _ Hfull Hsafe)).
-    - (* program-side UB: [p] is blamed, overlay-locally *)
+    -
       right. exists t'.
       have Hbt' : does_prefix T.sem' (FTbc t').
       { apply: Hbt; [ exact: (fgw_to_ftbc Hgw) | by [] ]. }

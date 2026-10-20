@@ -33,9 +33,6 @@ Import Types.
 
 Require Import MicroPolicies.Recomposition.Definitions.
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
-(* Require Import MicroPolicies.Recomposition.StepSilentStrong. *)
-(* Require Import MicroPolicies.Recomposition.StepEventReturn. *)
-(* Require Import MicroPolicies.Recomposition.StepEventCall. *)
 
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 Require Import MicroPolicies.Recomposition.PcColor.
@@ -51,8 +48,6 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
 
 
 
-  (*** Final Proofs ***)
-
   Theorem tsim_properties_match_states:
     @tsim_properties sem sem' sem'' (sd_traces det_sem) (sd_traces det_sem') (sd_traces det_sem'')
       (fun s1 s2 s3 => exists M, match_states M s1 s2 s3).
@@ -63,7 +58,7 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
     - exact step_silent_strong2.
     - exact step_silent_weak1.
     - exact step_silent_weak2.
-    - (* step_event: the merged event square — dispatch on the event (Call vs Return). *)
+    -
       intros s1 e s1' Hs1 s2 s2' Hs2 s3 M Hms.
       destruct e as [comp proc z comp' | comp z comp'].
       + eapply step_event_call; eassumption.
@@ -72,10 +67,6 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
 
   Local Opaque Merged.initial_state Merged.encode_code Merged.initial_memory.
 
-  (*** Final-state correspondence (the [FTerminates] case of [recomposition_blame]) ***)
-
-  (* The running component is a real component: [side_of c = i] + the [common_equiv] validity
-     [c ∈ ip ∨ c ∈ ic] give [is_relevant_comp i c]. *)
   Lemma relevant_of_side : forall i c,
     side_of c = i -> (c \in domm ip) || (c \in domm ic) -> is_relevant_comp i c.
   Proof.
@@ -84,9 +75,6 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
     rewrite Hip /= in Hval; exact Hval.
   Qed.
 
-  (* Projections out of [common_equiv] / [strong_equiv] / final-states: [common_combined_left/right],
-     [common_color_valid1/2], [strong_same_pc], [strong_side], [final_me_cell], [final_me_intro] now
-     come from RecBackward.v (via [Include PCM]); only the Top-specific ones are kept here. *)
   Lemma common_pcc1 : forall m s1 s2 s3, common_equiv m s1 s2 s3 -> pc_code_color s1.
   Proof. move=> m s1 s2 s3 H; destruct H; assumption. Qed.
   Lemma common_pcc2 : forall m s1 s2 s3, common_equiv m s1 s2 s3 -> pc_code_color s2.
@@ -100,11 +88,6 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
     case E: (m pcv) => [[v t]|] // [Hd Hc]. by exists (v @ t).
   Qed.
 
-  (* CORE: the strongly-related side transports a Halt-at-code pc-cell into the recomposed run [s3].
-     [same_pc] aligns the pc values (the [_alloc] variant is impossible — the cell exists);
-     [pc_code_color] makes the cell colour the running colour, so the [combined_codes] offset
-     coincides with the [same_pc] offset; [combined_codes] forward + [decode_match_no_JAL] (a Halt
-     is never a JAL) carry the exact same Halt instruction, with the same code tag, into [mem s3]. *)
   Lemma final_me_transfer_strong : forall (i : side) (s s3 : state) (d : atom (mword mt) mem_tag),
     same_pc i s s3 ->
     combined_codes i s s3 ->
@@ -140,38 +123,28 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
   Proof.
     pose proof tsim_properties_match_states as props.
     pose proof (tsim_match_initial_states props) as MINIT.
-    (* sem and sem' DO have THE canonical initial state — used to refute the no-initial cases
-       WITHOUT [simpl]/[eauto] (which would compute the huge [encode_code]/[initial_memory]). *)
     assert (HI_sem  : Smallstep.initial_state sem
                         (initial_state (code prog)  (prog_buffers prog)  (prog_interface prog)))  by reflexivity.
     assert (HI_sem' : Smallstep.initial_state sem'
                         (initial_state (code prog') (prog_buffers prog') (prog_interface prog'))) by reflexivity.
     intros m dp_sem dp_sem'.
-    (* [setoid_rewrite does_prefix_equiv] LOOPS (Proper search under the [forall]/[->]); use
-       forward/backward [apply] of the iff instead. *)
     apply (does_prefix_equiv det_sem) in dp_sem.
     apply (does_prefix_equiv det_sem') in dp_sem'.
     apply (does_prefix_equiv det_sem'').
     inversion dp_sem; subst; inversion dp_sem'; subst;
-      (* refute the no-initial constructors of [does_prefix'] — match the SPECIFIC semantics so
-         no [sem =?= sem'] conversion (over the huge initial states) is ever attempted *)
       try (exfalso; match goal with
              | H : (forall s, ~ Smallstep.initial_state sem  s) |- _ => exact (H _ HI_sem)
              | H : (forall s, ~ Smallstep.initial_state sem' s) |- _ => exact (H _ HI_sem')
            end);
-      (* the surviving diagonal cases: build the recomposed initial state + transport the Star *)
       match goal with
       | Hi  : Smallstep.initial_state sem  ?s1, Hi' : Smallstep.initial_state sem' ?s2,
         Hst : Star sem ?s1 ?t ?s1', Hst' : Star sem' ?s2 ?t ?s2' |- _ =>
           destruct (MINIT _ _ Hi Hi') as [s3 [Hi3 Hmatch]];
           destruct (tsimulation_star props Hst Hst' s3 Hmatch) as [s3' [Hst3 Hmatch3]]
       end.
-    - (* FTbc: pure prefix — the transported [Star] is all we need. *)
+    -
       apply (does_FTbc Hi3 Hst3).
-    - (* FGoes_wrong: owes [Nostep sem'' s3'] (WP-G [nostep_reflect]) and [~final_state sem'' s3']
-         (WP-F [notfinal_reflect]), both from RecBackward.v.  [pc_color_inv s3'] from
-         [reachable_pc_color''] (s3' reachable in [sem'']); the source-side [Nostep]/[~final] come
-         from the [FGoes_wrong] inversion of [dp_sem]/[dp_sem']. *)
+    -
       destruct Hmatch3 as [M Hms].
       have Hpc3 := reachable_pc_color'' Hi3 Hst3.
       match goal with Hii : Smallstep.initial_state sem ?ss, Hss : Star sem ?ss _ ?se |- _ =>
@@ -185,15 +158,11 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
       + match goal with
         | Hf1 : ~ final_state sem ?a, Hf2 : ~ final_state sem' ?b |- _ =>
             exact: (notfinal_reflect Hms Hpc3 Hf1 Hf2) end.
-    - (* FTerminates: [final_state sem'' s3'].  [final_me_transfer_strong] carries the strongly-
-         related side's Halt-at-code pc-cell into [s3'].  RIGHT: the strong side is [s'0], final in
-         [sem'] (final_state_me ⇒ is_code — clean).  LEFT: the strong side is [s'], final only in
-         [sem] (final_state_rUB) — is_code holds on its [ip]-coloured branch (the running side); only
-         the residual [is_code = false] spurious-final subcase is deferred. *)
+    -
       apply (does_FTerminates Hi3 Hst3).
       destruct Hmatch3 as [M Hms].
       inversion Hms as [M0 sa sb sc Hcom HstrL HwkR | M0 sa sb sc Hcom HwkL HstrR]; subst.
-      + (* match_states_left: [s'] strong Left (final_rUB), [s'0] weak Right. *)
+      +
         have Hsp   := strong_same_pc HstrL.
         have Hside := strong_side HstrL.
         have Hrel1 : is_relevant_comp Left (color_of s')
@@ -203,10 +172,7 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
         * apply: (final_me_transfer_strong (i := Left) (s := s') (d := d1));
             [ exact Hsp | exact: (common_combined_left Hcom) | exact: (common_pcc1 Hcom)
             | exact Hrel1 | exact Hcell1 | exact Ecode | exact Hdec1 ].
-        * (* The spurious subcase ([is_code (taga d1) = false]) is RULED OUT by the unconditional
-             pc-colour reachability invariant [reachable_pc_color] (PcColor.v): the pc-cell [d1] has
-             colour [color_of s'] ∈ ip (the running side), so [Himpl1] forces [is_code (taga d1)] —
-             contradicting [Ecode]. *)
+        *
           exfalso.
           have Hpci : pc_color_inv s'.
           { match goal with
@@ -215,7 +181,7 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
           have Hc := Hpci d1 Hcell1.
           have Hip : color (taga d1) \in domm ip by rewrite Hc; exact: Hrel1.
           by move: (Himpl1 Hip); rewrite Ecode.
-      + (* match_states_right: [s'0] strong Right (final_me — clean), [s'] weak Left. *)
+      +
         have Hsp   := strong_same_pc HstrR.
         have Hside := strong_side HstrR.
         have Hrel2 : is_relevant_comp Right (color_of s'0)
@@ -261,14 +227,13 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
         have Hpc1 : pc_color_inv se by exact: (reachable_pc_color Hii Hss)
     end.
     inversion Hms as [M0 sa sb sc Hcom HstrL HwkR | M0 sa sb sc Hcom HwkL HstrR]; subst.
-    - (* LEFT match: reflect to the (stuck, non-final) Left source. *)
+    -
       apply (does_FGoes_wrong Hi3 Hst3).
       + match goal with Hn1 : Nostep sem ?a |- _ =>
           exact: (nostep_reflect_left Hcom HstrL Hpc3 Hpc1 Hn1) end.
       + match goal with Hf1 : ~ final_state sem ?a |- _ =>
           exact: (notfinal_reflect_left Hcom HstrL Hpc3 Hf1) end.
-    - (* RIGHT match is impossible: [undef_in] forces the running colour into [ip], but the strong
-         Right side colours it into [ic] ([ip],[ic] disjoint). *)
+    -
       exfalso.
       match goal with Hi : Smallstep.initial_state sem ?ss, Hst : Star sem ?ss m ?e |- _ =>
         have Hip := undef_running_left Hi Hst undef_m end.

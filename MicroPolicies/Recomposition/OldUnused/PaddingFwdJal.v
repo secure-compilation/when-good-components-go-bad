@@ -1,7 +1,3 @@
-(* ===== JAL bullet of the forward single-step padding simulation, split into its own file so each
-   compile stays within the per-file budget.  Re-opens the [CodeShift] section context (same
-   Variables/Hypotheses/notations as PaddingFwd.v) and proves the standalone JAL-case lemma
-   [pad_step_fwd_jal], which PaddingFwd.v's [pad_step_fwd] dispatches to. ===== *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -73,7 +69,6 @@ Variable NC : nat.
 
 Local Notation st := (@Symbolic.state mt lrc_tags unit).
 
-(* re-expose the q/q'-parametrized definitions proved in PaddingSim *)
 Local Notation match_pad  := (@PaddingSim.match_pad q q').
 Local Notation pad_valid  := (@PaddingSim.pad_valid q q').
 Local Notation phia       := (@PaddingSim.phia q q').
@@ -83,8 +78,6 @@ Local Notation memwk      := (@PaddingSim.memwk q q').
 Local Notation memwk_bwd  := (@PaddingSim.memwk_bwd q q').
 Local Notation wregs      := (@PaddingSim.wregs q q').
 
-(* re-expose the q/q'-parametrized helper lemmas — [q]/[q'] are implicit (inferred from args), so
-   only the well-formedness hypotheses are pre-applied; the lemma-own args stay implicit. *)
 Local Notation code_cell_q      := (PaddingSim.code_cell_q Hcount Hbound Hbound').
 Local Notation phia_addr_code   := (PaddingSim.phia_addr_code Hcount Hbound Hbound').
 Local Notation pc_succ_corr     := (PaddingSim.pc_succ_corr Hcount Hbound Hbound' fallthrough_aligned).
@@ -99,9 +92,6 @@ Local Notation nonterm_succ_lt  := (PaddingSim.nonterm_succ_lt code_last_term).
 
 Local Opaque PaddingSim.rel_v.
 
-(* forward [reg_clear_list_aux] cons step.  Stated with the tail list [l'] ABSTRACT, so the
-   [obind _ (Some _)]/= reductions never unfold the (concrete) recursive call — then applied to the
-   concrete [reg_list] tail. *)
 Local Lemma rcla_cons_some (e : nat) (l' : seq nat)
    (rs : {fmap reg mt -> atom (mword mt) (Symbolic.tag_type lrc_tags Symbolic.R)})
    (t : Symbolic.tag_type lrc_tags Symbolic.R)
@@ -237,7 +227,7 @@ Proof.
     { have [v2a [HRa2 _]] := reg_get Hreg OLD. by exists v2a. }
     rewrite Hleq in NEXT.
     case: Hdisj => [Hbel1 | [celltgt [rcv [Hmw0 [Hbel1 [Hrcom [u Hentry]]]]]]].
-    + (* internal JAL *)
+    +
       have HN1 : @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit
                    (@Symbolic.State mt lrc_tags unit mem0 reg
                       (pcw@((Level level ctpc) : Symbolic.tag_type lrc_tags Symbolic.P)) extra)
@@ -304,7 +294,7 @@ Proof.
         split; first exact: Hc2'.
         split; first exact: Hnc1.
         exact: Hnc2.
-    + (* cross-component CALL *)
+    +
       have Hbelne : color ti != color (taga celltgt) by move: Hbel1; rewrite belong_someE.
       have Hentry' : check_entry (color ti) (Some (taga celltgt)) = Some tt by move: Hentry; case: u.
       have [p Hpname] : exists p, get_proc_name (Some (taga celltgt)) = Some p.
@@ -319,14 +309,12 @@ Proof.
                     exists a, reg (as_word (ssrint.Posz kk)) = Some a.
       { move=> kk Hkk; exact: (reg_clear_list_aux_dom Hlh1 Hkk). }
       have [a0 Ha0] : exists a, reg (as_word (ssrint.Posz 0)) = Some a by apply: Hdom.
-      (* expose s1's clear tail [cc] : lh1 = HSeqCons Other cc *)
       have [cc Hcc] : exists cc, Symbolic.reg_clear_list_aux [:: 2; 3; 5; 6; 7; 16; 17; 18; 19]%N reg (taga a0) = Some cc.
       { apply: reg_clear_list_aux_total => kk Hkk. apply: Hdom. by rewrite in_cons Hkk orbT. }
       have Hlh1' : lh1 = HSeqCons (taga a1) cc.
       { have H := @rcla_cons_some 0 [:: 2; 3; 5; 6; 7; 16; 17; 18; 19]%N reg (taga a1) a0 cc Ha0 Hcc.
         by move: Hlh1; rewrite H => -[= <-]. }
       rewrite Hlh1' Hta1 in NEXT.
-      (* expose s2's clear tail [cc2] : lh2 = HSeqCons Other cc2 *)
       have [b0 Hb0] := reg_some Hreg Ha0.
       have [cc2 Hcc2] : exists cc2, Symbolic.reg_clear_list_aux [:: 2; 3; 5; 6; 7; 16; 17; 18; 19]%N (Symbolic.regs s2) (taga (b0 @ (taga a0))) = Some cc2.
       { apply: reg_clear_list_aux_total => kk Hkk.

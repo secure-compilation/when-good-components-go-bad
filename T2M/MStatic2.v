@@ -1,9 +1,3 @@
-(** * T2M — assembly discharges for MDisc's section hypotheses.
-
-    [disch_HcstT]: compiled pointer constants are (c,0,0), or (c,1,0)/(c,1,1)
-    into aux registers only. [disch_HuniqT]: plain labels resolve to a unique
-    position of the linearized component. Both via lin_In_inv/compiled_proc_origin. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -60,8 +54,6 @@ Local Notation cdeW :=
   (Transitional.intermediate_to_transitional_gen PI tp).
 
 Variable Hprem : MDefs.t2me_premises L P C a b.
-
-(* ---- the pointer-constant discipline ---- *)
 
 Definition auxreg (r : register) : bool :=
   match r with R_AUX1 | R_AUX2 => true | _ => false end.
@@ -245,8 +237,6 @@ case: (lin_In_inv Hin)
     * by rewrite Ecd /= in Hhas.
 Qed.
 
-(* ---- label uniqueness in the linearized component ---- *)
-
 Lemma disch_HuniqT : forall (c : Component.id)
     (S : seq (Transitional.instr * mem_tag)) (l : label)
     (m m' : nat) (t1 t2 : mem_tag),
@@ -384,8 +374,6 @@ have Hn12 : n1 = n2.
 subst n2.
 rewrite Ho1 Ho2. by [].
 Qed.
-
-(* ---- the initial-memory layout facts (disc_initial's premises) ---- *)
 
 Local Notation mem0' :=
   (Transitional.Memory.prepare_procedures_initial_memory tp).
@@ -643,10 +631,6 @@ case Eb0: (bk == 0) => /=.
   + by case: j.
 Qed.
 
-(* ---- the per-component checker maps at the linked program ---- *)
-
-(* [linearize_component_gen PI pr c] depends on [pr] only through
-   [getm (prog_procedures pr) c] *)
 Lemma lin_gen_split (pr : Intermediate.program) (c : Component.id) :
   getm (Intermediate.prog_procedures tp) c
     = getm (Intermediate.prog_procedures pr) c ->
@@ -685,7 +669,6 @@ case Ea: (getm (Intermediate.prog_procedures a) c) => [xa|] /=.
   exact: HM.
 Qed.
 
-(* the checker maps, packaged by (classical) choice *)
 Lemma disch_HMM :
   exists MM : Component.id -> seq sv,
     forall c S, getm cdeW c = Some S -> comp_ok (c, 1, 0%Z) S (MM c).
@@ -706,9 +689,6 @@ exact: (proj2_sig (ClassicalEpsilon.constructive_indefinite_description
           _ (cdeW_link_comp_ok E'))).
 Qed.
 
-(* ---- the assembled INITIAL [mm_dsync] discharge: the carried invariant
-   (dinv + sync) holds at every base initial state, under the run's fit
-   (the initial buffer values must fit for the sync half's cell relation) ---- *)
 Theorem disch_dsy0 :
   exists MM : Component.id -> seq sv,
     (forall c S, getm cdeW c = Some S -> comp_ok (c, 1, 0%Z) S (MM c))

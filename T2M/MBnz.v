@@ -1,7 +1,3 @@
-(* MBnz.v — [compiled_branches_forward]: S2I output has forward branches
-   only; every [IBnz r l] in a compiled procedure sees [ILabel l] later
-   in the same body, via the suffix-checker [bnzfwdb]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -22,9 +18,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ================================================================== *)
-(* 1. The suffix checker and its kit.                                  *)
-(* ================================================================== *)
 
 Definition is_labelb (l : label) (i : instr) : bool :=
   if i is ILabel l' then l == l' else false.
@@ -78,9 +71,6 @@ elim: c n => [|i c IH] [|n] //=.
   exists m.+1. by split.
 Qed.
 
-(* ================================================================== *)
-(* 2. The emission walk.                                               *)
-(* ================================================================== *)
 
 Lemma compile_expr_bnz (C0 : Component.id)
     (lb sb : Pointer.t) (P_labels : NMap label) (e : expr) :
@@ -184,9 +174,6 @@ case: (Component.eqb C0 Component.main && Procedure.eqb P0 Procedure.main).
   by apply: bnzcat; [exact: Hpc | ].
 Qed.
 
-(* ================================================================== *)
-(* 3. The program level.                                               *)
-(* ================================================================== *)
 
 Theorem compiled_branches_forward
     (sa : Source.program) (tp : Intermediate.program) :

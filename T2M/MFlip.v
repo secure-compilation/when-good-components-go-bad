@@ -1,8 +1,3 @@
-(** * Generic determinacy tools for the prefix-level flip: [star_run_compare]
-    (two runs from one state are trace-comparable, the longer continuing the
-    shorter) and [silent_starN_bound] (silent progress bounded by a silent
-    path into a silently-stuck state); power [t2me_bwd_prefix]'s divergence. *)
-
 Require Import Common.Definitions.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
@@ -25,14 +20,12 @@ Section RunCompare.
 Variable L : semantics.
 Hypothesis DET : determinate L.
 
-(* matched single-event traces are equal *)
 Lemma match_traces_eq (t1 t2 : trace) :
   match_traces t1 t2 -> t1 = t2.
 Proof.
 by case.
 Qed.
 
-(* two runs from one state: the longer continues the shorter *)
 Lemma star_run_compare (s : state L) (u : trace) (s1 : state L)
     (t : trace) (s2 : state L) :
   Star L s u s1 -> Star L s t s2 ->
@@ -59,8 +52,6 @@ elim: Hu t s2 => [s0|s0 t1 sb t2' s1' u' Hstep Hstar IH Eu] t s2 Ht.
       by rewrite Eux Eapp_assoc.
 Qed.
 
-(* silent progress is bounded by a silent path into a silently-stuck
-   state *)
 Lemma silent_starN_bound (n0 : nat) (s s_stop : state L) :
   starN (step L) (globalenv L) n0 s E0 s_stop ->
   (forall s', ~ Step L s_stop E0 s') ->
@@ -87,7 +78,6 @@ elim: n0 s => [|n0 IH] s Hstop Hnostep n s1 Hn.
   by lia.
 Qed.
 
-(* the star/starN bridges (CompCert provides star_starN/starN_star) *)
 Lemma star_to_starN (s : state L) (t : trace) (s' : state L) :
   Star L s t s' ->
   exists n, starN (step L) (globalenv L) n s t s'.
@@ -95,7 +85,6 @@ Proof.
 exact: star_starN.
 Qed.
 
-(* an event-ready state has no silent step *)
 Lemma event_no_silent (s : state L) (e : event) (s1 s2 : state L) :
   Step L s [:: e] s1 -> Step L s E0 s2 -> False.
 Proof.
@@ -104,7 +93,6 @@ have [MT _] := sd_determ DET _ _ _ _ _ Hev Hsil.
 by have := match_traces_eq MT.
 Qed.
 
-(* silent divergence yields silent step chains of every length *)
 Lemma forever_silent_starN (s : state L) :
   forever_silent (step L) (globalenv L) s ->
   forall n : nat, exists s',
@@ -120,7 +108,6 @@ elim: n s Hfs => [|n IH] s Hfs.
   by apply: starN_step; [exact: H | exact: HsN | by []].
 Qed.
 
-(* silent starN chains compose *)
 Lemma starN_silent_trans (n m : nat) (s s1 s2 : state L) :
   starN (step L) (globalenv L) n s E0 s1 ->
   starN (step L) (globalenv L) m s1 E0 s2 ->
@@ -133,8 +120,6 @@ elim: n s => [|n IH] s Hn Hm.
   apply: starN_step; [exact: H0 | exact: (IH _ H1 Hm) | by []].
 Qed.
 
-(* a reactive run reaches finite prefixes with arbitrarily many
-   events *)
 Lemma reactive_star_events (s : state L) (T : traceinf) :
   forever_reactive (step L) (globalenv L) s T ->
   forall k : nat, exists t' s',
@@ -160,7 +145,6 @@ Qed.
 
 End RunCompare.
 
-(* a forward simulation preserves not-wrong finite prefixes *)
 Lemma fsim_does_prefix (L1 L2 : semantics) (m : finpref_behavior) :
   forward_simulation L1 L2 ->
   does_prefix L1 m ->
@@ -179,8 +163,6 @@ case: m Hpref Hnw => [tm| |tm] //= Hpref _.
   exact: (behavior_prefix_improves_trans' Hpref Himp).
 Qed.
 
-(* transferring a prefix-or-improves verdict backward along
-   behavior_improves (no determinism needed) *)
 Lemma improves_prefix_transfer (bS bT : program_behavior)
     (m : finpref_behavior) :
   behavior_improves bS bT ->

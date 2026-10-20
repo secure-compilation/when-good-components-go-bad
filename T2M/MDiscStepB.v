@@ -1,5 +1,3 @@
-(** * T2M — [disc_inv]-preservation lemmas for the BinOp cases of [TS.step]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.

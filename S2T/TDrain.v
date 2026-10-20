@@ -1,27 +1,3 @@
-(** * Stage 4, part 8 — `cont_matchJ_drain` at T.
-
-    See plan-i2t-redo.md §4 (Stage 4).
-
-    Port of `S2I/Simulation.v:1656`. `cont_matchJ` is `cont_match` up to leading
-    JOIN JUNK — the if-emission's glue, either a bare join label or the
-    else-branch's jump over the then-code — and this lemma drains that junk by
-    silent target steps so the diagrams only ever face the canonical,
-    syntax-directed `cont_match`.
-
-    `cont_matchJ` itself needs **no port**: it mentions memory zero times, so
-    the I-level relation is reused verbatim and only its consumption site moves
-    from `code_at` to `code_at_I`.
-
-    Two things differ from the I proof, and both come from the same place —
-    T flattens a component's procedures into ONE array:
-
-    - the `Bnz` resolves its label component-wide, so the uniqueness premise is
-      component-wide rather than per-procedure (`S2T/TLabel.v`);
-    - the `ILabel` step carries a `check_pc`, so the drain must know the array
-      continues past the label. That is `cont_matchJ_nonempty` — every
-      continuation's code is nonempty, which needs the MUTUAL induction because
-      `CM_seq`'s code is `c2 ++ rest` with `c2` not obviously nonempty. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import CompCert.Events.
@@ -49,9 +25,6 @@ Unset Strict Implicit.
 
 Module TDrain.
 
-(* ================================================================== *)
-(* Continuation code is nonempty                                      *)
-(* ================================================================== *)
 
 Lemma cat_nonempty (T : Type) (s1 s2 : seq T) :
   s2 <> [::] -> s1 ++ s2 <> [::].
@@ -61,9 +34,6 @@ Lemma nonempty_cons (T : Type) (s : seq T) :
   s <> [::] -> exists x r, s = x :: r.
 Proof. by case: s => [|x r] // _; exists x, r. Qed.
 
-(** Needed for the [check_pc] of the [ILabel] step: after the label there IS a
-    next cell. Proved by the mutual induction — `CM_seq` is the case that
-    forces it. *)
 Lemma cont_match_nonempty a C plm :
   (forall k rest temps, cont_match a C plm k rest temps -> rest <> [::])
   /\ (forall k rest temps, cont_matchJ a C plm k rest temps -> rest <> [::]).
@@ -85,17 +55,11 @@ Proof.
   by exists i, r.
 Qed.
 
-(* ================================================================== *)
-(* The drain                                                          *)
-(* ================================================================== *)
 
 Section WithCode.
 
 Variable cde : Transitional.code.
 
-(** Component-wide label uniqueness of the T array. Stage 3 discharges it from
-    `S2I/LabelUniq.v:834`'s `compiled_labels_unique`; stated here as the
-    premise it will become. *)
 Definition labels_uniq (C : Component.id) : Prop :=
   forall l C_code, getm cde C = Some C_code ->
     count (TLabel.is_tlabel l) C_code <= 1.
@@ -119,10 +83,10 @@ Proof.
     => [k0 rest0 temps0 Hc
        | l k0 rest0 temps0 Hj IH
        | lend lc c2 k0 rest0 temps0 Hj IH] pc Hcode Hpc Hu tmem tregs pct HONE.
-  - (* CMJ_base — already canonical *)
+  -
     exists pc, rest0.
     split; [exact: star_refl | by left | exact: Hcode | exact: Hpc | exact: Hc].
-  - (* CMJ_label — one administrative [ILabel] step *)
+  -
     have [i [r Er]] := cont_matchJ_cons Hj.
     have Hcode2 : TMacros.code_at_I cde C pc (ILabel l :: i :: r)
       by rewrite -Er.
@@ -138,11 +102,10 @@ Proof.
     exists pc', rest'. split=> //.
     + eapply star_trans; [exact: star_one SB | exact: Sd | by []].
     + right. eapply plus_left; [exact: SB | exact: Sd | by []].
-  - (* CMJ_bnzjoin — the else-branch's jump over the then-code *)
+  -
     have Hcode2 : TMacros.code_at_I cde C pc
       (IBnz R_ONE lend :: ILabel lc :: c2 ++ ILabel lend :: rest0)
       by exact: Hcode.
-    (* where the join label is, and that the machine finds it there *)
     have HcodeL : TMacros.code_at_I cde C pc
       ((IBnz R_ONE lend :: ILabel lc :: c2) ++ ILabel lend :: rest0)
       by exact: Hcode.

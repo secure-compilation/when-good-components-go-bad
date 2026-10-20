@@ -1,21 +1,3 @@
-(* Task #14 (I→Merged correctness): the MATCH RELATION.
-
-   Relates Intermediate.CS states of the linked compiled pair to me-machine
-   (Symbolic) states.  The settled clauses:
-   - pc: the I pc (C, blk, off) decomposes through the genv (LinGenv: blk =
-     proc_nb0 + j, the j-th procedure P of C), and the me pc word is
-     pc0 + flat_pos of (C, P, off), tagged Level n C with n the number of
-     cross-component frames on gps;
-   - memory: [mem_rel] (LinMatch) through an address map extending the
-     static one;
-   - registers: pointwise [val_rel_b] with Other tags, EXCEPT R_RA (owned
-     by the calling-convention clause);
-   - code: the code region of the me memory is exactly the encoded program
-     (LRC's STORE rule refuses is_code cells, so this is invariant);
-   - stack: the gps ↔ (R_RA / stack cells / Level) correspondence — the
-     calling-convention invariant of compiled code (in design; kept as a
-     parameter of the record for now so the data-step diagram can begin). *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -61,15 +43,11 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* ==================== determinate-run toolkit ==================== *)
-
 Section DetStar.
 
 Variable L : semantics.
 Hypothesis DET : determinate L.
 
-(* two runs from one state have prefix-comparable traces, with the
-   residual run made explicit *)
 Lemma star_traces_comp :
   forall s t1 s1, Star L s t1 s1 ->
   forall t2 s2, Star L s t2 s2 ->
@@ -93,7 +71,6 @@ Proof.
       * right. exists t'. split; auto. subst. traceEq.
 Qed.
 
-(* a state with arbitrarily long silent runs *)
 Definition silent_ray (s : Smallstep.state L) : Prop :=
   forall n : nat,
     exists (k : nat) (s' : Smallstep.state L),
@@ -118,7 +95,6 @@ Proof.
   exists k. eexists. split; [lia | exact HstN].
 Qed.
 
-(* any run out of a silent ray is silent and stays on the ray *)
 Lemma silent_ray_absorb :
   forall s t s',
     Star L s t s' -> silent_ray s -> t = E0 /\ silent_ray s'.
@@ -141,7 +117,6 @@ Proof.
     subst. split; auto.
 Qed.
 
-(* silent counted runs compose *)
 Lemma starN_silent_compose :
   forall n1 s s',
     starN (Smallstep.step L) (globalenv L) n1 s E0 s' ->
@@ -162,7 +137,6 @@ Proof.
       [exact Hst | exact (IH (erefl _) _ _ HN2) | auto].
 Qed.
 
-(* a stuck state ends every run immediately *)
 Lemma star_nostep_refl :
   forall s t s', Star L s t s' -> Nostep L s -> t = E0 /\ s' = s.
 Proof.
@@ -172,7 +146,6 @@ Proof.
   - exfalso. exact (Hns _ _ Hstep).
 Qed.
 
-(* a silent ray contradicts stuckness *)
 Lemma ray_nostep_absurd :
   forall s, silent_ray s -> Nostep L s -> False.
 Proof.
@@ -187,34 +160,26 @@ End DetStar.
 
 Section LinSim.
 
-(* the canonical label-scheme bounds and the two compiled sides *)
 Variables L P C : nat.
 Variables pra prb : Intermediate.program.
 
-(* the linked Intermediate program and its genv *)
 Let ilp : Intermediate.program := Intermediate.program_link pra prb.
 Let G : global_env := prepare_global_env ilp.
 
-(* the linked me-side code and memory layout *)
 Let codeW : @Merged.code mt := lin_code L P C pra ++ lin_code L P C prb.
 Let pbW : NMap {fmap Block.id -> nat + seq value} :=
   unionm (Intermediate.prog_buffers pra) (Intermediate.prog_buffers prb).
 Let pc0 : nat := size (initial_memory (mt := mt) pbW).
 
-(* flat position of instruction [o] of procedure (C0,P0), side-aware:
-   left-side components at their positions, right-side shifted *)
 Definition side_flat_pos (C0 : Component.id) (P0 : Procedure.id)
     (Pcode : Machine.code) (o : nat) : nat :=
   if C0 \in domm (Intermediate.prog_procedures pra)
   then flat_pos pra C0 P0 Pcode o
   else size (lin_code L P C pra) + flat_pos prb C0 P0 Pcode o.
 
-(* the source program owning component C0 *)
 Definition side_of (C0 : Component.id) : Intermediate.program :=
   if C0 \in domm (Intermediate.prog_procedures pra) then pra else prb.
 
-(* number of cross-component frames of a gps (consecutive same-component
-   frames come from IJal; component changes come from ICall) *)
 Fixpoint cross_frames (cur : Component.id) (gps : list Pointer.t) : nat :=
   match gps with
   | [::] => 0
@@ -224,14 +189,11 @@ Fixpoint cross_frames (cur : Component.id) (gps : list Pointer.t) : nat :=
       else (cross_frames (Pointer.component p) gps').+1
   end.
 
-(* the code region of the me memory is the encoded program *)
 Definition code_region_ok (mmem : {fmap mword mt -> matom}) : Prop :=
   forall (w : mword mt) (a : matom),
     encode_code codeW pc0 w = Some a ->
     getm mmem w = Some a.
 
-(* the pc clause: the I pc decomposes through the genv and lands at its
-   flat position, tagged with the running component at the gps's level *)
 Definition pc_rel (gps : list Pointer.t) (ipc : Pointer.t)
     (mpc : atom (mword mt) (tag_type lrc_tags Symbolic.P)) : Prop :=
   exists (Cprocs_src : NMap Machine.code) (j : nat)
@@ -249,7 +211,6 @@ Definition pc_rel (gps : list Pointer.t) (ipc : Pointer.t)
            = LRC.Level (cross_frames (Pointer.component ipc) gps)
                (Pointer.component ipc)].
 
-(* registers except R_RA: related values, Other tags *)
 Definition regs_rel_no_ra (bmap : addr_map)
     (iregs : Intermediate.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) : Prop :=
@@ -261,12 +222,6 @@ Definition regs_rel_no_ra (bmap : addr_map)
           val_rel_b bmap (Intermediate.Register.get r iregs) (vala a)
         & taga a = Other].
 
-(* THE match relation, parameterized by the calling-convention stack
-   invariant [SINV] (gps vs the me state) — instantiated once the R_RA
-   discipline is formalized *)
-(* the call-surviving register relation: a register is either strongly
-   related with an Other tag, or its I-side value is Undef (in which case
-   the me-side tag is unconstrained — post-invalidation state) *)
 Definition regs_rel_w (bmap : addr_map)
     (iregs : Intermediate.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) : Prop :=
@@ -280,8 +235,6 @@ Definition regs_rel_w (bmap : addr_map)
           \/ (Intermediate.Register.get r iregs = Undef
               /\ (taga a = LRC.Other \/ taga a = LRC.Invalidated))).
 
-(* the me register file is total on the machine's working keys (the 11
-   clear-list registers plus ra) — Jump/Jal's clear-lists need them *)
 Definition reg_keys : seq nat := [:: 1; 0; 2; 3; 4; 5; 6; 7; 16; 17; 18; 19].
 
 Definition regs_total (mregs : {fmap reg mt -> @ratom mt}) : Prop :=
@@ -307,7 +260,6 @@ Record lin_match
   lm_total : regs_total (Symbolic.regs ms)
 }.
 
-(* totality survives any register write *)
 Lemma regs_total_set (mregs : {fmap reg mt -> @ratom mt})
     (key : reg mt) (a : @ratom mt) :
   regs_total mregs -> regs_total (setm mregs key a).
@@ -316,11 +268,6 @@ move=> Htot k Hk; rewrite setmE.
 case: eqP => _; [by eexists | exact: Htot].
 Qed.
 
-(* placed later, after as_won_eqE (see regs_total_reg0 below) *)
-
-(* ==================== register plumbing ==================== *)
-
-(* register indices are small and distinct as 5-bit words *)
 Lemma to_nat_lt32 (r : register) : Intermediate.Register.to_nat r < 32.
 Proof. by case: r. Qed.
 
@@ -337,7 +284,6 @@ Proof.
 by rewrite won_eqE // small_lt_reg // to_nat_lt32.
 Qed.
 
-(* reading a related register *)
 Lemma regs_rel_get (bmap : addr_map)
     (iregs : Intermediate.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) :
@@ -356,14 +302,12 @@ split=> //.
 by rewrite -Htag; case: a Hget Hval Htag.
 Qed.
 
-(* an update on a present key succeeds *)
 Lemma updm_from_get (T : ordType) (S : Type) (m : {fmap T -> S})
     (k : T) (a v : S) :
   getm m k = Some a ->
   updm m k v = Some (setm m k v).
 Proof. by rewrite /updm => ->. Qed.
 
-(* writing related values (with Other tags) preserves the relation *)
 Lemma regs_rel_set (bmap : addr_map)
     (iregs : Intermediate.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register)
@@ -385,7 +329,6 @@ case Er: (Intermediate.Register.to_nat r'
   by exists a; split.
 Qed.
 
-(* writes to R_RA's slot are invisible to the no-RA relation *)
 Lemma regs_rel_set_ra (bmap : addr_map)
     (iregs : Intermediate.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (a : @ratom mt) :
@@ -402,9 +345,6 @@ case Er: (Intermediate.Register.to_nat r'
 - exact: Hrel.
 Qed.
 
-(* the call-surviving register relation: a register is either strongly
-   related with an Other tag, or its I-side value is Undef (in which case
-   the me-side tag is unconstrained — post-invalidation state) *)
 Lemma regs_rel_w_of (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) :
   regs_rel_no_ra bmap iregs mregs -> regs_rel_w bmap iregs mregs.
@@ -414,7 +354,6 @@ have [a [Hget Hval Htag]] := Hrel r Hra.
 by exists a; split=> //; left.
 Qed.
 
-(* at use sites the CS rules pin a non-Undef shape, recovering strength *)
 Lemma regs_rel_w_get (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) :
   regs_rel_w bmap iregs mregs ->
@@ -432,10 +371,6 @@ exists (vala a); split=> //.
 by rewrite -Htag; case: a Hget Htag Hval.
 Qed.
 
-(* the Undef-tolerant fetch: every non-RA register has a register-file
-   class atom (Other or Invalidated), related to the I value (Undef
-   relates freely), and DEFINED values pin the Other tag — the entry
-   point for the tag-parametric Mov/Store diagram cases *)
 Lemma regs_rel_w_get_any (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) :
   regs_rel_w bmap iregs mregs ->
@@ -460,7 +395,6 @@ have [a [Hget [[Htag Hval]|[Hu Ht]]]] := Hrel r Hra.
   by split.
 Qed.
 
-(* writing related values (Other tags) preserves the weak relation *)
 Lemma regs_rel_w_set (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) (r : register)
     (v : value) (w : mword mt) :
@@ -481,8 +415,6 @@ case Er: (Intermediate.Register.to_nat r'
   by exists a; split.
 Qed.
 
-(* setting Undef on the I side absorbs any me-side atom of a
-   register-file tag class (Other or Invalidated) *)
 Lemma regs_rel_w_set_undef (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) (a : @ratom mt) :
   taga a = LRC.Other \/ taga a = LRC.Invalidated ->
@@ -528,9 +460,6 @@ have -> : (word.as_word (ssrint.Posz j) : word (reg_field_size mt))
 by rewrite won_eqE // small_lt_reg.
 Qed.
 
-(* the invalidation thread of a cross call/return: ra rewritten, the ten
-   clear registers invalidated, rcom untouched — matches the I side's
-   Register.invalidate (Undef everywhere but R_COM) *)
 Lemma regs_rel_w_invalidate (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt})
     (rav : mword mt) (rat : LRC.value_tag)
@@ -557,26 +486,22 @@ have Hra4 : (ra : reg mt) = word.as_word (ssrint.Posz 4) by [].
 rewrite /Intermediate.Register.invalidate /Intermediate.Register.get
   mkfmapE.
 case: r' Hra' => Hra' /=; rewrite ?Hra4 !setmE !won_as_eqE //=.
-- (* R_ONE *)
+-
   by exists (w0@LRC.Invalidated); split=> //; right; split=> //; right.
-- (* R_COM *)
+-
   have Hcr : R_COM <> R_RA by [].
   have [a [Hget Hd]] := Hrel R_COM Hcr.
   by exists a; split.
-- (* R_AUX1 *)
+-
   by exists (w2@LRC.Invalidated); split=> //; right; split=> //; right.
-- (* R_AUX2 *)
+-
   by exists (w3@LRC.Invalidated); split=> //; right; split=> //; right.
-- (* R_SP *)
+-
   by exists (w5@LRC.Invalidated); split=> //; right; split=> //; right.
-- (* R_ARG *)
+-
   by exists (w6@LRC.Invalidated); split=> //; right; split=> //; right.
 Qed.
 
-(* ==================== address-map extension ==================== *)
-
-(* extending the address map at a FRESH block preserves the value
-   relation (existing pointers reference other blocks) *)
 Lemma val_rel_b_ext (bmap : addr_map) (C0 : Component.id) (b : Block.id)
     (base : nat) (v : value) (w : mword mt) :
   amap_get bmap C0 b = None ->
@@ -607,9 +532,6 @@ split=> //.
 exact: val_rel_b_ext Hval.
 Qed.
 
-(* ==================== position bridges ==================== *)
-
-(* word successor of an encoded position — exact, no bounds (modular) *)
 Lemma won_S (n : nat) :
   addw (@word_of_nat (word_size mt) n) onew = word_of_nat n.+1.
 Proof.
@@ -619,7 +541,6 @@ rewrite as_word_addwD.
 by congr word.as_word; lia.
 Qed.
 
-(* flat position of the next instruction *)
 Lemma flat_pos_S (pr : Intermediate.program) (c : Component.id)
     (p : Procedure.id) (Pcode : Machine.code) (o : nat) (i : Machine.instr) :
   List.nth_error Pcode o = Some i ->
@@ -638,12 +559,6 @@ move=> Ho; rewrite /side_flat_pos; case: ifP => _.
 - by rewrite (flat_pos_S prb c p Ho) addnA.
 Qed.
 
-(* ==================== the master fetch bridge ==================== *)
-
-(* [pc_rel] + the I-side [executing] fact pin down the SOURCE-level
-   procedure and offset: the genv block decomposes through
-   [genv_procs_spec], the codes agree, and the running instruction sits at
-   the source offset — everything the encoded-fetch lemmas consume *)
 Lemma lm_fetch (gps : list Pointer.t) (ipc : Pointer.t)
     (mpc : atom (mword mt) (tag_type lrc_tags Symbolic.P))
     (i : Machine.instr) :
@@ -701,11 +616,6 @@ exists Cprocs_src, P0, Pcode, j.
 by split; split.
 Qed.
 
-(* ==================== step-construction kernels ==================== *)
-
-(* the me machine takes a silent Nop step whenever the pc cell decodes to
-   Nop, is code-tagged with the running colour, and the next cell belongs
-   to the same colour — the computational core shared by all silent cases *)
 Lemma stepf_nop_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -741,7 +651,6 @@ eapply Symbolic.step_nop.
   by [].
 Qed.
 
-(* the silent Const step: same kernel plus one register write *)
 Lemma stepf_const_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -783,8 +692,6 @@ eapply Symbolic.step_const.
   by [].
 Qed.
 
-(* the silent Mov step: two register reads, one write; the moved value
-   keeps its tag (Other sources stay Other) *)
 Lemma stepf_mov_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -829,10 +736,6 @@ eapply Symbolic.step_mov.
   by [].
 Qed.
 
-(* the Invalidated twin: LRC's MOV rule propagates the tag (the
-   [is_not_invalid] guard is disabled), and [is_address Invalidated]
-   makes the source rewrite ts' = Invalidated = ts, so the state shape
-   is identical *)
 Lemma stepf_mov_compute_inv (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -877,7 +780,6 @@ eapply Symbolic.step_mov.
   by [].
 Qed.
 
-(* the silent Binop step: two Other-tagged reads, one write *)
 Lemma stepf_binop_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -926,8 +828,6 @@ eapply Symbolic.step_binop.
   by [].
 Qed.
 
-(* the silent Load step: own-colour data cell, Other-tagged pointer;
-   the loaded value's tag moves to the register, the cell keeps Other *)
 Lemma stepf_load_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -978,8 +878,6 @@ eapply Symbolic.step_load.
   by [].
 Qed.
 
-(* the silent Store step: own-colour data target, Other-tagged pointer and
-   source; the source tag moves into the cell *)
 Lemma stepf_store_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1031,10 +929,6 @@ eapply Symbolic.step_store.
   by [].
 Qed.
 
-(* the Invalidated-source Store twin: the stored register carries an
-   Invalidated tag (a cross-invalidated Undef on the I side); LRC's
-   STORE accepts it, [is_address Invalidated] keeps the register tag,
-   and [switch_val] moves Invalidated into the cell *)
 Lemma stepf_store_compute_inv (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1086,10 +980,6 @@ eapply Symbolic.step_store.
   by [].
 Qed.
 
-(* tag-generic Load: the cell's value tag is arbitrary and moves into the
-   destination register; the cell is retagged by [switch_val] (invalidated
-   when the moved tag is an address capability).  This is the variant the
-   compiled pop-R_RA sites need. *)
 Lemma stepf_load_any_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1143,10 +1033,6 @@ eapply Symbolic.step_load.
   by [].
 Qed.
 
-(* tag-generic Store: the source register's value tag is arbitrary and
-   moves into the cell; the register is retagged by [switch_val]
-   (invalidated when the moved tag is an address capability).  This is
-   the variant the compiled push-R_RA sites need. *)
 Lemma stepf_store_any_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1201,7 +1087,6 @@ eapply Symbolic.step_store.
   by [].
 Qed.
 
-(* the silent Bnz step, fall-through variant (tested register is zero) *)
 Lemma stepf_bnz_z_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1244,8 +1129,6 @@ eapply Symbolic.step_bnz.
   by [].
 Qed.
 
-(* the silent Bnz step, taken-branch variant (tested register nonzero);
-   target = pcv + swcast n, whose cell must be own-coloured *)
 Lemma stepf_bnz_nz_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1288,8 +1171,6 @@ eapply Symbolic.step_bnz.
   by [].
 Qed.
 
-(* writing back the exact atom already stored leaves the map unchanged;
-   turns the 13 register write-backs of Jump/Jal into no-ops *)
 Lemma updm_id (T : ordType) (S : Type) (m : {fmap T -> S}) (k : T) (v : S) :
   getm m k = Some v -> updm m k v = Some m.
 Proof.
@@ -1297,8 +1178,6 @@ move=> Hget; rewrite /updm Hget; congr Some.
 by apply/eq_fmap=> k'; rewrite setmE; case: eqP => [->|//]; rewrite Hget.
 Qed.
 
-(* the silent intra-component Jump step: jump register tagged InternalJump,
-   target cell own-coloured; every write-back is an identity *)
 Lemma stepf_jump_intra_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1367,9 +1246,6 @@ eapply Symbolic.step_jump.
   by [].
 Qed.
 
-(* the silent intra-component Jal step: return-address cell (pc+1) and target
-   cell own-coloured; ra := pc+1 tagged InternalJump, clear write-backs are
-   identities on the post-write register map *)
 Lemma stepf_jal_intra_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -1456,9 +1332,6 @@ eapply Symbolic.step_jal.
   by [].
 Qed.
 
-(* the evented cross-component Jal step (ECall): target cell is a foreign
-   entry point listing the caller; ra := pc+1 tagged Ret lvl, rcom stays
-   Other, all other registers are invalidated *)
 Lemma stepf_jal_cross_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c c' : Component.id)
@@ -1574,9 +1447,6 @@ eapply Symbolic.step_jal.
   by [].
 Qed.
 
-(* the evented cross-component Jump step (ERet): jump register tagged
-   Ret lvl at level lvl.+1, target cell foreign; ra and the jump register
-   are invalidated, rcom stays Other, all other registers invalidated *)
 Lemma stepf_jump_cross_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c c' : Component.id)
@@ -1689,9 +1559,6 @@ eapply Symbolic.step_jump.
   by [].
 Qed.
 
-(* the silent SERVICE step through the alloc syscall: pc is the (unmapped)
-   alloc address, the monitor runs alloc_fun; the post-state shape is
-   characterized separately by alloc_fun_shape *)
 Lemma stepf_syscall_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (lvl : nat) (c : Component.id)
@@ -1718,9 +1585,6 @@ eapply Symbolic.step_syscall.
   by [].
 Qed.
 
-(* ==================== side-uniform encoded fetch ==================== *)
-
-(* the linked fetch, dispatching on the side owning component [c] *)
 Lemma side_encoded_fetch (c : Component.id) (Cprocs : NMap Machine.code)
     (p : Procedure.id) (Pcode : Machine.code) (o : nat) (i : Machine.instr)
     (k : nat) (cell : @Merged.instr mt * mem_tag) :
@@ -1754,7 +1618,6 @@ case Hd: (c \in domm (Intermediate.prog_procedures pra)) => /=;
   by exists v; split.
 Qed.
 
-(* every instruction's first cell carries the plain code tag *)
 Lemma cell_exp0 (msz0 : NMap (NMap nat)) (c : Component.id)
     (i : Machine.instr) :
   exists mi : @Merged.instr mt,
@@ -1767,9 +1630,6 @@ case: i => *; try by eexists.
 by rewrite /instr_to_transitional; case: (Nat.eqb _ _); eexists.
 Qed.
 
-(* ==================== diagram wrappers ==================== *)
-
-(* INop: one silent me-step, pc advances one cell *)
 Lemma sim_nop (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (i' : Machine.instr)
@@ -1820,7 +1680,6 @@ eapply stepf_nop_compute.
 - exact Hrcom.
 Qed.
 
-(* ILabel: encodes to MrLabel, decodes to Nop — same silent step *)
 Lemma sim_label (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (l : nat) (i' : Machine.instr)
@@ -1871,7 +1730,6 @@ eapply stepf_nop_compute.
 - exact Hrcom.
 Qed.
 
-(* IConst: one silent me-step writing the converted immediate *)
 Lemma sim_const (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (v0 : imvalue) (r : Machine.register) (i' : Machine.instr)
@@ -1936,7 +1794,6 @@ eapply stepf_const_compute.
 - exact Hupd.
 Qed.
 
-(* IMov: one silent me-step copying r1 into r2 *)
 Lemma sim_mov (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2000,8 +1857,6 @@ eapply stepf_mov_compute.
 - exact Hupd2.
 Qed.
 
-(* the Invalidated twin of [sim_mov] — the entry wrapper's
-   [IMov R_SP R_AUX1] on a freshly invalidated register file *)
 Lemma sim_mov_inv (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2065,7 +1920,6 @@ eapply stepf_mov_compute_inv.
 - exact Hupd2.
 Qed.
 
-(* IBinOp: one silent me-step computing the operation *)
 Lemma sim_binop (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (op : Values.binop) (r1 r2 r3 : Machine.register)
@@ -2140,7 +1994,6 @@ eapply stepf_binop_compute.
 - exact Hupd3.
 Qed.
 
-(* ILoad: one silent me-step through an own-colour data cell *)
 Lemma sim_load (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2210,7 +2063,6 @@ eapply stepf_load_compute.
 - exact Hupd2.
 Qed.
 
-(* IStore: one silent me-step writing an own-colour data cell *)
 Lemma sim_store (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2283,7 +2135,6 @@ eapply stepf_store_compute.
 - exact Hupdm.
 Qed.
 
-(* the Invalidated-source Store twin of [sim_store] *)
 Lemma sim_store_inv (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2356,9 +2207,6 @@ eapply stepf_store_compute_inv.
 - exact Hupdm.
 Qed.
 
-(* ILoad, tag-generic: the loaded cell's value tag moves into the
-   destination register; the cell is invalidated when the tag is an
-   address capability (compiled pop-R_RA) *)
 Lemma sim_load_any (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2431,9 +2279,6 @@ eapply stepf_load_any_compute.
 - exact Hupd2.
 Qed.
 
-(* IStore, tag-generic: the source register's value tag moves into the
-   cell; the register is invalidated when the tag is an address
-   capability (compiled push-R_RA) *)
 Lemma sim_store_any (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r1 r2 : Machine.register) (i' : Machine.instr)
@@ -2508,7 +2353,6 @@ eapply stepf_store_any_compute.
 - exact Hupdm.
 Qed.
 
-(* IBnz, untaken branch (register is zero): silent fall-through *)
 Lemma sim_bnz_z (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r : Machine.register) (l : nat) (i' : Machine.instr)
@@ -2568,8 +2412,6 @@ eapply stepf_bnz_z_compute.
 - exact Hupd.
 Qed.
 
-(* ==================== word-cast bridges ==================== *)
-
 Lemma valw_won (k n : nat) :
   eqtype.val (@word_of_nat k n) = n %% 2 ^ k :> nat.
 Proof. by rewrite /word_of_nat WordExtra.valw_as_word. Qed.
@@ -2582,7 +2424,6 @@ move: (valw_won k a) (valw_won k b) => Ea Eb. rewrite Ea Eb.
 rewrite (valw_won k (a + b)) WordExtra.valw_as_word. by rewrite modnDm.
 Qed.
 
-(* the unsigned imm→word cast is the identity on in-range positions *)
 Lemma swcast_won_id (x : nat) :
   x < 2 ^ imm_size mt ->
   @swcast _ (word_size mt) (@word_of_nat (imm_size mt) x)
@@ -2600,8 +2441,6 @@ Proof.
 move=> Hb. by rewrite (swcast_won_id Hb) word_of_natDall.
 Qed.
 
-(* IJump: the intra-component stack return — jumps through R_RA, whose tag
-   must be InternalJump; the target cell is own-coloured *)
 Lemma sim_jump_intra (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (w : mword mt)
@@ -2670,9 +2509,6 @@ eapply stepf_jump_intra_compute.
 - exact Hc19.
 Qed.
 
-(* IReturn: the cross-component return — jumps through R_RA (tagged
-   Ret lvl at level lvl.+1) into a foreign component, emitting ERet;
-   everything but rcom is invalidated *)
 Lemma sim_return (NC : nat) (c c' : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (w : mword mt)
@@ -2814,10 +2650,6 @@ eapply stepf_jump_cross_compute.
 - exact Hu19.
 Qed.
 
-(* ==================== the alloc five-cell sequence ==================== *)
-
-(* no cell of the linked code defines [alloc_label] (all emitted labels are
-   odd), so the resolver falls through to the syscall address *)
 Lemma link_no_alloc :
   findopt (is_label_def Merged.alloc_label) codeW = None.
 Proof.
@@ -2827,10 +2659,6 @@ have [HIn'|HIn'] := List.in_app_or _ _ _ HIn.
 - exact: (findopt_None_notIn (lin_low_no_alloc L P C prb) HIn').
 Qed.
 
-(* the capability Mov: the source's value tag — whatever it is — MOVES
-   to the destination, the source is retagged by the MOV rule
-   (invalidated when the tag is an address capability; LRC's MOV output
-   [ts'; ts]) *)
 Lemma stepf_mov_jump_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -2878,8 +2706,6 @@ eapply Symbolic.step_mov.
   by [].
 Qed.
 
-(* the service Jal: the target address is UNMAPPED (the syscall table
-   address), so tni = None and belong accepts — a silent intra-style Jal *)
 Lemma stepf_jal_service_compute (NC : nat)
     (mem : {fmap mword mt -> matom}) (mregs : {fmap reg mt -> @ratom mt})
     (pcv : mword mt) (lvl : nat) (c : Component.id)
@@ -2964,9 +2790,6 @@ eapply Symbolic.step_jal.
   by [].
 Qed.
 
-(* ---- the five positional steps of IAlloc ---- *)
-
-(* cell 0: rsize → R_SC_ARG1 (data mov) *)
 Lemma sim_alloc_mov1 (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (rptr rsize : Machine.register)
@@ -3031,7 +2854,6 @@ eapply stepf_mov_compute.
 - exact Hupd2.
 Qed.
 
-(* cell 1: R_RA → R_SC_ARG3 (capability mov, R_RA invalidated) *)
 Lemma sim_alloc_mov2 (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (rptr rsize : Machine.register)
@@ -3097,7 +2919,6 @@ eapply stepf_mov_jump_compute.
 - exact Hupd2.
 Qed.
 
-(* cell 2: Jal to the (unmapped) alloc service address *)
 Lemma sim_alloc_jal (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (rptr rsize : Machine.register)
@@ -3219,7 +3040,6 @@ eapply stepf_jal_service_compute.
 - exact Hd19.
 Qed.
 
-(* cell 3: R_SC_ARG3 → R_RA (capability mov back) *)
 Lemma sim_alloc_mov4 (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (rptr rsize : Machine.register)
@@ -3285,7 +3105,6 @@ eapply stepf_mov_jump_compute.
 - exact Hupd2.
 Qed.
 
-(* cell 4: R_SC_RET → rptr (data mov); pc leaves the alloc block *)
 Lemma sim_alloc_mov5 (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (rptr rsize : Machine.register) (i' : Machine.instr)
@@ -3349,8 +3168,6 @@ eapply stepf_mov_compute.
 - exact Hupd2.
 Qed.
 
-(* ==================== body-label statics ==================== *)
-
 Section BodyStatics.
 
 Hypothesis Hlab_a : forall cid Cprocs Pid Pcode l0,
@@ -3381,7 +3198,6 @@ Hypothesis Huniq_b : forall cid Cprocs0 l0,
   sumn [seq count (ilab l0) (odflt [::] (getm Cprocs0 p'))
        | p' <- domm Cprocs0] <= 1.
 
-(* body-label resolution through the link, side-uniform *)
 Lemma side_label_pos_body (c : Component.id) (l : nat)
     (Cprocs : NMap Machine.code) (Pcode : Machine.code)
     (p : Procedure.id) (o : nat) (pc00 default : nat) :
@@ -3402,9 +3218,6 @@ case Hd: (c \in domm (Intermediate.prog_procedures pra)) => /=;
   by lia.
 Qed.
 
-(* ---- entry-label layer (ICall targets) ---- *)
-
-(* the flat position of procedure (c,p)'s ENTRY cell, side-aware *)
 Definition side_entry_pos (c : Component.id) (p : Procedure.id) : nat :=
   if c \in domm (Intermediate.prog_procedures pra)
   then comp_base (intermediate_to_transitional pra) c
@@ -3413,7 +3226,6 @@ Definition side_entry_pos (c : Component.id) (p : Procedure.id) : nat :=
        + (comp_base (intermediate_to_transitional prb) c
           + (proc_base prb c p + 0)).
 
-(* entry-label resolution through the link, side-uniform *)
 Lemma side_label_pos_entry (c : Component.id) (p : Procedure.id)
     (Cprocs : NMap Machine.code) (Pcode : Machine.code)
     (pc00 default : nat) :
@@ -3432,8 +3244,6 @@ case Hd: (c \in domm (Intermediate.prog_procedures pra)) => /=;
                 Hcomp_b Hdisj HC HP pc00 default).
 Qed.
 
-(* the encoded ENTRY cell: a Nop carrying [head_tag] (colour, entry point,
-   allowed callers) *)
 Lemma side_entry_encoded_fetch (c : Component.id) (p : Procedure.id)
     (Cprocs : NMap Machine.code) (Pcode : Machine.code) :
   pc0 + size codeW < 2 ^ word_size mt ->
@@ -3487,8 +3297,6 @@ case Hd: (c \in domm (Intermediate.prog_procedures pra)) => Hb HC HP.
 - exact (auxr _ _ Hb HC HP).
 Qed.
 
-(* the entry stutter: from the entry cell to offset 0 of the procedure —
-   one silent Nop step inside the (already switched) component *)
 Lemma sim_entry_nop (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (p : Procedure.id) (Pcode : Machine.code)
     (i0 : Machine.instr)
@@ -3531,8 +3339,6 @@ eapply stepf_nop_compute.
 - exact Hrcom.
 Qed.
 
-(* IJal: intra-component call to the body label [l] (unique in [c]);
-   ra := pc+1 tagged InternalJump, target = the label cell *)
 Lemma sim_jal (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (l : nat) (i' : Machine.instr)
@@ -3662,9 +3468,6 @@ eapply stepf_jal_intra_compute.
 - exact Hd19.
 Qed.
 
-(* ICall: the evented cross-component call — Jal to the callee's entry
-   cell, which lists the caller among its allowed callers; ra := pc+1
-   tagged Ret lvl, rcom survives, everything else is invalidated *)
 Lemma sim_call (NC : nat) (c c' : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (p : Procedure.id) (i' : Machine.instr)
@@ -3761,21 +3564,17 @@ have [v [Hv Ht Hdec]]
   := side_encoded_fetch Hb HC HP Ho (isize_gt0 (ICall c' p)) Hcell.
 rewrite addn0 in Hv Hdec.
 case: v Hv Ht Hdec => iw itag Hv /= Ht Hdec; subst itag.
-(* the return cell at o.+1 *)
 have [mi' Hcell'] := cell_exp0
   (memory_lengths (Intermediate.prog_buffers (side_of c))) c i'.
 have [v' [Hv' Ht' _]]
   := side_encoded_fetch Hb HC HP Ho' (isize_gt0 i') Hcell'.
 rewrite addn0 in Hv'.
 case: v' Hv' Ht' => nv ntag Hv' /= Ht'; subst ntag.
-(* the callee's entry cell *)
 have [ve [Hve Hte _]] := side_entry_encoded_fetch Hb HC' HP'.
 case: ve Hve Hte => ev etag Hve /= Hte; subst etag.
 rewrite Hhead in Hve.
-(* resolve the entry label inside the decoded Jal *)
 move: Hdec => /= Hdec.
 rewrite (side_label_pos_entry _ _ HC' HP') in Hdec.
-(* pc bridges *)
 have Epc : addw (word_of_nat (side_flat_pos c P0 Pcode o + pc0)) onew
            = @word_of_nat (word_size mt)
                (side_flat_pos c P0 Pcode o.+1 + pc0).
@@ -3830,7 +3629,6 @@ eapply stepf_jal_cross_compute.
 - exact Hu19.
 Qed.
 
-(* IBnz, taken branch: relative forward jump to the body label [l] *)
 Lemma sim_bnz_nz (NC : nat) (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
     (o : nat) (r : Machine.register) (l : nat)
@@ -3907,16 +3705,10 @@ Qed.
 
 End BodyStatics.
 
-(* ==================== diagram cases ==================== *)
-
-(* the machine's rcom register IS R_COM's key — via VM computation: the
-   kernel's lazy conversion diverges on this innocuous-looking fact *)
 Lemma rcom_key : (rcom : reg mt)
   = @word_of_nat (reg_field_size mt) (Intermediate.Register.to_nat R_COM).
 Proof. by vm_compute. Qed.
 
-(* the me address of a related pointer IS the flat position word — bridges
-   val_rel_b's Ptr clause to mr_load's address spelling *)
 Lemma won_addz (base : nat) (off : Z) :
   (0 <= off)%Z ->
   word.as_word
@@ -3928,9 +3720,6 @@ rewrite /word_of_nat; congr word.as_word.
 by case: off Hoff => [|p|p] //= Hoff; lia.
 Qed.
 
-(* the integer-immediate value relation: an in-range non-negative
-   constant is written as the same word on both sides (the fit condition
-   is the standard trace-value assumption) *)
 Lemma val_rel_imm_int (bmap : addr_map) (msz0 : NMap (NMap nat)) (z : Z) :
   (0 <= z)%Z -> Z.to_nat z < 2 ^ imm_size mt ->
   val_rel_b bmap (imm_to_val (IInt z))
@@ -3943,9 +3732,6 @@ have -> : Merged.encode_int z = ssrint.Posz (Z.to_nat z).
 exact (swcast_won_id Hfit).
 Qed.
 
-(* the event-value roundtrip: the me machine reads back exactly the
-   I-side integer, for non-negative values fitting the SIGNED word range
-   (int_of_word reads the top bit as a sign) *)
 Lemma event_value_roundtrip (z : Z) :
   (0 <= z)%Z -> Z.to_nat z < 2 ^ (word_size mt).-1 ->
   Symbolic.convert
@@ -3969,8 +3755,6 @@ Lemma as_wordD_nat (a b : nat) :
   = (word.as_word (ssrint.Posz (a + b)) : mword mt).
 Proof. exact (word_of_natDall (word_size mt) a b). Qed.
 
-(* integer addition relates unconditionally on non-negative operands
-   (word addition is modular; encode_int is Posz∘Z.to_nat on ≥ 0) *)
 Lemma binop_rel_add_int (bmap : addr_map) (z1 z2 : Z)
     (w1 w2 : mword mt) :
   (0 <= z1)%Z -> (0 <= z2)%Z ->
@@ -4028,7 +3812,6 @@ congr word.as_word; congr ssrint.Posz.
 by lia.
 Qed.
 
-(* integer equality relates under the word-size fit (collision freedom) *)
 Lemma binop_rel_eq_int (bmap : addr_map) (z1 z2 : Z)
     (w1 w2 : mword mt) :
   (0 <= z1)%Z -> (0 <= z2)%Z ->
@@ -4051,7 +3834,6 @@ have -> : (Z.to_nat z1 == Z.to_nat z2) = (z1 =? z2)%Z.
 by case: (z1 =? z2)%Z.
 Qed.
 
-(* as_word cancels val (the canonical nat base of a word) *)
 Lemma won_valK (w : mword mt) :
   @word_of_nat (word_size mt) (eqtype.val w) = w.
 Proof.
@@ -4059,7 +3841,6 @@ apply: WordExtra.word_nat_inj.
 by rewrite valw_won modn_small.
 Qed.
 
-(* the fresh block's base word: won (val max).+1 = max + 1 *)
 Lemma won_val_S (w : mword mt) :
   @word_of_nat (word_size mt) ((eqtype.val w).+1)
   = (w + word.as_word (ssrint.Posz 1))%w.
@@ -4116,13 +3897,6 @@ congr word.as_word; congr ssrint.Posz.
 by lia.
 Qed.
 
-(* TODO(Leq case): the word Ord is the subtype (val) order but the
-   conversion through the pcancel-HB chain diverges at exact-time; an
-   ord_wonE bridge needs a dedicated extraction lemma for [Ord of _ by <:]
-   (e.g. via Ord.leq's cancel-instance equation) — then binop_rel_leq_int
-   is a clone of binop_rel_eq_int. *)
-
-(* pc_rel advances with Pointer.inc (same block decomposition) *)
 Lemma pc_rel_inc (gps : list Pointer.t) (ipc : Pointer.t)
     (mpc : atom (mword mt) (tag_type lrc_tags Symbolic.P))
     (Cprocs : NMap Machine.code) (j : nat)
@@ -4156,8 +3930,6 @@ split.
 - by split.
 Qed.
 
-(* pc_rel at an arbitrary target pointer sharing ipc's component and
-   block (intra-procedure jumps: taken branches, Jal landings) *)
 Lemma pc_rel_at (gps : list Pointer.t) (ipc tpc : Pointer.t)
     (mpc : atom (mword mt) (tag_type lrc_tags Symbolic.P))
     (Cprocs : NMap Machine.code) (j : nat)
@@ -4186,19 +3958,16 @@ split.
 - by split.
 Qed.
 
-(* the machine's ra register IS R_RA's key — VM-certified like rcom_key *)
 Lemma ra_key4 : (ra : reg mt)
   = @word_of_nat (reg_field_size mt) (Intermediate.Register.to_nat R_RA).
 Proof. by vm_compute. Qed.
 
-(* raw as_word key comparison (both spellings), 5-bit registers *)
 Lemma as_eqE (i j : nat) :
   i < 32 -> j < 32 ->
   ((word.as_word (ssrint.Posz i) : reg mt) == word.as_word (ssrint.Posz j))
   = (i == j).
 Proof. move=> Hi Hj. exact (won_as_eqE Hi Hj). Qed.
 
-(* the I-side R_RA clobber is invisible to the no-RA relation *)
 Lemma regs_rel_w_iset_ra (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) (v : value) :
   regs_rel_w bmap iregs mregs ->
@@ -4214,7 +3983,6 @@ have -> : (Intermediate.Register.to_nat r'
 by move: Hd; rewrite /Intermediate.Register.get.
 Qed.
 
-(* getm through a setm at ra's slot, other working keys unchanged *)
 Lemma getm_set_ra_other (mregs : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (k : nat) :
   k < 32 -> (k == 4) = false ->
@@ -4233,7 +4001,6 @@ have -> : ((word.as_word (ssrint.Posz k) : reg mt)
 by [].
 Qed.
 
-(* reading BACK the ra key just set (both spellings) *)
 Lemma getm_set_ra_self (mregs : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) :
   getm (setm mregs
@@ -4249,9 +4016,6 @@ have -> : ((word.as_word (ssrint.Posz 4) : reg mt)
 by [].
 Qed.
 
-(* INop: one silent me-step, lin_match reassembled at Pointer.inc ipc.
-   Premises beyond the match: the SINV clause is pc-insensitive, and the
-   instruction is not last in its procedure (compiledness). *)
 Lemma diag_nop (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4320,7 +4084,6 @@ split.
   + abstract (exact Htot).
 Qed.
 
-(* ILabel: same silent diagram as INop *)
 Lemma diag_label (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4383,8 +4146,6 @@ split.
   + abstract (exact Htot).
 Qed.
 
-(* IConst: silent step writing the converted immediate; the value relation
-   for the immediate and the SINV stability are explicit premises *)
 Lemma diag_const (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4474,9 +4235,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* IBinOp: silent step; the sources' Other-tags and the result value
-   relation are explicit premises (BinOp has no I-side shape premise, so
-   Other-ness comes from the compiled read-after-write invariant later) *)
 Lemma diag_binop (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4574,8 +4332,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* IMov, strong case: the source register is Other-tagged and related;
-   the writeback is an identity, the destination write a single setm *)
 Lemma diag_mov_strong (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4659,8 +4415,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* IMov, Invalidated case: the source register was cross-invalidated,
-   so its I value is Undef; the tag propagates to the destination *)
 Lemma diag_mov_inv (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4749,8 +4503,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* IBnz, untaken: silent fall-through, registers unchanged (identity
-   writeback); the zero test on the me word is an explicit premise *)
 Lemma diag_bnz_z (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4820,9 +4572,6 @@ split.
   + abstract (exact Htot).
 Qed.
 
-(* a pure tag rewrite of one data cell (same word, colour, entry,
-   code-flag) preserves the memory relation — [switch_val]'s cell
-   retagging on RA-moving loads *)
 Lemma mem_rel_retag (bmap : addr_map) (imem : Memory.Memory.t)
     (mmem : {fmap mword mt -> matom}) (k : mword mt) (w : mword mt)
     (vt vt' : LRC.value_tag) (c0 : Component.id)
@@ -4848,8 +4597,6 @@ constructor.
 - exact: MI.
 Qed.
 
-(* ILoad: silent step through an own-component data cell; the cell's
-   Other-vtag (buffer/stack separation) and SINV stability are premises *)
 Lemma diag_load (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -4958,9 +4705,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* ILoad of an Invalidated data cell (a stored cross-invalidated Undef,
-   e.g. the reloaded saved-SP slot): the tag moves into the destination
-   register and the cell is re-tagged Invalidated (unchanged) *)
 Lemma diag_load_inv (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5076,9 +4820,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* IStore: silent step writing an own-component data cell; the me memory
-   changes by one setm; the code region survives because the target cell
-   is a data cell while encoded cells are code-tagged *)
 Lemma diag_store (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5201,7 +4942,7 @@ split.
   + abstract (apply: (pc_rel_inc Hilp Hblk Hjnth Hoff); by []).
   + abstract (exact Hmem').
   + abstract (exact Hregs).
-  + (* code region survives: the target is a data cell *)
+  +
     abstract (
       move=> w a Henc;
       rewrite setmE;
@@ -5214,8 +4955,6 @@ split.
   + abstract (exact Htot).
 Qed.
 
-(* IStore of a cross-invalidated register (Undef on the I side): the
-   Invalidated tag moves into the cell; the old cell tag is arbitrary *)
 Lemma diag_store_inv (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5353,11 +5092,6 @@ split.
   + abstract (exact Htot).
 Qed.
 
-(* ILoad into R_RA (the compiled pop-R_RA site): the cell's value tag —
-   whatever it is — moves into R_RA and the cell is retagged by
-   [switch_val].  R_RA is outside [regs_rel_w], the cell's word does not
-   change, so the match relation survives with only the SINV-threading
-   premise position-conditioned. *)
 Lemma diag_load_ra (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5474,7 +5208,7 @@ split.
   + abstract (exact: (mem_rel_retag _ Hmem Hcell)).
   + abstract (rewrite -Hset;
       exact: (regs_rel_w_set_ra _ (regs_rel_w_iset_ra v Hregs))).
-  + (* code region survives: the target is a data cell *)
+  +
     abstract (
       move=> w a Henc;
       rewrite setmE;
@@ -5487,10 +5221,6 @@ split.
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
 
-(* IStore of R_RA (the compiled push-R_RA site): R_RA's value tag —
-   whatever it is — moves into the cell and R_RA is retagged by
-   [switch_val].  The I side stores Undef (the I-side R_RA is clobbered
-   by IJal), which relates to any word, so the match relation survives. *)
 Lemma diag_store_ra (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5625,7 +5355,7 @@ split.
   + abstract (apply: (pc_rel_inc Hilp Hblk Hjnth Hoff); by []).
   + abstract (exact Hmem').
   + abstract (exact: (regs_rel_w_set_ra _ Hregs)).
-  + (* code region survives: the target is a data cell *)
+  +
     abstract (
       move=> w a Henc;
       rewrite setmE;
@@ -5637,8 +5367,6 @@ split.
   + abstract (exact: (HS _ _ _ _ _ _ _ Hamap Hra' Hcell Hovt' Hstack)).
   + abstract (apply: regs_total_set; exact Htot).
 Qed.
-
-(* ==================== control-flow diagram cases ==================== *)
 
 Section DiagStatics.
 
@@ -5664,9 +5392,6 @@ Hypothesis Huniq_b : forall cid Cprocs0 l0,
   sumn [seq count (ilab l0) (odflt [::] (getm Cprocs0 p'))
        | p' <- domm Cprocs0] <= 1.
 
-(* IBnz, taken: silent jump to the label's position [tpc] in the same
-   procedure; the label/forward/fit facts come pinned to the match's
-   procedure code *)
 Lemma diag_bnz_nz (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5752,9 +5477,6 @@ Qed.
 
 End DiagStatics.
 
-(* IJump: the intra-component stack return — pops the gps to [tpc]; the
-   R_RA fact and the frame's decomposition are the SINV clause, taken
-   here as the [Hframe] premise *)
 Lemma diag_jump (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5810,7 +5532,6 @@ have [rca [Hrc _]] := Hregs R_COM Hcr.
 have Elvl : cross_frames (Pointer.component ipc) gps
             = cross_frames (Pointer.component ipc) gps'.
 { by rewrite Hgps /= Hcomp' eqxx. }
-(* the target cell *)
 have [mit Hcellt] := cell_exp0
   (memory_lengths (Intermediate.prog_buffers
      (side_of (Pointer.component ipc)))) (Pointer.component ipc) i''.
@@ -5823,7 +5544,6 @@ case: ms HS Hpc Hmem Hregs Hcode Hstack Hval Htag Hrc Htot HRA
      Htag Hrc Htot HRA.
 subst pcv pct.
 case: vt Hvt Htt => nvt nttag Hvt /= Htt; subst nttag.
-(* the eleven clear registers from totality *)
 have [a1 Hc1] := Htot 1 isT.
 have [a0 Hc0] := Htot 0 isT.
 have [a2 Hc2] := Htot 2 isT.
@@ -5872,8 +5592,6 @@ split.
   + abstract (exact Htot).
 Qed.
 
-(* IHalt: final-state correspondence — the me pc sits on the encoded
-   Halt cell, which is code-tagged *)
 Lemma diag_halt
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -5916,7 +5634,6 @@ split.
 - by [].
 Qed.
 
-(* stepping a getm over a setm at a distinct literal working key *)
 Lemma getm_set_other (mregs : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (i k : nat) :
   i < 32 -> k < 32 -> (k == i) = false ->
@@ -5925,9 +5642,6 @@ Lemma getm_set_other (mregs : {fmap reg mt -> @ratom mt})
   = getm mregs (word.as_word (ssrint.Posz k)).
 Proof. move=> Hi Hk Hki. by rewrite setmE as_eqE // Hki. Qed.
 
-(* IReturn: the evented cross-component return — pops [tpc] (a foreign
-   frame), emits ERet, invalidates everything but rcom; the frame facts
-   and the event-value correspondence are premises (SINV + fit) *)
 Lemma diag_return (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -6011,7 +5725,6 @@ have Elvl : cross_frames (Pointer.component ipc) gps
 { rewrite Hgps /=.
   by rewrite eq_sym Hneq. }
 rewrite Elvl in Htag.
-(* the target cell *)
 have [mit Hcellt] := cell_exp0
   (memory_lengths (Intermediate.prog_buffers
      (side_of (Pointer.component tpc)))) (Pointer.component tpc) i''.
@@ -6056,7 +5769,6 @@ have HRA' : getm mregs
                       @(LRC.Ret (cross_frames (Pointer.component tpc)
                                    gps'))).
 { exact HRA. }
-(* the invalidation thread *)
 have HuA := updm_from_get
   ((word_of_nat (side_flat_pos (Pointer.component tpc) P0' Pcode'
       (Z.to_nat (Pointer.offset tpc)) + pc0))@LRC.Invalidated) HRA'.
@@ -6217,9 +5929,6 @@ Hypothesis Hdisj :
   fdisjoint (domm (Intermediate.prog_procedures pra))
             (domm (Intermediate.prog_procedures prb)).
 
-(* ICall: TWO me-steps — the evented cross Jal onto the callee's entry
-   cell, then the silent entry stutter to offset 0; registers invalidated
-   but rcom, ra minted with the Ret capability *)
 Lemma diag_call (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -6351,7 +6060,6 @@ have Hc4' : getm mregs
               (@word_of_nat (reg_field_size mt)
                  (Intermediate.Register.to_nat R_RA)) = Some (v4@t4).
 { exact Hc4. }
-(* the invalidation thread, ra minted with the Ret capability *)
 pose reta : @ratom mt
   := ((@word_of_nat (word_size mt)
          (side_flat_pos (Pointer.component ipc) P0 Pcode
@@ -6411,7 +6119,6 @@ have Hd19 : getm M10 (word.as_word (ssrint.Posz 19)) = Some (v19@t19).
      /raK getm_set_ra_other. }
 have Hu19 := updm_from_get (v19@LRC.Invalidated) Hd19.
 set M11 := setm M10 _ _ in Hu19.
-(* rcom survives the whole thread *)
 have Hrc11 : getm M11 (word.as_word (ssrint.Posz 1))
              = Some (rcv@LRC.Other).
 { by rewrite /M11 /M10 /M9 /M8 /M7 /M6 /M5 /M4 /M3 /M2 /M1
@@ -6537,11 +6244,9 @@ Qed.
 
 End DiagStaticsCall.
 
-(* the syscall_ret register's key, VM-certified like rcom/ra *)
 Lemma sret_key : (syscall_ret : reg mt) = word.as_word (ssrint.Posz 16).
 Proof. by vm_compute. Qed.
 
-(* key-spelling bridges for the alloc sequence's registers *)
 Lemma key17E : @word_of_nat (reg_field_size mt)
                  (Merged.to_nat_bis (inr Merged.R_SC_ARG1))
                = word.as_word (ssrint.Posz 17).
@@ -6562,7 +6267,6 @@ Lemma key4E : @word_of_nat (reg_field_size mt)
               = word.as_word (ssrint.Posz 4).
 Proof. by []. Qed.
 
-(* I-side register indices are < 7: walks over syscall-register writes *)
 Lemma to_nat_lt7 (r : register) : Intermediate.Register.to_nat r < 7.
 Proof. by case: r. Qed.
 
@@ -6574,7 +6278,6 @@ Lemma to_nat_bis_lt32 (kb : register + Merged.sys_reg) :
   Merged.to_nat_bis kb < 32.
 Proof. by case: kb => [r|s]; [case: r | case: s]. Qed.
 
-(* getm through a setm at a to_nat_bis-spelled key, distinct raw key *)
 Lemma getm_set_bis_other (m : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (kb : register + Merged.sys_reg) (k : nat) :
   k < 32 -> (k == Merged.to_nat_bis kb) = false ->
@@ -6593,7 +6296,6 @@ have -> : ((word.as_word (ssrint.Posz k) : reg mt)
 by [].
 Qed.
 
-(* getm through a setm, both keys to_nat_bis-spelled and distinct *)
 Lemma getm_set_bis_bis (m : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (kb kb' : register + Merged.sys_reg) :
   (Merged.to_nat_bis kb' == Merged.to_nat_bis kb) = false ->
@@ -6615,9 +6317,6 @@ Lemma as_won_eqE (k i : nat) :
    == @word_of_nat (reg_field_size mt) i) = (k == i).
 Proof. move=> Hk Hi. by rewrite eq_sym (won_as_eqE Hi Hk) eq_sym. Qed.
 
-(* the me machine's initial register file is total on the working keys:
-   getm walks decided at the 5-bit KEY level only (32-bit values are
-   never normalized — vm_compute would explode on the unary 2^32) *)
 Lemma regs_total_reg0 : regs_total Merged.reg0.
 Proof.
 move=> k; rewrite /reg_keys !inE => Hk.
@@ -6658,7 +6357,6 @@ by move/eqP: Hk => ->; rewrite /Merged.reg0 mkfmapE /=
      !as_won_eqE //=; eexists.
 Qed.
 
-(* the raw key HITS the to_nat_bis-spelled setm *)
 Lemma getm_set_bis_hit (m : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (kb : register + Merged.sys_reg) (k : nat) :
   k < 32 -> (k == Merged.to_nat_bis kb) = true ->
@@ -6671,7 +6369,6 @@ move=> Hk Hke.
 by rewrite setmE (as_won_eqE Hk (to_nat_bis_lt32 kb)) Hke.
 Qed.
 
-(* walking a to_nat_bis-spelled read over a RAW-keyed setm *)
 Lemma getm_set_raw_other_bis (m : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (j : nat) (kb : register + Merged.sys_reg) :
   j < 32 -> (Merged.to_nat_bis kb == j) = false ->
@@ -6704,7 +6401,6 @@ rewrite setmE rcom_key (won_as_eqE (to_nat_lt32 R_COM) Hj).
 by rewrite Hne -rcom_key.
 Qed.
 
-(* same, reading rcom (register 1) *)
 Lemma getm_set_bis_rcom (m : {fmap reg mt -> @ratom mt})
     (x : @ratom mt) (kb : register + Merged.sys_reg) :
   (1 == Merged.to_nat_bis kb) = false ->
@@ -6724,7 +6420,6 @@ have -> : ((rcom : reg mt)
 by [].
 Qed.
 
-(* an I-register key never collides with a syscall-register key (≥ 16) *)
 Lemma won_reg_neq_hi (r : register) (k : nat) :
   16 <= k < 32 ->
   ((@word_of_nat (reg_field_size mt) (Intermediate.Register.to_nat r)
@@ -6738,8 +6433,6 @@ rewrite E => Hk7.
 by lia.
 Qed.
 
-(* writes to syscall-register slots (raw keys ≥ 16) are invisible to the
-   I-register relation *)
 Lemma regs_rel_w_set_hi (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) (k : nat) (a : @ratom mt) :
   16 <= k < 32 ->
@@ -6752,7 +6445,6 @@ exists a'; split=> //.
 by rewrite setmE (won_reg_neq_hi r' Hk).
 Qed.
 
-(* same for the to_nat_bis-spelled syscall keys *)
 Lemma regs_rel_w_set_bis_hi (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt})
     (s : Merged.sys_reg) (a : @ratom mt) :
@@ -6778,7 +6470,6 @@ have -> : ((@word_of_nat (reg_field_size mt)
 by [].
 Qed.
 
-(* nor with ra's key, when the register is not R_RA *)
 Lemma won_reg_neq_ra (r : register) :
   r <> R_RA ->
   ((@word_of_nat (reg_field_size mt) (Intermediate.Register.to_nat r)
@@ -6791,9 +6482,6 @@ rewrite reg_key_eqE.
 by apply/negbTE/negP => /eqP /to_nat_inj E; exact: Hne E.
 Qed.
 
-(* the six-me-step chain of IAlloc.  The syscall result [st4] and the
-   code-region fact for its (grown) memory are premises; the final state
-   is characterized through st4's fields and the fresh block's [max]. *)
 Lemma diag_alloc_steps (NC : nat)
     (c : Component.id) (lvl : nat)
     (Cprocs : NMap Machine.code) (P0 : Procedure.id) (Pcode : Machine.code)
@@ -6925,7 +6613,6 @@ set N1 := setm mregs K17b (wsz@LRC.Other) in Hafun.
 set N2 := setm N1 K4b (v4@t4inv) in Hafun.
 set N3 := setm N2 K19b (v4@t4) in Hafun.
 set N4 := setm N3 K4b reta in Hafun.
-(* chain updm facts *)
 have HuA1 : updm mregs K17b (wsz@LRC.Other) = Some N1.
 { by rewrite (updm_from_get _ Ha1). }
 have H1_4 : getm N1 K4b = Some (v4@t4).
@@ -6942,7 +6629,6 @@ have H3ra : getm N3 K4b = Some (v4@t4inv).
 { by rewrite /N3 getm_set_bis_bis // /N2 setmE eqxx. }
 have HuA4 : updm N3 K4b reta = Some N4.
 { by rewrite (updm_from_get _ H3ra). }
-(* clear-list facts on N3 and N4 *)
 have H3_1 : getm N3 (word.as_word (ssrint.Posz 1)) = Some (v1@t1).
 { by rewrite /N3 /N2 /N1 !getm_set_bis_other. }
 have H3_0 : getm N3 (word.as_word (ssrint.Posz 0)) = Some (v0@t0).
@@ -6993,14 +6679,12 @@ have H4_18 : getm N4 (word.as_word (ssrint.Posz 18)) = Some (v18@t18).
 have H4_19 : getm N4 (word.as_word (ssrint.Posz 19))
              = Some (v4@t4).
 { by rewrite /N4 getm_set_bis_other. }
-(* rcom through the chain *)
 have Hrc1 : getm N1 rcom = Some rc.
 { by rewrite /N1 getm_set_bis_rcom. }
 have Hrc3 : getm N3 rcom = Some rc.
 { by rewrite /N3 /N2 !getm_set_bis_rcom. }
 have Hrc4 : getm N4 rcom = Some rc.
 { by rewrite /N4 getm_set_bis_rcom. }
-(* the syscall's shape *)
 have [c4 [len [max [rav [regs5 SH]]]]] := alloc_fun_shape Hafun.
 case: SH => [[Hrav Hpc4]] Hc4 [Hlen Hbnd] [Hupd5 Hregs4] Hmem4.
 move: Hc4 => /= Hc4; subst c4.
@@ -7014,13 +6698,11 @@ rewrite sret_key in Hupd5'.
 move: Hupd5'; rewrite /updm H4_16 /= => -[Eregs5]; subst regs5.
 set N5 := setm N4 (word.as_word (ssrint.Posz 16))
             ((max + as_word (ssrint.Posz 1))%w@LRC.Other) in Eregs5.
-(* destructure the syscall's result state *)
 clear Hupd5 Hrav.
 case: st4 Hpc4 Eregs5 Hmem4 Hcode4 Hafun
   => m4 r4 [p4v p4t] [] /= Hpc4 Eregs5 Hmem4 Hcode4 Hafun.
 case: Hpc4 => E1 E2; subst p4v p4t.
 subst r4.
-(* mov4/mov5 facts *)
 have Hrc5 : getm N5 rcom = Some rc.
 { by rewrite /N5 getm_set_raw_rcom. }
 have H5_19 : getm N5 K19b = Some (v4@t4).
@@ -7074,7 +6756,6 @@ have Hu78 : updm N7 KRPT ((max + as_word (ssrint.Posz 1))%w@LRC.Other)
             = Some (setm N7 KRPT
                       ((max + as_word (ssrint.Posz 1))%w@LRC.Other)).
 { by rewrite (updm_from_get _ H7_rp). }
-(* assemble *)
 exists max, len.
 do 4!eexists.
 split; [exact Hlen | exact Hmem4 | by [] |].
@@ -7163,9 +6844,6 @@ split.
   + exact Hu78.
 Qed.
 
-(* IAlloc: the full diagram case — six me-steps and the lin_match
-   reassembly over the extended address map; the syscall success, the
-   post-memory relation (freshness) and SINV stability are premises *)
 Lemma diag_alloc (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -7397,9 +7075,6 @@ Hypothesis Huniq_b : forall cid Cprocs0 l0,
   sumn [seq count (ilab l0) (odflt [::] (getm Cprocs0 p'))
        | p' <- domm Cprocs0] <= 1.
 
-(* IJal: pushes inc ipc onto the gps, clobbers R_RA (Undef on the I side,
-   the InternalJump return capability on the me side), jumps to label [l]
-   at [tpc]; the label decomposition comes pinned to the ilp lookup *)
 Lemma diag_jal (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -7560,14 +7235,6 @@ Qed.
 
 End DiagStaticsJal.
 
-(* ==================== the SINV specification ==================== *)
-
-(* Position classes of compiled code (shared vocabulary with the
-   instance): [dead_at c o] scans the first [o] instructions of [c] and
-   reports whether position [o] sits inside a call window — after a
-   push-R_RA ([IStore _ R_RA]) up to and including the matching pop-R_RA
-   ([ILoad _ R_RA]) — where the return capability is parked in the
-   frame's stack cell rather than live in R_RA. *)
 Definition ra_dead_step (i : Machine.instr) (dead : bool) : bool :=
   match i with
   | IStore _ r2 => match r2 with R_RA => true | _ => dead end
@@ -7586,13 +7253,6 @@ Fixpoint ra_dead_scan (c : Machine.code) (dead : bool) (o : nat)
 Definition dead_at (c : Machine.code) (o : nat) : bool :=
   ra_dead_scan c false o.
 
-(* the exact obligations the fifteen diagram cases impose on the
-   calling-convention invariant: any SINV satisfying this record makes
-   the whole diagram work.  Each preservation clause carries the joint
-   step's FULL data (the instruction, the exact I-side update, the exact
-   me-side write-back), so a positional instance can track the stack
-   discipline; the frame-extraction clauses are what the control-transfer
-   cases consume. *)
 Record sinv_spec
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -7904,7 +7564,6 @@ Record sinv_spec
         (Intermediate.Register.invalidate iregs) (C', b, 0%Z)
         (@Symbolic.State mt lrc_tags _ (Symbolic.mem ms) mregs' mpc'
            tt);
-  (* EXTRACTION clauses — position-conditioned via the matched pc *)
   ss_frame_jump : forall bmap gps' tpc imem iregs ipc ms,
       lin_match SINV bmap (tpc :: gps') imem iregs ipc ms ->
       Intermediate.GlobalEnv.executing G ipc IJump ->
@@ -7949,8 +7608,6 @@ Record sinv_spec
           & exists i'',
               List.nth_error Pcode' (Z.to_nat (Pointer.offset tpc))
               = Some i''];
-  (* RA-transport clauses — the compiled pop/push-R_RA sites move the
-     capability between R_RA and a stack cell via [switch_val] *)
   ss_load_ra : forall bmap gps imem iregs ipc ms r1 (bp : Block.id)
                       (op : Z) (v : value) (base : nat) (w2 : mword mt)
                       (cvt : LRC.value_tag)
@@ -7965,8 +7622,6 @@ Record sinv_spec
       getm (Symbolic.mem ms)
         (@word_of_nat (word_size mt) (base + Z.to_nat op))
         = Some (w2@(LRC.MTag cvt (Pointer.component ipc) ent false)) ->
-      (* the loaded slot holds the top frame's capability (run-level:
-         compiled pops read exactly the pushed slot) *)
       (forall (tpc : Pointer.t) (gps' : list Pointer.t),
        gps = tpc :: gps' ->
        exists (Cprocs' : NMap Machine.code) (j' : nat)
@@ -8035,9 +7690,6 @@ Record sinv_spec
            mpc' tt)
 }.
 
-(* ==================== the assembled step diagram ==================== *)
-
-(* silent multi-step closure of the me machine *)
 Inductive me_sstar (NC : nat)
   : @Symbolic.state mt lrc_tags unit
     -> @Symbolic.state mt lrc_tags unit -> Prop :=
@@ -8046,7 +7698,6 @@ Inductive me_sstar (NC : nat)
     step_me (NC := NC) s s' None -> me_sstar NC s' s'' ->
     me_sstar NC s s''.
 
-(* trace-indexed me step, CompCert-style (mirrors RSCDefs' step shape) *)
 Definition step_t (NC : nat)
     (s : @Symbolic.state mt lrc_tags unit) (t : Events.trace)
     (s' : @Symbolic.state mt lrc_tags unit) : Prop :=
@@ -8056,7 +7707,6 @@ Definition step_t (NC : nat)
   | _ => False
   end.
 
-(* the silent star embeds into the trace-indexed star *)
 Lemma me_sstar_star (NC : nat)
     (ms msF : @Symbolic.state mt lrc_tags unit) :
   me_sstar NC ms msF ->
@@ -8068,7 +7718,6 @@ elim=> [s|s s' s'' Hst _ IH].
   by eapply star_step; [exact St | exact IH | ].
 Qed.
 
-(* CS steps carry at most one event *)
 Lemma cs_step_trace (s1 s2 : CS.state) (e : Events.trace) :
   CS.step G s1 e s2 ->
   e = Events.E0 \/ exists ev, e = [:: ev].
@@ -8076,7 +7725,6 @@ Proof.
 move=> Hst; case: Hst => *; try (by left); by right; eexists.
 Qed.
 
-(* a related zero is the zero word (discharges Obnz_z's conclusion) *)
 Lemma val_rel_int0 (bmap : addr_map) (w : mword mt) :
   val_rel_b bmap (Int 0) w -> (w == 0%w) = true.
 Proof.
@@ -8084,7 +7732,6 @@ move=> -> /=.
 by apply/eqP.
 Qed.
 
-(* the running component lies in the linked procedure domain *)
 Lemma lm_pc_domm
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
         -> Intermediate.Register.t -> Pointer.t
@@ -8099,9 +7746,6 @@ case=> -[Cp [j [P0 [Pc [HP _ _ _ _]]]]] _ _ _ _ _.
 by rewrite mem_domm HP.
 Qed.
 
-(* ---- discharges of the DiagAll/InitMatch side conditions ---- *)
-
-(* the domm side condition follows from well-formedness *)
 Lemma wf_procs_iface :
   Intermediate.well_formed_program ilp ->
   forall cid,
@@ -8112,8 +7756,6 @@ move=> Hwf cid.
 by rewrite (Intermediate.wfprog_defined_procedures Hwf).
 Qed.
 
-(* the main-procedure premises follow from well-formedness (main on the
-   left side) *)
 Lemma wf_main_procs :
   Intermediate.well_formed_program ilp ->
   Intermediate.prog_main ilp = true ->
@@ -8131,7 +7773,6 @@ case=> ?; subst mp.
 by exists CprocsM; split.
 Qed.
 
-(* the mirrored main lookup: main owned by the right side *)
 Lemma wf_main_procs_r :
   Intermediate.well_formed_program ilp ->
   Intermediate.prog_main ilp = true ->
@@ -8150,7 +7791,6 @@ move=> Hget.
 by exists mp; split.
 Qed.
 
-(* index of the least key: id 0 sorts first *)
 Lemma index0_sorted (l : seq nat) :
   sorted Ord.lt l -> 0 \in l -> seq.index 0 l = 0.
 Proof.
@@ -8167,7 +7807,6 @@ rewrite inE => /orP[/eqP Ea | Hin].
   + by move: Hle.
 Qed.
 
-(* the main procedure (id 0) has base offset 0 in its component *)
 Lemma proc_base_main (pr : Intermediate.program)
     (c : Component.id) (Cprocs : NMap Machine.code) :
   Intermediate.prog_procedures pr c = Some Cprocs ->
@@ -8182,7 +7821,6 @@ have -> : seq.index Procedure.main (domm Cprocs) = 0.
 by rewrite take0.
 Qed.
 
-(* the encoded code cells are code-tagged (discharges Oenc) *)
 Lemma encode_is_code :
   Intermediate.well_formed_program pra ->
   Intermediate.well_formed_program prb ->
@@ -8199,10 +7837,6 @@ have [HIna|HInb] := List.in_app_or _ _ _ HIn.
 - by have [Hic _] := lin_low_tags HInb.
 Qed.
 
-(* compiled code never touches R_RA through the data-register forms;
-   the vestigial push/pop R_RA transport (IStore/ILoad on the RA slot)
-   is handled by dedicated variants later *)
-(* decidable R_RA test on registers (7 constructors) *)
 Lemma reg_ra_dec (r : Machine.register) : r = R_RA \/ r <> R_RA.
 Proof. by case: r; [right|right|right|right|left|right|right]. Qed.
 
@@ -8211,8 +7845,6 @@ Definition ra_free_instr (i : Machine.instr) : Prop :=
   | IConst _ r => r <> R_RA
   | IMov r1 r2 => r1 <> R_RA /\ r2 <> R_RA
   | IBinOp _ r1 r2 r3 => [/\ r1 <> R_RA, r2 <> R_RA & r3 <> R_RA]
-  (* the moved register of Load/Store MAY be R_RA — the compiled
-     pop/push-R_RA sites; only the address register is constrained *)
   | ILoad r1 r2 => r1 <> R_RA
   | IStore r1 r2 => r1 <> R_RA
   | IBnz r _ => r <> R_RA
@@ -8220,10 +7852,6 @@ Definition ra_free_instr (i : Machine.instr) : Prop :=
   | _ => True
   end.
 
-(* I-side reachability from the linked program's initial state — the
-   anchor that makes run-invariant oracles (operand definedness, R_RA
-   clobberedness, value fits) dischargeable by an instance: they only
-   need to hold along actual runs, not for arbitrary matched states *)
 Definition ireach (s : CS.state) : Prop :=
   exists t, star CS.step G (CS.initial_machine_state ilp) t s.
 
@@ -8249,7 +7877,6 @@ Qed.
 
 Section DiagAll.
 
-(* ---- the label-scheme statics (union of the per-case sections) ---- *)
 Hypothesis Hlab_a : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pra cid = Some Cprocs ->
   getm Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -8278,12 +7905,10 @@ Hypothesis Huniq_b : forall cid Cprocs0 l0,
   sumn [seq count (ilab l0) (odflt [::] (getm Cprocs0 p'))
        | p' <- domm Cprocs0] <= 1.
 
-(* the linked program's procedure components are interfaced *)
 Hypothesis Hdomm : forall cid,
   cid \in domm (Intermediate.prog_procedures ilp) ->
   cid \in domm (Intermediate.prog_interface ilp).
 
-(* the flat code image fits in the word space *)
 Hypothesis Hb : pc0 + size codeW < 2 ^ word_size mt.
 
 Variable NC : nat.
@@ -8292,9 +7917,6 @@ Variable SINV : addr_map -> list Pointer.t -> Memory.Memory.t
                 -> @Symbolic.state mt lrc_tags unit -> Prop.
 Hypothesis Hspec : sinv_spec SINV.
 
-(* -------- the compiledness / fit / freshness oracle -------- *)
-
-(* non-terminal instructions have a successor cell *)
 Hypothesis Onext : forall cid Cprocs P0 Pcode o i,
   Intermediate.prog_procedures (side_of cid) cid = Some Cprocs ->
   getm Cprocs P0 = Some Pcode ->
@@ -8302,22 +7924,15 @@ Hypothesis Onext : forall cid Cprocs P0 Pcode o i,
   i <> IHalt -> i <> IReturn -> i <> IJump ->
   exists i', List.nth_error Pcode o.+1 = Some i'.
 
-(* compiled data-register forms avoid R_RA *)
 Hypothesis Ora : forall cid Cprocs P0 Pcode o i,
   Intermediate.prog_procedures (side_of cid) cid = Some Cprocs ->
   getm Cprocs P0 = Some Pcode ->
   List.nth_error Pcode o = Some i ->
   ra_free_instr i.
 
-(* the encoded code cells are code-tagged *)
 Hypothesis Oenc : forall w a,
   encode_code codeW pc0 w = Some a -> is_code (taga a) = true.
 
-(* along compiled runs a binop's operand registers carry Other tags on
-   the me side (LRC's BINOP rule demands [is_other] on both): the
-   compiled push/pop binops read freshly written R_SP/R_ONE and user
-   binops read reloaded user values — never a cross-invalidated
-   register *)
 Hypothesis Otag : forall bmap gps imem iregs ipc ms Cprocs P0 Pcode
     op r1 r2 r3,
   ireach (gps, imem, iregs, ipc) ->
@@ -8336,8 +7951,6 @@ Hypothesis Otag : forall bmap gps imem iregs ipc ms Cprocs P0 Pcode
           (Intermediate.Register.to_nat r2)) = Some a ->
      taga a = LRC.Other).
 
-(* at compiled pop-R_RA sites the loaded slot holds the top frame's
-   capability *)
 Hypothesis Oload_ra : forall bmap gps imem iregs ipc ms r1
        (bp : Block.id) (op : Z) (v : value) (base : nat)
        (w2 : mword mt) (cvt : LRC.value_tag)
@@ -8375,15 +7988,12 @@ Hypothesis Oload_ra : forall bmap gps imem iregs ipc ms r1
                 else LRC.Ret (cross_frames (Pointer.component tpc)
                                 gps')).
 
-(* at compiled push-R_RA sites the I-side R_RA is clobbered (IJal sets
-   it to Undef; pop reloads the pushed Undef; call/return invalidate) *)
 Hypothesis Oraud : forall bmap gps imem iregs ipc ms r1,
   ireach (gps, imem, iregs, ipc) ->
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (IStore r1 R_RA) ->
   Intermediate.Register.get R_RA iregs = Undef.
 
-(* converted immediates relate *)
 Hypothesis Oimm : forall bmap gps imem iregs ipc ms v0 r,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (IConst v0 r) ->
@@ -8392,7 +8002,6 @@ Hypothesis Oimm : forall bmap gps imem iregs ipc ms v0 r,
        (memory_lengths (Intermediate.prog_buffers
           (side_of (Pointer.component ipc)))) v0)).
 
-(* binop results relate *)
 Hypothesis Obinop : forall bmap gps imem iregs ipc ms op r1 r2 r3 w1 w2,
   ireach (gps, imem, iregs, ipc) ->
   lin_match SINV bmap gps imem iregs ipc ms ->
@@ -8404,7 +8013,6 @@ Hypothesis Obinop : forall bmap gps imem iregs ipc ms op r1 r2 r3 w1 w2,
        (Intermediate.Register.get r2 iregs))
     (binop_denote (Merged.binop_trans op) w1 w2).
 
-(* the branch scrutinee words mirror the zero test *)
 Hypothesis Obnz_z : forall bmap gps imem iregs ipc ms r l w,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (IBnz r l) ->
@@ -8420,8 +8028,6 @@ Hypothesis Obnz_nz : forall bmap gps imem iregs ipc ms r l zv w,
   val_rel_b bmap (Int zv) w ->
   (w == 0%w) = false.
 
-(* the branch label facts: nonnegative target offset, the label cell,
-   forward position, immediate fit *)
 Hypothesis Obnz_lab : forall bmap gps imem iregs ipc tpc ms r l,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (IBnz r l) ->
@@ -8448,7 +8054,6 @@ Hypothesis Obnz_lab : forall bmap gps imem iregs ipc tpc ms r l,
                      (Z.to_nat (Pointer.offset ipc)))
           < 2 ^ imm_size mt]).
 
-(* the jal label facts *)
 Hypothesis Ojal_lab : forall bmap gps imem iregs ipc tpc ms l,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (IJal l) ->
@@ -8467,9 +8072,6 @@ Hypothesis Ojal_lab : forall bmap gps imem iregs ipc tpc ms l,
                    (Z.to_nat (Pointer.offset tpc)) + 0)
           < 2 ^ imm_size mt].
 
-(* along compiled runs, a jal executing above a nonempty frame stack
-   sits inside a call window (only the wrap-main stub's jal is naked,
-   and it only ever runs at the bottom) *)
 Hypothesis Ojal_dead : forall bmap gps imem iregs ipc ms l
        (Cprocs : NMap Machine.code) (j : nat)
        (P0 : Procedure.id) (Pcode : Machine.code),
@@ -8484,7 +8086,6 @@ Hypothesis Ojal_dead : forall bmap gps imem iregs ipc ms l
   gps <> [::] ->
   dead_at Pcode (Z.to_nat (Pointer.offset ipc)) = true.
 
-(* the loaded cells are plain data *)
 Hypothesis Oload : forall bmap gps imem iregs ipc ms r1 r2 bp op v,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (ILoad r1 r2) ->
@@ -8500,7 +8101,6 @@ Hypothesis Oload : forall bmap gps imem iregs ipc ms r1 r2 bp op v,
       vtag (taga a) = LRC.Other
       \/ (vtag (taga a) = LRC.Invalidated /\ v = Undef)).
 
-(* the stored cells are plain data *)
 Hypothesis Ostore : forall bmap gps imem imem' iregs ipc ms r1 r2 bp op,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (IStore r1 r2) ->
@@ -8524,7 +8124,6 @@ Hypothesis Ostore : forall bmap gps imem imem' iregs ipc ms r1 r2 bp op,
           vtag (taga a) = LRC.Other
           \/ vtag (taga a) = LRC.Invalidated)].
 
-(* the event argument words convert back to the traced integers *)
 Hypothesis Oconv : forall bmap gps imem iregs ipc ms z w t,
   ireach (gps, imem, iregs, ipc) ->
   lin_match SINV bmap gps imem iregs ipc ms ->
@@ -8534,8 +8133,6 @@ Hypothesis Oconv : forall bmap gps imem iregs ipc ms z w t,
        (Intermediate.Register.to_nat R_COM)) = Some (w@t) ->
   Symbolic.convert (word.int_of_word w) = z.
 
-(* the call entry statics: head tag, import listing, entry fit,
-   entry-point decomposition *)
 Hypothesis Ocall : forall bmap gps imem iregs ipc ms C' p b,
   lin_match SINV bmap gps imem iregs ipc ms ->
   Intermediate.GlobalEnv.executing G ipc (ICall C' p) ->
@@ -8552,8 +8149,6 @@ Hypothesis Ocall : forall bmap gps imem iregs ipc ms C' p b,
               List.nth_error (elementsm CprocsC) jc = Some (p, Pcode')
             & exists i0, List.nth_error Pcode' 0 = Some i0]].
 
-(* the alloc oracle: syscall dispatch cell absent, the syscall's
-   result state, block freshness, and the produced memory's relation *)
 Hypothesis Oalloc : forall bmap gps imem imem' iregs ipc ms
                            rptr rsize szZ bI wsz v4
                            (t4 : LRC.value_tag),
@@ -8616,8 +8211,6 @@ Hypothesis Oalloc : forall bmap gps imem imem' iregs ipc ms
               getm (Symbolic.mem ms) w = Some a ->
               getm (Symbolic.mem st4) w = Some a)].
 
-(* -------- packaging helpers -------- *)
-
 Local Lemma pack_silent (bmap' : addr_map) (gpsF : CS.stack)
     (imemF : Memory.Memory.t) (iregsF : Intermediate.Register.t)
     (ipcF : Pointer.t) (ms : @Symbolic.state mt lrc_tags unit) :
@@ -8667,8 +8260,6 @@ case=> ms1 [ms2 [S1 S2 M]]; exists bmap', ms1, ms2; split=> //.
 by eapply me_sstar_step; [exact S2 | eapply me_sstar_refl].
 Qed.
 
-(* -------- the assembled diagram -------- *)
-
 Theorem diag_all (bmap : addr_map) (s1 s2 : CS.state)
     (e : Events.trace) (ms : @Symbolic.state mt lrc_tags unit) :
   ireach s1 ->
@@ -8684,7 +8275,7 @@ Theorem diag_all (bmap : addr_map) (s1 s2 : CS.state)
 Proof.
 move=> Hreach Hm Hstep.
 inversion Hstep; subst; clear Hstep.
-- (* Nop *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8693,7 +8284,7 @@ inversion Hstep; subst; clear Hstep.
   eapply diag_nop; try eassumption.
   + move=> mpc' HS0; exact: (ss_nop Hspec mpc' Hex HS0).
   + by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Label *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8702,7 +8293,7 @@ inversion Hstep; subst; clear Hstep.
   eapply diag_label; try eassumption.
   + move=> mpc' HS0; exact: (ss_label Hspec mpc' Hex HS0).
   + by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Const *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8716,7 +8307,7 @@ inversion Hstep; subst; clear Hstep.
   + exact: (Oimm Hm Hex).
   + move=> mpc' HS0; exact: (ss_const Hspec mpc' Hex Hra HS0).
   + by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Mov *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8728,13 +8319,13 @@ inversion Hstep; subst; clear Hstep.
   have [w1 [t1 [Hw1 Hv1 Ht1 Hpin]]]
     := regs_rel_w_get_any (lm_regs Hm) Hra1.
   case: Ht1 => Et1; subst t1.
-  + (* Other-tagged source *)
+  +
     apply: pack_silent.
     eapply diag_mov_strong; try eassumption.
     * reflexivity.
     * move=> mpc' HS0; exact: (ss_mov Hspec mpc' Hex Hra1 Hra2 Hw1 HS0).
     * by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-  + (* Invalidated source: the I value is Undef *)
+  +
     have Hu1 : Intermediate.Register.get r1 regs0 = Undef.
     { case E: (Intermediate.Register.get r1 regs0) => [z|p|] //.
       - by have := Hpin ltac:(rewrite E; discriminate).
@@ -8745,7 +8336,7 @@ inversion Hstep; subst; clear Hstep.
     * move=> mpc' HS0;
         exact: (ss_mov_inv Hspec mpc' Hex Hra1 Hra2 Hu1 Hw1 HS0).
     * by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* BinOp *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8770,7 +8361,7 @@ inversion Hstep; subst; clear Hstep.
   + exact: (Obinop Hreach Hm Hex Hv1 Hv2).
   + move=> mpc' HS0; exact: (ss_binop Hspec mpc' Hex Hra3 Hw1 Hw2 HS0).
   + by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Load *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8792,7 +8383,7 @@ inversion Hstep; subst; clear Hstep.
   have [Hoffp Hvtag0]
     := Oload Hm Hex HG HL.
   have [Era | Hra2] := reg_ra_dec r2.
-  + (* pop-R_RA site: the cell's tag moves into R_RA *)
+  +
     subst r2.
     apply: pack_silent.
     eapply diag_load_ra with (r1 := r1); try eassumption.
@@ -8801,7 +8392,7 @@ inversion Hstep; subst; clear Hstep.
       have HO := Oload_ra Hreach Hm Hex HG HL Hamap Hcell.
       exact: (ss_load_ra Hspec mpc' Hm Hex HG HL Hamap Hcell HO).
     * by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-  + (* fetch the cell to decide its tag class *)
+  +
     have Hmrl0 : forall C1 b1 o1 v1,
         Memory.Memory.load mem0 (C1, b1, o1) = Some v1 ->
         exists base a,
@@ -8816,7 +8407,7 @@ inversion Hstep; subst; clear Hstep.
     have [base0 [a0 [Hamap0 Hcell0 _ _ _]]] := Hmrl0 _ _ _ _ HL.
     case: (Hvtag0 Hra2 _ _ Hamap0 Hcell0)
       => [Ho0 | [Hi0 Hu0]].
-    * (* Other-tagged cell *)
+    *
       have Hvtag : forall base a,
           amap_get bmap (Pointer.component pc1) bp = Some base ->
           getm (Symbolic.mem ms)
@@ -8834,7 +8425,7 @@ inversion Hstep; subst; clear Hstep.
       -- move=> base w ent mpc' Hamap1 Hcell1 HS0;
            exact: (ss_load Hspec mpc' Hex Hra2 HG HL Hamap1 Hcell1 HS0).
       -- by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-    * (* Invalidated cell: the loaded value is Undef *)
+    *
       have Hvtag : forall base a,
           amap_get bmap (Pointer.component pc1) bp = Some base ->
           getm (Symbolic.mem ms)
@@ -8853,7 +8444,7 @@ inversion Hstep; subst; clear Hstep.
            exact: (ss_load_inv Hspec mpc' Hex Hra2 HG HL Hu0 Hamap1
                      Hcell1 HS0).
       -- by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Store *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8877,7 +8468,7 @@ inversion Hstep; subst; clear Hstep.
   have Hld : loadable mem0 (Pointer.component pc1, bp, opz)
     := Memory_store_loadable HST.
   have [Era | Hra2] := reg_ra_dec r2.
-  + (* push-R_RA site: R_RA's tag moves into the cell *)
+  +
     subst r2.
     have HraU := Oraud Hreach Hm Hex.
     apply: pack_silent.
@@ -8889,7 +8480,7 @@ inversion Hstep; subst; clear Hstep.
   + have [w2 [t2 [Hw2 Hv2 Ht2 Hpin2]]]
       := regs_rel_w_get_any (lm_regs Hm) Hra2.
     case: Ht2 => Et2; subst t2.
-    * (* Other-tagged stored value *)
+    *
       have Hvtag := Hvtag0 Hra2.
       apply: pack_silent.
       eapply diag_store with (r1 := r1); try eassumption.
@@ -8897,7 +8488,7 @@ inversion Hstep; subst; clear Hstep.
            exact: (ss_store Hspec mpc' Hex Hra2 HG HST Hamap0 Hw0
                      Hcell0 HS0).
       -- by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-    * (* Invalidated stored value: the I value is Undef *)
+    *
       have Hu2 : Intermediate.Register.get r2 regs0 = Undef.
       { case E: (Intermediate.Register.get r2 regs0) => [z|p|] //.
         - by have := Hpin2 ltac:(rewrite E; discriminate).
@@ -8909,7 +8500,7 @@ inversion Hstep; subst; clear Hstep.
            exact: (ss_store_inv Hspec mpc' Hex Hra2 Hu2 HG HST Hamap0
                      Hw0 Hcell0 HS0).
       -- by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Jal *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8929,7 +8520,7 @@ inversion Hstep; subst; clear Hstep.
       exact: (ss_push_jal Hspec mpc' Hex HF Hilp0 Hblk0 Hjnth0 Hoff0
                 (Ojal_dead Hreach Hm Hex Hilp0 Hblk0 Hjnth0 Hoff0)
                 HS0).
-- (* Jump *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8943,7 +8534,7 @@ inversion Hstep; subst; clear Hstep.
   eapply diag_jump; try eassumption.
   + reflexivity.
   + move=> mpc' HS0; exact: (ss_pop_jump Hspec mpc' Hex Hcmp HS0).
-- (* BnzNZ *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8974,7 +8565,7 @@ inversion Hstep; subst; clear Hstep.
   apply: pack_silent.
   eapply diag_bnz_nz; try eassumption.
   move=> mpc' HS0; exact: (ss_bnz_nz Hspec mpc' Hex HF HG Hnz HS0).
-- (* BnzZ *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -8993,7 +8584,7 @@ inversion Hstep; subst; clear Hstep.
   eapply diag_bnz_z; try eassumption.
   + move=> mpc' HS0; exact: (ss_bnz_z Hspec mpc' Hex HG HS0).
   + by move=> ??? Hs Hg Hn; apply: (Onext Hs Hg Hn).
-- (* Alloc *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -9055,7 +8646,7 @@ inversion Hstep; subst; clear Hstep.
     eapply me_sstar_step; first exact S6.
     eapply me_sstar_refl.
   + exact M.
-- (* Call *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -9093,7 +8684,7 @@ inversion Hstep; subst; clear Hstep.
            Hra0 HS0;
       exact: (ss_push_call Hspec b mpc' Hne HCin0 Hex Hilp0 Hblk0
                 Hjnth0 Hoff0 Hra0 HS0).
-- (* Return *)
+-
   match goal with
   | He : Intermediate.GlobalEnv.executing _ _ _ |- _ => move: He => Hex
   end.
@@ -9121,8 +8712,6 @@ inversion Hstep; subst; clear Hstep.
       exact: (ss_pop_ret Hspec mregs' mpc' Hex Hne HS0).
 Qed.
 
-(* the diagram lifted to whole runs: every I star is mirrored by a
-   trace-equal me star through lin_match *)
 Theorem star_diag (s1 s2 : CS.state) (t : Events.trace)
     (bmap : addr_map) (ms : @Symbolic.state mt lrc_tags unit) :
   star CS.step G s1 t s2 ->
@@ -9153,9 +8742,6 @@ move=> Hstar; elim: Hstar bmap ms.
     reflexivity.
 Qed.
 
-(* ==================== initial states ==================== *)
-
-(* the initial register file satisfies the weak relation *)
 Lemma regs_rel_w_of_b (bmap : addr_map) iregs
     (mregs : {fmap reg mt -> @ratom mt}) :
   regs_rel_b bmap iregs mregs -> regs_rel_w bmap iregs mregs.
@@ -9165,8 +8751,6 @@ have [a [Hget Hval Htag]] := Hrel r.
 by exists a; split=> //; left.
 Qed.
 
-(* the me machine's initial state is one silent entry stutter away from
-   matching the I machine's initial state *)
 Theorem match_initial (CprocsM : NMap Machine.code) (bM : Block.id) :
   size (linearize_bufs pbW) + size codeW < 2 ^ word_size mt ->
   Intermediate.prog_main ilp = true ->
@@ -9264,7 +8848,6 @@ split.
   + exact: regs_total_reg0.
 Qed.
 
-(* the mirrored initial-states lemma: main owned by the RIGHT side *)
 Theorem match_initial_r (CprocsM : NMap Machine.code) (bM : Block.id) :
   Intermediate.well_formed_program pra ->
   Component.main \notin domm (Intermediate.prog_interface pra) ->
@@ -9367,16 +8950,10 @@ split.
   + exact: regs_total_reg0.
 Qed.
 
-(* ==================== behaviour-level packaging ==================== *)
-
-(* the MP-level program whose me semantics runs the linked linearized
-   image *)
 Definition Wlin : MicroPolicies.Recomposition.Definitions.program :=
   MicroPolicies.Recomposition.Definitions.Build_program
     (Intermediate.prog_interface ilp) codeW pbW true.
 
-(* matched final states: an I halt lands the me machine on an encoded
-   halt cell *)
 Lemma match_final (bmap : addr_map) (s : CS.state)
     (ms : @Symbolic.state mt lrc_tags unit) :
   (let '(gps, imem, iregs, ipc) := s in
@@ -9393,8 +8970,6 @@ rewrite /final_halt_code Hget /=.
 by split.
 Qed.
 
-(* THE forward transfer, generic over how the initial match was
-   established (main-left or main-right) *)
 Theorem fwd_does_prefix_gen (m : finpref_behavior) :
   (exists ms',
      step_me (NC := NC)
@@ -9413,7 +8988,7 @@ have St : Smallstep.step (me_sem NC Wlin) tt
 apply/(does_prefix_equiv (det_me_sem NC Wlin)).
 move/(does_prefix_equiv (CS.determinacy ilp)): Hdp => Hdp.
 case: m Hnw Hdp => t Hnw Hdp.
-- (* FTerminates *)
+-
   inversion Hdp as [| |s s' t0 Hini Hstar Hfin| |]; subst.
   move: Hini; rewrite /= /CS.initial_state => ?; subst s.
   have [bmapF [msF [Sme HmF]]] := star_diag Hstar ireach_init Hmi.
@@ -9422,9 +8997,9 @@ case: m Hnw Hdp => t Hnw Hdp.
   + reflexivity.
   + eapply star_step; [exact St | exact Sme' | by []].
   + exact: match_final HmF Hfin.
-- (* FGoes_wrong *)
+-
   by [].
-- (* FTbc *)
+-
   inversion Hdp as [s s' t0 Hini Hstar| | | |Hnoinit]; subst; last first.
   + by have := Hnoinit _ (erefl _).
   + move: Hini; rewrite /= /CS.initial_state => ?; subst s.
@@ -9435,7 +9010,6 @@ case: m Hnw Hdp => t Hnw Hdp.
     * eapply star_step; [exact St | exact Sme' | by []].
 Qed.
 
-(* the forward transfer, main on the left *)
 Theorem fwd_does_prefix (CprocsM : NMap Machine.code) (bM : Block.id)
     (m : finpref_behavior) :
   Intermediate.well_formed_program ilp ->
@@ -9466,7 +9040,6 @@ exact: (fwd_does_prefix_gen
           Hnw Hdp).
 Qed.
 
-(* the forward transfer, main on the right *)
 Theorem fwd_does_prefix_r (CprocsM : NMap Machine.code) (bM : Block.id)
     (m : finpref_behavior) :
   Intermediate.well_formed_program pra ->
@@ -9498,7 +9071,6 @@ exact: (fwd_does_prefix_gen
           Hnw Hdp).
 Qed.
 
-(* silent me stars counted *)
 Lemma me_sstar_starN (ms msF : @Symbolic.state mt lrc_tags unit) :
   me_sstar NC ms msF ->
   exists j, starN (prog_step_me NC) tt j ms Events.E0 msF.
@@ -9510,7 +9082,6 @@ elim=> [s|s s' s'' Hst _ [j IH]].
   by eapply starN_step; [exact St | exact IH | ].
 Qed.
 
-(* the me image of a silent I divergence is an unbounded silent ray *)
 Lemma diverge_ray (bmap : addr_map) (s : CS.state)
     (ms : @Symbolic.state mt lrc_tags unit) :
   ireach s ->
@@ -9538,8 +9109,6 @@ elim: n bmap s ms Hreach Hm Hdiv
   exact: (starN_silent_compose (L := me_sem NC Wlin) HssN HN).
 Qed.
 
-(* THE determinism flip, generic over how the initial match was
-   established (main-left or main-right) *)
 Theorem bwd_improves_gen (m : finpref_behavior) :
   (exists ms',
      step_me (NC := NC)
@@ -9577,13 +9146,13 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
 - move: Hini0; rewrite /= /CS.initial_state => ?; subst s0.
   inversion Hsb as [tb sfin Hstb Hfin | tb sdiv Hstb Hdiv
                    | T Hreact | tb sw Hstb Hnostep Hnfin]; subst.
-  + (* Terminates tb *)
+  +
     have [bmapF [msFI [SmeI HmF]]] := Ime _ _ Hstb.
     have HfinC : final_halt_code msFI := match_final HmF Hfin.
     have HnsI : Nostep (me_sem NC Wlin) msFI.
     { by apply: (sd_final_nostep (det_me_sem NC Wlin)); exact HfinC. }
     case: m Hdp => t Hdp.
-    * (* FTerminates *)
+    *
       inversion Hdp as [| |sm0 sm t0 Hini2 Hsm Hfm| |]; subst.
       move: Hini2; rewrite /= /prog_initial => ?; subst sm0.
       have Hns_m : Nostep (me_sem NC Wlin) sm.
@@ -9594,7 +9163,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
          subst t'. left. by rewrite /= Etr E0_right.
       -- have [Et' _] := star_nostep_refl Hres HnsI.
          subst t'. left. by rewrite /= Etr E0_right.
-    * (* FGoes_wrong *)
+    *
       inversion Hdp as [|sm0 sm t0 Hini2 Hsm Hns_m Hnf_m| | Hnoinit|];
         subst; last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9605,7 +9174,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
             subst t' msFI. by have := Hnf_m HfinC.
          ++ have [Et' Es'] := star_nostep_refl Hres HnsI.
             subst t' sm. by have := Hnf_m HfinC.
-    * (* FTbc *)
+    *
       inversion Hdp as [sm0 sm t0 Hini2 Hsm| | | |Hnoinit]; subst;
         last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9616,7 +9185,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
          ++ have [Et' _] := star_nostep_refl Hres HnsI.
             subst t'. left. rewrite /= Etr E0_right.
             exists (Terminates Events.E0). by rewrite /= E0_right.
-  + (* Diverges tb *)
+  +
     have [bmapF [msD [SmeI HmD]]] := Ime _ _ Hstb.
     have HreachD : ireach sdiv by exists tb.
     have Hray : silent_ray (L := me_sem NC Wlin) msD.
@@ -9624,7 +9193,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
       have [k [msz [Hk HN]]] := diverge_ray HreachD HmD Hdiv n.
       by exists k, msz; split; [exact Hk | exact HN]. }
     case: m Hdp => t Hdp.
-    * (* FTerminates *)
+    *
       inversion Hdp as [| |sm0 sm t0 Hini2 Hsm Hfm| |]; subst.
       move: Hini2; rewrite /= /prog_initial => ?; subst sm0.
       have Hns_m : Nostep (me_sem NC Wlin) sm.
@@ -9637,7 +9206,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
       -- have [_ Hray2] := silent_ray_absorb (det_me_sem NC Wlin)
                              Hres Hray.
          by have := ray_nostep_absurd Hray2 Hns_m.
-    * (* FGoes_wrong *)
+    *
       inversion Hdp as [|sm0 sm t0 Hini2 Hsm Hns_m Hnf_m| | Hnoinit|];
         subst; last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9650,7 +9219,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
          ++ have [_ Hray2] := silent_ray_absorb (det_me_sem NC Wlin)
                                 Hres Hray.
             by have := ray_nostep_absurd Hray2 Hns_m.
-    * (* FTbc *)
+    *
       inversion Hdp as [sm0 sm t0 Hini2 Hsm| | | |Hnoinit]; subst;
         last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9662,7 +9231,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
                               Hres Hray.
             subst t'. left. rewrite /= Etr E0_right.
             exists (Diverges Events.E0). by rewrite /= E0_right.
-  + (* Reacts T *)
+  +
     have F : forall (n : nat) (sF : CS.state) (TF : traceinf),
         forever_reactive CS.step G sF TF ->
         exists t' s',
@@ -9688,7 +9257,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
           by rewrite behavior_app_assoc -Ebeh'.
         + eapply star_trans; [exact Hst | exact Hstar' | by []]. }
     case: m Hdp => t Hdp.
-    * (* FTerminates *)
+    *
       inversion Hdp as [| |sm0 sm t0 Hini2 Hsm Hfm| |]; subst.
       move: Hini2; rewrite /= /prog_initial => ?; subst sm0.
       have Hns_m : Nostep (me_sem NC Wlin) sm.
@@ -9702,7 +9271,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
          by move: Hlen; lia.
       -- exfalso. subst t.
          move: Hlen. rewrite List.app_length. lia.
-    * (* FGoes_wrong *)
+    *
       inversion Hdp as [|sm0 sm t0 Hini2 Hsm Hns_m Hnf_m| | Hnoinit|];
         subst; last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9716,7 +9285,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
             by move: Hlen; lia.
          ++ exfalso. subst t.
             move: Hlen. rewrite List.app_length. lia.
-    * (* FTbc *)
+    *
       inversion Hdp as [sm0 sm t0 Hini2 Hsm| | | |Hnoinit]; subst;
         last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9731,10 +9300,10 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
             by rewrite -behavior_app_assoc.
          ++ exfalso. subst t.
             move: Hlen. rewrite List.app_length. lia.
-  + (* Goes_wrong tb *)
+  +
     have [bmapF [msW [SmeI HmW]]] := Ime _ _ Hstb.
     case: m Hdp => t Hdp.
-    * (* FTerminates *)
+    *
       inversion Hdp as [| |sm0 sm t0 Hini2 Hsm Hfm| |]; subst.
       move: Hini2; rewrite /= /prog_initial => ?; subst sm0.
       have Hns_m : Nostep (me_sem NC Wlin) sm.
@@ -9747,7 +9316,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
          rewrite /=. exists Events.E0. by rewrite E0_right.
       -- right. exists tb. split; [reflexivity|].
          rewrite /=. by exists t'.
-    * (* FGoes_wrong *)
+    *
       inversion Hdp as [|sm0 sm t0 Hini2 Hsm Hns_m Hnf_m| | Hnoinit|];
         subst; last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9759,7 +9328,7 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
             by left.
          ++ right. exists tb. split; [reflexivity|].
             rewrite /=. by exists t'.
-    * (* FTbc *)
+    *
       inversion Hdp as [sm0 sm t0 Hini2 Hsm| | | |Hnoinit]; subst;
         last first.
       -- by have := Hnoinit _ (erefl _).
@@ -9771,7 +9340,6 @@ inversion Hbeh as [s0 beh0 Hini0 Hsb | Hnoinit0]; subst; last first.
             rewrite /=. by exists t'.
 Qed.
 
-(* the determinism flip, main on the left *)
 Theorem bwd_improves (CprocsM : NMap Machine.code) (bM : Block.id)
     (m : finpref_behavior) :
   Intermediate.well_formed_program ilp ->
@@ -9803,7 +9371,6 @@ exact: (bwd_improves_gen
           Hdp).
 Qed.
 
-(* the determinism flip, main on the right *)
 Theorem bwd_improves_r (CprocsM : NMap Machine.code) (bM : Block.id)
     (m : finpref_behavior) :
   Intermediate.well_formed_program pra ->
@@ -9838,14 +9405,6 @@ Qed.
 
 End DiagAll.
 
-(* ==================== the residual interface ==================== *)
-
-(* Everything the simulation still ASSUMES, bundled per linked pair: the
-   label-scheme statics, the calling-convention invariant with its spec,
-   the finite-machine fits, and the undischarged per-run oracles
-   (liveness, RA-freedom, label statics, value fits, the alloc bundle).
-   KDynamics.v assumes this record and turns [H_bwd]/[bt_run] into
-   theorems over it. *)
 Record sim_residual (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -9888,9 +9447,6 @@ Record sim_residual (NC : nat)
     getm Cprocs P0 = Some Pcode ->
     List.nth_error Pcode o = Some i ->
     ra_free_instr i;
-  (* the tag oracle replacing the old (FALSE) operand-definedness
-     field: a binop's operand registers are Other-tagged on the me
-     side (LRC's BINOP demands [is_other]); TRUE of compiled runs *)
   sr_tag_binop : forall bmap gps imem iregs ipc ms Cprocs P0 Pcode
       op r1 r2 r3,
     ireach (gps, imem, iregs, ipc) ->
@@ -10153,8 +9709,6 @@ Record sim_residual (NC : nat)
                 getm (Symbolic.mem st4) w = Some a)]
 }.
 
-(* the label-scheme statics alone (dischargeable from [lin_ok] + wf +
-   compiledness + linkability) *)
 Record lin_statics : Prop := LinStatics {
   lst_lab_a : forall cid Cprocs Pid Pcode l0,
     Intermediate.prog_procedures pra cid = Some Cprocs ->
@@ -10185,7 +9739,6 @@ Record lin_statics : Prop := LinStatics {
          | p' <- domm Cprocs0] <= 1
 }.
 
-(* the determinism flip, over the residual bundle *)
 Theorem bwd_improves_res (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -10244,7 +9797,6 @@ exact: (bwd_improves Rlab_a Rcomp_a Rlab_b Rcomp_b Rproc_a Rproc_b
           Hptr (Rinit bM) Hdp).
 Qed.
 
-(* the determinism flip over the residual bundle, main on the right *)
 Theorem bwd_improves_res_r (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -10304,7 +9856,6 @@ exact: (bwd_improves_r Rlab_a Rcomp_a Rlab_b Rcomp_b Rproc_a Rproc_b
           Hmain0 Hptr (Rinit bM) Hdp).
 Qed.
 
-(* the forward transfer, over the residual bundle *)
 Theorem fwd_does_prefix_res (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t
@@ -10362,7 +9913,6 @@ exact: (fwd_does_prefix Rlab_a Rcomp_a Rlab_b Rcomp_b Rproc_a Rproc_b
           Hptr (Rinit bM) Hnw Hdp).
 Qed.
 
-(* the forward transfer over the residual bundle, main on the right *)
 Theorem fwd_does_prefix_res_r (NC : nat)
     (SINV : addr_map -> list Pointer.t -> Memory.Memory.t
             -> Intermediate.Register.t -> Pointer.t

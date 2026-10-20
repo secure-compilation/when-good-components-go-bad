@@ -1,14 +1,3 @@
-(* Task #14 (I→Merged correctness), T14.1 kernel: POSITIONS through the
-   linearizer's flattening.
-
-   [transitional_to_merged_gen] is a foldr that expands each transitional
-   cell into a contiguous run of merged cells — exactly ONE cell for every
-   instruction except [TrAlloc], which expands to the 5-cell alloc-syscall
-   calling sequence.  The simulation's pc correspondence needs nth-level
-   position facts (LinearizeMerged only has In-level ones): this file
-   provides the expansion sizes, concatenation, and the position of the
-   k-th cell of the j-th expansion, down to the per-procedure segment. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
@@ -58,8 +47,6 @@ Section T2MPos.
 Variables (make : proc_label -> nat) (upd : Component.id -> nat -> nat).
 Variable msz : NMap (NMap nat).
 
-(* the per-cell expansion: one transitional cell ↦ its merged cells,
-   all carrying the cell's tag *)
 Definition cell_exp (itrt : Transitional.instr * mem_tag) :=
   [seq (i, itrt.2)
   | i <- instr_translation (mt := mt) make (upd (color itrt.2)) msz itrt.1].
@@ -67,7 +54,6 @@ Definition cell_exp (itrt : Transitional.instr * mem_tag) :=
 Definition t2m_flat (l : seq (Transitional.instr * mem_tag)) :=
   foldr (fun itrt c => cell_exp itrt ++ c) [::] l.
 
-(* the generalized flattening IS [t2m_flat] of the flattened component list *)
 Lemma t2m_genE (pb : NMap {fmap Block.id -> nat + seq value})
       (cde : Transitional.code) :
   msz = memory_lengths pb ->
@@ -80,7 +66,6 @@ elim: (flatten _) => [|[itr t] l IH] //=.
 by rewrite app_catE IH.
 Qed.
 
-(* expansion sizes *)
 Definition texp_size (itr : Transitional.instr) : nat :=
   match itr with TrAlloc _ _ => 5 | _ => 1 end.
 
@@ -92,7 +77,6 @@ case: itr => //=.
 by move=> [l|pl].
 Qed.
 
-(* flat size of a translated segment *)
 Definition tseg_size (l : seq (Transitional.instr * mem_tag)) : nat :=
   sumn [seq texp_size x.1 | x <- l].
 
@@ -113,8 +97,6 @@ elim: l => [|x l IH] //=.
 by rewrite size_cat size_cell_exp IH.
 Qed.
 
-(* THE position lemma: the k-th cell of the j-th expansion sits at
-   (flat size of the first j expansions) + k *)
 Lemma t2m_flat_nth l j x k :
   List.nth_error l j = Some x ->
   k < texp_size x.1 ->
@@ -122,14 +104,14 @@ Lemma t2m_flat_nth l j x k :
   = List.nth_error (cell_exp x) k.
 Proof.
 elim: l j => [|y l IH] [|j] //.
-- (* head *)
+-
   move=> [= E] Hk; subst x.
   rewrite take0.
   have -> : tseg_size [::] = 0 by [].
   have -> : t2m_flat (y :: l) = cell_exp y ++ t2m_flat l by [].
   rewrite List.nth_error_app1 //.
   rewrite lin_size_length size_cell_exp. by lia.
-- (* tail *)
+-
   move=> Hj Hk.
   have -> : take j.+1 (y :: l) = y :: take j l by [].
   have -> : tseg_size (y :: take j l) = texp_size y.1 + tseg_size (take j l) by [].
@@ -145,9 +127,6 @@ Qed.
 
 End T2MPos.
 
-(* ==================== the Intermediate-instruction layer ==================== *)
-
-(* expansion size of one Intermediate instruction through the linearizer *)
 Definition isize (i : Machine.instr) : nat :=
   match i with IAlloc _ _ => 5 | _ => 1 end.
 
@@ -166,9 +145,6 @@ rewrite map_cons tseg_size_cons IH texp_isize.
 by [].
 Qed.
 
-(* flat offset of instruction [o] within a procedure's linearized segment:
-   the entry-label cell (position 0) plus the expansions of the earlier
-   instructions *)
 Definition proc_off (Pcode : seq Machine.instr) (o : nat) : nat :=
   1 + sumn [seq isize i | i <- take o Pcode].
 
@@ -178,9 +154,6 @@ Variables (make : proc_label -> nat) (upd : Component.id -> nat -> nat).
 Variable msz : NMap (NMap nat).
 Variable pr : Intermediate.program.
 
-(* the k-th expansion cell of the o-th instruction of procedure (c,p) sits
-   at offset [proc_off Pcode o + k] within the procedure's linearized
-   segment (position 0 being the entry-label cell) *)
 Lemma linearize_proc_nth c p Cprocs Pcode o i k :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -217,8 +190,6 @@ Qed.
 
 End ProcSegment.
 
-(* ==================== generic position toolkit ==================== *)
-
 Lemma sumn_consE (a : nat) (l : seq nat) : sumn (a :: l) = a + sumn l.
 Proof. by []. Qed.
 
@@ -240,7 +211,6 @@ Proof.
 by elim: l1 => [|x l1 IH] //=.
 Qed.
 
-(* position within a flatten: earlier segments' sizes + inner index *)
 Lemma flatten_nth_error (A : Type) (ll : seq (seq A)) j l k :
   List.nth_error ll j = Some l ->
   k < size l ->
@@ -248,12 +218,12 @@ Lemma flatten_nth_error (A : Type) (ll : seq (seq A)) j l k :
   = List.nth_error l k.
 Proof.
 elim: ll j => [|s ll IH] [|j] //.
-- (* head *)
+-
   move=> [= E] Hk; subst s.
   have -> : flatten (l :: ll) = l ++ flatten ll by [].
   have -> : sumn [seq size s0 | s0 <- take 0 (l :: ll)] + k = k by [].
   by rewrite nth_error_cat1.
-- (* tail *)
+-
   move=> Hj Hk.
   have -> : take j.+1 (s :: ll) = s :: take j ll by [].
   have -> : sumn [seq size s0 | s0 <- s :: take j ll]
@@ -266,7 +236,6 @@ elim: ll j => [|s ll IH] [|j] //.
   exact: (IH j Hj Hk).
 Qed.
 
-(* prefix-sum bound at a fetchable position *)
 Lemma sumn_take_le (l : seq nat) j a :
   List.nth_error l j = Some a ->
   sumn (take j l) + a <= sumn l.
@@ -276,7 +245,6 @@ elim: l j => [|x l IH] [|j] //=.
 - move=> Ho. have := IH j Ho. by lia.
 Qed.
 
-(* first-occurrence index fetch *)
 Lemma nth_error_index (T : eqType) (s : seq T) x :
   x \in s ->
   List.nth_error s (seq.index x s) = Some x.
@@ -290,7 +258,6 @@ case E: (a == x) => /=.
   + exact: (IH Hx).
 Qed.
 
-(* assoc-list fetch at key index (uniq keys) *)
 Lemma nth_error_index_assoc (A : Type) (l : seq (nat * A)) c v :
   uniq (unzip1 l) ->
   List.In (c, v) l ->
@@ -307,7 +274,6 @@ move=> /andP [Hk Hu] [E|HIn].
   + exact: (IH Hu HIn).
 Qed.
 
-(* fmap keys are sorted, hence uniq *)
 Lemma elementsm_keys_uniq (A : Type) (m : NMap A) :
   uniq (unzip1 (Maps.elementsm m)).
 Proof.
@@ -326,7 +292,6 @@ apply: nth_error_index_assoc; first exact: elementsm_keys_uniq.
 exact: (getm_In Hc).
 Qed.
 
-(* nth_error bridges to ssr nth/size *)
 Lemma nth_error_size (A : Type) (l : seq A) o x :
   List.nth_error l o = Some x -> o < size l.
 Proof.
@@ -341,8 +306,6 @@ elim: l o => [|a l IH] [|o] //=.
 - by move=> [= ->].
 - exact: IH.
 Qed.
-
-(* ==================== transitional-level segment sizes ==================== *)
 
 Lemma tseg_size_cat (l1 l2 : seq (Transitional.instr * mem_tag)) :
   tseg_size (l1 ++ l2) = tseg_size l1 + tseg_size l2.
@@ -365,8 +328,6 @@ Qed.
 Lemma isize_gt0 (i : Machine.instr) : 0 < isize i.
 Proof. by case: i. Qed.
 
-(* advance: stepping one Intermediate instruction shifts the flat offset by
-   the instruction's expansion size *)
 Lemma proc_off_S (Pcode : seq Machine.instr) o i :
   List.nth_error Pcode o = Some i ->
   proc_off Pcode o.+1 = proc_off Pcode o + isize i.
@@ -377,24 +338,19 @@ rewrite -cats1 map_cat sumn_cat /=.
 by lia.
 Qed.
 
-(* ==================== per-procedure / per-component bases ==================== *)
-
 Definition comp_procs (pr : Intermediate.program) (c : Component.id)
   : seq Procedure.id :=
   domm (odflt emptym (Intermediate.prog_procedures pr c)).
 
-(* flat (merged-coordinate) base of procedure p within component c's segment *)
 Definition proc_base (pr : Intermediate.program) (c : Component.id)
     (p : Procedure.id) : nat :=
   sumn (take (seq.index p (comp_procs pr c))
              [seq tseg_size (linearize_proc pr c p') | p' <- comp_procs pr c]).
 
-(* flat base of component c's segment within the full linearized code *)
 Definition comp_base (cde : Transitional.code) (c : Component.id) : nat :=
   sumn (take (seq.index c (unzip1 (Maps.elementsm cde)))
              [seq tseg_size x.2 | x <- Maps.elementsm cde]).
 
-(* absolute flat position of instruction o of procedure (c,p) *)
 Definition flat_pos (pr : Intermediate.program) (c : Component.id)
     (p : Procedure.id) (Pcode : seq Machine.instr) (o : nat) : nat :=
   comp_base (intermediate_to_transitional pr) c
@@ -475,7 +431,6 @@ rewrite !sumn_consE size_t2m_flat IH.
 by [].
 Qed.
 
-(* within-procedure positions stay inside the procedure's segment *)
 Lemma proc_off_lt (c : Component.id) Cprocs p Pcode o i k :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -510,7 +465,6 @@ rewrite tseg_size_flatten.
 by rewrite -map_comp.
 Qed.
 
-(* master: within-component fetch *)
 Lemma linearize_component_nth (c : Component.id) Cprocs p Pcode o i k :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -549,7 +503,6 @@ rewrite (flatten_nth_error Hj Hb).
 exact: (linearize_proc_nth make upd msz HC HP Ho Hk).
 Qed.
 
-(* master: component segment within the full linearized code *)
 Lemma t2m_flat_code_nth (cde : Transitional.code) (c : Component.id) cseg q :
   cde c = Some cseg ->
   q < tseg_size cseg ->
@@ -575,9 +528,6 @@ rewrite (flatten_nth_error Hj Hqb).
 by [].
 Qed.
 
-(* GRAND MASTER: absolute fetch in the generated merged code.
-   The k-th expansion cell of instruction o of procedure (c,p) sits at
-   [flat_pos pr c p Pcode o + k] in [lin_gen pr make upd]. *)
 Lemma lin_gen_nth (c : Component.id) Cprocs p Pcode o i k :
   msz = memory_lengths (Intermediate.prog_buffers pr) ->
   Intermediate.prog_procedures pr c = Some Cprocs ->
@@ -622,9 +572,6 @@ rewrite (t2m_flat_code_nth Hcget Hbound).
 exact: (linearize_component_nth HC HP Ho Hk).
 Qed.
 
-(* ---- entry cells ---- *)
-
-(* the procedure segment is non-empty (it starts with the entry label cell) *)
 Lemma tseg_size_linproc_gt0 (c : Component.id) Cprocs p Pcode :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -638,7 +585,6 @@ have -> : linearize_proc pr c p
 by [].
 Qed.
 
-(* the entry cell of procedure (c,p) is position 0 of its segment *)
 Lemma linearize_proc_entry (c : Component.id) Cprocs p Pcode :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -653,8 +599,6 @@ have -> : linearize_proc pr c p
 by [].
 Qed.
 
-(* segment view: position q inside procedure (c,p)'s segment, seen from the
-   component's flat code *)
 Lemma linearize_component_seg (c : Component.id) Cprocs p q :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   p \in domm Cprocs ->
@@ -689,7 +633,6 @@ have Hb : q < size (t2m_flat make upd msz (linearize_proc pr c p)).
 by rewrite (flatten_nth_error Hj Hb).
 Qed.
 
-(* lin_gen view of a component segment *)
 Lemma lin_gen_seg (c : Component.id) cseg q :
   msz = memory_lengths (Intermediate.prog_buffers pr) ->
   intermediate_to_transitional pr c = Some cseg ->
@@ -707,8 +650,6 @@ rewrite (t2m_genE make upd (intermediate_to_transitional pr) E).
 exact: (t2m_flat_code_nth Hc Hq).
 Qed.
 
-(* GRAND: the entry-label cell of procedure (c,p) sits at
-   [comp_base + proc_base] in [lin_gen] *)
 Lemma lin_gen_entry_nth (c : Component.id) Cprocs p Pcode :
   msz = memory_lengths (Intermediate.prog_buffers pr) ->
   Intermediate.prog_procedures pr c = Some Cprocs ->
@@ -745,9 +686,6 @@ Qed.
 
 End Assembly.
 
-(* ==================== label resolution ==================== *)
-
-(* count of an In-wise-false predicate is 0 *)
 Lemma count_In0 (A : Type) (pe : A -> bool) (l : seq A) :
   (forall x, List.In x l -> pe x = false) -> count pe l = 0.
 Proof.
@@ -756,7 +694,6 @@ rewrite Hz; last by left.
 rewrite IH //. by move=> x Hx; apply: Hz; right.
 Qed.
 
-(* a uniq-keyed sum bounded by the indicator of one key is at most 1 *)
 Lemma sumn_le_pred (T : eqType) (s : seq T) (x : T) (g : T -> nat) :
   uniq s ->
   (forall y, List.In y s -> g y <= nat_of_bool (y == x)) ->
@@ -778,7 +715,6 @@ case E: (a == x).
   rewrite Hg0 add0n. apply: IH => // y HIn. by apply: Hb; right.
 Qed.
 
-(* a unique matching position is THE findopt result *)
 Lemma findopt_unique_pos (A : Type) (pe : A -> bool) (l : seq A) n x :
   count pe l <= 1 ->
   List.nth_error l n = Some x ->
@@ -794,9 +730,6 @@ have Enm : n = m.
 by rewrite Hm Enm.
 Qed.
 
-(* ==================== encoded-memory fetch ==================== *)
-
-(* the label-position resolver baked into [encode_code] *)
 Definition code_label_pos (cde : @Merged.code mt) (pc0 : nat)
     (l default : nat) : nat :=
   match findopt (is_label_def l) cde with
@@ -804,9 +737,6 @@ Definition code_label_pos (cde : @Merged.code mt) (pc0 : nat)
   | None => if l == alloc_label then l else default
   end.
 
-(* fetching the encoded cell: position n of the code list appears in the
-   [encode_code] memory at address pc0+n, carrying the cell's tag and the
-   encoding of its instruction (labels resolved by [code_label_pos]) *)
 Lemma encode_code_fetch (cde : @Merged.code mt) (pc0 n : nat)
     (i : @Merged.instr mt) (t : mem_tag) :
   pc0 + size cde < 2 ^ word_size mt ->
@@ -845,7 +775,6 @@ split.
   + exact: Hval.
 Qed.
 
-(* the transitional-level pre-image of [is_label_def] through the flattening *)
 Definition tlab_pred (lab : nat) (make : proc_label -> nat)
     (upd : Component.id -> nat -> nat)
     (cell : Transitional.instr * mem_tag) : bool :=
@@ -855,8 +784,6 @@ Definition tlab_pred (lab : nat) (make : proc_label -> nat)
   | _ => false
   end.
 
-(* label-cell count is preserved by the flattening (labels expand 1-1;
-   nothing else emits a label — including the 5-cell alloc sequence) *)
 Lemma t2m_count_label (lab : nat) (make : proc_label -> nat)
     (upd : Component.id -> nat -> nat)
     (pb : NMap {fmap Block.id -> nat + seq value}) (cde : Transitional.code) :
@@ -878,7 +805,6 @@ Section LabelResolution.
 Variables L P C : nat.
 Variable pr : Intermediate.program.
 
-(* lin_ok-style bounds of the canonical label scheme *)
 Hypothesis Hlab_bound : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pr cid = Some Cprocs ->
   Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -888,14 +814,11 @@ Hypothesis Hproc_bound : forall cid Cprocs Pid,
 Hypothesis Hcomp_bound : forall cid,
   cid \in domm (Intermediate.prog_procedures pr) -> cid < C.
 
-(* the target label: procedure id bounded by the scheme (the procedure
-   itself may belong to this program or to the other side of a link) *)
 Variables (c : Component.id) (p : Procedure.id).
 Hypothesis HpP : p < P.
 
 Let lab := mk_entry L P C c p.
 
-(* entry cells match exactly at (c,p) *)
 Lemma tlab_pred_entry (cp : Component.id) (pp : Procedure.id) :
   pp < P ->
   (lab == can_make L P C (cp, pp)) = ((cp == c) && (pp == p)).
@@ -911,7 +834,6 @@ case E: ((cp == c) && (pp == p)).
   by rewrite !eqxx in E.
 Qed.
 
-(* body cells never match the entry label *)
 Lemma tlab_pred_body (cp : Component.id) (pp : Procedure.id)
     Cprocs' Pcode' (mi : Machine.instr) :
   Intermediate.prog_procedures pr cp = Some Cprocs' ->
@@ -923,18 +845,17 @@ Lemma tlab_pred_body (cp : Component.id) (pp : Procedure.id)
 Proof.
 move=> HC' HP' HcpC HIn.
 case: mi HIn => //=.
-- (* ILabel *)
+-
   move=> l HIn.
   case El: (lab == can_upd L cp l) => //.
   exfalso.
   move/eqP: El. rewrite /lab /can_upd => El.
   have HlL := Hlab_bound HC' HP' HIn.
   exact: (mk_body_entry_disjoint HcpC HlL (esym El)).
-- (* ICall *)
+-
   move=> c0 P0 _. by case: (Nat.eqb cp c0).
 Qed.
 
-(* count over one procedure's linearization: the indicator of (c,p) *)
 Lemma count_entry_linproc (cp : Component.id) (pp : Procedure.id)
     Cprocs' Pcode' :
   Intermediate.prog_procedures pr cp = Some Cprocs' ->
@@ -962,7 +883,6 @@ have -> : count (tlab_pred lab (can_make L P C) (can_upd L))
 by rewrite addn0.
 Qed.
 
-(* count over one component's linearization: at most the component indicator *)
 Lemma count_entry_lincomp (cp : Component.id) Cprocs' :
   Intermediate.prog_procedures pr cp = Some Cprocs' ->
   cp < C ->
@@ -982,7 +902,7 @@ have -> : [seq count (tlab_pred lab (can_make L P C) (can_upd L)) l
             | p' <- domm Cprocs'].
 { by rewrite -map_comp. }
 case Ecp: (cp == c).
-- (* the target component: at most one procedure matches *)
+-
   move/eqP: Ecp => ?; subst cp.
   apply: sumn_le_pred; first exact: uniq_fset.
   move=> p' HIn.
@@ -991,7 +911,7 @@ case Ecp: (cp == c).
   rewrite (count_entry_linproc HC' HP' HcpC (Hproc_bound HC' Hp'in)).
   rewrite eqxx andTb.
   exact: leqnn.
-- (* other components contribute nothing *)
+-
   have H0 : sumn [seq count (tlab_pred lab (can_make L P C) (can_upd L))
                             (linearize_proc pr cp p')
                  | p' <- domm Cprocs'] = 0.
@@ -1003,7 +923,6 @@ case Ecp: (cp == c).
   by rewrite H0.
 Qed.
 
-(* whole flattened program: at most one entry-label cell *)
 Lemma count_entry_flat :
   count (tlab_pred lab (can_make L P C) (can_upd L))
         (flatten (map snd (Maps.elementsm (intermediate_to_transitional pr))))
@@ -1052,7 +971,6 @@ rewrite ssrnat.addn0.
 exact: Hb.
 Qed.
 
-(* no cell of a program NOT owning component c carries its entry label *)
 Lemma count_entry_flat_absent :
   c \notin domm (Intermediate.prog_procedures pr) ->
   count (tlab_pred lab (can_make L P C) (can_upd L))
@@ -1103,7 +1021,6 @@ rewrite ssrnat.addn0.
 exact: Hb.
 Qed.
 
-(* the entry cell survives the trailing-halt extension at the same position *)
 Lemma lin_code_entry_nth Cprocs Pcode :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1130,8 +1047,6 @@ case E: (lin_body L P C pr) => [|cell rest].
   exact: (nth_error_size Hg').
 Qed.
 
-(* MASTER: the entry label of (c,p) resolves — via [encode_code]'s findopt —
-   to exactly the entry-cell position *)
 Lemma lin_code_entry_findopt Cprocs Pcode :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1144,8 +1059,6 @@ apply: (findopt_unique_pos count_entry_lin_code (lin_code_entry_nth HCc HPp)).
 by rewrite /is_label_def /= /lab /can_make /= eqxx.
 Qed.
 
-(* corollary in [encode_code]'s own resolver: a Jal to the entry label of
-   (c,p) targets exactly the entry cell's address *)
 Lemma code_label_pos_entry Cprocs Pcode (pc0 default : nat) :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1160,18 +1073,11 @@ Qed.
 
 End LabelResolution.
 
-(* ==================== label resolution across a LINK ==================== *)
-
-(* [me_sem] runs [program_link (lin_side … a) (lin_side … b)], whose code is
-   [lin_code a ++ lin_code b]: labels resolve across the WHOLE concatenation.
-   Disjointness of the two sides' components keeps entry labels unique. *)
-
 Section LinkResolution.
 
 Variables L P C : nat.
 Variables pra prb : Intermediate.program.
 
-(* lin_ok-style bounds for BOTH sides *)
 Hypothesis Hlab_a : forall cid Cprocs Pid Pcode l0,
   Intermediate.prog_procedures pra cid = Some Cprocs ->
   Cprocs Pid = Some Pcode -> List.In (ILabel l0) Pcode -> l0 < L.
@@ -1194,8 +1100,6 @@ Hypothesis Hdisj :
             (domm (Intermediate.prog_procedures prb)).
 
 Let codeW := lin_code L P C pra ++ lin_code L P C prb.
-
-(* ---- target procedure on the LEFT side ---- *)
 
 Section LeftTarget.
 
@@ -1255,8 +1159,6 @@ by [].
 Qed.
 
 End LeftTarget.
-
-(* ---- target procedure on the RIGHT side ---- *)
 
 Section RightTarget.
 
@@ -1322,8 +1224,6 @@ End RightTarget.
 
 End LinkResolution.
 
-(* ==================== end-to-end fetch for lin_code ==================== *)
-
 Section LinCodeFetch.
 
 Variables L P C : nat.
@@ -1331,7 +1231,6 @@ Variable pr : Intermediate.program.
 
 Let can_msz := memory_lengths (Intermediate.prog_buffers pr).
 
-(* instruction-cell positions survive the trailing-halt extension *)
 Lemma lin_code_nth (c : Component.id) Cprocs p Pcode o i k :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1368,9 +1267,6 @@ case E: (lin_body L P C pr) => [|hd rest].
   exact: (nth_error_size Hg').
 Qed.
 
-(* THE me-machine fetch: at address pc0 + flat position, the encoded memory
-   holds the cell's tag and decodes to the cell's instruction with labels
-   resolved by [code_label_pos] *)
 Lemma lin_code_encoded_fetch (c : Component.id) Cprocs p Pcode o i k
     (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
   pc0 + size (lin_code L P C pr) < 2 ^ word_size mt ->
@@ -1405,8 +1301,6 @@ Qed.
 
 End LinCodeFetch.
 
-(* ==================== end-to-end fetch across a LINK ==================== *)
-
 Section LinkFetch.
 
 Variables L P C : nat.
@@ -1416,7 +1310,6 @@ Let codeW := lin_code L P C pra ++ lin_code L P C prb.
 Let msza := memory_lengths (Intermediate.prog_buffers pra).
 Let mszb := memory_lengths (Intermediate.prog_buffers prb).
 
-(* instruction cells of the LEFT side keep their positions in the link *)
 Lemma link_code_nth_l (c : Component.id) Cprocs p Pcode o i k :
   Intermediate.prog_procedures pra c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1441,7 +1334,6 @@ rewrite Hcell in Hn.
 exact: (nth_error_size Hn).
 Qed.
 
-(* instruction cells of the RIGHT side shift by the left code's size *)
 Lemma link_code_nth_r (c : Component.id) Cprocs p Pcode o i k :
   Intermediate.prog_procedures prb c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1458,7 +1350,6 @@ rewrite /codeW nth_error_cat2.
 exact: (lin_code_nth L P C HC HP Ho Hk).
 Qed.
 
-(* THE linked me-machine fetch, LEFT side *)
 Lemma link_encoded_fetch_l (c : Component.id) Cprocs p Pcode o i k
     (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
   pc0 + size codeW < 2 ^ word_size mt ->
@@ -1489,7 +1380,6 @@ rewrite Hval /encode_instr_mp.
 by rewrite encodeK.
 Qed.
 
-(* THE linked me-machine fetch, RIGHT side *)
 Lemma link_encoded_fetch_r (c : Component.id) Cprocs p Pcode o i k
     (pc0 : nat) (cell : @Merged.instr mt * mem_tag) :
   pc0 + size codeW < 2 ^ word_size mt ->
@@ -1527,13 +1417,9 @@ Qed.
 
 End LinkFetch.
 
-(* ==================== BODY-label resolution (IBnz targets) ==================== *)
-
-(* the Intermediate-level "is the label-l marker" predicate *)
 Definition ilab (l0 : nat) (mi : Machine.instr) : bool :=
   if mi is ILabel l' then l' == l0 else false.
 
-(* pointwise sum congruence, In-based *)
 Lemma eq_sumn_map_In (T : Type) (f g : T -> nat) (s : seq T) :
   (forall x, List.In x s -> f x = g x) ->
   sumn [seq f x | x <- s] = sumn [seq g x | x <- s].
@@ -1557,7 +1443,6 @@ Hypothesis Hproc_bound : forall cid Cprocs Pid,
 Hypothesis Hcomp_bound : forall cid,
   cid \in domm (Intermediate.prog_procedures pr) -> cid < C.
 
-(* the target body label, bounded by the scheme *)
 Variables (c : Component.id) (l : nat).
 Hypothesis HcC : c < C.
 Hypothesis HlL : l < L.
@@ -1588,7 +1473,6 @@ move/eqP: El. rewrite /lab /can_make /= => El.
 exact: (mk_body_entry_disjoint HcC HlL El).
 Qed.
 
-(* per-instruction: only the matching ILabel of the matching component *)
 Lemma count_body_map (cp : Component.id) (Pcode' : Machine.code) :
   (forall l0, List.In (ILabel l0) Pcode' -> l0 < L) ->
   count (tlab_pred lab (can_make L P C) (can_upd L))
@@ -1676,8 +1560,6 @@ case Ecp: (cp == c).
   by rewrite H0.
 Qed.
 
-(* the compiled-code uniqueness premise: component c declares the label at
-   most once across its procedures (T14.3 discharges this for S2I output) *)
 Hypothesis Huniq : forall Cprocs,
   Intermediate.prog_procedures pr c = Some Cprocs ->
   sumn [seq count (ilab l) (odflt [::] (Cprocs p')) | p' <- domm Cprocs] <= 1.
@@ -1726,7 +1608,6 @@ rewrite ssrnat.addn0.
 exact: Hb.
 Qed.
 
-(* the defining occurrence sits at its flat position *)
 Lemma lin_code_body_nth Cprocs p Pcode o :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1739,7 +1620,6 @@ have Hk : 0 < isize (ILabel l) by [].
 by rewrite (lin_code_nth L P C HCc HPp Ho Hk).
 Qed.
 
-(* MASTER: the body label resolves to its defining occurrence *)
 Lemma lin_code_body_findopt Cprocs p Pcode o :
   Intermediate.prog_procedures pr c = Some Cprocs ->
   Cprocs p = Some Pcode ->
@@ -1765,7 +1645,6 @@ rewrite /code_label_pos (lin_code_body_findopt HCc HPp Ho).
 by [].
 Qed.
 
-(* the non-owning side of a link contributes nothing *)
 Lemma count_body_lin_code_absent (pr' : Intermediate.program) :
   (forall cid Cprocs Pid Pcode l0,
       Intermediate.prog_procedures pr' cid = Some Cprocs ->
@@ -1792,7 +1671,6 @@ have Hflat : count (tlab_pred lab (can_make L P C) (can_upd L))
   have Ekc : (k == c) = false.
   { case Ekc: (k == c) => //. move/eqP: Ekc => ?; subst k.
     by rewrite mem_domm Eprocs in Hnotin. }
-  (* mirror count_body_lincomp for pr' *)
   have -> : linearize_component pr' k
             = flatten [seq linearize_proc pr' k p' | p' <- domm Cprocs'].
   { by rewrite /linearize_component Eprocs. }
@@ -1840,8 +1718,6 @@ Qed.
 
 End BodyLabelResolution.
 
-(* ==================== body labels across a LINK ==================== *)
-
 Section LinkBodyResolution.
 
 Variables L P C : nat.
@@ -1863,8 +1739,6 @@ Hypothesis Hdisj :
             (domm (Intermediate.prog_procedures prb)).
 
 Let codeW := lin_code L P C pra ++ lin_code L P C prb.
-
-(* ---- defining occurrence on the LEFT side ---- *)
 
 Section BodyLeft.
 
@@ -1928,8 +1802,6 @@ by [].
 Qed.
 
 End BodyLeft.
-
-(* ---- defining occurrence on the RIGHT side ---- *)
 
 Section BodyRight.
 
@@ -2001,13 +1873,6 @@ End BodyRight.
 
 End LinkBodyResolution.
 
-(* ==================== the initial pc: find-first-colour ==================== *)
-
-(* [Merged.initial_state] starts the pc at pc0 + the FIRST cell coloured
-   Component.main.  Since components are laid out in ascending id order and
-   every cell of a component's segment carries its colour, that position is
-   exactly [comp_base] of main.  Generic machinery first. *)
-
 Lemma find_first_pos (A : Type) (pred : A -> bool) (l : seq A) :
   forall (n : nat) (x : A),
   List.nth_error l n = Some x ->
@@ -2027,7 +1892,6 @@ elim: l => [|a l IH] [|n] x //=.
   apply: (Hbefore k.+1 y) => //.
 Qed.
 
-(* which segment a flatten-position falls in *)
 Lemma flatten_pos_inv (A : Type) (ll : seq (seq A)) :
   forall (k : nat) (x : A),
   List.nth_error (flatten ll) k = Some x ->
@@ -2076,7 +1940,6 @@ have := IH a b Hab.
 by lia.
 Qed.
 
-(* keys strictly before the first occurrence differ from it *)
 Lemma nth_index_neq (T : eqType) (s : seq T) :
   forall (x : T) (j : nat) (y : T),
   j < seq.index x s ->
@@ -2091,7 +1954,6 @@ elim: s => [|a s IH] x [|j] y //=.
   exact: (IH x j y _ Hnth).
 Qed.
 
-(* In-inversion for the flattening: every cell inherits some source tag *)
 Section T2MIn.
 
 Variables (make : proc_label -> nat) (upd : Component.id -> nat -> nat).
@@ -2113,7 +1975,6 @@ Qed.
 
 End T2MIn.
 
-(* every cell of a component's flattened segment carries its colour *)
 Lemma lincomp_cell_color (make : proc_label -> nat)
     (upd : Component.id -> nat -> nat) (msz : NMap (NMap nat))
     (pr : Intermediate.program) (c' : Component.id)
@@ -2130,7 +1991,6 @@ move/lin_proc_In: Hcell => [Hhd|[mi [_ Hcell]]].
 - rewrite Hcell i2t_snd. exact: color_def_mem_tag.
 Qed.
 
-(* THE find lemma: the first c-coloured cell is the start of c's segment *)
 Section FindComp.
 
 Variables (make : proc_label -> nat) (upd : Component.id -> nat -> nat).
@@ -2150,7 +2010,6 @@ move=> HC Hp0.
 have Hcget : intermediate_to_transitional pr c
              = Some (linearize_component pr c).
 { by rewrite i2t_getm HC. }
-(* c's segment is non-empty *)
 have Hb0 : 0 < tseg_size (linearize_component pr c).
 { rewrite (tseg_size_lincomp HC).
   move/dommP: (Hp0) => [Pcode0 HP0].
@@ -2162,7 +2021,6 @@ have Hb0 : 0 < tseg_size (linearize_component pr c).
   have Hle := sumn_take_le Hn.
   have Hgt := tseg_size_linproc_gt0 HC HP0.
   by lia. }
-(* the cell at comp_base *)
 have Hnth0 := t2m_flat_code_nth make upd msz Hcget Hb0.
 rewrite ssrnat.addn0 in Hnth0.
 have [cell0 Hcell0] : exists cell0,
@@ -2174,27 +2032,23 @@ apply: (find_first_pos (x := cell0)).
 - by rewrite Hnth0.
 - have HIn := List.nth_error_In _ _ Hcell0.
   by rewrite (lincomp_cell_color HIn) eqxx.
-- (* positions before comp_base sit in earlier components' segments *)
+-
   move=> k y Hk Hky.
   move: Hky.
   rewrite (t2m_flat_flatten make upd msz) => Hky.
   have [j [l' [k' [H1 H2 H3 H4]]]] := flatten_pos_inv Hky.
-  (* peel the two maps *)
   have [l0 [Hl0 El']] := nth_error_map_inv H1.
   have [[cj vj] [Hpair El0]] := nth_error_map_inv Hl0.
-  (* the segment is component cj's linearization *)
   have Hcj : intermediate_to_transitional pr cj = Some vj.
   { apply: In_fmap_getm. exact: (List.nth_error_In _ _ Hpair). }
   have Evj : vj = linearize_component pr cj.
   { move: Hcj. rewrite i2t_getm.
     by case Ep: (Intermediate.prog_procedures pr cj) => [Cprocsj|] //= [<-]. }
-  (* the cell's colour is cj *)
   have Hcol : color y.2 = cj.
   { apply: (lincomp_cell_color (make := make) (upd := upd) (msz := msz)
               (pr := pr)).
     rewrite -Evj -El0 -El'.
     exact: (List.nth_error_In _ _ H4). }
-  (* j lies strictly before c's index, so cj ≠ c *)
   have Hjlt : j < seq.index c (unzip1 (Maps.elementsm
                                           (intermediate_to_transitional pr))).
   { move: Hk. rewrite /comp_base H2.
@@ -2221,7 +2075,6 @@ Qed.
 
 End FindComp.
 
-(* [initial_state]'s find uses a pattern lambda; bridge it *)
 Lemma find_pred_pairE (c : Component.id)
     (l : seq (@Merged.instr mt * mem_tag)) :
   find (fun '(_, tag) => color tag == c) l
@@ -2333,9 +2186,6 @@ Section FindLink.
 Variables L P C : nat.
 Variables pra prb : Intermediate.program.
 
-(* the linked program's initial pc offset: the first main-coloured cell of
-   [lin_code pra ++ lin_code prb] is the start of main's segment (main on
-   the left side) *)
 Lemma find_color_link (c : Component.id) (Cprocs : NMap Machine.code)
     (p0 : Procedure.id) :
   Intermediate.prog_procedures pra c = Some Cprocs ->
@@ -2361,7 +2211,6 @@ rewrite Hhas.
 exact: Hfc.
 Qed.
 
-(* seq membership to List.In (local bridge) *)
 Lemma mem_seq_In_lp (T : eqType) (l : seq T) (x : T) :
   x \in l -> List.In x l.
 Proof.
@@ -2371,7 +2220,6 @@ rewrite in_cons => /orP[/eqP -> | /IH H].
 - by right.
 Qed.
 
-(* no cell of a colour-free block matches the colour test *)
 Lemma has_color_false (c : Component.id)
     (l : seq (@Merged.instr mt * mem_tag)) :
   (forall i t, List.In (i, t) l -> color t <> c) ->
@@ -2386,7 +2234,6 @@ case Ec: (color t == c) => /=.
   exact: (Hno i' t' (or_intror HIn')).
 Qed.
 
-(* the mirrored initial-pc resolution: main on the RIGHT side *)
 Lemma find_color_link_r (c : Component.id) (Cprocs : NMap Machine.code)
     (p0 : Procedure.id) :
   Intermediate.well_formed_program pra ->

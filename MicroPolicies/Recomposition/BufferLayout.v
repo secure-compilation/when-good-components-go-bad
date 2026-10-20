@@ -1,13 +1,3 @@
-(* Buffer-layout kernel: the data segment [initial_memory pb] (Merged.v) lays the cells of
-   [linearize_bufs pb] CONTIGUOUSLY at addresses [word_of_nat 0 .. word_of_nat (total-1)],
-   total = size (linearize_bufs pb).  This file proves the generic [Tmp.mapk] toolkit
-   (lifted verbatim from RecompositionInit, which will import it from here) and the layout
-   facts needed to DISCHARGE the former RecInit hypotheses [initial_memory_domm] /
-   [alloc_label_not_in_initial_memory] and to bound [size (initial_memory pb)].
-
-   Word discipline: never compute 2^32; all mod/val reasoning via WordExtra's
-   [valw_as_word]/[word_nat_inj] and [val_word_of_nat]-style bounds. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
@@ -34,8 +24,6 @@ Unset Printing Implicit Defensive.
 
 Section MapkToolkit.
 
-(* Tmp.mapk preserves values: if mapk f m k' = Some v, then
-   exists k such that f k = k' and m k = Some v *)
 Lemma foldl_unionm_In: forall {T : ordType} {S : Type} (ms : seq {fmap T -> S}) k v,
   foldl unionm emptym ms k = Some v ->
   exists mi, List.In mi ms /\ mi k = Some v.
@@ -45,13 +33,13 @@ Proof.
   - intros k0 v0. rewrite foldl_rcons.
     rewrite unionmE.
     case Hacc: (foldl unionm emptym m0 k0) => [v' |].
-    + (* accumulator has a value — it came from ms *)
+    +
       move=> [<-].
       destruct (IH _ _ Hacc) as [mi [Hmi Hmi_k]].
       exists mi. split; [| exact Hmi_k].
       rewrite -cats1.
       apply List.in_or_app. left. exact Hmi.
-    + (* accumulator is None — value comes from m0 *)
+    +
       move=> Hm0. simpl in Hm0.
       eexists; split; [| eassumption].
       rewrite -cats1.
@@ -88,9 +76,6 @@ Lemma In_fmap_getm: forall {T: ordType} {S: Type} (m: {fmap T -> S}) k v,
 Proof.
   intros T0 S0 m k v Hin.
   destruct m as [s Hs]. simpl in *.
-  (* s is a sorted list of (T0 * S0) pairs, Hin : List.In (k, v) s *)
-  (* getm_def scans left-to-right: if k == p.1 then Some p.2 else recurse *)
-  (* Since s is sorted with unique keys, (k, v) in s means getm_def finds it *)
   induction s as [| [k0 v0] rest IH].
   - contradiction.
   - simpl. simpl in Hin. destruct Hin as [Heq | Hin].
@@ -98,23 +83,18 @@ Proof.
       rewrite /getm. simpl. rewrite eqxx. reflexivity.
     + rewrite /getm. simpl.
       case Hkeq: (k == k0).
-      * (* k = k0 but (k, v) is in rest — contradicts sorted/unique *)
+      *
         move/eqP : Hkeq => Hkeq. subst k0.
         exfalso.
         have Hpath := Hs.
-        (* path.sorted Ord.lt (k :: unzip1 rest) — since unzip1 ((k,v0)::rest) = k :: unzip1 rest *)
         simpl in Hpath.
-        (* Hpath should be: path Ord.lt k (unzip1 rest) *)
-        (* From (k, v) ∈ rest, k ∈ unzip1 rest *)
         have Hkin: List.In k (unzip1 rest).
         { clear -Hin. induction rest as [| [k1 v1] rest' IH].
           - contradiction.
           - simpl in *. destruct Hin as [[= -> ->] | Hin].
             + left. reflexivity.
             + right. exact (IH Hin). }
-        (* Convert to \in *)
         apply Extra.In_in in Hkin.
-        (* Hs gives path Ord.lt k (unzip1 rest) *)
         simpl in Hs.
         have := path.order_path_min (@Ord.lt_trans T0) Hs.
         move=> /allP /(_ _ Hkin).
@@ -131,21 +111,14 @@ Proof.
   intros T0 T0' S0 f m k' v.
   unfold Tmp.mapk.
   intros H. apply foldl_unionm_In in H as [mi [Hmi Hmi_k']].
-  (* Hmi : List.In mi (unzip2 (mapim (fun k x => mkfmap [:: (f k, x)]) m)) *)
-  (* Hmi_k' : mi k' = Some v *)
   set mm := mapim (fun k x => mkfmap [:: (f k, x)]) m in Hmi.
   destruct (In_unzip2_exists Hmi) as [k0 Hpair].
   apply In_fmap_getm in Hpair.
-  (* move/getmP : Hpair => Hpair. *)
-  (* Hpair : mm k0 = Some mi *)
   rewrite /mm mapimE in Hpair.
   destruct (m k0) as [x0 |] eqn:Hmk0; simpl in Hpair; [| discriminate].
   injection Hpair => Hmi_eq.
-  (* mi = mkfmap [:: (f k0, x0)] *)
   rewrite -Hmi_eq /= in Hmi_k'.
   rewrite setmE in Hmi_k'.
-  (* rewrite -Hmi_eq mkfmapE /= in Hmi_k'. *)
-  (* Hmi_k' : (if k' == f k0 then Some x0 else None) = Some v *)
   case: ifP Hmi_k' => [/eqP Hfk | //].
   move=> [<-].
   exists k0. split.
@@ -153,11 +126,6 @@ Proof.
   - exact Hmk0.
 Qed.
 
-(* Converse: if m k = Some v and f is injective ON THE KEYS OF m, then mapk f m (f k) = Some v.
-   [injective f] (globally) was too strong — the actual key relabel word_of_nat(·+pc0) is NOT
-   globally injective (it wraps); it is injective only on the positions [< size], which is what
-   [encode_code_nth] supplies. *)
-(* converse of In_fmap_getm *)
 Lemma getm_In: forall {T : ordType} {S : Type} (m : {fmap T -> S}) k v,
     m k = Some v -> List.In (k, v) m.
 Proof.
@@ -167,7 +135,6 @@ Proof.
   - by move=> H; right; apply: IH.
 Qed.
 
-(* a key in some member of the list is in the domain of the folded union *)
 Lemma domm_foldl_unionm_In: forall {T : ordType} {S : Type} (ms : seq {fmap T -> S}) mi j,
     List.In mi ms -> j \in domm mi -> j \in domm (foldl unionm emptym ms).
 Proof.
@@ -201,7 +168,6 @@ Proof.
 Qed.
 
 
-(* getm through a BIJECTIVE key relabel. *)
 Lemma mapk_bijE {T T' : ordType} {S : Type} (f : T -> T') (g : T' -> T)
     (m : {fmap T -> S}) (k' : T') :
   cancel f g -> cancel g f -> Tmp.mapk f m k' = m (g k').
@@ -218,8 +184,6 @@ Qed.
 
 End MapkToolkit.
 
-(* ===== The (c,b,o) key space of [linearize_bufs] ===== *)
-
 Definition tunflat (x : nat * nat * nat) : nat * (nat * nat) :=
   match x with (a, b, c) => (a, (b, c)) end.
 Definition tflat (x : nat * (nat * nat)) : nat * nat * nat :=
@@ -230,7 +194,6 @@ Proof. by move=> [a [b c]]. Qed.
 Lemma tunflatK : cancel tunflat tflat.
 Proof. by move=> [[a b] c]. Qed.
 
-(* Pointwise lookup of [linearize_bufs]. *)
 Lemma linearize_bufsE pb c b o :
   linearize_bufs pb (c, b, o)
   = match pb c with
@@ -249,7 +212,6 @@ case Emb: (map b) => [blk|] //=.
 by rewrite fmap_of_seqE.
 Qed.
 
-(* Key membership <-> in-range offset of a declared block. *)
 Lemma linearize_bufs_key (pb : NMap {fmap Values.Block.id -> nat + seq Values.value}) (c b o : nat) :
   reflect (exists (map : {fmap Values.Block.id -> nat + seq Values.value})
                   (blk : nat + seq Values.value),
@@ -272,14 +234,10 @@ apply/(iffP dommP).
   by rewrite linearize_bufsE Hpc Hmb Hnth.
 Qed.
 
-(* ===== The contiguous address layout ===== *)
-
-(* [size (domm m) = size m] (lifted from RecompositionInit; will be deduped there). *)
 Lemma size_domm_fmap (T : ordType) (S : Type) (m : {fmap T -> S}) :
   size (domm m) = size m.
 Proof. by rewrite val_domm size_map. Qed.
 
-(* [encode_int] is faithful on nats (lifted from RecompositionInit). *)
 Lemma nat_of_pos_succ : forall m, ssrnat.nat_of_pos (Pos.of_succ_nat m) = m.+1.
 Proof. elim=> [//|m IH] /=. by rewrite nat_of_succ_pos IH. Qed.
 
@@ -295,7 +253,6 @@ Variable pb : NMap {fmap Values.Block.id -> nat + seq Values.value}.
 Local Notation bufs := (linearize_bufs pb).
 Local Notation total := (size (linearize_bufs pb)).
 
-(* The block-order predicates used by [Merged.initial_memory]'s base address. *)
 Definition blk_before (c b : nat) : pred (nat * nat * nat) :=
   fun x => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end.
 Definition blk_at (c b : nat) : pred (nat * nat * nat) :=
@@ -306,7 +263,6 @@ Definition bl_base (c b : nat) : nat := count (blk_before c b) (domm bufs).
 Definition nat_addr (k : nat * nat * nat) : nat :=
   match k with (c, b, o) => o + bl_base c b end.
 
-(* Bridge to [initial_memory]'s [filterm]-based base address. *)
 Lemma base_filterm c b :
   size (domm (filterm (fun x (_ : Values.value * mem_tag) => blk_before c b x) bufs))
   = bl_base c b.
@@ -315,11 +271,9 @@ rewrite (@domm_filter_eq _ _ (blk_before c b) bufs) /bl_base.
 by rewrite /= val_fset_filter size_filter.
 Qed.
 
-(* [blk_before] and [blk_at] are disjoint, and both are below any later block. *)
 Lemma blk_before_at_disjoint c b k : blk_before c b k -> blk_at c b k -> False.
 Proof. case: k => [[c' b'] o'] /= H1 /andP[/eqP ? /eqP ?]; subst. by lia. Qed.
 
-(* The keys of block (c,b) are exactly (c,b,o) for o < the block length. *)
 Lemma blk_at_key c b k :
   k \in domm bufs -> blk_at c b k ->
   exists o, k = (c, b, o) /\ o < size (linearize_buf pb c b).
@@ -329,7 +283,6 @@ exists o'; split=> //.
 by case/linearize_bufs_key: Hk => map [blk [_ _ Hlt]].
 Qed.
 
-(* Counting the block (c,b): exactly its length, when declared. *)
 Lemma blk_at_count c b map blk :
   pb c = Some map -> map b = Some blk ->
   count (blk_at c b) (domm bufs) = size (linearize_buf pb c b).
@@ -351,7 +304,6 @@ have Hperm : perm_eq [seq k <- domm bufs | blk_at c b k]
 by rewrite (perm_size Hperm) size_map size_iota.
 Qed.
 
-(* Monotonicity: a whole earlier block fits below a later block's base. *)
 Lemma base_block_leq c1 b1 c2 b2 map blk :
   pb c1 = Some map -> map b1 = Some blk ->
   blk_before c2 b2 (c1, b1, 0) ->
@@ -371,7 +323,6 @@ case: k => [[c' b'] o'] /orP[H1|/andP[/eqP ? /eqP ?]]; subst => /=.
 - move: Hbefore => /=. by lia.
 Qed.
 
-(* A whole block fits below the total. *)
 Lemma base_len_leq_total c b map blk :
   pb c = Some map -> map b = Some blk ->
   bl_base c b + size (linearize_buf pb c b) <= total.
@@ -388,7 +339,6 @@ apply: (leq_trans (count_size _ _)).
 by rewrite size_domm_fmap.
 Qed.
 
-(* (A) Every key's address is below the total. *)
 Lemma nat_addr_lt k : k \in domm bufs -> nat_addr k < total.
 Proof.
 case: k => [[c b] o] Hk.
@@ -398,7 +348,6 @@ have Hle := base_len_leq_total Hpc Hmb.
 by lia.
 Qed.
 
-(* (B) The address map is injective on the key set. *)
 Lemma nat_addr_inj k1 k2 :
   k1 \in domm bufs -> k2 \in domm bufs -> nat_addr k1 = nat_addr k2 -> k1 = k2.
 Proof.
@@ -419,7 +368,6 @@ case Hcb : ((c1 == c2) && (b1 == b2)).
     move: Heq; rewrite /nat_addr. by lia.
 Qed.
 
-(* (C) Every address below the total is hit. *)
 Lemma nat_addr_onto n :
   n < total -> exists2 k, k \in domm bufs & nat_addr k = n.
 Proof.
@@ -440,9 +388,6 @@ Qed.
 
 End Layout.
 
-(* ===== Transport to [initial_memory] ===== *)
-
-(* [Tmp.mapk] only looks at [f] pointwise. *)
 Lemma eq_mapk {T T' : ordType} {S : Type} (f g : T -> T') (m : {fmap T -> S}) :
   f =1 g -> Tmp.mapk f m = Tmp.mapk g m.
 Proof.
@@ -453,7 +398,6 @@ apply/eq_fmap => k. rewrite !mapimE. case: (m k) => //= v.
 by rewrite Efg.
 Qed.
 
-(* word_of_nat is injective below 2^k. *)
 Lemma won_inj (k : nat) (a b : nat) :
   a < 2 ^ k -> b < 2 ^ k ->
   @word_of_nat k a = word_of_nat b -> a = b.
@@ -473,7 +417,6 @@ Variable pb : NMap {fmap Values.Block.id -> nat + seq Values.value}.
 Local Notation bufs := (linearize_bufs pb).
 Local Notation total := (size (linearize_bufs pb)).
 
-(* [initial_memory] IS a [mapk] with our canonical address as the key map. *)
 Lemma initial_memory_as_mapk :
   {enc : Values.value * mem_tag -> Types.atom (mword mt) mem_tag |
     initial_memory pb
@@ -489,7 +432,6 @@ Qed.
 
 Hypothesis Hbound : total < 2 ^ (word_size mt).
 
-(* The key map is injective on the buffer keys. *)
 Let won_addr_inj :
   {in domm bufs &, injective (fun k => @word_of_nat (word_size mt) (nat_addr pb k))}.
 Proof.
@@ -501,7 +443,6 @@ have Hb2 : nat_addr pb k2 < 2 ^ (word_size mt)
 exact: (nat_addr_inj Hk1 Hk2 (won_inj Hb1 Hb2 E)).
 Qed.
 
-(* Key membership of the data segment. *)
 Lemma initial_memory_key w :
   (w \in domm (initial_memory pb))
   <-> (exists2 k, k \in domm bufs & w = @word_of_nat (word_size mt) (nat_addr pb k)).
@@ -522,7 +463,6 @@ split.
   exact: (mapk_Some_inv Hinj Hv).
 Qed.
 
-(* The three headline facts. *)
 Lemma initial_memory_domm_iota :
   domm (initial_memory pb)
   = fset [seq @word_of_nat (word_size mt) n | n <- iota 0 total].

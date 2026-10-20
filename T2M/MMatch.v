@@ -1,8 +1,3 @@
-(** * T2M match relation: relates a stackless T state (memory, registers,
-    pc pointer, level tag) of the linked program to an me machine state of
-    the linked compiled pair.  Says nothing about fit — fit premises enter
-    the diagrams from [run_fits] (MDefs), not from the relation. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -52,9 +47,6 @@ Local Notation codeW :=
   (compiler_code L P C PB PI pra ++ compiler_code L P C PB PI prb).
 Local Notation pc0 := (size (initial_memory (mt := mt) PB)).
 
-(* ================================================================== *)
-(* 1. The linked T code decomposes per side.                          *)
-(* ================================================================== *)
 
 Lemma lin_comp_gen_eqproc (pr1 pr2 : Intermediate.program) c :
   Intermediate.prog_procedures pr1 c = Intermediate.prog_procedures pr2 c ->
@@ -92,12 +84,7 @@ apply: lin_comp_gen_eqproc.
 by rewrite /= unionmE Hv Hb.
 Qed.
 
-(* ================================================================== *)
-(* 2. The pc relation.                                                *)
-(* ================================================================== *)
 
-(* the me flat position of the T pc (start of its expansion), by side —
-   the address orientation ([pos + pc0]) matches [link_tfetch_l/r] *)
 Variant pc_rel (tpc : Pointer.t) (w : mword mt) : Prop :=
 | PCLeft cseg :
     Pointer.component tpc \in domm (Intermediate.prog_procedures pra) ->
@@ -119,12 +106,7 @@ Variant pc_rel (tpc : Pointer.t) (w : mword mt) : Prop :=
                 (BinInt.Z.to_nat (Pointer.offset tpc))) + pc0) ->
     pc_rel tpc w.
 
-(* ================================================================== *)
-(* 3. The CODE-address map, and the register relation.                *)
-(* ================================================================== *)
 
-(* the linked layout's code-position function: component × T-array
-   index ↦ flat me address (pc0 included) — [cmap_t]'s instantiation *)
 Definition cmapW (c : Component.id) (q : nat) : option nat :=
   if c \in domm (Intermediate.prog_procedures pra)
   then omap (fun cseg => tpos PI pra c cseg q + pc0)
@@ -133,9 +115,6 @@ Definition cmapW (c : Component.id) (q : nat) : option nat :=
                           + tpos PI prb c cseg q) + pc0)
             (Transitional.intermediate_to_transitional_gen PI prb c).
 
-(* the STRONG per-register fact: value related through the address maps
-   ([tvrel]: the value TAG picks the data/code interpretation), me tag =
-   T value tag on the nose *)
 Definition reg_synced (amap : amap_t) (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) (r : register) : Prop :=
   exists ra,
@@ -143,10 +122,6 @@ Definition reg_synced (amap : amap_t) (tregs : Transitional.Register.t)
         tvrel cmapW amap (Transitional.Register.get r tregs) (vala ra)
       & taga ra = Transitional.tvtag (Transitional.Register.get r tregs)].
 
-(* Every register is either synced or EVENT-CLOBBERED: on Call/Return
-   T writes [tUndef] (tag OTHER) while me re-tags the old value
-   INVALIDATED, a representation mismatch the relation must allow;
-   diagrams take [reg_synced] premises for the registers they READ. *)
 Definition mregs_rel (amap : amap_t) (tregs : Transitional.Register.t)
     (mregs : {fmap reg mt -> @ratom mt}) : Prop :=
   forall r : register,
@@ -165,9 +140,6 @@ Proof.
 move=> /(_ r) [[ra [Hra _ _]]|[ra [Hra _ _]]]; by exists ra.
 Qed.
 
-(* the me machine's [reg_clear_list] (Jal/Jump/Call/Return) reads the
-   SYSTEM registers 7 and 16-19 too — their PRESENCE is part of the
-   relation (their contents are policy-internal, unconstrained) *)
 Definition sysregs_ok (mregs : {fmap reg mt -> @ratom mt}) : Prop :=
   forall k : nat, k \in [:: 7; 16; 17; 18; 19] ->
     exists ra, mregs (@word_of_nat (reg_field_size mt) k) = Some ra.
@@ -182,9 +154,6 @@ case: ifP => _; first by eexists.
 exact: H Hk.
 Qed.
 
-(* ================================================================== *)
-(* 4. The match relation.                                             *)
-(* ================================================================== *)
 
 Record match_states (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
@@ -207,13 +176,7 @@ Definition match_st (amap : amap_t) (ts : TS.state)
   let '(tmem, tregs, tpc, tpct) := ts in
   match_states amap tmem tregs tpc tpct ms.
 
-(* ================================================================== *)
-(* 5. The fetch master lemma — the entry point of every diagram.      *)
-(* ================================================================== *)
 
-(* the diagram entry point: from T [executing] and the pc relation, the
-   me memory at the me pc holds the FIRST expansion cell of the T
-   instruction: same tag, decoding to the merged instruction. *)
 Lemma match_fetch (mmem : {fmap mword mt -> matom})
     (tpc : Pointer.t) (w : mword mt)
     (i : Transitional.instr) (tg : mem_tag) cell :
@@ -265,8 +228,6 @@ case: Hpc => cseg Hside Hseg Hle Hw.
   + by rewrite /cmapW (negbTE Hside) Hseg /=.
 Qed.
 
-(* the k-th expansion cell of the executing instruction (the ALLOC
-   stub spans FIVE cells; [match_fetch] is the k = 0 face) *)
 Lemma match_fetch_k (mmem : {fmap mword mt -> matom})
     (tpc : Pointer.t) (w : mword mt)
     (i : Transitional.instr) (tg : mem_tag) (k : nat) cell :
@@ -326,10 +287,6 @@ case: Hpc => cseg Hside Hseg Hle Hw.
   + by rewrite /cmapW (negbTE Hside) Hseg /=.
 Qed.
 
-(* ================================================================== *)
-(* 6. [pc_rel] IS [cmapW] at the pc's coordinates — the glue the      *)
-(*    control-flow diagrams invert through ([code_rel] uses cmapW).   *)
-(* ================================================================== *)
 
 Lemma pc_rel_cmap (tpc : Pointer.t) (w : mword mt) :
   pc_rel tpc w ->

@@ -1,7 +1,3 @@
-(* The assumption layer for RSC^DC_MD at the micro-policy machine level.
-   [MPCompilerSig] abstracts the Intermediate -> MP linearizer and its
-   correctness; [RSC_MP_Input] packages the premises of the final theorem. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -41,8 +37,6 @@ Require Import MicroPolicies.Recomposition.RSCDefs.
 Import DoNotation.
 Import Types.
 
-(* The back-translation package for a trace [t] of the UB-restricted run of
-   [link (lin a) (lin b)]: [bt_Cs] becomes the final theorem's witness. *)
 Record bt_package (NC : nat) (lin : Intermediate.program -> program)
        (lin_ok : Intermediate.program -> Prop)
        (run_ok : Intermediate.program -> Intermediate.program ->
@@ -95,12 +89,10 @@ Module Type MPCompilerSig.
   Axiom NC_lt_word : NC < word_size mt.
   Axiom alloc_label_lt_word_NC : alloc_label < expn 2 (word_size mt - NC).
 
-  (* the Intermediate → MP linearizer, abstracted *)
   Parameter lin : Intermediate.program -> program.
 
   Parameter lin_ok : Intermediate.program -> Prop.
 
-  (* ---- static preservation ---- *)
   Axiom lin_interface : forall a,
     prog_interface (lin a) = Intermediate.prog_interface a.
   Axiom lin_buffers : forall a,
@@ -114,7 +106,6 @@ Module Type MPCompilerSig.
   Axiom lin_out_wf : forall a,
     Intermediate.well_formed_program a -> lin_output_wf (lin a).
 
-  (* label spaces of interface-disjoint programs are disjoint *)
   Axiom lin_labels_disjoint : forall a b,
     Intermediate.well_formed_program a ->
     Intermediate.well_formed_program b ->
@@ -145,11 +136,9 @@ Module Type MPCompilerSig.
             /\ nth_error (code (lin b')) mb' = Some (i', tc)
           & is_code tc /\ color tc \in domm (Intermediate.prog_interface b)].
 
-  (* ---- the pair-level run-fit ---- *)
   Parameter run_ok :
     Intermediate.program -> Intermediate.program -> Events.trace -> Prop.
 
-  (* ---- backward compiler correctness (overlay -> Source) ---- *)
   Axiom H_bwd_src : forall (sa sb : Source.program)
       (a b : Intermediate.program) m,
     Source.well_formed_program sa ->
@@ -166,11 +155,9 @@ Module Type MPCompilerSig.
       program_behaves (S.CS.sem (Source.program_link sa sb)) beh
       /\ (CompCertExtensions.prefix m beh \/ behavior_improves_finpref beh m).
 
-  (* ---- the finite-machine fit ---- *)
   Parameter bt_fits :
     Intermediate.program -> Intermediate.program -> Events.trace -> Prop.
 
-  (* ---- the back-translation package ---- *)
   Axiom H_bt : forall a b (m0 : finpref_behavior),
     Intermediate.well_formed_program a ->
     Intermediate.well_formed_program b ->
@@ -194,7 +181,6 @@ Module Type RSC_MP_Input (K : MPCompilerSig).
   Parameter Ct : Intermediate.program.
   Parameter fm : finpref_behavior.
 
-  (* the reasonable assumptions of RSC_DC_MD, one level down *)
   Axiom well_formed_p : Source.well_formed_program p.
   Axiom successful_compilation : compile_program p = Some p_compiled.
   Axiom well_formed_Ct : Intermediate.well_formed_program Ct.
@@ -206,7 +192,6 @@ Module Type RSC_MP_Input (K : MPCompilerSig).
   Axiom p_ok : K.lin_ok p_compiled.
   Axiom Ct_ok : K.lin_ok Ct.
 
-  (* static side conditions of the component-prefix memory scheme *)
   Axiom comp_bound : forall x,
     (x \in domm (Intermediate.prog_interface p_compiled))
     || (x \in domm (Intermediate.prog_interface Ct)) ->
@@ -216,7 +201,6 @@ Module Type RSC_MP_Input (K : MPCompilerSig).
                                  (prog_buffers (K.lin Ct))))
       + size (code (K.lin p_compiled) ++ code (K.lin Ct)) < alloc_label.
 
-  (* the observed safe target prefix *)
   Axiom target_prefix :
     does_prefix (mp_sem K.NC (program_link (K.lin p_compiled) (K.lin Ct))) fm.
   Axiom safe_prefix : not_wrong_finpref fm.

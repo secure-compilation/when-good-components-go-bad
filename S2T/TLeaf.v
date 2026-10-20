@@ -1,34 +1,3 @@
-(** * Stage 4, part 9 — the leaf evaluations at T.
-
-    See plan-i2t-redo.md §4 (Stage 4).
-
-    Ports of `S2I/Simulation.v:1803-1860` (`leaf_val_run`, `leaf_arg_run`,
-    `leaf_local_run`): the three expressions that compile to a single
-    instruction. They are the first diagrams, and the smallest, so they are
-    where the shape of a T diagram gets fixed.
-
-    Two differences from the I versions, both structural rather than
-    incidental:
-
-    - **They return `val_inv`, not just a step.** `Simulation.v`'s leaf runs
-      hand back a `CS.step` and a `code_at`, and the master diagram
-      re-establishes all twenty invariant fields itself. At T there are more
-      fields and every one of them has to be transported anyway, so the leaf
-      run does it once — which is also what makes the master diagram's leaf
-      cases one line each.
-    - **`E_arg` writes TWO registers.** `TS.Mov r1 r2` retags its SOURCE as well
-      as writing its target (`Register.set r1 … (if is_address … then
-      Invalidated else Other) (Register.set r2 …)`), because at MP a `Mov` of a
-      capability must not leave a live duplicate behind. For `IMov R_ARG R_COM`
-      that means `R_ARG` is rewritten too — harmlessly, since its VALUE is
-      unchanged and `vi_arg` speaks only of the value, but the invariant
-      transport has to go through both writes.
-
-    Note where `check_pc` comes from: each of these is a single instruction, so
-    the next cell is the head of `rest` — and `rest` is nonempty because it
-    realises a continuation (`TDrain.cont_matchJ_nonempty`). The nonemptiness
-    lemma written for the drain pays off immediately here. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -76,9 +45,6 @@ Variable labelsP : NMap (NMap label).
 Local Notation expr_inv := (TMatch.expr_inv cde iface labelsP).
 Local Notation val_inv := (TMatch.val_inv cde iface labelsP).
 
-(** The compiler's leaf cases, read off [ei_comp]. Stated separately because
-    casing on [v] inside the diagram is blocked — the [expr_inv] hypothesis
-    mentions it. *)
 Lemma compile_val_int C plm v s1 c s2 :
   compile_expr C (lbp C) (scr C) plm (E_val v) s1 = Some (c, s2) ->
   exists i, v = Int i /\ c = [:: IConst (IInt i) R_COM].
@@ -94,8 +60,6 @@ Lemma compile_local C plm s1 c s2 :
   c = [:: IConst (IPtr (lbp C)) R_COM].
 Proof. by move=> /= [<- _]. Qed.
 
-(** The residual code of an [expr_inv] is nonempty, so the single-instruction
-    leaves have a successor cell and their [check_pc] discharges. *)
 Lemma ei_rest_cons a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb
       prot temps plm c rest s1 s2 cap :
   expr_inv a scrs C stk mem k e arg ret rtag Sl tmem tregs pct pc fb prot
@@ -105,9 +69,6 @@ Proof.
   move=> H. exact: (TDrain.cont_matchJ_cons (TMatch.ei_cont H)).
 Qed.
 
-(* ================================================================== *)
-(* [E_val] — one [IConst]                                             *)
-(* ================================================================== *)
 
 Lemma leaf_val_run a scrs C stk mem k v arg ret rtag Sl tmem tregs pct pc fb
       prot temps plm c rest s1 s2 cap :
@@ -129,7 +90,7 @@ Proof.
                  (IConst (IInt i) R_COM :: i0 :: r0).
   { move: (TMatch.ei_code HI). by rewrite Ec Er. }
   exists i. rewrite Ev. split=> //.
-  - (* [TS.Const]'s result is [imm_to_val v], stuck on a variable under eapply *)
+  -
     have -> : Int i = imm_to_val (IInt i) by [].
     eapply TS.Const; [exact: (TMacros.code_at_I_head Hcode)
                      | exact: (TMacros.check_pc_at_I Hcode)].
@@ -161,9 +122,6 @@ Proof.
       exact: TMatch.ei_tag HI.
 Qed.
 
-(* ================================================================== *)
-(* [E_arg] — one [IMov], which writes both registers                  *)
-(* ================================================================== *)
 
 Lemma leaf_arg_run a scrs C stk mem k arg ret rtag Sl tmem tregs pct pc fb
       prot temps plm c rest s1 s2 cap :
@@ -184,12 +142,10 @@ Proof.
   have Ec := compile_arg (TMatch.ei_comp HI).
   have Hcode : TMacros.code_at_I cde C pc (IMov R_ARG R_COM :: i0 :: r0).
   { move: (TMatch.ei_code HI). by rewrite Ec Er. }
-  (* the source register is data, so the [Mov]'s retag is [Other] *)
   have Ht : tvtag (Transitional.Register.get R_ARG tregs) = Other.
   { apply: (TInv.ti_regs (TMatch.ei_tag HI)). by []. }
   rewrite /=. split.
-  - (* [mem]/[regs]/[pct] are not inferable from [Mov]'s premises, so they are
-       explicit; and the rule's retag must be reduced before it will match *)
+  -
     move: (TS.Mov tmem tregs pct (TMacros.code_at_I_head Hcode)
                   (TMacros.check_pc_at_I Hcode)).
     rewrite Ht. exact: id.
@@ -223,9 +179,6 @@ Proof.
       exact: TMatch.ei_tag HI.
 Qed.
 
-(* ================================================================== *)
-(* [E_local] — one [IConst] of the local-buffer pointer               *)
-(* ================================================================== *)
 
 Lemma leaf_local_run a scrs C stk mem k arg ret rtag Sl tmem tregs pct pc fb
       prot temps plm c rest s1 s2 cap :

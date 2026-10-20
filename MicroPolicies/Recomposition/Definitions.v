@@ -119,9 +119,6 @@ Record well_formed_program (p: program) := {
                          exists v, nth_error (code p) 0 = Some v /\ color (snd v) = Component.main *)
   }.
 
-(* [find_rank] (first-match index) is S-independent; kept GLOBAL so the lifted alignment
-   hypothesis [align_find_rank_main_right] (in [AlignmentFacts]) refers to the SAME constant as
-   [RecInit]'s body (avoids module-functor generativity making two instances non-convertible). *)
 Fixpoint find_rank' {T} (f: pred T) (l: seq T) (n: nat) : option nat :=
   match l with
   | [] => None
@@ -150,22 +147,11 @@ Module Type RecompositionContext.
   Axiom Hprog_is_closed  : closed_program (program_link p  c ).
   Axiom Hprog_is_closed' : closed_program (program_link p' c').
 
-  (* Component ids fit in the NC-bit prefix field: there are at most 2^NC - 1 components, so
-     every interface component [x] has [1 + x < 2^NC].  This is what makes the component-prefix
-     scheme injective ([component_memory_prefix] puts [1+x] in the top NC bits) and hence
-     [memory_prefix_condition'] sound — without it the prefixes wrap. *)
   Axiom colors_bounded : forall x,
     (x \in domm (prog_interface p)) || (x \in domm (prog_interface c)) -> 1 + x < 2 ^ NC.
 
-  (* The component-prefix field (top [NC] bits) fits below the word width: needed so the prefix
-     shift [word_size - NC] is non-degenerate (it is an INT subtraction in [component_memory_prefix],
-     hence a huge shift zeroing everything when [NC > word_size]).  Used by the [LRC] prefix lemmas
-     [component_memory_prefix_succ_not_zero]/[_inj]/[mask_range]. *)
   Axiom NC_lt_word : NC < word_size mt.
 
-  (* The allocator label [2^14] sits strictly below the per-component offset window
-     [2^(word_size - NC)] (so it masks to 0 and never collides with a real address).  For the
-     concrete 32-bit machine this is [NC < 18].  Used by [mask_alloc_label]. *)
   Axiom alloc_label_lt_word_NC : alloc_label < expn 2 (word_size mt - NC).
 
 End RecompositionContext.
@@ -339,7 +325,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
       end.
 
     Definition stack_value := Types.atom (Types.mword mt) value_tag.
-    (* [find_rank']/[find_rank] are now GLOBAL (above [RecompositionContext]). *)
 
 
     (* [p0 prog C] finds the first location of
@@ -348,10 +333,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
       do! start <- find_rank (fun '(_,tag) => color tag == comp) (code prog);
       Some (start + size (domm (@initial_memory mt (prog_buffers prog)))).
 
-    (* Faithful (possibly NEGATIVE) int differences of code base positions.
-       NOT via [encode_int]: it is off-by-one on negatives ([Z.neg n => Negz (nat_of_pos n)]
-       and [Negz m = -(m+1)]).  [int_diff a b] (OffsetWord.v) is a [simpl never] wrapper of
-       [(Posz a - Posz b)%R]; convert with [int_diffE]. *)
     Definition offset1: NMap ssrint.int :=
       mkfmapfp (fun comp =>
                   do! p_s3 <- p0 prog'' comp;
@@ -366,7 +347,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
                   Some (int_diff p_s3 p_s2))
         (domm ic).
 
-    (* [find_rank] succeeds whenever some element satisfies the predicate. *)
     Lemma find_rank'_isSome {T} (f: pred T) l :
       forall n, has f l -> isSome (find_rank' f l n).
     Proof.
@@ -378,7 +358,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
       has f l -> isSome (find_rank f l).
     Proof. exact: find_rank'_isSome. Qed.
 
-    (* If some code entry of [a] is coloured [k], then [p0 a k] resolves. *)
     Lemma p0_has_isSome (a: program) k :
       has (fun '(_, tag) => color tag == k) (code a) -> isSome (p0 a k).
     Proof.
@@ -386,7 +365,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
       by case: (find_rank (fun '(_, tag) => color tag == k) (code a)) => [x|].
     Qed.
 
-    (* Every component of a well-formed program's interface colours some code entry. *)
     Lemma wf_color_has (a: program) k :
       well_formed_program a -> k \in domm (prog_interface a) ->
       has (fun '(_, tag) => color tag == k) (code a).
@@ -504,8 +482,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
              end)
     .
 
-    (* Rocq 9.1.1: abbreviations no longer accept #[export]; plain [Notation]
-       abbreviations are Import-visible anyway. *)
     Notation data := (Types.atom (Types.mword mt) mem_tag).
 
     Variant data_match_variant (i: side) (comp: Component.id) (m: metadata): stack_value -> stack_value -> Prop :=
@@ -582,14 +558,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
         ((regs s' w) = Some d -> exists d', data_match i (color_of s) m d' d /\ (regs s  w) = Some d') /\
           ((regs s  w) = Some d -> exists d', data_match i (color_of s) m d d' /\ (regs s' w) = Some d').
 
-    (* General-offset strengthenings (each first field is now a CONJUNCTION so existing
-       destruct arities keep parsing):
-       - [same_pc_alloc] also records the s'-side pc-cell is empty: with off <> 0 the
-         backward alloc corners can no longer be refuted via offset-zero arithmetic, but
-         the s'-side [None] contradicts the reflected pc-cell directly.
-       - [same_pc_normal] also records the pc-cell is CODE: a running-colour DATA pc-cell
-         would make backward reflection of the Syscall corner unprovable at off <> 0
-         (data addresses are NOT offset-shifted, so [memory_match] yields no clash). *)
     Variant same_pc (i: side): state -> state -> Prop :=
       | same_pc_alloc: forall s s',
           vala (pc s) = vala (pc s') ->
@@ -602,15 +570,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
           same_pc i s s'
     .
 
-    (* [decode_match] carries the PAIR's side [i] (a PARAMETER — constructor arities unchanged).
-       The JAL-target offset equation is GUARDED by "the target's side = the pair's side":
-       a cross-side call cell ([MrJal] whose label resolves in the OTHER side) encodes
-       layout-dependent immediates in the two linked programs — no per-component offset relates
-       them — and no step proof uses the equation for such cells: silent JALs are intra-component
-       (the LRC [belong] gate), and cross-component calls are EVENTS whose target correspondence
-       flows through the side-guarded [entry_points_offset].  The unguarded fields (target cells
-       exist on both sides, are code, and have EQUAL TAGS) are what the event machinery consumes;
-       they hold for cross-side targets because entry tags are interface-determined. *)
     Variant decode_match (i: side) (mem: @memory mt) (mem': @memory mt) v v': Prop :=
       | decode_match_no_JAL:
         (forall imm, decode_instr v <> Some (Jal imm)) ->
@@ -745,10 +704,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
         is_code (taga d)
     .
 
-    (* code cells always carry the [Other] value-tag (instructions are never capabilities/addresses):
-       [encode_code] tags them [Other], STORE refuses to write code cells, and a LOAD's re-tag of a
-       code cell is therefore the identity.  Needed so the LOAD case leaves the matched
-       [combined_codes] code tags untouched. *)
     Definition code_vtag_other (mem: @memory mt) :=
       forall w d,
         mem w = Some d ->
@@ -795,11 +750,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
       | None => True
       end.
 
-    (* The pc points into the RUNNING component's code: if the cell the pc currently addresses is a
-       code cell, its colour is the pc-tag colour [color_of s].  Enforced dynamically at every step
-       by the LRC [check_belong current tni] guard (tni = tag of the new-pc cell) — so it is preserved
-       by every silent/event step — but never previously recorded as a state invariant, which is why
-       the final-state correspondence (you can only halt in your own code) could not be derived. *)
     Definition pc_code_color (s: state) : Prop :=
       forall d, mem s (vala (pc s)) = Some d -> is_code (taga d) -> color (taga d) = color_of s.
 
@@ -820,11 +770,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
           capability_correctness m WS_S3 s3 ->
           combined_codes Left  s1 s3 ->
           combined_codes Right s2 s3 ->
-          (* the running component [c] (shared pc-tag colour of all three runs) is a real
-             component of the system.  On the LEFT this is free from [side_of c = Left]
-             (definitionally [c \in ip]); on the RIGHT [side_of c = Right] only gives
-             [c \notin ip], so we must carry the validity explicitly.  Used e.g. by
-             [alloc_fun_common] to bound [1 + c < 2^NC] via [colors_bounded]. *)
           (c \in domm ip) || (c \in domm ic) ->
           pc_code_color s1 ->
           pc_code_color s2 ->
@@ -853,7 +798,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
           memory_address_correctness i s ->
           memory_address_correctness i s' ->
           entry_points_offset i (mem s) (mem s') ->
-          (* register_address_correctness i s' -> *)
           memory_match i m s s' ->
           weak_equiv i m s s'
     .
@@ -861,7 +805,6 @@ Module RecompositionDefinitions (S: RecompositionContext).
 
   End SimulationRelations.
 
-  (* Rocq 9.1.1: abbreviations no longer accept #[export]. *)
   Notation match_states := (match_states sem sem' sem'' (common_equiv)
     (strong_equiv Left) (strong_equiv Right) (weak_equiv Left) (weak_equiv Right)).
 
@@ -1068,15 +1011,9 @@ Module RecompositionDefinitions (S: RecompositionContext).
 
 End RecompositionDefinitions.
 
-(* The label-definition predicate used throughout the label machinery. *)
 Definition is_label_def (l : Machine.label) : pred (@Merged.instr mt * mem_tag) :=
   fun pc => match pc.1 with MrLabel l0 => l == l0 | _ => false end.
 
-(* Per-program LINEARIZER-OUTPUT well-formedness: the code-shape facts any correct
-   Merged-code emitter guarantees.  [low_jal_local_or_foreign]: a (non-alloc) JAL label
-   either resolves in the program itself (intra-side call/jump) or is a FOREIGN entry
-   label — not defined here, target colour outside this interface (a cross-side call,
-   related across runs by the LinearizerFacts [jal_cross_*] fields below). *)
 Record lin_output_wf (a : program) : Prop := {
   low_tags : forall i t, List.In (i, t) (code a) -> is_code t = true /\ vtag t = Other;
   low_colors : forall i t, List.In (i, t) (code a) -> color t \in domm (prog_interface a);
@@ -1084,7 +1021,6 @@ Record lin_output_wf (a : program) : Prop := {
       nth_error (code a) n = Some (@MrBnz mt r l, t) ->
       exists m, findopt (is_label_def l) (code a) = Some m;
   low_no_alloc : findopt (is_label_def alloc_label) (code a) = None;
-  (* the entry tag is a FUNCTION of (colour, procedure id) — head_tag is interface-determined *)
   low_entry_det : forall i1 t1 i2 t2 e1 e2,
       List.In (i1, t1) (code a) -> List.In (i2, t2) (code a) ->
       color t1 = color t2 -> entry t1 = Some e1 -> entry t2 = Some e2 -> e1.1 = e2.1 ->
@@ -1093,14 +1029,6 @@ Record lin_output_wf (a : program) : Prop := {
       \/ exists t, nth_error (code a) (size (code a) - 1) = Some (@MrHalt mt, t)
 }.
 
-(* LINEARIZER-OUTPUT facts about the QUADRUPLE (replaces the old AlignmentFacts; the
-   alignment axioms are gone — see the general-offset refactor).
-   [prog]/[prog']/[prog''] are Local in [RecompositionDefinitions] ⇒ inline [program_link];
-   [p c p' c'] come from [Import D] (which [Export]s S); [find_rank]/[findopt] are global.
-   The [jal_cross_*] fields service CROSS-SIDE calls: a JAL sitting in the pair's shared
-   segment whose label is foreign resolves, in BOTH runs of the pair, to entry cells with
-   the SAME (interface-determined) tag of the other side's colour — the exact inputs of
-   [decode_match_JAL]'s unguarded fields. *)
 Module Type LinearizerFacts (S: RecompositionContext).
   Module D := RecompositionDefinitions S.
   Import D.
@@ -1115,16 +1043,11 @@ Module Type LinearizerFacts (S: RecompositionContext).
     findopt (is_label_def l) (code c) = None
     /\ findopt (is_label_def l) (code c') = None.
 
-  (* Suffix labels are the suffix's own: a label defined in c or c' is not defined in the
-     other programs it links against (mirror of [labels_disjoint_prefix]). *)
   Axiom labels_disjoint_suffix : forall l,
     findopt (is_label_def l) (code c') <> None ->
     findopt (is_label_def l) (code p) = None
     /\ findopt (is_label_def l) (code p') = None.
 
-  (* Cross-side calls out of the shared PREFIX [p] (Left pair: prog vs prog''): a foreign
-     JAL label of [p] is defined in BOTH [c] and [c'], at CODE entry cells with the SAME
-     tag, coloured in [ic]. *)
   Axiom jal_cross_p : forall n l t,
     nth_error (code p) n = Some (@MrJal mt l, t) -> l <> alloc_label ->
     findopt (is_label_def l) (code p) = None ->
@@ -1134,9 +1057,6 @@ Module Type LinearizerFacts (S: RecompositionContext).
           nth_error (code c) mc = Some (ic_, tc) /\ nth_error (code c') mc' = Some (i_, tc)
         & is_code tc /\ color tc \in domm (prog_interface c)].
 
-  (* Cross-side calls out of the shared SUFFIX [c'] (Right pair: prog' vs prog''): a
-     foreign JAL label of [c'] is defined in BOTH [p'] and [p], at CODE entry cells with
-     the SAME tag, coloured in [ip]. *)
   Axiom jal_cross_c' : forall n l t,
     nth_error (code c') n = Some (@MrJal mt l, t) -> l <> alloc_label ->
     findopt (is_label_def l) (code c') = None ->
@@ -1146,9 +1066,6 @@ Module Type LinearizerFacts (S: RecompositionContext).
           nth_error (code p') mp' = Some (ip_, tp) /\ nth_error (code p) mp = Some (i_, tp)
         & is_code tp /\ color tp \in domm (prog_interface p)].
 
-  (* One-program cross fields for the segments appearing in a SINGLE run: foreign JAL labels
-     of [p'] resolve in [c'] (inside prog'), and foreign JAL labels of [c] resolve in [p]
-     (inside prog). *)
   Axiom jal_cross_p'one : forall n l t,
     nth_error (code p') n = Some (@MrJal mt l, t) -> l <> alloc_label ->
     findopt (is_label_def l) (code p') = None ->
@@ -1158,9 +1075,6 @@ Module Type LinearizerFacts (S: RecompositionContext).
     findopt (is_label_def l) (code c) = None ->
     exists m, findopt (is_label_def l) (code p) = Some m.
 
-  (* Program-size premises, stated on the PRE-COLLAPSE buffer totals (this is what makes
-     [initial_memory_domm] provable — see BufferLayout.v); RecInit re-derives the old
-     [size (initial_memory _)]-based forms under their old names. *)
   Axiom memory_size_lin :
     size (linearize_bufs (unionm (prog_buffers p) (prog_buffers c)))
       + size (code p ++ code c) < alloc_label.
@@ -1171,15 +1085,8 @@ Module Type LinearizerFacts (S: RecompositionContext).
     size (linearize_bufs (unionm (prog_buffers p) (prog_buffers c')))
       + size (code p ++ code c') < alloc_label.
 
-  (* The primed programs need only reproduce the buffer LAYOUT (block
-     domains and sizes): the flat data segment's addresses, total size, and
-     pointer concretization are shape-determined (BufferShape.v), and the
-     memory relations only value-compare the matched sides' cells.  Content
-     equality was never needed — and the back-translated programs cannot
-     provide it. *)
   Axiom bufs_shape_p_p' : bufs_shape (prog_buffers p) = bufs_shape (prog_buffers p').
   Axiom bufs_shape_c_c' : bufs_shape (prog_buffers c) = bufs_shape (prog_buffers c').
 End LinearizerFacts.
 
-(* Backward-compatibility alias while the functor headers migrate. *)
 Module Type AlignmentFacts := LinearizerFacts.

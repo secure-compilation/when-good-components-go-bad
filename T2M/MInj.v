@@ -1,8 +1,3 @@
-(** * The memory injection: relates T's structured memory
-    ([Transitional.Memory.t]) to the me machine's flat word-addressed
-    memory.  Provides [vrel]/[amap_ok]/[minj], the initial map [amap0],
-    and the load/store/alloc preservation lemmas. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Maps.
@@ -35,25 +30,18 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* code-address map: component × code index ↦ me flat address (static;
-   code never moves), instantiated by the linked-layout position map *)
 Definition cmap_t := Component.id -> nat -> option nat.
 
 Section Injection.
 Variable pb : NMap {fmap Block.id -> nat + seq value}.
 Variable cmap : cmap_t.
 
-(* ================================================================== *)
-(* 1. The address map.                                                *)
-(* ================================================================== *)
 
-(* component ↦ T block id ↦ me base address *)
 Definition amap_t := NMap (NMap nat).
 
 Definition addr_of (amap : amap_t) (c b : nat) : option nat :=
   obind (getm ^~ b) (getm amap c).
 
-(* the INITIAL address map: exactly the static bases *)
 Definition amap0 : amap_t :=
   mapim (fun c bmap => mapim (fun b _ => bl_base pb c b) bmap) pb.
 
@@ -77,12 +65,7 @@ case Hb: (bmap b) => [bf|] //= [<-].
 by exists bmap, bf.
 Qed.
 
-(* ================================================================== *)
-(* 2. The value relation.                                             *)
-(* ================================================================== *)
 
-(* the word decodes to z via the composite me's event payloads use
-   ([Symbolic.evi]), so payload agreement is definitional *)
 Definition wrepr (z : Z) (w : mword mt) : Prop :=
   Symbolic.convert (int_of_word w) = z.
 
@@ -98,10 +81,6 @@ Variant vrel (amap : amap_t) : value -> mword mt -> Prop :=
 | VRUndef w :
     vrel amap Undef w.
 
-(* code capabilities: a T value tagged [InternalJump]/[Ret _] is a
-   pointer into code; its me image is the flat code address via [cmap].
-   [Invalidated] values are dead, hence unconstrained.  The tag
-   dispatches the interpretation. *)
 Definition code_rel (v : value) (w : mword mt) : Prop :=
   exists cp bp op pos,
     [/\ v = Ptr (cp, bp, op),
@@ -117,17 +96,12 @@ Definition tvrel (amap : amap_t)
   | Invalidated => True
   end.
 
-(* per-cell relation: tvalues related, mem tags equal, and the T-side
-   tvalue/mem-tag sync [vtag t.2 = tvtag t.1] *)
 Definition cellrel (amap : amap_t)
     (tc : Transitional.tvalue * mem_tag) (mc : matom) : Prop :=
   [/\ tvrel amap tc.1 (vala mc),
       taga mc = tc.2
     & vtag tc.2 = Transitional.tvtag tc.1].
 
-(* an event-clobbered cell: T records [tUndef]/vtag [Other] but me
-   records [Invalidated] (other tag fields equal).  Written at cross
-   entries; [amap]-free, so it transports over store/alloc updates. *)
 Definition clobcell (tc : Transitional.tvalue * mem_tag)
     (mc : @matom mt) : Prop :=
   [/\ tc.1 = Transitional.tUndef,
@@ -137,14 +111,10 @@ Definition clobcell (tc : Transitional.tvalue * mem_tag)
          entry (taga mc) = entry tc.2
        & is_code (taga mc) = is_code tc.2].
 
-(* the weakened per-cell relation carried by [mj_cell] *)
 Definition cellrelw (amap : amap_t)
     (tc : Transitional.tvalue * mem_tag) (mc : matom) : Prop :=
   cellrel amap tc mc \/ clobcell tc mc.
 
-(* ================================================================== *)
-(* 3. Address-map well-formedness.                                    *)
-(* ================================================================== *)
 
 Definition block_size (tmem : Transitional.Memory.t) (c b : nat) : option nat :=
   match tmem c with
@@ -174,9 +144,6 @@ Record amap_ok (amap : amap_t) (tmem : Transitional.Memory.t) : Prop := {  aok_s
       b < Transitional.Memory.nextblock cm
 }.
 
-(* ================================================================== *)
-(* 4. The memory injection.                                           *)
-(* ================================================================== *)
 
 Record minj (amap : amap_t)
     (tmem : Transitional.Memory.t)
@@ -199,11 +166,6 @@ Record minj (amap : amap_t)
 
 End Injection.
 
-(* ================================================================== *)
-(* 5. The signed round-trip: [int_of_word ∘ as_word] is the identity  *)
-(*    on the signed window (stated over an abstract width so [simpl]   *)
-(*    can't evaluate [2 ^ 32] in unary).                              *)
-(* ================================================================== *)
 
 Section WordRoundTrip.
 
@@ -216,8 +178,6 @@ Proof. by rewrite ltn_exp2l // -{2}(prednK k_gt0). Qed.
 Lemma exp_halfE : 2 ^ k = 2 ^ k.-1 + 2 ^ k.-1.
 Proof. by rewrite addnn -mul2n -expnS (prednK k_gt0). Qed.
 
-(* [Transitional.val] shadows the subtype projection here, so the
-   ordinal value is spelled with eqtype's [\val] notation *)
 Lemma val_as_word_neg (m : nat) :
   m < 2 ^ k ->
   \val (word.as_word (ssrint.Negz m) : word.word k) = (2 ^ k - m.+1)%N :> nat.
@@ -260,18 +220,11 @@ Qed.
 
 End WordRoundTrip.
 
-(* ================================================================== *)
-(* 6. The encoding kernel: buffer values land, related, in the data   *)
-(*    segment; [encode_int] is faithful on the whole signed window.   *)
-(* ================================================================== *)
 
 Lemma encode_int_neg (n : nat) :
   Merged.encode_int (BinInt.Z.opp (Z.of_nat n.+1)) = ssrint.Negz n.
 Proof. by rewrite /= nat_of_pos_succ. Qed.
 
-(* lia treats [Z.pow]/[expn] as opaque atoms, so [Z.pow 2 31] and the
-   nat [2 ^ 31] must be bridged explicitly; proved by induction, never
-   computed (unary [2 ^ 31] would hang the kernel) *)
 Lemma expn_Zpow (n : nat) : Z.of_nat (2 ^ n) = BinInt.Z.pow 2 (Z.of_nat n).
 Proof.
 elim: n => [//|n IH].
@@ -283,7 +236,6 @@ Qed.
 Lemma expn_Zpow31 : Z.of_nat (2 ^ 31) = BinInt.Z.pow 2 31.
 Proof. by rewrite expn_Zpow. Qed.
 
-(* the composite the me machine observes values through gives back z *)
 Lemma wrepr_encode_int (z : Z) :
   MDefs.int_fits z ->
   wrepr z (word.as_word (Merged.encode_int z) : mword mt).
@@ -307,7 +259,6 @@ case: (ZArith_dec.Z_lt_le_dec z 0) => Hsgn.
   by rewrite (int_of_word_as_word_pos Hk Hn).
 Qed.
 
-(* the me-side encoding of an in-buffer pointer IS flat base + offset *)
 Lemma me_encode_val_ptr (pb : NMap {fmap Block.id -> nat + seq value})
     (c' b' : nat) (o' : Z) :
   BinInt.Z.le 0 o' ->
@@ -326,9 +277,6 @@ congr word.as_word; congr ssrint.Posz.
 by lia.
 Qed.
 
-(* ================================================================== *)
-(* 7. Little list inversions (Forall-free, List.In-free).             *)
-(* ================================================================== *)
 
 Lemma nth_error_nthE (A : Type) (l : seq A) n (v : A) :
   List.nth_error l n = Some v -> nth None [seq Some x | x <- l] n = Some v.
@@ -354,11 +302,6 @@ elim: l n => [|a l IH] [|n] //=.
 - exact: IH.
 Qed.
 
-(* ================================================================== *)
-(* 8. The initial correspondence: [minj (amap0 pb)] holds between the *)
-(*    two machines' initial memories, given the fit condition on the  *)
-(*    initial buffer contents.                                        *)
-(* ================================================================== *)
 
 Section InitialCorrespondence.
 
@@ -376,9 +319,6 @@ Local Notation mmem0 :=
   (unionm (encode_code cde (size (initial_memory (mt := mt) pb)))
           (initial_memory (mt := mt) pb)).
 
-(* -------- the T side: what [prepare_procedures_initial_memory] lays down *)
-
-(* reserving procedure blocks only bumps [nextblock] *)
 Lemma reserve_blocks_content m n :
   Transitional.Memory.content (Transitional.Memory.reserve_blocks m n).1
   = Transitional.Memory.content m.
@@ -397,7 +337,6 @@ case E: (Transitional.Memory.reserve_blocks m n) IH => [m' bs] /= IH.
 by lia.
 Qed.
 
-(* the per-component initial memory IS a reserve-over-prealloc *)
 Lemma t_init_shape C cm :
   tmem0 C = Some cm ->
   exists k0,
@@ -466,7 +405,6 @@ rewrite reserve_blocks_content /Transitional.Memory.prealloc /=.
 by rewrite Hpb.
 Qed.
 
-(* every initial block id is below its component's next-block counter *)
 Lemma t_init_next C cm b blk :
   tmem0 C = Some cm ->
   getm (Transitional.Memory.content cm) b = Some blk ->
@@ -486,7 +424,6 @@ apply: fold_left_max_in.
 by rewrite domm_map.
 Qed.
 
-(* every declared block EXISTS in the initial memory (for [aok_dom]) *)
 Lemma t_init_exists C bmap b bf :
   pb C = Some bmap -> bmap b = Some bf ->
   exists cm blk,
@@ -575,8 +512,6 @@ case: bf Hblk Hlin Hbf => [n|l] Hblk Hlin Hbf.
   exact: (List.map_nth_error (fun v => (v, def_mem_tag C false)) _ _ Hx).
 Qed.
 
-(* -------- the me side: the same cell, at the flat address *)
-
 Lemma me_init_cell C b o v :
   linearize_bufs pb (C, b, o) = Some (v, def_mem_tag C false) ->
   mmem0 (@word_of_nat (word_size mt) (nat_addr pb (C, b, o)))
@@ -589,8 +524,6 @@ have Hget := initial_memory_getm Htot Hlin.
 apply: me_init_data_fetch => //.
 by apply/dommP; eexists; exact: Hlin.
 Qed.
-
-(* -------- the theorem *)
 
 Theorem minj_init :
   (forall c cm b blk o cell,
@@ -678,10 +611,6 @@ Qed.
 
 End InitialCorrespondence.
 
-(* ================================================================== *)
-(* 9. LOAD preservation: a successful T load surfaces, related, at    *)
-(*    the flat address.                                               *)
-(* ================================================================== *)
 
 Lemma minj_load (pb : NMap {fmap Block.id -> nat + seq value})
     (cmap : cmap_t)
@@ -710,11 +639,6 @@ have Hd := mj_data Hinj Hc Hb Hcell Ha Hmc.
 by exists a, mc.
 Qed.
 
-(* ================================================================== *)
-(* 10. STORE preservation: writing a related cell at its flat address *)
-(*     preserves the injection; other cells are untouched because     *)
-(*     in-range flat addresses are word-injective.                    *)
-(* ================================================================== *)
 
 Lemma list_upd_size (A : Type) (l : seq A) k (x : A) l' :
   list_upd l k x = Some l' -> size l' = size l.
@@ -733,7 +657,6 @@ case E: (list_upd l k x) => [l''|] // _.
 by rewrite ltnS (IH _ _ E).
 Qed.
 
-(* nth_error's index bound, in ssr form *)
 Lemma nth_error_lt (A : Type) (l : seq A) n (x : A) :
   List.nth_error l n = Some x -> n < size l.
 Proof.
@@ -746,7 +669,6 @@ Section StorePreservation.
 Variable pb : NMap {fmap Block.id -> nat + seq value}.
 Variable cmap : cmap_t.
 
-(* in-range flat addresses of DIFFERENT blocks are different words *)
 Lemma addr_sep_blocks (amap : amap_t) (tmem : Transitional.Memory.t)
     c1 b1 a1 n1 o1 c2 b2 a2 n2 o2 :
   amap_ok pb amap tmem ->
@@ -768,7 +690,6 @@ have HE := won_inj Hlt1 Hlt2 Ew.
 by case: Hd => H; lia.
 Qed.
 
-(* distinct in-range offsets of the SAME block are different words *)
 Lemma addr_sep_offs (amap : amap_t) (tmem : Transitional.Memory.t)
     c b a n o1 o2 :
   amap_ok pb amap tmem ->
@@ -961,11 +882,6 @@ Qed.
 
 End StorePreservation.
 
-(* ================================================================== *)
-(* 11. ALLOC preparation: the address-map extension is monotone: the  *)
-(*     fresh block id is unmapped, so existing relation facts          *)
-(*     transport verbatim.                                            *)
-(* ================================================================== *)
 
 Definition amap_upd (amap : amap_t) (c b base : nat) : amap_t :=
   setm amap c (setm (odflt emptym (amap c)) b base).
@@ -1027,8 +943,6 @@ Section AllocPreservation.
 Variable pb : NMap {fmap Block.id -> nat + seq value}.
 Variable cmap : cmap_t.
 
-(* -------- list toolbox -------- *)
-
 Lemma nth_error_lt_ex (A : Type) (l : seq A) o :
   o < size l -> exists x, List.nth_error l o = Some x.
 Proof.
@@ -1047,7 +961,6 @@ Qed.
 Lemma size_repeat (A : Type) (x : A) n : size (List.repeat x n) = n.
 Proof. by elim: n => //= n ->. Qed.
 
-(* looking up the flat fresh segment *)
 Lemma mkfmap_seg_lookup (x : atom (mword mt) mem_tag) (base st n o : nat) :
   base + (st + n) <= 2 ^ word_size mt ->
   st <= o < st + n ->
@@ -1071,8 +984,6 @@ elim: n st => [|n IH] st Hbnd /andP[Ho1 Ho2].
     * by lia.
     * apply/andP; split; by lia.
 Qed.
-
-(* -------- the theorem -------- *)
 
 Theorem minj_alloc (amap : amap_t) (tmem : Transitional.Memory.t)
     (mmem : {fmap mword mt -> matom}) (c : Component.id)

@@ -1,7 +1,3 @@
-(* RSC^DC_MD for the micro-policy machine backend: [RSC_MP (K) (X)] proves the
-   RSC^DC_MD conclusion for a model [K : MPCompilerSig] of the linearizer
-   correctness and an instance [X : RSC_MP_Input K] of the theorem premises. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -1058,7 +1054,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
       by [].
   Qed.
 
-  (* Main theorem *)
   Theorem RSC_DC_MD_MP :
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface X.Ct /\

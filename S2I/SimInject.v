@@ -1,16 +1,3 @@
-(* Block-renaming injections for the S2I forward simulation (FCC).
-
-   Source and compiled programs allocate DIFFERENT block ids for the same
-   source-level allocation: the compiled code additionally allocates stack
-   frames, and its static layout adds the hidden calling-convention block 1.
-   The simulation therefore relates memories through a per-component partial
-   INJECTIVE block renaming [α] that is the identity on the static-buffer
-   block [Block.local] of EVERY component — so static-buffer pointer
-   literals (the only pointers well-formed buffers may contain, see
-   [Source.well_formed_buffer]) relate to themselves.
-
-   The layer is language-agnostic: it only speaks about [Common.Memory]. *)
-
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
@@ -22,8 +9,6 @@ From extructures Require Import ord fset fmap.
 Set Bullet Behavior "Strict Subproofs".
 Local Open Scope fset_scope.
 
-(* ==================== renamings ==================== *)
-
 Definition renaming := Component.id -> Block.id -> option Block.id.
 
 Record inj_ok (α : renaming) : Prop := InjOk {
@@ -32,7 +17,6 @@ Record inj_ok (α : renaming) : Prop := InjOk {
       α C b1 = Some b' -> α C b2 = Some b' -> b1 = b2
 }.
 
-(* the initial renaming: only the static buffer blocks, identically *)
 Definition init_renaming : renaming :=
   fun C b => if b == Block.local then Some Block.local else None.
 
@@ -44,11 +28,9 @@ Proof.
     by case: (b1 =P Block.local) => [->|] //; case: (b2 =P Block.local) => [->|].
 Qed.
 
-(* extension with one fresh pair *)
 Definition extend (α : renaming) (C : Component.id) (b b' : Block.id) : renaming :=
   fun C0 b0 => if (C0 == C) && (b0 == b) then Some b' else α C0 b0.
 
-(* renaming inclusion *)
 Definition rle (α α' : renaming) : Prop :=
   forall C b b', α C b = Some b' -> α' C b = Some b'.
 
@@ -91,8 +73,6 @@ Proof.
     + exact: Hinj.
 Qed.
 
-(* ==================== the value relation ==================== *)
-
 Inductive val_inject (α : renaming) : value -> value -> Prop :=
 | VI_int : forall z, val_inject α (Int z) (Int z)
 | VI_ptr : forall C b b' o,
@@ -115,7 +95,6 @@ Proof.
   exact: Hle Ha.
 Qed.
 
-(* block-equality tests transfer along an injective renaming *)
 Lemma inj_block_eqb {α C b1 b2 b1' b2'} :
   inj_ok α ->
   α C b1 = Some b1' -> α C b2 = Some b2' ->
@@ -128,7 +107,6 @@ Proof.
   - subst b2'. by case: (NE (Hinj _ _ _ _ H1 H2)).
 Qed.
 
-(* THE closure fact: [eval_binop] respects the relation. *)
 Lemma eval_binop_inject α op v1 v1' v2 v2' :
   inj_ok α ->
   val_inject α v1 v1' -> val_inject α v2 v2' ->
@@ -137,26 +115,21 @@ Proof.
   move=> Hok H1 H2.
   case: H1 => [z1|C1 b1 b1' o1 Ha1|]; case: H2 => [z2|C2 b2 b2' o2 Ha2|];
     case: op => //=; try by constructor.
-  (* Ptr/Ptr: Minus *)
   - case: (PeanoNat.Nat.eqb_spec C1 C2) => [EC|NC] /=; last by constructor.
     subst C2.
     rewrite (inj_block_eqb Hok Ha1 Ha2).
     case: (Nat.eqb b1' b2') => /=; by constructor.
-  (* Ptr/Ptr: Eq *)
   - rewrite /Pointer.eq.
     case: (PeanoNat.Nat.eqb_spec C1 C2) => [EC|NC] /=; last by constructor.
     subst C2.
     rewrite (inj_block_eqb Hok Ha1 Ha2).
     case: (Nat.eqb b1' b2') => /=; by constructor.
-  (* Ptr/Ptr: Leq *)
   - rewrite /Pointer.leq.
     case: (PeanoNat.Nat.eqb_spec C1 C2) => [EC|NC] /=; last by constructor.
     subst C2.
     rewrite (inj_block_eqb Hok Ha1 Ha2).
     case: (Nat.eqb b1' b2') => /=; by constructor.
 Qed.
-
-(* ==================== the memory relation ==================== *)
 
 Definition option_rel {A B : Type} (R : A -> B -> Prop)
            (x : option A) (y : option B) : Prop :=
@@ -184,7 +157,6 @@ Record mem_inject (α : renaming) (ms mt : Memory.t) : Prop := MemInject {
                  (Memory.load ms (C, b, i)) (Memory.load mt (C, b', i))
 }.
 
-(* ---- small fmap helper ---- *)
 Lemma domm_setm_existing {T : ordType} {S : Type}
       {m : {fmap T -> S}} {k} {v v0 : S} :
   getm m k = Some v0 -> domm (setm m k v) = domm m.
@@ -193,7 +165,6 @@ Proof.
   case: (x =P k) => [->|] //=. by rewrite mem_domm Hk.
 Qed.
 
-(* Memory-level: a successful store implies the cell was loadable. *)
 Lemma store_some_load_some {ms ptr v ms'} :
   Memory.store ms ptr v = Some ms' ->
   exists w, Memory.load ms ptr = Some w.
@@ -204,8 +175,6 @@ Proof.
     => [cm'|] // _.
   exact: ComponentMemory.store_load Hs.
 Qed.
-
-(* ==================== load transfer ==================== *)
 
 Lemma load_inject {α ms mt C b b' i v} :
   mem_inject α ms mt ->
@@ -219,8 +188,6 @@ Proof.
   by exists v'.
 Qed.
 
-(* ==================== store transfer ==================== *)
-
 Lemma store_inject {α ms mt C b b' i v v' ms'} :
   mem_inject α ms mt ->
   α C b = Some b' ->
@@ -230,12 +197,10 @@ Lemma store_inject {α ms mt C b b' i v v' ms'} :
          /\ mem_inject α ms' mt'.
 Proof.
   move=> Hm Ha Hv Hs.
-  (* the target cell is loadable, hence storable *)
   have [w Hlw] := store_some_load_some Hs.
   have [w' [Hlw' _]] := load_inject Hm Ha Hlw.
   have [mt' Hs'] := Memory.store_after_load mt (C, b', i) w' v' Hlw'.
   exists mt'. split; first exact: Hs'.
-  (* dissect the two stores *)
   move: (Hs) (Hs'). rewrite /Memory.store /=.
   case Hcs: (getm ms C) => [cms|] //.
   case Hcs2: (ComponentMemory.store cms b i v) => [cms'|] // [Ems].
@@ -291,8 +256,6 @@ Proof.
       exact: Hload Ha0.
 Qed.
 
-(* Target-only store at a block OUTSIDE the renaming's range (a
-   compiler-owned cell: scratch, flag, or a stack-frame slot). *)
 Lemma store_outside_inject {α ms mt ptr v mt'} :
   mem_inject α ms mt ->
   (forall b0, α (Pointer.component ptr) b0 <> Some (Pointer.block ptr)) ->
@@ -331,8 +294,6 @@ Proof.
     exact: Hload Ha0.
 Qed.
 
-(* ==================== alloc transfer ==================== *)
-
 Lemma alloc_inject {α ms mt C n ms' ptrs} :
   mem_inject α ms mt ->
   Memory.alloc ms C n = Some (ms', ptrs) ->
@@ -352,7 +313,6 @@ Proof.
   case Hct2: (ComponentMemory.alloc cmt n) => [cmt' bt].
   exists (setm mt C cmt'), (C, bt, 0%Z), bs, bt.
   case: (Hm) => Hok Hdomm Hwfs Hwft Hlocs Hloct Hdom Hrng Hload.
-  (* freshness on both sides *)
   have Hfs : bs \notin ComponentMemory.domm cms
     := ComponentMemory.alloc_fresh _ _ _ _ (Hwfs _ _ Hcs) Hcs2.
   have Hft : bt \notin ComponentMemory.domm cmt
@@ -426,20 +386,20 @@ Proof.
       + move=> Ha0 Hb0.
         have [cm0 [Hcm0 Hin0]] := Hrng _ _ _ Ha0 Hb0.
         rewrite setmE EC. by exists cm0.
-    - (* loads *)
+    -
       move=> C0 b0 b0' j.
       rewrite {1}/extend.
       case EC: (C0 == C) => /=.
       + move/eqP: EC => EC. subst C0.
         case EB: (b0 == bs) => /=.
-        * (* the fresh pair *)
+        *
           move/eqP: EB => EB. subst b0. move=> [<-].
           rewrite /Memory.load /= !setmE eqxx.
           rewrite (ComponentMemory.load_after_alloc_eq _ _ _ _ Hcs2)
                   (ComponentMemory.load_after_alloc_eq _ _ _ _ Hct2).
           case: ((0 <=? j)%Z && (j <? Z.of_nat n)%Z) => //=.
           by constructor.
-        * (* old pairs in the allocating component *)
+        *
           move=> Ha0.
           have Hb0ne : b0 <> bs by move=> E; rewrite E eqxx in EB.
           have Hb0'ne : b0' <> bt.
@@ -451,7 +411,7 @@ Proof.
           case: (ComponentMemory.load cms b0 j) => [w|];
             case: (ComponentMemory.load cmt b0' j) => [w'|] //= HR.
           exact: val_inject_rle Hle HR.
-      + (* other components untouched *)
+      +
         move=> Ha0.
         have := Hload _ _ _ j Ha0.
         rewrite /Memory.load /= !setmE EC.
@@ -468,8 +428,6 @@ Proof.
   - by rewrite -E1.
 Qed.
 
-(* Target-only alloc (a stack frame): the relation survives unchanged, and
-   the fresh block is outside the renaming's range. *)
 Lemma alloc_outside_inject {α ms mt C n mt' ptrt} :
   mem_inject α ms mt ->
   Memory.alloc mt C n = Some (mt', ptrt) ->

@@ -109,8 +109,6 @@ Definition binop_of_binop (b : binop) : Types.binop :=
 
 Definition alloc_label := 2 ^ 14.
 
-(* [mt] is abstract here, so the bound is stated on [word_size mt] directly (the concrete
-   instance has [word_size = 32], [alloc_label = 2^14], so any [NC < 18] satisfies it). *)
 Lemma mask_alloc_label: forall NC,
   alloc_label < expn 2 (word_size mt - NC) ->
   andw (word_of_nat alloc_label) (@mask mt NC) = 0%w.
@@ -138,14 +136,6 @@ Fixpoint fold_left_map_bis {FROM ACC TO: Type} (f : ACC -> FROM -> TO * ACC) (in
 end.
 
 (* gives you the beginning point of each buffers in memory *)
-(* FIXED 2026-08-07 (T2M Stage-0 audit): the outer fold used to thread
-   [count + acc], but [count] (the inner [fold_left_map_bis] result) already
-   includes [acc], so from the THIRD component on every base drifted upward
-   and [IConst (IPtr …)] immediates pointed at the wrong flat address —
-   while [initial_memory]'s [base_adress] counts correctly, so code and data
-   disagreed.  Confirmed empirically by [T2M/M_Audit.v] (sample [p_three]:
-   baked base 18 vs actual 12, the me run wedges in component 3).  The
-   correct accumulator is [count]. *)
 Definition memory_lengths (buf : NMap {fmap Block.id -> nat + seq value}):  NMap (NMap nat) :=
   let l := Maps.elementsm (mapm Maps.elementsm buf) in (* turns fmaps into lists *)
   let f := (fun acc => fold_left_map_bis (fun acc' (a : nat * (nat + seq value)) =>
@@ -156,14 +146,6 @@ Definition memory_lengths (buf : NMap {fmap Block.id -> nat + seq value}):  NMap
                            ((fst s, mkfmap (flat)), count) ) 0 l).
 
 
-(* FIXED 2026-08-08 (T2M §3.6): the [Z.neg] branch used to be
-   [Negz (nat_of_pos n)] = -(n+1) — off by one on EVERY negative integer
-   (ssrint's [Negz m] denotes -(m+1)).  On the immediate path this was
-   masked by the 15-bit truncation the fit condition fences anyway, but
-   [initial_memory]/[me_encode_val] also route BUFFER contents through
-   here, where words are full-width and the off-by-one was the only
-   error: a buffer holding [Int (-5)] was silently initialized as -6.
-   The faithful embedding of [Z.neg n] (= -n, n ≥ 1) is [Negz (n-1)]. *)
 Definition encode_int (z : Z) : ssrint.int :=
   match z with
   | Z0 => ssrint.Posz 0
@@ -207,11 +189,6 @@ Definition instr_translation (make_label : proc_label -> nat) (update_label : na
 
 Notation prog_buffers := (NMap {fmap Block.id -> nat + seq value}).
 
-(* GENERALIZED flattening: the label scheme ([make_label] for procedure entries,
-   [update_label] for per-component body labels) is a PARAMETER, so separately-compiled
-   programs can share one canonical, collision-free scheme (see
-   Recomposition/LabelScheme.v).  [transitional_to_merged] below recovers the legacy
-   behaviour (bounds computed from the code map) definitionally. *)
 Definition transitional_to_merged_gen (make_label : proc_label -> nat)
     (update_label : Component.id -> nat -> nat)
     (pb : prog_buffers) (cde : Transitional.code) : code :=
@@ -278,7 +255,6 @@ Definition findopt {A : Type} (pred : A -> bool) l : option nat :=
                     end) None l.
 
 Definition encode_code (cde : code) (pc0 : nat) : memory :=
-  (* let cde := cde ++ [(MrHalt, MTag Other Component.main None true )] in *)
   let code_length := size cde in
   let offset := pc0 + code_length in
   let is_label := (fun a p => match (fst p) with | MrLabel l => a == l | _ => false end) in

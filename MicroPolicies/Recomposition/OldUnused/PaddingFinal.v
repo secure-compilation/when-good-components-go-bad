@@ -1,8 +1,3 @@
-(* ===== Assembly of the UNCONDITIONAL padding does_prefix transfer.  Instantiates the conditional
-   [padding_forward_sf]/[padding_backward_sf] (PaddingCorrect) with the concrete relation
-   [Rf s1 s2 := match_pad s1 s2 /\ pad_valid s1], discharging the four interface hypotheses from the
-   proven [pad_step_fwd] (forward step correspondence) and [pad_valid_step] (validity preservation).
-   The result [padding_forward]/[padding_backward] take only well-formedness of q/q'. ===== *)
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Util.
@@ -50,8 +45,6 @@ Variables q q' : program.
 Local Notation pc0 := (size (@Merged.initial_memory mt (prog_buffers q))).
 Local Notation padc := ((pad_code (code q) (code q')).1).
 Local Notation sizes := (pad_block_sizes (code q) (code q')).
-(* same label-position resolver as PaddingSim (whose [lpf] is section-local and not exported) — used
-   for the control-flow target offsets in the BNZ/JAL backward reconstructions. *)
 Local Notation lpf c :=
   (fun (l d : nat) =>
      match findopt (fun p => match p.1 with MrLabel l0 => l == l0 | _ => false end) c with
@@ -86,28 +79,14 @@ Local Notation cptr_code := (@PaddingValid.cptr_code q).
 Local Notation addr_ok := (@PaddingSim.addr_ok q q').
 Local Notation pc_safe := (@PaddingValid.pc_safe q q').
 
-(* WELL-FORMEDNESS of q: every [MrJal] label either resolves to a defined [MrLabel] in [code q] or is
-   the allocator label (the only "unresolved" jump).  Mirror of [bnz_labels_resolved]; lets the JAL
-   cross-component branch derive [addr_ok] of the (φ-resolved) target — resolved labels land in the
-   code image (a real cell), the alloc label lands above it — and then reuse [jump_target_corr_bwd]. *)
 Hypothesis jal_labels_resolved : forall n l t,
   nth_error (code q) n = Some (MrJal l, t) ->
   findopt (fun p => match p.1 with MrLabel l0 => l == l0 | _ => false end) (code q) = None ->
   l = alloc_label.
 
-(* The forward simulation relation.  [match_pad]: padded run [s2] tracks the [q] run [s1].
-   [pad_valid]: every code-pointer of [s1] addresses a real cell or lies outside the padded image
-   (never the gap).  [cptr_code]: every code-pointer of [s1] points strictly inside [q]'s code.
-   [pc_safe]: [s1]'s pc itself avoids the padding gap — the invariant that makes [Rf_nostep] hold
-   (a q-position in the gap would map by φ=id onto a padded NOP, letting [s2] step where [s1] is
-   stuck).  [Hciso] (the immutable-code premise of [cptr_code_step]/[pc_safe_step]) is [match_pad]'s
-   5th conjunct, so it need not be tracked separately. *)
 Definition Rf (s1 s2 : st) : Prop :=
   match_pad s1 s2 /\ pad_valid s1 /\ cptr_code s1 /\ pc_safe s1.
 
-(* [Rf_step1]: the keystone.  [pad_step_fwd] transfers the step + [match_pad]; [pad_valid_step],
-   [cptr_code_step], [pc_safe_step] carry the three single-run invariants across it (the last two
-   draw [Hciso] from [match_pad]).  The merged trace [t] is at most one event, fixing [ev]. *)
 Lemma Rf_step1 : forall s1 s2 t s1',
   Rf s1 s2 -> pstep NC tt s1 t s1' -> exists s2', pstep NC tt s2 t s2' /\ Rf s1' s2'.
 Proof.
@@ -125,10 +104,6 @@ Proof.
                                  Hciso Hcc Hstep) ] ] ] ] ).
 Qed.
 
-(* well-formedness of q: the initial memory (encoded code ∪ data buffers) holds no code-pointer
-   value (code cells encode instructions, tag [Other]; data buffers are data).  This is the base
-   case of [pad_valid]: registers are uniformly [Other] ([reg0]) so PV1 is vacuous, and PV2 is the
-   hypothesis. *)
 Hypothesis init_noncodeptr : forall w v t,
   unionm (encode_code (code q) pc0) (Merged.initial_memory (prog_buffers q)) w = Some (v @ t) ->
   is_codeptr (vtag t) = false.
@@ -143,8 +118,6 @@ Proof.
   - by move=> w v t Hw; rewrite (init_noncodeptr Hw).
 Qed.
 
-(* base case of [cptr_code]: registers are uniformly [Other] ([reg0]) so PC1 is vacuous, and every
-   memory cell of the initial state is a non-code-pointer ([init_noncodeptr]) so PC2 is too. *)
 Lemma cptr_code_init :
   cptr_code (Merged.initial_state (code q) (prog_buffers q) (prog_interface q)).
 Proof.
@@ -155,12 +128,9 @@ Proof.
   - by move=> w v t Hw; rewrite (init_noncodeptr Hw).
 Qed.
 
-(* well-formedness of q: the [main] component has a code cell — its entry [main_pos] is a real index
-   into [code q] (so the initial pc sits inside [q]'s code, not in the padding gap). *)
 Hypothesis main_in_code :
   find (fun '(_, tag) => color tag == Component.main) (code q) < size (code q).
 
-(* base case of [pc_safe]: the initial pc is [main_pos], an index strictly inside [q]'s code. *)
 Lemma pc_safe_init :
   pc_safe (Merged.initial_state (code q) (prog_buffers q) (prog_interface q)).
 Proof.
@@ -171,21 +141,16 @@ Proof.
   - have := alloc_label_lt_word; move: main_in_code Hbound; lia.
 Qed.
 
-(* the data segment occupies addresses [0, pc0); [Merged.initial_memory] domain is exactly the
-   image of [iota 0 pc0].  This is a [RecompositionContext] fact (already relied on by
-   [recomposition_blame], RecInit:321) — a structural well-formedness property of the data layout. *)
 Hypothesis initial_memory_domm : forall b,
   domm (@Merged.initial_memory mt b)
   = fset (map (@word_of_nat (word_size mt)) (List.seq 0 (size (@Merged.initial_memory mt b)))).
 
-(* well-formedness of the data segment: every buffer cell is data, not code. *)
 Hypothesis initial_memory_not_code : forall (w : mword mt) (v : matom),
   @Merged.initial_memory mt (prog_buffers q) w = Some v -> is_code (taga v) = false.
 
 Lemma seqE : forall len start, List.seq start len = iota start len.
 Proof. by elim => [|len IH] start //=; rewrite IH. Qed.
 
-(* the code image [pc0, pc0+|cde|) and the data image [0, pc0) are disjoint. *)
 Lemma enc_data_disj (cde : @Merged.code mt) (w : mword mt) (v : matom) :
   pc0 + size cde < alloc_label ->
   @Merged.initial_memory mt (prog_buffers q) w = Some v ->
@@ -207,18 +172,13 @@ Proof.
   move: Hnlt; rewrite He; lia.
 Qed.
 
-(* well-formedness of the data segment: every buffer cell carries value-tag [Other] (RecInit:1224,
-   a derived [RecompositionContext] consequence) ⟹ it is not a code pointer and φ fixes its value. *)
 Hypothesis initial_memory_vtag_other : forall (w : mword mt) (v : matom),
   @Merged.initial_memory mt (prog_buffers q) w = Some v -> vtag (taga v) = Other.
 
-(* well-formedness of q/padc: the [main] entry in [padc] sits at the φ-image of its position in
-   [code q] (padding preserves cell order/colour, only inserting NOPs at block ends). *)
 Hypothesis main_entry_aligned :
   find (fun '(_, tag) => color tag == Component.main) padc
   = shift_pos sizes (find (fun '(_, tag) => color tag == Component.main) (code q)).
 
-(* every [reg0] cell carries value-tag [Other]. *)
 Lemma reg0_other (r : reg mt) (a : ratom) : reg0 r = Some a -> taga a = Other.
 Proof. rewrite /reg0 !setmE; repeat (case: ifP => _; first by move=> [= <-]); by rewrite emptymE. Qed.
 
@@ -229,30 +189,30 @@ Proof.
   rewrite /PaddingSim.match_pad.
   cbn [Merged.initial_state Symbolic.pc Symbolic.regs Symbolic.mem Symbolic.internal vala taga].
   split; last split; last split; last split; last split; last split; last split; last split; last split.
-  - (* C1: pc value — main entry φ-image *)
+  -
     rewrite (addnC (size (@Merged.initial_memory mt (prog_buffers q)))
                    (find (fun '(_, tag) => color tag == Component.main) (code q))).
     by rewrite (phia_addr_code Hcount Hbound Hbound' main_in_code) main_entry_aligned addnC.
-  - (* C2: pc tag *) by [].
-  - (* C3: internal *) by [].
-  - (* C4: registers — reg0, all Other, rel_v identity *)
+  -  by [].
+  -  by [].
+  -
     move=> r; case Hr: (reg0 r) => [a|] //=.
     have Hto := reg0_other Hr.
     exists (vala a); split; first by congr Some; rewrite atom_etaE.
     by move=> _; rewrite Hto; exact: (esym (rel_v_Other q q' (vala a))).
-  - (* C5: code1 iso *)
+  -
     move=> w a; rewrite unionmE; case Henc: (encode_code (code q) _ w) => [a'|] /=.
     + by move=> [= <-].
     + by move=> Hdata Hcode; rewrite (initial_memory_not_code Hdata) in Hcode.
-  - (* C6: code1 rev *)
+  -
     by move=> w a Henc; rewrite unionmE Henc.
-  - (* C7: code2 iso *)
+  -
     move=> w a; rewrite unionmE; case Henc: (encode_code padc _ w) => [a'|] /=.
     + by move=> [= <-].
     + by move=> Hdata Hcode; rewrite (initial_memory_not_code Hdata) in Hcode.
-  - (* C8: code2 rev *)
+  -
     by move=> w a Henc; rewrite unionmE Henc.
-  - (* C9: memwk (forward) — non-code cell ⟹ data ⟹ same in s2, vtag Other ⟹ rel_v identity *)
+  -
     rewrite /PaddingSim.memwk.
     move=> w a; rewrite unionmE; case Henc: (encode_code (code q) _ w) => [a'|] /=.
     + by move=> [= <-] Hcode; rewrite (code_tags_wf_q Henc) in Hcode.
@@ -260,7 +220,7 @@ Proof.
       rewrite unionmE (enc_data_disj Hbound' Hdata) /=.
       exists (vala a); split; first by rewrite Hdata; congr Some; rewrite atom_etaE.
       by move=> _; rewrite (initial_memory_vtag_other Hdata); exact: (esym (rel_v_Other q q' _)).
-  - (* C10: memwk_bwd — symmetric *)
+  -
     rewrite /PaddingSim.memwk_bwd.
     move=> w a; rewrite unionmE; case Henc: (encode_code padc _ w) => [a'|] /=.
     + by move=> [= <-] Hcode; rewrite (code_tags_wf_padc Henc) in Hcode.
@@ -271,12 +231,10 @@ Proof.
       by move=> _; rewrite (initial_memory_vtag_other Hdata); exact: (esym (rel_v_Other q q' _)).
 Qed.
 
-(* only [MrHalt] decodes to [Halt]; [Halt] is position/label-independent. *)
 Lemma imt_halt_indep (i : Merged.instr) (lp1 lp2 : nat -> nat -> nat) (pos1 pos2 : nat) :
   instr_merged_to_mp i lp1 pos1 = Halt mt -> instr_merged_to_mp i lp2 pos2 = Halt mt.
 Proof. by case: i. Qed.
 
-(* padding only inserts cells: the first (q) padded code is no shorter than [code q]. *)
 Lemma align_blocks_size_ge (bs bs' : seq (@Merged.code mt)) :
   size (flatten bs) <= size (align_blocks bs bs').1.
 Proof.
@@ -295,13 +253,8 @@ Proof.
   by rewrite proc_split_flatten in H.
 Qed.
 
-(* keep [decode_instr] folded so [/=] reduces only the state projections and the [pfinal] match —
-   not [decode_instr] into its [do!]-chain (which would block the [Hdec…] rewrites). *)
 Local Opaque decode_instr.
 
-(* [Rf_final]: the two runs halt simultaneously.  At a halt the pc cell is a [Halt] code cell; under
-   [match_pad] it is the [φ]-shifted same cell (forward via [code_cell_padc]; backward via [pc_safe]
-   pinning the q-pc inside [code q] so [φ] is the in-code shift, then the same cell correspondence). *)
 Lemma Rf_final : forall s1 s2, Rf s1 s2 -> (pfinal s1 <-> pfinal s2).
 Proof.
   move=> [m1 r1 [v1 t1] e1] [m2 r2 [v2 t2] e2] HR.
@@ -310,7 +263,7 @@ Proof.
   cbn [Symbolic.mem Symbolic.pc vala] in Hpcv0, Hc1iso, Hc1rev, Hc2iso, Hc2rev.
   rewrite /PaddingValid.pc_safe in Hps; cbn [Symbolic.pc vala] in Hps.
   rewrite /pfinal /=; split.
-  - (* forward: q halts ⟹ padded halts *)
+  -
     case Hm1: (m1 v1) => [[i1 tag1]|] // [Hdec1 Hcode1].
     have Henc1 : encode_code (code q) pc0 v1 = Some (i1 @ tag1) by apply: (Hc1iso _ _ Hm1 Hcode1).
     have [n [im [tm [Hn [Hvq [Hnth [Htagq Hdecq]]]]]]] := code_cell_q Hcount Hbound Hbound' Henc1.
@@ -323,7 +276,7 @@ Proof.
     + rewrite Hdec2; congr Some; apply: imt_halt_indep.
       have Hh := Hdecq; rewrite Hdec1 in Hh; move: Hh => [= Hh]; exact: (esym Hh).
     + by rewrite Htag2 -Htagq.
-  - (* backward: padded halts ⟹ q halts *)
+  -
     case Hm2: (m2 v2) => [[i2 tag2]|] // [Hdec2 Hcode2].
     have Henc2 : encode_code padc pc0 v2 = Some (i2 @ tag2) by apply: (Hc2iso _ _ Hm2 Hcode2).
     have [k [Hv2k Hk]] := encode_code_nth_inv Henc2.
@@ -374,8 +327,6 @@ Qed.
 
 Local Notation padl := ((pad_align q q').1).
 
-(* [Rf_init]: the four invariants hold of the two initial states.  [code padl]/[prog_buffers padl]/
-   [prog_interface padl] are definitionally [padc]/[prog_buffers q]/[prog_interface q]. *)
 Lemma Rf_init :
   Rf (Merged.initial_state (code q) (prog_buffers q) (prog_interface q))
      (Merged.initial_state (code padl) (prog_buffers padl) (prog_interface padl)).
@@ -385,9 +336,6 @@ Proof.
   by split; [exact: cptr_code_init | exact: pc_safe_init].
 Qed.
 
-(* Encode-level backward cell correspondence (lpf-free conclusion).  Exposes the [encode_code] facts
-   + the φ pc positions so control-flow callers can re-apply [code_cell_q]/[code_cell_padc] to obtain
-   the CONCRETE [lpf]-resolved decodes (needed for [bnz_corr]/[jal_target_corresp]). *)
 Lemma pad_pc_cell_bwd_aux (s1 s2 : st) (i2 : mword mt) (ti2 : mem_tag) :
   match_pad s1 s2 -> pc_safe s1 ->
   Symbolic.mem s2 (vala (Symbolic.pc s2)) = Some (i2 @ ti2) -> is_code ti2 ->
@@ -456,9 +404,6 @@ Proof.
   by rewrite Htag2eq.
 Qed.
 
-(* ===== Backward cell-correspondence (the [Rf_final]-backward preamble, factored for [Rf_nostep]).
-   A code cell at [s2]'s pc reflects to the φ-source code cell at [s1]'s pc with the SAME [MrXxx]
-   ([im]) and tag ([tm]); [pc_safe] pins [s1]'s pc inside [q]'s code so [φ] is the in-code shift. *)
 Lemma pad_pc_cell_bwd (s1 s2 : st) (i2 : mword mt) (ti2 : mem_tag) :
   match_pad s1 s2 -> pc_safe s1 ->
   Symbolic.mem s2 (vala (Symbolic.pc s2)) = Some (i2 @ ti2) -> is_code ti2 ->
@@ -525,8 +470,6 @@ Proof.
   do 4 eexists; split; [exact: Hdecq | rewrite Hi2; exact: Hdec2'].
 Qed.
 
-(* backward register reflection (≈ RecBackward.reg_reflect): a register read on the padded run [s2]
-   reflects to a same-tag read on the q run [s1] (match_pad's registers share domain + tag). *)
 Lemma reg_reflect_bwd (s1 s2 : st) (r : reg mt) (w2 : mword mt) (t : tag_type lrc_tags R) :
   match_pad s1 s2 -> Symbolic.regs s2 r = Some (w2 @ t) ->
   exists w1, Symbolic.regs s1 r = Some (w1 @ t).
@@ -539,9 +482,6 @@ Proof.
   by exists (vala a); rewrite -Ht; congr Some; exact: (esym (atom_etaE a)).
 Qed.
 
-(* value-preserving register reflection for [Other]-tagged (data/heap) registers: since [rel_v Other]
-   is the identity, an [Other]-tagged register holds the SAME value in both runs (needed for the
-   load/store address). *)
 Lemma reg_reflect_bwd_other (s1 s2 : st) (r : reg mt) (w : mword mt) :
   match_pad s1 s2 -> Symbolic.regs s2 r = Some (w @ Other) ->
   Symbolic.regs s1 r = Some (w @ Other).
@@ -559,8 +499,6 @@ Proof.
   by rewrite -(atom_etaE a) Hta Hvw.
 Qed.
 
-(* code-pointer register reflection (for JUMP/JAL targets & return addrs): an [is_address]-tagged
-   register holds [w'] on the q run and its φ-image [phia q q' w'] on the padded run. *)
 Lemma reg_reflect_bwd_cptr (s1 s2 : st) (r : reg mt) (w : mword mt) (t : value_tag) :
   match_pad s1 s2 -> Symbolic.regs s2 r = Some (w @ t) -> is_address t -> t <> Invalidated ->
   exists w', Symbolic.regs s1 r = Some (w' @ t) /\ w = phia q q' w'.
@@ -578,9 +516,6 @@ Proof.
   congr Some. by rewrite -(atom_etaE a) Hta.
 Qed.
 
-(* backward belong correspondence for a (φ-shifted) jump/return target: the colour the padded run
-   sees at [phia q q' w] is the colour the q run sees at [w] (target cells correspond; a [None] cell
-   makes [belong] vacuously true). *)
 Lemma jump_belong_corr_bwd (s1 s2 : st) (w : mword mt) (c : Component.id) :
   match_pad s1 s2 ->
   belong c (match Symbolic.mem s2 (phia q q' w) with Some ni => Some (taga ni) | None => None end) ->
@@ -594,8 +529,6 @@ Proof.
   move: Hb; rewrite Hm2 !belong_someE Ht2. by [].
 Qed.
 
-(* backward target-CELL correspondence (for the JUMP/JAL return target): the cell the q run holds at
-   [w] (which exists — [addr_ok]) matches in tag the cell the padded run holds at [phia q q' w]. *)
 Lemma jump_target_corr_bwd (s1 s2 : st) (w : mword mt) (celltgt2 : matom) :
   match_pad s1 s2 -> addr_ok (Symbolic.mem s1) w -> Symbolic.mem s2 (phia q q' w) = Some celltgt2 ->
   exists celltgt1, Symbolic.mem s1 w = Some celltgt1 /\ taga celltgt1 = taga celltgt2.
@@ -626,8 +559,6 @@ Proof.
     + have [a0 [Ha0 _]] := Hnc2 _ _ Hm2 Hcc. by rewrite Ha0 in Hmw.
 Qed.
 
-(* backward non-code memory reflection (≈ RecBackward.mem_data_reflect): a non-code cell read on
-   [s2] reflects to a same-tag cell on [s1] at the same address (match_pad's [memwk_bwd]). *)
 Lemma mem_reflect_bwd (s1 s2 : st) (w : mword mt) (v2 : mword mt) (t : mem_tag) :
   match_pad s1 s2 -> Symbolic.mem s2 w = Some (v2 @ t) -> is_code t = false ->
   exists v1, Symbolic.mem s1 w = Some (v1 @ t).
@@ -640,8 +571,6 @@ Proof.
   by rewrite Ht; exact: (esym (atom_etaE a0)).
 Qed.
 
-(* backward [evi] reflection (≈ RecBackward.rb_evi_reflect): [evi] succeeds on the q run [s1]
-   whenever the [rcom] register is defined on the padded run [s2] (shared register domain). *)
 Lemma pad_evi_reflect (s1 s2 : st) :
   match_pad s1 s2 -> (exists a2, Symbolic.regs s2 rcom = Some a2) ->
   exists ei, Symbolic.evi s1 = Some ei.
@@ -652,9 +581,6 @@ Proof.
   by rewrite /Symbolic.evi Hr1 /=; eexists.
 Qed.
 
-(* gating prereq (≈ PreservationLemmas.silent_transfer_belong, re-derived for [Merged.transfer]):
-   a silent OP transfer's [check_belong] gate forces the next-cell colour to match the running one.
-   The [Merged.transfer] wrapper adds the [is_code]/load-store peels before the LRC body. *)
 Lemma merged_silent_transfer_belong :
   forall (op : opcode) tpc ti (ts : hseq (tag_type lrc_tags) (inputs op)) tni e
          (ov : ovec lrc_tags op),
@@ -709,9 +635,6 @@ Proof.
     case: tni => [t|] //; case: t => vt ct et bt; by case: et => [[p l]|].
 Qed.
 
-(* gating prereq (≈ PreservationLemmas.silent_next_pc_belong for [Merged.transfer]): a silent OP
-   step's next-pc cell has the running colour.  Bridges [next_state_updates_and_pc] to the transfer
-   and applies [merged_silent_transfer_belong]. *)
 Lemma merged_silent_next_pc_belong :
   forall (s s' : st) op tpc ti (ts : hseq (tag_type lrc_tags) (inputs op)) updts pc',
     @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -730,9 +653,6 @@ Proof.
       exact: (merged_silent_transfer_belong Htr) ).
 Qed.
 
-(* φ-shift fall-through succ-correspondence: for a non-terminal cell at [s1]'s pc (index [n], so the
-   successor [n+1] is in-code and contiguous under φ via [fallthrough_aligned]), the two runs' next-pc
-   cells [pc+1] carry the SAME tag (padding preserves the shifted cell's tag). *)
 Lemma pad_succ_cell_eq_tag (s1 s2 : st) (n : nat) (i : Merged.instr) (t : mem_tag) :
   match_pad s1 s2 -> vala (Symbolic.pc s1) = word_of_nat (n + pc0) ->
   n.+1 < size (code q) -> nth_error (code q) n = Some (i, t) -> PaddingSim.is_term i = false ->
@@ -765,8 +685,6 @@ Proof.
     by rewrite Ht1; exact: (esym (atom_etaE v2cell)).
 Qed.
 
-(* the [current == current'] gate of [Merged.transfer]: the executed cell's colour equals the
-   running (pc-tag) colour.  Pre-[per-opcode]: a single gate peel. *)
 Lemma merged_transfer_current_eq (op : opcode) tpc ti
       (ts : hseq (tag_type lrc_tags) (inputs op)) tni e (ov : ovec lrc_tags op) ev :
   Merged.transfer (IVec (OP op) tpc ti ts tni) e = Some (ov, ev) ->
@@ -782,13 +700,10 @@ Proof.
   by case Heq: (_ == current') => // _; apply/eqP; exact: Heq.
 Qed.
 
-(* opcode-kind preservation under re-resolution (like [imt_halt_indep]): only the source [MrXxx]
-   determines [Nop], independent of the label/position resolver. *)
 Lemma imt_nop_indep (i : Merged.instr) (lp1 lp2 : nat -> nat -> nat) (pos1 pos2 : nat) :
   instr_merged_to_mp i lp1 pos1 = Nop mt -> instr_merged_to_mp i lp2 pos2 = Nop mt.
 Proof. by case: i. Qed.
 
-(* the NOP transfer is silent (event = None). *)
 Lemma merged_nop_silent tpc ti tni e (ov : ovec lrc_tags NOP) ev :
   Merged.transfer (IVec NOP tpc ti [hseq] tni) e = Some (ov, ev) -> ev = None.
 Proof.
@@ -806,12 +721,10 @@ Proof.
   by move: Hfin2 => [= _ Hlev2]; congruence.
 Qed.
 
-(* a [Nop]-decoding cell is non-terminal (needed for [nonterm_succ_lt] ⟹ in-code successor). *)
 Lemma imt_nop_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) :
   instr_merged_to_mp i lp pos = Nop mt -> PaddingSim.is_term i = false.
 Proof. by case: i. Qed.
 
-(* the NOP step (at the [next_state_updates] level) is silent. *)
 Lemma merged_nop_nsu_silent (s : st) tpc ti pc' s' ev :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
     (IVec NOP tpc ti [hseq]) [::] pc' = Some (s', ev) -> ev = None.
@@ -825,7 +738,6 @@ Proof.
       by move: Hk => [= _ Hf]; congruence ).
 Qed.
 
-(* the [current==current'] gate at the [next_state_updates] level (silent OP step). *)
 Lemma merged_nsu_current_eq (s s' : st) op tpc ti
       (ts : hseq (tag_type lrc_tags) (inputs op)) updts pc' ev :
   @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit s
@@ -841,8 +753,6 @@ Proof.
       exact: (merged_transfer_current_eq Htr) ).
 Qed.
 
-(* ===== First full per-opcode backward reconstruction (NOP), validating the foundation end-to-end:
-   a NOP step on the padded run [s2] is reflected by a NOP step on the q run [s1]. ===== *)
 Lemma pad_nostep_nop (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -872,9 +782,7 @@ Proof.
   have [v1n [v2n [tnext [Hm1n Hm2n]]]] := pad_succ_cell_eq_tag Hmp Hpc1 Hn1 Hnth Hterm.
   have [_ [Hpct _]] := Hmp.
   have Hic1 : is_code ti1 by rewrite Hti1 -Hti2.
-  (* tpc2 = taga (pc s1) (from [Hs2] and [match_pad] pc-tag) *)
   have Htpc2eq : tpc2 = taga (Symbolic.pc s1) by rewrite -Hpct Hs2.
-  (* colour chain: color ti1 = (running colour) = color tnext *)
   have Hcc1 : color ti1 = match taga (Symbolic.pc s1) with Level _ c => c end.
   { by rewrite Hti1 -Hti2 Hcur2 Htpc2eq. }
   have Hctn : color tnext = match taga (Symbolic.pc s1) with Level _ c => c end.
@@ -882,10 +790,8 @@ Proof.
     change (match Some (v2n @ tnext) with Some ni => Some (taga ni) | None => None end)
       with (Some tnext).
     rewrite PaddingSim.belong_someE => /eqP H. by rewrite -H Htpc2eq. }
-  (* reconstruct s1's NOP step *)
   exists (@Symbolic.State mt lrc_tags unit (Symbolic.mem s1) (Symbolic.regs s1)
             ((vala (Symbolic.pc s1) + 1)%w @ (Symbolic.pct s1)) (Symbolic.internal s1)), None.
-  (* evi s1 succeeds *)
   have [a2 Hrcom2] : exists a2, Symbolic.regs s2 rcom = Some a2.
   { move: NEXT2; rewrite /Symbolic.next_state_updates /Symbolic.next_state_updates_and_pc
                         /Symbolic.next_state /Symbolic.evi.
@@ -902,12 +808,10 @@ Proof.
     exact: (merged_nop_intro Hic1 Hm1n Hcur1 Hbel1 Hevi).
 Qed.
 
-(* a [Const]-decoding cell is non-terminal. *)
 Lemma imt_const_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) n r :
   instr_merged_to_mp i lp pos = Const n r -> PaddingSim.is_term i = false.
 Proof. by case: i => //= *; congruence. Qed.
 
-(* ===== CONST backward reconstruction (inv/intro pattern, reused for all fall-through opcodes). ===== *)
 Lemma pad_nostep_const (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -933,14 +837,12 @@ Proof.
   have Hterm : PaddingSim.is_term im = false by apply: (imt_const_nonterm Hconst2).
   have Hn1 : n.+1 < size (code q) by apply: (nonterm_succ_lt code_last_term Hn Hnth Hterm).
   have [v1n [v2n [tnext [Hm1n Hm2n]]]] := pad_succ_cell_eq_tag Hmp Hpc1 Hn1 Hnth Hterm.
-  (* invert s2's CONST step *)
   have Hm2n' : mem2 (pc2 + 1)%w = Some (v2n @ tnext) by move: Hm2n; rewrite Hs2.
   have NEXT2' : @Symbolic.next_state_updates mt ops lrc_tags Merged.transfer unit
                   (@Symbolic.State mt lrc_tags unit mem2 reg2 (pc2 @ tpc2) extra2)
                   (IVec (OP CONST) tpc2 ti2 [hseq told2]) [:: RegWrite r2 (swcast n2)] = Some (s2', ev)
     by move: NEXT2; rewrite Hs2.
   have [_ [_ [Hcur2 [Hbel2 [ei2 Hevi2]]]]] := merged_const_inv Hic2 Hm2n' Hold2 NEXT2'.
-  (* match_pad pieces + colour transfer *)
   have [_ [Hpct _]] := Hmp.
   have Hic1 : is_code ti1 by rewrite Hti1 -Hti2.
   have Htpc2eq : tpc2 = taga (Symbolic.pc s1) by rewrite -Hpct Hs2.
@@ -965,7 +867,6 @@ Proof.
       [exact: Hic1 | exact: Hm1n | exact: Hreg1 | exact: Hcur1 | exact: Hbel1 | exact: Hevi].
 Qed.
 
-(* a [Mov]/[Binop]-decoding cell is non-terminal. *)
 Lemma imt_mov_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) r1 r2 :
   instr_merged_to_mp i lp pos = Mov r1 r2 -> PaddingSim.is_term i = false.
 Proof. by case: i => //= *; congruence. Qed.
@@ -973,7 +874,6 @@ Lemma imt_binop_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) 
   instr_merged_to_mp i lp pos = Binop op r1 r2 r3 -> PaddingSim.is_term i = false.
 Proof. by case: i => //= *; congruence. Qed.
 
-(* ===== MOV backward reconstruction. ===== *)
 Lemma pad_nostep_mov (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1031,7 +931,6 @@ Proof.
   - exact: (merged_mov_intro Hic1 Hm1n Hreg1s1 Hreg2s1 Hcur1 Hbel1 Hevi).
 Qed.
 
-(* ===== BINOP backward reconstruction. ===== *)
 Lemma pad_nostep_binop (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1094,7 +993,6 @@ Proof.
   - exact: (merged_binop_intro bop Hic1 Hm1n Hreg1s1 Hreg2s1 Hreg3s1 Hcur1 Hbel1 Hevi).
 Qed.
 
-(* a [Load]/[Store]-decoding cell is non-terminal. *)
 Lemma imt_load_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) r1 r2 :
   instr_merged_to_mp i lp pos = Load r1 r2 -> PaddingSim.is_term i = false.
 Proof. by case: i => //= *; congruence. Qed.
@@ -1102,7 +1000,6 @@ Lemma imt_store_nonterm (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) 
   instr_merged_to_mp i lp pos = Store r1 r2 -> PaddingSim.is_term i = false.
 Proof. by case: i => //= *; congruence. Qed.
 
-(* ===== LOAD backward reconstruction (address is [Other] ⟹ φ-invariant ⟹ same in both runs). ===== *)
 Lemma pad_nostep_load (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1139,13 +1036,10 @@ Proof.
   have [_ [Hpct _]] := Hmp.
   have Hic1 : is_code ti1 by rewrite Hti1 -Hti2.
   have Htpc2eq : tpc2 = taga (Symbolic.pc s1) by rewrite -Hpct Hs2.
-  (* s1's address register: [Other] ⟹ same value [w1] *)
   have Hregs2r1 : Symbolic.regs s2 r1 = Some (w1 @ Other) by rewrite Hs2 -Ht1.
   have Hreg1s1 := reg_reflect_bwd_other Hmp Hregs2r1.
-  (* s1's loaded cell at [w1]: same (non-code) tag *)
   have Hmems2w1 : Symbolic.mem s2 w1 = Some (w2 @ t2) by rewrite Hs2.
   have [vw2' Hmems1w1] := mem_reflect_bwd Hmp Hmems2w1 Hisct2.
-  (* s1's destination register *)
   have Hregs2r2 : Symbolic.regs s2 r2 = Some (old @ told) by rewrite Hs2.
   have [old' Hreg2s1] := reg_reflect_bwd Hmp Hregs2r2.
   have [a2 Hrcom2] : exists a2, Symbolic.regs s2 rcom = Some a2.
@@ -1169,7 +1063,6 @@ Proof.
   - exact: (merged_load_intro Hic1 Hisct2 Hm1n Hreg1s1 Hmems1w1 Hreg2s1 Hcur1 Hbel1 Hct2col Hevi).
 Qed.
 
-(* ===== STORE backward reconstruction (address [Other] ⟹ same; stored cell non-code via inv). ===== *)
 Lemma pad_nostep_store (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1233,7 +1126,6 @@ Proof.
   - exact: (merged_store_intro Hic1 Hisctold Hm1n Hreg1s1 Hreg2s1 Hmems1w1 Hcur1 Hbel1 Htoldcol Hevi).
 Qed.
 
-(* ===== BNZ backward reconstruction (terminal-free conditional branch). ===== *)
 Lemma pad_nostep_bnz (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1257,7 +1149,6 @@ Proof.
   have Hic1 : is_code ti1 by rewrite Hti1 -Hti2.
   have Htpc2eq : tpc2 = taga (Symbolic.pc s1) by rewrite -Hpct Hs2.
   have Hbw : pc0 + size (code q) < 2 ^ word_size mt by exact: (ltn_trans Hbound alloc_label_lt_word).
-  (* concrete [lpf]-resolved decodes for both runs *)
   have [na [ima [tma [Hna [Hvqa [Hntha [Htagqa Hdecq]]]]]]] := code_cell_q Hcount Hbound Hbound' Henc1.
   have Ena : na = n.
   { have Hb1 : na + pc0 < 2 ^ word_size mt by move: Hna Hbw; lia.
@@ -1270,25 +1161,21 @@ Proof.
   have [v2 [Henc2c [Htag2c Hdec2c]]] := code_cell_padc word_of_nat_inj Hcount Hbound Hbound' Hn Hnth.
   have Hv2cell : v2 = i2 @ ti2 by have H := Henc2; rewrite Hv2eq Henc2c in H; move: H => [= ->].
   rewrite Hv2cell vala_at in Hdec2c.
-  (* identify [im = MrBnz r l0] from [decode i2 = Bnz r n2] (via [imt_bnz_inv]) *)
   have HBeq : Bnz r n2 = instr_merged_to_mp im (lpf padc) (pc0 + shift_pos sizes n).
   { have H := Hdec2; rewrite Hdec2c in H; move: H => [= H']; by rewrite H'. }
   have [rc [l0 [Him Hn2eq]]] := imt_bnz_inv HBeq.
   rewrite Him in HBeq Hdecq Hnth; clear Him.
-  (* the q-resolved offset; the executed register [r = word_of_nat (to_nat rc)] is shared by both
-     runs ([imt] register is [lp]/[pos]-independent), recovered by [injection] of [HBeq]. *)
   pose n1 := @word_of_nat (imm_size mt) (lpf (code q) l0 (pc0 + n) - (pc0 + n)).
   have Hdec1 : decode_instr i1 = Some (Bnz r n1).
   { simpl in HBeq. injection HBeq as E1 E2. rewrite Hdecq. by rewrite ?E1 ?E2. }
   have [Hpcv _] := Hmp.
-  (* per-branch target cell + colour correspondence (mirrors the forward [pad_step_fwd] BNZ block) *)
   have [celln1 [celln2 [Hmem1pc' [Hmem2pc' Hcol]]]] :
     exists celln1 celln2,
       Symbolic.mem s1 (vala (Symbolic.pc s1) + (if w == 0%w then 1%w else swcast n1))%w = Some celln1 /\
       Symbolic.mem s2 (vala (Symbolic.pc s2) + (if w == 0%w then 1%w else swcast n2))%w = Some celln2 /\
       color (taga celln2) = color (taga celln1).
   { case: (w == 0%w).
-    - (* fall through *)
+    -
       have Hterm : PaddingSim.is_term (MrBnz rc l0) = false by [].
       have Hn1 : n.+1 < size (code q) by apply: (nonterm_succ_lt code_last_term Hn Hnth Hterm).
       have [v1n [v2n [tnext [Hm1n Hm2n]]]] := pad_succ_cell_eq_tag Hmp Hvq Hn1 Hnth Hterm.
@@ -1320,11 +1207,9 @@ Proof.
       have Hmem2t : Symbolic.mem s2 (vala (Symbolic.pc s2) + swcast n2)%w = Some v2tgt.
       { rewrite Hpccorr_t Hpc1t (phia_addr_code Hcount Hbound Hbound' Hjtgt) Ejt.
         exact: (Hc2rev _ _ Henc2t). }
-      (* [exact] not [rewrite Hmem1t Hmem2t]: rewriting a [mem]-at-[swcast]-address spins. *)
       exists v1tgt, v2tgt; split; first exact: Hmem1t.
       split; first exact: Hmem2t.
       by rewrite Htag2t -Htmt. }
-  (* invert s2's BNZ step *)
   have Hm2pc' : mem2 (pc2 + (if w == 0%w then 1%w else swcast n2))%w = Some celln2
     by move: Hmem2pc'; rewrite Hs2.
   have NEXT2' : @Symbolic.next_state_updates_and_pc mt ops lrc_tags Merged.transfer unit
@@ -1333,7 +1218,6 @@ Proof.
                   (pc2 + (if w == 0%w then 1%w else swcast n2))%w = Some (s2', ev)
     by move: NEXT2; rewrite Hs2.
   have [_ [_ [Ht1 [Hcur2 [Hbel2 [ei2 Hevi2]]]]]] := merged_bnz_inv Hic2 Hr Hm2pc' NEXT2'.
-  (* s1's pieces *)
   have Hregs2r : Symbolic.regs s2 r = Some (w @ Other) by rewrite Hs2 -Ht1.
   have Hreg1s1 := reg_reflect_bwd_other Hmp Hregs2r.
   have [a2 Hrcom2] : exists a2, Symbolic.regs s2 rcom = Some a2.
@@ -1352,7 +1236,6 @@ Proof.
   - exact: (merged_bnz_intro Hic1 Hreg1s1 Hmem1pc' Hcur1 Hbel1 Hevi).
 Qed.
 
-(* ===== JUMP backward reconstruction (register-indirect: internal jump or cross-component return). ===== *)
 Lemma pad_nostep_jump (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1383,11 +1266,9 @@ Proof.
   case: tpc2 Hs2 NEXT2 => [level ctpc] Hs2 NEXT2.
   have NEXT2' := NEXT2; rewrite Hs2 in NEXT2'.
   have [Hcolor Hdisj] := jump_step_inv Hic2 Hr Hra Hclear NEXT2'.
-  (* the running colour seen by [s1] is [ctpc] (= [s2]'s, via [Hpct]) *)
   have Htpcs1 : taga (Symbolic.pc s1) = Level level ctpc by rewrite -Hpct Hs2.
   have Hcur1 : color ti1 == match taga (Symbolic.pc s1) with Level _ c => c end.
   { rewrite Htpcs1 /= Hti1 -Hti2; exact: Hcolor. }
-  (* [s1]'s return-addr register + its clear list (shared register domain) *)
   have Hras2 : Symbolic.regs s2 ra = Some (rav @ rat) by rewrite Hs2.
   have [rav' Hra1s1] := reg_reflect_bwd Hmp Hras2.
   have [a2 Hrcom2] : exists a2, Symbolic.regs s2 rcom = Some a2.
@@ -1395,7 +1276,7 @@ Proof.
     case: (Symbolic.regs s2 rcom) => [a2|] /=; [by move=> _; exists a2 | by []]. }
   have [ei Hevi] := pad_evi_reflect Hmp (ex_intro _ a2 Hrcom2).
   case: Hdisj => [[Hbel Ht1] | [n0 [celltgt [rcv [Hmw [Hbelne [Ht1 [Hlvl Hrcom]]]]]]]].
-  - (* internal jump: [t1 = InternalJump]; target [w' = φ⁻¹ w] is in-component code *)
+  -
     have Hregs2r : Symbolic.regs s2 r = Some (w @ InternalJump) by rewrite Hs2 -Ht1.
     have [w' [Hr1s1 Hweq]] := reg_reflect_bwd_cptr Hmp Hregs2r isT (fun H => ltac:(discriminate H)).
     have Hbel1 : belong (color ti1)
@@ -1424,7 +1305,7 @@ Proof.
       * exact: Hbel1.
       * exact: Hcur1.
       * exact: Hevi.
-  - (* cross-component return: [t1 = Ret n0], registers cleared, [ERet] event *)
+  -
     have Hregs2r : Symbolic.regs s2 r = Some (w @ (Ret n0)) by rewrite Hs2 -Ht1.
     have [w' [Hr1s1 Hweq]] := reg_reflect_bwd_cptr Hmp Hregs2r isT (fun H => ltac:(discriminate H)).
     have Hok : addr_ok (Symbolic.mem s1) w'.
@@ -1478,8 +1359,6 @@ Lemma imt_jal_inv (i : Merged.instr) (lp : nat -> nat -> nat) (pos : nat) (w : i
   exists l, i = MrJal l /\ w = @word_of_nat (imm_size mt) (lp l pos).
 Proof. by case: i => //= l [= ->]; exists l. Qed.
 
-(* one [reg_clear_list_aux] cons step (local copy of [PaddingValid]'s [rcla_cons_some], which is
-   section-local there); peels the head register so the clear list can be exposed structurally. *)
 Lemma rcla_cons_some (e : nat) (l' : seq nat)
    (rs : {fmap reg mt -> atom (mword mt) (Symbolic.tag_type lrc_tags Symbolic.R)})
    (t : Symbolic.tag_type lrc_tags Symbolic.R)
@@ -1493,8 +1372,6 @@ Proof.
   by rewrite reg_clear_list_aux_cons Hr [obind _ (Some a)]/= Hll [obind _ (Some ll)]/=.
 Qed.
 
-(* ===== JAL backward reconstruction (call: internal or cross-component; label-resolved target via
-   [jal_corr], non-terminal return point via [pad_succ_cell_eq_tag], ECall + register-clear). ===== *)
 Lemma pad_nostep_jal (s1 s2 : st)
   (mem2 : {fmap mword mt -> matom}) (reg2 : {fmap reg mt -> ratom})
   (pc2 : mword mt) (tpc2 : tag_type lrc_tags P) (i2 : mword mt) (ti2 : mem_tag)
@@ -1521,7 +1398,6 @@ Proof.
   have [_ [_ [_ [_ [Hc1iso [Hc1rev [_ [Hc2rev _]]]]]]]] := Hmp.
   have [_ [Hpct _]] := Hmp.
   have Hic1 : is_code ti1 by rewrite Hti1 -Hti2.
-  (* concrete [lpf] decodes *)
   have [na [ima [tma [Hna [Hvqa [Hntha [Htagqa Hdecq]]]]]]] := code_cell_q Hcount Hbound Hbound' Henc1.
   have Ena : na = n.
   { have Hbw : pc0 + size (code q) < 2 ^ word_size mt by exact: (ltn_trans Hbound alloc_label_lt_word).
@@ -1534,7 +1410,6 @@ Proof.
   have [v2c [Henc2c [Htag2c Hdec2c]]] := code_cell_padc word_of_nat_inj Hcount Hbound Hbound' Hn Hnth.
   have Hv2cell : v2c = i2 @ ti2 by have H := Henc2; rewrite Hv2eq Henc2c in H; move: H => [= ->].
   rewrite Hv2cell vala_at in Hdec2c.
-  (* [im = MrJal l0]; [imm] is the padded-side resolution *)
   have HBeq := Hdec2c; rewrite Hdec2 in HBeq; move: HBeq => [= HBeq].
   have [l0 [Him Himm]] := imt_jal_inv HBeq.
   subst im.
@@ -1543,27 +1418,21 @@ Proof.
   have Hdec1 : decode_instr i1 = Some (Jal imm1). { rewrite /imm1 Hdecq. by []. }
   have Hterm : PaddingSim.is_term (MrJal l0) = false by [].
   have Hn1 : n.+1 < size (code q) by apply: (nonterm_succ_lt code_last_term Hn Hnth Hterm).
-  (* return point cell (jal is non-terminal): [pc+1] cells share tag [tnext] *)
   have [v1n [v2n [tnext [Hm1n Hm2n]]]] := pad_succ_cell_eq_tag Hmp Hpc1 Hn1 Hnth Hterm.
-  (* target correspondence: [swcast imm] (s2) = φ (swcast imm1) (s1) *)
   have Htgt : swcast imm = phia q q' (swcast imm1).
   { rewrite Himm /imm1. exact: (PaddingSim.jal_corr Hcount Hbound Hbound' l0 Hn). }
-  (* the [s2] return cell is the same as [Hretcell]'s, so [tret = tnext] *)
   have Hmem2 : Symbolic.mem s2 = mem2 by rewrite Hs2.
   have Hpcv2 : vala (Symbolic.pc s2) = pc2 by rewrite Hs2.
   have Etret : tret = tnext.
   { move: Hm2n; rewrite Hmem2 Hpcv2 Hretcell => -[= _ ->]; by []. }
-  (* [s1]'s return-addr register (tag [told] preserved) *)
   have Hras2 : Symbolic.regs s2 ra = Some (old @ told) by rewrite Hs2.
   have [old' Hra1s1] := reg_reflect_bwd Hmp Hras2.
-  (* [s1]'s [rcom] register + [evi] *)
   have [a2 Hrcom2] : exists a2, Symbolic.regs s2 rcom = Some a2.
   { move: NEXT2; rewrite Hs2 /Symbolic.next_state_updates_and_pc /Symbolic.next_state /Symbolic.evi.
     case E: (reg2 rcom) => [a2|] /=; [by move=> _; exists a2 | by []]. }
   have Hrcom2' : Symbolic.regs s2 rcom = Some ((vala a2) @ (taga a2)) by rewrite Hrcom2 atom_etaE.
   have [w1 Hrcom1] := reg_reflect_bwd Hmp Hrcom2'.
   have [ei Hevi] := pad_evi_reflect Hmp (ex_intro _ a2 Hrcom2).
-  (* register-clear domain on [s1] (reflected from [Hclear] over [reg_list]) *)
   have Hdom : forall e, e \in [:: 0; 2; 3; 5; 6; 7; 16; 17; 18; 19]%N ->
                 exists a, Symbolic.regs s1 (as_word (ssrint.Posz e)) = Some a.
   { move=> e He.
@@ -1582,7 +1451,6 @@ Proof.
     rewrite /Symbolic.reg_clear_list /Symbolic.reg_list.
     exact: (@rcla_cons_some 1 [:: 0; 2; 3; 5; 6; 7; 16; 17; 18; 19]%N (Symbolic.regs s1) told
               (w1 @ (taga a2)) lh1 Hr1 Hlh1'). }
-  (* invert the [s2] JAL step into colour facts + the same-component/cross-component disjunction *)
   case: tpc2 Hs2 Hpct Hm2 NEXT2 Hmem2 Hpcv2 => [level ctpc] Hs2 Hpct Hm2 NEXT2 Hmem2 Hpcv2.
   have NEXT2' := NEXT2; rewrite Hs2 in NEXT2'.
   have [Hcolor [Hcret Hdisj]] := jal_step_inv Hic2 Hretcell Hra Hclear NEXT2'.
@@ -1591,7 +1459,7 @@ Proof.
   { rewrite Htpcs1 /= Hti1 -Hti2; exact: Hcolor. }
   have Hcret1 : color ti1 == color tnext by rewrite Hti1 -Hti2 -Etret; exact: Hcret.
   case: Hdisj => [Hbel | [celltgt [rcv [Hmw [Hbelne [Hrcoms2 [u Hentry]]]]]]].
-  - (* internal JAL (same-component target, or alloc/None: belong is vacuously true on [None]) *)
+  -
     have Hbel1 : belong (color ti1)
                    (match Symbolic.mem s1 (swcast imm1) with Some ni => Some (taga ni) | None => None end).
     { rewrite Hti1 -Hti2; apply: (jump_belong_corr_bwd (s2 := s2)).
@@ -1622,11 +1490,10 @@ Proof.
     + exact: Hra1s1.
     + exact: Hl1full.
     + exact: HN1.
-  - (* cross-component CALL: reflect the entry target cell, clear registers, emit [ECall] *)
+  -
     have Hrcoms2' : Symbolic.regs s2 rcom = Some (rcv @ Other) by rewrite Hs2; exact: Hrcoms2.
     have Hrcom1' := reg_reflect_bwd_other Hmp Hrcoms2'.
     have Hta2 : taga a2 = Other by move: Hrcom2; rewrite Hrcoms2' => -[= <-].
-    (* expose [lh1 = HSeqCons Other cc] so the clear list matches [jal_call_nsuap] *)
     have [a0 Ha0] : exists a, Symbolic.regs s1 (as_word (ssrint.Posz 0)) = Some a
       by apply: Hdom; rewrite !inE.
     have [cc Hcc] : exists cc,
@@ -1637,8 +1504,6 @@ Proof.
     { rewrite Hta2.
       exact: (@rcla_cons_some 0 [:: 2; 3; 5; 6; 7; 16; 17; 18; 19]%N (Symbolic.regs s1) Other a0 cc Ha0 Hcc). }
     have Hlh1eq : lh1 = HSeqCons Other cc by move: Hlh1; rewrite Hcons => -[= <-].
-    (* reflect the cross-component target cell: the resolved jal target is [addr_ok] (in the code
-       image, or — for the alloc label — above it), so [jump_target_corr_bwd] applies. *)
     have Hm2tgt : Symbolic.mem s2 (phia q q' (swcast imm1)) = Some celltgt by rewrite -Htgt Hmem2.
     have Hok : addr_ok (Symbolic.mem s1) (swcast imm1).
     { rewrite /imm1.
@@ -1692,9 +1557,6 @@ Proof.
     + rewrite Hlh1eq; exact: HN1.
 Qed.
 
-(* ===== Backward step-EXISTENCE: if the padded run [s2] takes any merged step, the [q] run [s1]
-   (related by [match_pad]/[pad_valid]/[pc_safe]) can also step.  Dispatches the inverted [step_me] to
-   the ten per-opcode [pad_nostep_*] reflection lemmas (syscall reuses [PaddingFwdSys]'s). ===== *)
 Lemma pad_step_bwd_exists (s1 s2 s2' : st) (ev : option event) :
   match_pad s1 s2 -> pc_safe s1 -> pad_valid s1 ->
   step_me (NC := NC) s2 s2' ev ->
@@ -1714,8 +1576,6 @@ Proof.
              code_tags_wf_q alloc_label_lt_NC code_colors_bounded Hmp Hpv ST PC GETCALL CALL).
 Qed.
 
-(* ===== [Rf_nostep]: the fourth [PaddingFromForward] interface — contrapositive of
-   [pad_step_bwd_exists] (if [s1] is stuck, so is [s2]). ===== *)
 Lemma Rf_nostep :
   forall s1 s2, Rf s1 s2 -> Nostep (mergedsem NC q) s1 -> Nostep (mergedsem NC padl) s2.
 Proof.
@@ -1728,9 +1588,6 @@ Proof.
   rewrite /= /pstep. by case: ev' Hsm1 => [e|] Hsm1.
 Qed.
 
-(* ===== The two headline transfers, instantiating [PaddingCorrect]'s single-forward-simulation
-   theorems with the concrete relation [Rf] and its four interface proofs.  (Still parametrised by the
-   section's well-formedness hypotheses; discharged to pure wf of q/q' in [AlignDischarge].) ===== *)
 Theorem padding_forward m :
   does_prefix (mergedsem NC q) m -> does_prefix (mergedsem NC padl) m.
 Proof. exact: (padding_forward_sf Rf_init Rf_step1 Rf_final Rf_nostep). Qed.
@@ -1741,9 +1598,6 @@ Proof. exact: (padding_backward_sf Rf_init Rf_step1 Rf_final Rf_nostep). Qed.
 
 End CodeShiftFinal.
 
-(* [shift_pos] increments by exactly 1 across a NON-boundary successor: if [n.+1] is not the start of
-   any block (no prefix of [sizes] has original-sizes summing to [n.+1]), the two φ-images are
-   contiguous.  The core arithmetic behind [fallthrough_aligned]. *)
 Lemma shift_pos_succ (sizes : seq (nat * nat)) (n : nat) :
   all (fun x => x.1 <= x.2) sizes ->
   (forall k, sumn [seq p.1 | p <- take k sizes] <> n.+1) ->
@@ -1765,8 +1619,6 @@ Proof.
     rewrite Hn1 (IH (n - s) Hall Hrec). by rewrite addnS.
 Qed.
 
-(* Every [proc_split_fuel] block begins with an entry cell, provided the input starts with one
-   (procedures start at entries; [proc_split] splits exactly at [is_entry] cells). *)
 Lemma proc_split_fuel_all_entry (fuel : nat) (ys : @Merged.code mt) (dflt : Merged.instr * mem_tag) :
   (ys <> [::] -> is_entry (head dflt ys)) ->
   all (fun b => is_entry (head dflt b)) (proc_split_fuel fuel ys).
@@ -1780,7 +1632,6 @@ Proof.
     rewrite -nth0 nth_drop addn0. apply: nth_find. by rewrite has_find.
 Qed.
 
-(* [proc_split] blocks are non-empty (bool form, avoiding the [List.In] bridge). *)
 Lemma proc_split_fuel_nonempty_b (fuel : nat) (ys : @Merged.code mt) :
   all (fun b => 0 < size b) (proc_split_fuel fuel ys).
 Proof.
@@ -1790,7 +1641,6 @@ Lemma proc_split_nonempty_b (cde : @Merged.code mt) :
   all (fun b => 0 < size b) (proc_split cde).
 Proof. exact: proc_split_fuel_nonempty_b. Qed.
 
-(* [nth] at a cumulative block-size boundary is the head of that block (blocks non-empty). *)
 Lemma nth_flatten_block (bs : seq (@Merged.code mt)) (k : nat) (dflt : Merged.instr * mem_tag) :
   all (fun b => 0 < size b) bs -> k < size bs ->
   nth dflt (flatten bs) (sumn [seq size b | b <- take k bs]) = head dflt (nth [::] bs k).
@@ -1804,7 +1654,6 @@ Proof.
       rewrite ltnNge Hge /= addKn. apply: (IH k Hall). by move: Hk; rewrite /= ltnS.
 Qed.
 
-(* Every NON-FIRST [proc_split] block begins with an entry cell (block 0 is leading code). *)
 Lemma proc_split_behead_entry (cde : @Merged.code mt) (dflt : Merged.instr * mem_tag) :
   all (fun b => is_entry (head dflt b)) (behead (proc_split cde)).
 Proof.
@@ -1815,7 +1664,6 @@ Proof.
   rewrite -nth0 nth_drop addn0. apply: nth_find. by rewrite has_find.
 Qed.
 
-(* The cumulative block-size boundary at [k >= 1] is an entry position of [cde]. *)
 Lemma boundary_entry (cde : @Merged.code mt) (k : nat) (dflt : Merged.instr * mem_tag) :
   0 < k -> k < size (proc_split cde) ->
   is_entry (nth dflt cde (sumn [seq size b | b <- take k (proc_split cde)])).
@@ -1827,12 +1675,10 @@ Proof.
   rewrite size_behead -!subn1. apply: ltn_sub2r => //. exact: (leq_ltn_trans Hk0 Hk).
 Qed.
 
-(* sum of block sizes = total flattened size. *)
 Lemma sumn_sizes_flatten (bs : seq (@Merged.code mt)) :
   sumn [seq size b | b <- bs] = size (flatten bs).
 Proof. by elim: bs => [|b bs IH] //=; rewrite size_cat IH. Qed.
 
-(* the first-components of [take k block_sizes] sum to the first k left-block sizes (equal counts). *)
 Lemma sumn_take_block_sizes (bs bs' : seq (@Merged.code mt)) (k : nat) :
   size bs = size bs' ->
   sumn [seq p.1 | p <- take k (PaddingCorrect.block_sizes bs bs')]
@@ -1842,9 +1688,6 @@ Proof.
   by rewrite (IH bs' k Hsz).
 Qed.
 
-(* φ commutes with [find] of a block-respecting predicate (one that fails on the pad NOPs of any
-   block it doesn't already match): the first match in the padded code is the φ-image of the first
-   match in the original.  Core of [main_entry_aligned]. *)
 Lemma find_align_blocks (P : pred (Merged.instr * mem_tag)) (bs bs' : seq (@Merged.code mt)) :
   size bs = size bs' ->
   all (fun b => ~~ has P b ==> ~~ P (nop_cell (block_color b))) bs ->
@@ -1872,20 +1715,14 @@ Proof.
     by rewrite Hge addKn IHr.
 Qed.
 
-(* ===== Alignment-hypothesis DISCHARGE.  The conditional theorems above assume facts about the
-   PADDED code [padc] ([code_tags_wf_padc], …).  The headline goal forbids those as premises (only
-   well-formedness of q/q' allowed).  This section proves them from base well-formedness of q's raw
-   code + the structural padding lemmas of Padding.v (pad_code_tags_wf etc.). ===== *)
 Section AlignDischarge.
 
 Variables q q' : program.
 Local Notation pc0 := (size (@Merged.initial_memory mt (prog_buffers q))).
 Local Notation padc := ((pad_code (code q) (code q')).1).
 
-(* base well-formedness of q: every raw code cell is instruction-tagged with a data value-tag. *)
 Hypothesis code_wf_q : forall i t, List.In (i, t) (code q) -> is_code t = true /\ vtag t = Other.
 
-(* the bridge: an [encode_code] cell's tag is the tag of the corresponding raw code cell. *)
 Lemma encode_code_cell_in (cde : @Merged.code mt) (w : mword mt) (a : matom) :
   encode_code cde pc0 w = Some a -> exists i, List.In (i, taga a) cde.
 Proof.
@@ -1895,7 +1732,6 @@ Proof.
   exists i; rewrite Htag; exact: (nth_error_In _ _ Hnth).
 Qed.
 
-(* DISCHARGED: [code_tags_wf_padc].  Every padded-code cell is [is_code] (Padding.v pad_code_tags_wf). *)
 Lemma code_tags_wf_padc_disch : forall w a, encode_code padc pc0 w = Some a -> is_code (taga a).
 Proof.
   move=> w a Henc.
@@ -1903,7 +1739,6 @@ Proof.
   by have [Hc _] := pad_code_tags_wf code_wf_q Hin.
 Qed.
 
-(* DISCHARGED: [code_tags_wf_q].  Every raw-code cell is [is_code] (directly from [code_wf_q]). *)
 Lemma code_tags_wf_q_disch : forall w a, encode_code (code q) pc0 w = Some a -> is_code (taga a).
 Proof.
   move=> w a Henc.
@@ -1911,17 +1746,11 @@ Proof.
   by have [Hc _] := code_wf_q Hin.
 Qed.
 
-(* WELL-FORMEDNESS of q/q': equal procedure-block counts (equal interfaces ⟹ same #procedures). *)
 Hypothesis Hcount_d : size (proc_split (code q)) = size (proc_split (code q')).
-(* WELL-FORMEDNESS of q: a non-terminal instruction is never immediately followed by a procedure
-   entry (procedure bodies run to a terminal before the next procedure's entry). *)
 Hypothesis code_noterm_noentry : forall (j : nat) (dflt : Merged.instr * mem_tag),
   j.+1 < size (code q) -> is_term (fst (nth dflt (code q) j)) = false ->
   is_entry (nth dflt (code q) j.+1) = false.
 
-(* DISCHARGED: [fallthrough_aligned] — within a procedure block φ shifts contiguously; the boundary
-   case is excluded because a non-terminal is not followed by an entry ([boundary_entry] +
-   [code_noterm_noentry]).  [shift_pos_succ] supplies the arithmetic. *)
 Lemma fallthrough_aligned_disch : forall n i t,
   n.+1 < size (code q) -> nth_error (code q) n = Some (i, t) -> is_term i = false ->
   PaddingCorrect.shift_pos (pad_block_sizes (code q) (code q')) n.+1
@@ -1947,8 +1776,6 @@ Proof.
     by move: Hn1; rewrite Heq ltnn.
 Qed.
 
-(* DISCHARGED: [main_entry_aligned] — the main-coloured predicate is block-respecting (pad NOPs of a
-   block with no main cell are non-main), so [find_align_blocks] applies. *)
 Lemma main_entry_aligned_disch :
   find (fun '(_, tag) => color tag == Component.main) padc
   = PaddingCorrect.shift_pos (pad_block_sizes (code q) (code q'))
@@ -1970,8 +1797,6 @@ Proof.
              proc_split_flatten.
 Qed.
 
-(* DISCHARGED (init memory): code cells of padc have [vtag = Other] (⟹ non-code-pointer); pairs with
-   the buffer half to give [init_noncodeptr] for the padded program. *)
 Lemma padc_vtag_other : forall w a, encode_code padc pc0 w = Some a -> vtag (taga a) = Other.
 Proof.
   move=> w a Henc.
@@ -1979,7 +1804,6 @@ Proof.
   by have [_ Hv] := pad_code_tags_wf code_wf_q Hin.
 Qed.
 
-(* DISCHARGED (init memory): code cells of q itself have [vtag = Other]. *)
 Lemma codeq_vtag_other : forall w a, encode_code (code q) pc0 w = Some a -> vtag (taga a) = Other.
 Proof.
   move=> w a Henc.
@@ -1987,8 +1811,6 @@ Proof.
   by have [_ Hv] := code_wf_q Hin.
 Qed.
 
-(* the padded code is no larger than the two inputs combined (each aligned block has size
-   [maxn |b| |b'| <= |b| + |b'|]). *)
 Lemma align_blocks_size_le (bs bs' : seq (@Merged.code mt)) :
   size (align_blocks bs bs').1 <= size (flatten bs) + size (flatten bs').
 Proof.
@@ -2006,28 +1828,19 @@ Proof.
   by rewrite !proc_split_flatten.
 Qed.
 
-(* DISCHARGED: [Hbound'] ([pc0 + |padc| < alloc_label]) from the combined-size well-formedness. *)
 Hypothesis Hbound_sum : pc0 + (size (code q) + size (code q')) < alloc_label.
 
 Lemma Hbound'_disch : pc0 + size padc < alloc_label.
 Proof. have := size_pad_code_le; move: Hbound_sum; lia. Qed.
 
-(* DISCHARGED: [Hbound] ([pc0 + |code q| < alloc_label]) from the combined-size well-formedness. *)
 Lemma Hbound_disch : pc0 + size (code q) < alloc_label.
 Proof. move: Hbound_sum; lia. Qed.
 
-(* DISCHARGED: [word_of_nat_inj] — a pure word-arithmetic fact ([word_of_nat] is injective below
-   [2^word_size] because [val] is its left inverse there).  Not q/q'-specific, hence proven (not a
-   premise); the same fact [recomposition_blame] relies on. *)
 Lemma word_of_nat_inj_disch : forall a b,
   a < 2 ^ (word_size mt) -> b < 2 ^ (word_size mt) ->
   @word_of_nat (word_size mt) a = word_of_nat b -> a = b.
 Proof. move=> a b Ha Hb H. by rewrite -(val_word_of_nat Ha) -(val_word_of_nat Hb) H. Qed.
 
-(* ===== The remaining §CodeShiftFinal hypotheses are pure WELL-FORMEDNESS of q/q' (and the
-   compartment count [NC]); they are taken as premises of the closed theorems (allowed by the goal),
-   not discharged.  Everything that was an alignment / padding-structure / simulation fact has been
-   PROVEN above. ===== *)
 Variable NC : nat.
 Hypothesis alloc_label_lt_NC : alloc_label < 2 ^ (word_size mt - NC).
 Hypothesis code_colors_bounded : forall w a,
@@ -2054,8 +1867,6 @@ Hypothesis initial_memory_not_code : forall (w : mword mt) (v : matom),
 Hypothesis initial_memory_vtag_other : forall (w : mword mt) (v : matom),
   @Merged.initial_memory mt (prog_buffers q) w = Some v -> vtag (taga v) = Other.
 
-(* ===== THE HEADLINE CLOSED THEOREMS: the unconditional forward and backward [does_prefix] transfer
-   for [pad_align], depending only on well-formedness of q/q'. ===== *)
 Theorem padding_forward_closed m :
   does_prefix (mergedsem NC q) m -> does_prefix (mergedsem NC (pad_align q q').1) m.
 Proof.

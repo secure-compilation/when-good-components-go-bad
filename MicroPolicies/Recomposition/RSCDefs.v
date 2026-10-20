@@ -39,7 +39,6 @@ Section ProgramSemantics.
   Variable NC : nat.
   Variable W : program.
 
-  (* trace-shaped step wrappers, mirroring Definitions.v's [step1]/[step2] *)
   Definition prog_step_me := (fun (ge: unit) (s: state) t (s': state) =>
                                 match t with
                                 | [::] => step_me s s' None (NC := NC)
@@ -64,7 +63,6 @@ Section ProgramSemantics.
       | Some (Types.Atom i tag) => (Types.decode_instr i) = Some (Types.Halt _)
       end.
 
-  (* overlay final states: [Halt] on a code cell *)
   Definition final_halt_code : state -> Prop :=
     fun '(Symbolic.State m r (Types.Atom pc _) _) =>
       match (m pc) with
@@ -73,7 +71,6 @@ Section ProgramSemantics.
           ((Types.decode_instr i) = Some (Types.Halt _)) /\ (is_code tag = true)
       end.
 
-  (* THE micro-policy machine semantics of a whole MP-level program *)
   Definition mp_sem : semantics :=
     {| Smallstep.state := state;
        Smallstep.genvtype := unit;
@@ -82,7 +79,6 @@ Section ProgramSemantics.
        Smallstep.final_state := final_halt;
        Smallstep.globalenv := tt |}.
 
-  (* the overlay (Merged) semantics of a whole MP-level program *)
   Definition me_sem : semantics :=
     {| Smallstep.state := state;
        Smallstep.genvtype := unit;
@@ -127,8 +123,6 @@ Section ProgramSemantics.
 
 End ProgramSemantics.
 
-(* the running colour of a state (standalone copy of Definitions.v's
-   functor-internal [color_of]; definitionally equal) *)
 Definition rsc_color_of : state -> Component.id :=
   fun '(Symbolic.State m r (Types.Atom _ tpc) _) =>
     match (tpc) with
@@ -138,7 +132,6 @@ Definition rsc_color_of : state -> Component.id :=
 Section RUBSemantics.
 
   Variable NC : nat.
-  (* the partial-program / context interfaces (the [I] of [UB(I)]) *)
   Variables pI cI : Program.interface.
   Variable W : program.
 
@@ -154,9 +147,6 @@ Section RUBSemantics.
           /\ ((color tag) \in (domm pI) -> (is_code tag = true))
       end.
 
-  (* the UB-restricting semantics [⇝_{UB(C)}]: the context side may take raw
-     machine steps (refining overlay-level undefined behaviour), the program
-     side must stay within the overlay *)
   Definition rub_sem : semantics :=
     L_restricted_UB (prog_step_me NC) (prog_step_mp NC)
                     (prog_initial W) rub_final tt rub_allowed.

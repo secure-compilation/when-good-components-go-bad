@@ -38,36 +38,15 @@ Import TraceBracket(nsu_silent_extract, switch_val_color).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 
-(* ============================================================================
-   PcColor.v — the UNCONDITIONAL pc-colour reachability invariant.
-
-   [pc_code_color] (Definitions.v) records only the CONDITIONAL fact "if the
-   pc-cell is code then its colour is the running colour".  That is too weak for
-   the final-state correspondence: a spurious [final_state] can sit on a
-   same-colour DATA cell whose value decodes to Halt.  The LRC [check_belong]
-   guard checks COLOUR ONLY (belong c (Some t) = (c == color t), LRC.v:103), so
-   the *unconditional* invariant
-
-       pc_color_inv s := forall d, mem s (vala (pc s)) = Some d -> color (taga d) = color_of s
-
-   is a genuine per-step invariant.  We prove it is preserved by silent/event
-   steps and holds at the initial state, hence at every reachable state.
-   ============================================================================ *)
-
 Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
 
   Module Init := RecInit S A.
   Include Init.
   Import PCCM.
 
-  (* The unconditional pc-colour invariant: the cell the pc currently addresses
-     (code OR data) has the running colour. *)
   Definition pc_color_inv (s: state) : Prop :=
     forall d, mem s (vala (pc s)) = Some d -> color (taga d) = color_of s.
 
-  (* Unconditional analogue of [pc_code_color_combine]: from the post-pc =
-     [pc']@[tpc] and a colour-correspondence between [mem s' (pc s')] and an
-     auxiliary [mpre pc'] on which [belong] holds, conclude [pc_color_inv s']. *)
   Lemma pc_color_inv_combine : forall (s' : state)
       (mpre : {fmap mword mt -> atom (mword mt) (tag_type lrc_tags Symbolic.M)}) pc' tpc,
     pc s' = pc'@tpc ->
@@ -85,9 +64,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     by rewrite Hcol Hbel Hcol0.
   Qed.
 
-  (* Unconditional analogue of [pc_code_color_alloc]: the allocator lands the pc on
-     the return-address cell [ret], whose colour the syscall has checked equals the
-     current component (we only use the colour conjunct of the check). *)
   Lemma pc_color_alloc : forall (s s' : state) blk (a : mword mt) ret,
     mem s' = unionm (mem s) blk -> mem s a = Some ret ->
     vala (pc s') = a -> taga (pc s') = taga (pc s) ->
@@ -122,9 +98,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       [ reflexivity | exact Hret | reflexivity | reflexivity | exact Hretcol ].
   Qed.
 
-  (* An event-producing transfer is necessarily a (cross-component) JUMP or JAL.
-     Mirrors [op_silent_trpc]'s case split; the 12 non-event opcodes produce [None]
-     ([by move: H => [=]] discriminates [None = Some e]). *)
   Lemma transfer_event_jumpjal :
     forall (op : opcode) (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
            (ts : hseq (tag_type lrc_tags) (inputs op)) (tni : option (tag_type lrc_tags Symbolic.M))
@@ -156,11 +129,11 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
       move: H. case: ifP => // _ H. move: H. case E: (switch_val _ _) => [a c] /=. by move=> [=].
-    - (* JUMP *) by left.
+    -  by left.
     - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       by move: H => [=].
-    - (* JAL *) by right.
+    -  by right.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
@@ -168,9 +141,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
   Qed.
 
-  (* The new pc-tag colour of an EVENT transfer equals the colour of the next-instruction cell
-     [tnitag]: both the JUMP (return) and JAL (call) event branches set [trpc = build_tpc _
-     (get_tni_color tni)], and [get_tni_color (Some tnitag) = Some (color tnitag)]. *)
   Lemma event_trpc_tni :
     forall (op : opcode) (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
            (ts : hseq (tag_type lrc_tags) (inputs op)) (tnitag : tag_type lrc_tags Symbolic.M)
@@ -202,7 +172,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
       move: H. case: ifP => // _ H. move: H. case E: (switch_val _ _) => [a c] /=. by move=> [=].
-    - (* JUMP — event (return) branch *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. move: H. case: ifP => _ H.
       + case: (obind_inv H) => u1 [_ {}H]. by move: H => [=].
@@ -212,7 +182,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       by move: H => [=].
-    - (* JAL — event (call) branch *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       move: H. case: ifP => _ H.
@@ -227,17 +197,11 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
   Qed.
 
-  (* A silent LRC step lands the pc on a cell of the running colour.  Mirrors the
-     case split of [silent_step_pc_code_color] but UNCONDITIONALLY: the OP opcodes
-     leave memory unchanged (so the post-pc cell is a [mem s] cell guarded by
-     [belong]); LOAD re-tags keeping colour ([switch_val_color]); STORE writes a
-     cell whose colour is the running colour ([weak_store_facts]); the allocator
-     lands on the running-coloured return address. *)
   Lemma silent_step_pc_color :
     forall (s s' : state), step_mp (NC := NC) s s' None -> pc_color_inv s'.
   Proof.
     move=> s s' Hstep. inversion Hstep.
-    - (* 1  nop *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -245,7 +209,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 2  const *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -253,7 +217,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 3  mov *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -261,7 +225,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 4  binop *)
+    -
       rewrite /next_state_updates in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -269,7 +233,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 5  load — re-tag of the loaded cell keeps colour *)
+    -
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have [Hw0 [Hmem' [Htag Hguard]]] := weak_load_facts ST MEM1 NEXT.
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
@@ -278,7 +242,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       + move=> [= Hdeq]. exists (w2 @ t2). rewrite Heq Hw0.
         split; [ reflexivity | ]. by rewrite -Hdeq /= switch_val_color.
       + move=> Hd. by exists d.
-    - (* 6  store — the written cell carries the running colour *)
+    -
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have [vnew [oldd [Hw0 [Hmem' [Htag [Hcolv [Hcolold _]]]]]]] := weak_store_facts ST OLD NEXT.
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
@@ -287,7 +251,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       + move=> [= Hdeq]. exists oldd. rewrite Heq. split; [ exact Hw0 | ].
         by rewrite -Hdeq Hcolold Hcolv.
       + move=> Hd. by exists d.
-    - (* 7  jump — memory unchanged *)
+    -
       unfold mvec in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -295,7 +259,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 8  bnz — memory unchanged *)
+    -
       unfold mvec, pc' in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmm : mem s' = mem s.
@@ -303,7 +267,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
         rewrite Hmem (ndsu_mem_noM (st := s) _ _ Edsu); [ by rewrite ST | nomw | nomr ]. }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 9  jal — memory unchanged (identity MemRead + reg writes) *)
+    -
       unfold mvec, pc' in NEXT.
       have [Hpc Hbel] := silent_next_pc_belong NEXT.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -325,39 +289,34 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
                   repeat (move: Hin => [Hin|Hin]; [by discriminate|]); case: Hin) ] ). }
       apply: (pc_color_inv_combine Hpc _ Hbel) => d Hd.
       exists d; split; [ rewrite -Hmm; by move: Hd; rewrite Hpc /= | by [] ].
-    - (* 10  syscall (alloc) — pc lands on the running-coloured return address *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       exact: (pc_color_alloc_fun Halloc).
   Qed.
 
-  (* An EVENT (cross-component Call/Return) step also lands the pc on a running-coloured cell.
-     The 7 non-event opcodes (nop..store, bnz) cannot emit an event ([transfer_event_jumpjal]);
-     JUMP (return) and JAL (call) set the new pc-tag colour to the next-cell colour
-     ([event_trpc_tni]), and memory is unchanged so that next-cell is the [mem s] cell read by
-     [Hd]; SYSCALL(alloc) reuses [pc_color_alloc_fun] ([run_syscall_alloc] ignores the event). *)
   Lemma event_step_pc_color :
     forall (s s' : state) e, step_mp (NC := NC) s s' (Some e) -> pc_color_inv s'.
   Proof.
     move=> s s' e Hstep. inversion Hstep.
-    - (* nop *) rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
+    -  rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* const *) rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
+    -  rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* mov *) rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
+    -  rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* binop *) rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
+    -  rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* load *) rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
+    -  rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* store *) rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
+    -  rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jump — cross-component return *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] := nsuap_event_inv NEXT.
       have Hmm : mem s' = mem s.
@@ -366,10 +325,10 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       move: Htr; rewrite Hd => Htr.
       have Hc := event_trpc_tni Htr.
       rewrite (color_of_pc_tag s') Hpcs /=. by rewrite Hc.
-    - (* bnz *) unfold mvec, pc' in NEXT.
+    -  unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jal — cross-component call *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [Hdsu [Hmem Hpcs]]]]]] := nsuap_event_inv NEXT.
       have Hmemcell : mem s (pc0 + 1)%w = Some (vret @ tret) by rewrite ST.
@@ -383,20 +342,17 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       move: Htr; rewrite Hd => Htr.
       have Hc := event_trpc_tni Htr.
       rewrite (color_of_pc_tag s') Hpcs /=. by rewrite Hc.
-    - (* syscall (alloc) — same as the silent case *)
+    -
       have Halloc := run_syscall_alloc GETCALL CALL.
       exact: (pc_color_alloc_fun Halloc).
   Qed.
 
-  (* Any LRC step (silent or event) lands the pc on a running-coloured cell. *)
   Lemma step_mp_pc_color : forall (s s' : state) ev,
     step_mp (NC := NC) s s' ev -> pc_color_inv s'.
   Proof.
     move=> s s' [e|] H; [ exact: (event_step_pc_color H) | exact: (silent_step_pc_color H) ].
   Qed.
 
-  (* A [sem] step yields a [step_mp] (BOTH [step_restricted_UB] constructors carry the [stepT]=[step2]
-     relation, SmallstepUB.v:22-31), hence [pc_color_inv] of the target. *)
   Lemma sem_step_pc_color : forall s t s', Step sem s t s' -> pc_color_inv s'.
   Proof.
     move=> s t s' Hstep. simpl in Hstep. destruct t as [|e [|? ?]].
@@ -405,7 +361,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - inversion Hstep as [? ? ? H ? | ? ? ? ? H]; subst; exact: (False_rect _ H).
   Qed.
 
-  (* A [Star] either stays at the initial state or its last step targets [s']. *)
   Lemma star_last_or_refl : forall (L : Smallstep.semantics) s t s',
     Star L s t s' -> s' = s \/ exists s'' e, Step L s'' e s'.
   Proof.
@@ -416,7 +371,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       + by exists s'', e0.
   Qed.
 
-  (* [find_rank] succeeding means the predicate holds somewhere ([has]). *)
   Lemma find_rank'_has {T} (f : pred T) : forall l k n, find_rank' f l k = Some n -> has f l.
   Proof.
     elim => [|x l IH] k n //=. case E: (f x) => H; first by [].
@@ -425,7 +379,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
   Lemma find_rank_has {T} (f : pred T) l n : find_rank f l = Some n -> has f l.
   Proof. exact: find_rank'_has. Qed.
 
-  (* A [sem''] step (plain [step1] = [step_me], Definitions.v:242) yields a [step_mp] (via [step_me_mp]). *)
   Lemma sem''_step_pc_color : forall s t s', Step sem'' s t s' -> pc_color_inv s'.
   Proof.
     move=> s t s' Hstep. simpl in Hstep. destruct t as [|e [|? ?]].
@@ -434,10 +387,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: Hstep.
   Qed.
 
-  (* Base case: the INITIAL state's pc-cell (the main entry) is running-coloured.  Unconditional
-     analogue of [initial_state_pc_cell]: the pc lands inside [encode_code] (a code cell coloured
-     [Component.main]); [encode_code_nth] makes the lookup succeed so no [is_code] side-condition
-     is needed. *)
   Lemma initial_pc_color_inv : forall cde pb pi,
     has (fun '(_, tag) => color tag == Component.main) cde ->
     size (initial_memory (mt := mt) pb) + size cde < 2 ^ word_size mt ->
@@ -475,8 +424,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     apply/eqP. move: (@nth_find _ (i, t) _ cde Hhas). by rewrite -/mp Hnn.
   Qed.
 
-  (* The reachability invariant for the LEFT run [sem]: every reachable state's pc-cell is
-     running-coloured.  (Non-empty: the last step, [sem_step_pc_color]; empty: [initial_pc_color_inv].) *)
   Lemma reachable_pc_color : forall s t s',
     Smallstep.initial_state sem s -> Star sem s t s' -> pc_color_inv s'.
   Proof.
@@ -496,7 +443,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite /prog /program_link /=. exact: (ltn_trans memory_size alloc_label_lt_w).
   Qed.
 
-  (* Reachability invariant for the MERGED run [sem''] (mirrors [reachable_pc_color]). *)
   Lemma reachable_pc_color'' : forall s t s',
     Smallstep.initial_state sem'' s -> Star sem'' s t s' -> pc_color_inv s'.
   Proof.
@@ -509,9 +455,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite /prog'' /program_link /=. exact: (ltn_trans memory_size'' alloc_label_lt_w).
   Qed.
 
-  (* A [sem'] step (plain [step1] = [step_me]) yields a [step_mp] — dedicated copy of
-     [sem''_step_pc_color] so the goal [simpl]s the step directly (avoids unifying the [sem']/[sem'']
-     semantics records, which is very slow). *)
   Lemma sem'_step_pc_color : forall s t s', Step sem' s t s' -> pc_color_inv s'.
   Proof.
     move=> s t s' Hstep. simpl in Hstep. destruct t as [|e [|? ?]].
@@ -520,7 +463,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: Hstep.
   Qed.
 
-  (* Reachability invariant for the RIGHT run [sem'] (mirrors [reachable_pc_color'']). *)
   Lemma reachable_pc_color' : forall s t s',
     Smallstep.initial_state sem' s -> Star sem' s t s' -> pc_color_inv s'.
   Proof.
@@ -533,10 +475,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite /prog' /program_link /=. exact: (ltn_trans memory_size' alloc_label_lt_w).
   Qed.
 
-  (* ===== Running-colour tracking along a trace (for undef_running_left) ===== *)
-
-  (* An EVENT transfer's [tni] is present and the event's target [next_comp_of_event] is its colour.
-     Mirror of [event_trpc_tni]/[transfer_event_jumpjal], generic in [tni]. *)
   Lemma event_nextcomp_and_some :
     forall (op : opcode) (tpc : tag_type lrc_tags P) (ti : tag_type lrc_tags Symbolic.M)
            (ts : hseq (tag_type lrc_tags) (inputs op)) (tni : option (tag_type lrc_tags Symbolic.M))
@@ -568,7 +506,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       case: (obind_inv H) => u2 [_ {}H]. case: (obind_inv H) => u3 [_ {}H].
       move: H. case: ifP => // _ H. move: H. case E: (switch_val _ _) => [a c] /=. by move=> [=].
-    - (* JUMP — return branch *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. move: H. case: ifP => _ H.
       + case: (obind_inv H) => u1 [_ {}H]. by move: H => [=].
@@ -579,7 +517,7 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite (hseq_eta ts) (hseq0 (hsbehead ts)) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H].
       by move: H => [=].
-    - (* JAL — call branch *)
+    -
       rewrite (hseq_eta ts) (hseq_eta (hsbehead ts)) (hseq_eta (hsbehead (hsbehead ts))) in H.
       case: (obind_inv H) => u0 [_ {}H]. case: (obind_inv H) => u1 [_ {}H]. move: H. case: ifP => _ H.
       + by move: H => [=].
@@ -596,7 +534,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - by case: (obind_inv H) => u0 [_ H1]; discriminate H1.
   Qed.
 
-  (* The running colour after an EVENT step is the event's target component. *)
   Lemma event_step_color :
     forall (s s' : state) e, step_mp (NC := NC) s s' (Some e) -> color_of s' = next_comp_of_event e.
   Proof.
@@ -619,26 +556,25 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite /next_state_updates in NEXT; unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jump *)
+    -
       unfold mvec in NEXT.
       have [evinp [ov0 [st0 [Htr [_ [_ Hpcs]]]]]] := nsuap_event_inv NEXT.
       have [t [Htni Hnc]] := event_nextcomp_and_some Htr.
       rewrite Htni in Htr.
       rewrite (color_of_pc_tag s') Hpcs /= (event_trpc_tni Htr). by rewrite Hnc.
-    - (* bnz *) unfold mvec, pc' in NEXT.
+    -  unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr _]]]] := nsuap_event_inv NEXT.
       case: (transfer_event_jumpjal Htr) => E; discriminate.
-    - (* jal *)
+    -
       unfold mvec, pc' in NEXT.
       have [evinp [ov0 [st0 [Htr [_ [_ Hpcs]]]]]] := nsuap_event_inv NEXT.
       have [t [Htni Hnc]] := event_nextcomp_and_some Htr.
       rewrite Htni in Htr.
       rewrite (color_of_pc_tag s') Hpcs /= (event_trpc_tni Htr). by rewrite Hnc.
-    - (* syscall: run_syscall never emits an event *)
+    -
       have Hev := run_syscall_event_none CALL. discriminate Hev.
   Qed.
 
-  (* A single [sem] step advances the running colour to the [last] of the step's trace. *)
   Lemma sem_step_color : forall s t s', Step sem s t s' ->
     color_of s' = last (color_of s) [seq next_comp_of_event e | e <- t].
   Proof.
@@ -648,7 +584,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - inversion Hstep as [? ? ? H ? | ? ? ? ? H]; subst; exact: (False_rect _ H).
   Qed.
 
-  (* The running colour at the end of a [sem] run is [last_comp] of its trace. *)
   Lemma star_color_last : forall s m s', Star sem s m s' ->
     color_of s' = last (color_of s) [seq next_comp_of_event e | e <- m].
   Proof.
@@ -657,8 +592,6 @@ Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
     - rewrite Heqt map_cat last_cat -(sem_step_color Hstep). exact IH.
   Qed.
 
-  (* The blame-colour interface: if the LEFT run goes undefined in [ip], the running colour at the
-     end is an [ip]-component.  ([color_of (initial) = main = last_comp E0]; events advance it.) *)
   Lemma undef_running_left : forall s1 s1' m,
     Smallstep.initial_state sem s1 -> Star sem s1 m s1' ->
     Common.Blame.undef_in m ip -> color_of s1' \in domm ip.
