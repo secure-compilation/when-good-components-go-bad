@@ -41,9 +41,9 @@ Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 Require Import MicroPolicies.Recomposition.PcColor.
 
-Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S).
+Module RecBackward (S: RecompositionContext) (A: AlignmentFacts S) (P: PresT S).
 
-  Module PC := RecPcColor S A.
+  Module PC := RecPcColor S A P.
   Include PC.
   Import PCCM.
 

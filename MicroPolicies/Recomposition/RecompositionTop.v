@@ -34,19 +34,26 @@ Import Types.
 Require Import MicroPolicies.Recomposition.Definitions.
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 
+Require Import MicroPolicies.Recomposition.StepSilentStrong.
+Require Import MicroPolicies.Recomposition.StepSilentStrong2.
+Require Import MicroPolicies.Recomposition.StepSilentWeak2.
+Require Import MicroPolicies.Recomposition.StepEventReturn.
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 Require Import MicroPolicies.Recomposition.PcColor.
 Require Import MicroPolicies.Recomposition.RecBackward.
 
 Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
 
-  Module PCM := RecBackward S A.
+  Module P0 := Preservation S.
+  Module PCM := RecBackward S A P0.
   Include PCM.
 
+  Module SS1 := StepStrong S P0.
+  Module SS2 := StepStrong2 S P0.
+  Module SW := StepWeak2 S P0.
+  Module SE := StepEventReturn S P0.
 
-
-
-
+  Notation lrc_silent_gmc := SW.lrc_silent_gmc.
 
   Theorem tsim_properties_match_states:
     @tsim_properties sem sem' sem'' (sd_traces det_sem) (sd_traces det_sem') (sd_traces det_sem'')
@@ -54,15 +61,15 @@ Module RecTop (S: RecompositionContext) (A: AlignmentFacts S).
   Proof.
     eapply threeway_simulation_properties.
     - exact match_initial_states.
-    - exact step_silent_strong1.
-    - exact step_silent_strong2.
-    - exact step_silent_weak1.
-    - exact step_silent_weak2.
+    - exact SS1.step_silent_strong1.
+    - exact SS2.step_silent_strong2.
+    - exact SW.step_silent_weak1.
+    - exact SW.step_silent_weak2.
     -
       intros s1 e s1' Hs1 s2 s2' Hs2 s3 M Hms.
       destruct e as [comp proc z comp' | comp z comp'].
-      + eapply step_event_call; eassumption.
-      + eapply step_event_return; eassumption.
+      + eapply SE.step_event_call; eassumption.
+      + eapply SE.step_event_return; eassumption.
   Qed.
 
   Local Opaque Merged.initial_state Merged.encode_code Merged.initial_memory.

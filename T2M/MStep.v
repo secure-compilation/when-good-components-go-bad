@@ -49,6 +49,32 @@ Proof. by rewrite word_size_mt. Qed.
 Lemma expn_ws_31 : (2 : nat) ^ (word_size mt).-1 = 2 ^ 31.
 Proof. by have -> : (word_size mt).-1 = 31 by rewrite word_size_mt. Qed.
 
+Lemma reg_clear_listE {m : machine_types} {tt : Symbolic.tag_types}
+    (regs : {fmap reg m -> atom (mword m) (Symbolic.tag_type tt Symbolic.R)})
+    (top : Symbolic.tag_type tt Symbolic.R)
+    (a1 a0 a2 a3 a5 a6 a7 a16 a17 a18 a19 :
+       atom (mword m) (Symbolic.tag_type tt Symbolic.R)) :
+  regs (word.as_word (ssrint.Posz 1)) = Some a1 ->
+  regs (word.as_word (ssrint.Posz 0)) = Some a0 ->
+  regs (word.as_word (ssrint.Posz 2)) = Some a2 ->
+  regs (word.as_word (ssrint.Posz 3)) = Some a3 ->
+  regs (word.as_word (ssrint.Posz 5)) = Some a5 ->
+  regs (word.as_word (ssrint.Posz 6)) = Some a6 ->
+  regs (word.as_word (ssrint.Posz 7)) = Some a7 ->
+  regs (word.as_word (ssrint.Posz 16)) = Some a16 ->
+  regs (word.as_word (ssrint.Posz 17)) = Some a17 ->
+  regs (word.as_word (ssrint.Posz 18)) = Some a18 ->
+  regs (word.as_word (ssrint.Posz 19)) = Some a19 ->
+  Symbolic.reg_clear_list regs top
+  = Some [hseq top; taga a1; taga a0; taga a2; taga a3; taga a5; taga a6;
+          taga a7; taga a16; taga a17; taga a18; taga a19].
+Proof.
+move=> H1 H0 H2 H3 H5 H6 H7 H16 H17 H18 H19.
+rewrite /Symbolic.reg_clear_list.
+cbv beta iota zeta delta [Symbolic.reg_clear_list_aux Symbolic.reg_list].
+by rewrite H1 H0 H2 H3 H5 H6 H7 H16 H17 H18 H19.
+Qed.
+
 Lemma inc_offset (p : Pointer.t) :
   Pointer.offset (Pointer.inc p) = BinInt.Z.add (Pointer.offset p) 1.
 Proof. by case: p => [[? ?] ?]. Qed.
@@ -2264,9 +2290,8 @@ have HA19c : Symbolic.regs ms (word.as_word (ssrint.Posz 19))
 have Hclear : Symbolic.reg_clear_list (Symbolic.regs ms) InternalJump
   = Some [hseq InternalJump; t1'; t0'; t2'; t3'; t5'; t6'; t7';
           t16'; t17'; t18'; t19'].
-{ rewrite /Symbolic.reg_clear_list /=.
-  by rewrite HA1c /= HA0c /= HA2c /= HA3c /= HA5c /= HA6c /= HA7c /=
-             HA16c /= HA17c /= HA18c /= HA19c /=. }
+{ exact: (reg_clear_listE _ HA1c HA0c HA2c HA3c HA5c HA6c HA7c
+                          HA16c HA17c HA18c HA19c). }
 rewrite /Symbolic.pct in Hpct.
 exists (@Symbolic.State mt lrc_tags unit
           (Symbolic.mem ms) (Symbolic.regs ms)
@@ -2683,9 +2708,8 @@ have HA19c : Symbolic.regs ms (word.as_word (ssrint.Posz 19))
 have Hclear : Symbolic.reg_clear_list (Symbolic.regs ms) tra
   = Some [hseq tra; t1'; t0'; t2'; t3'; t5'; t6'; t7';
           t16'; t17'; t18'; t19'].
-{ rewrite /Symbolic.reg_clear_list /=.
-  by rewrite HA1c /= HA0c /= HA2c /= HA3c /= HA5c /= HA6c /= HA7c /=
-             HA16c /= HA17c /= HA18c /= HA19c /=. }
+{ exact: (reg_clear_listE _ HA1c HA0c HA2c HA3c HA5c HA6c HA7c
+                          HA16c HA17c HA18c HA19c). }
 move: Hdec => /= Hdec.
 rewrite Hlp in Hdec.
 have Ecast : @swcast (imm_size mt) (word_size mt)
@@ -3374,9 +3398,8 @@ have HA19c : Symbolic.regs ms (word.as_word (ssrint.Posz 19))
 have Hclear : Symbolic.reg_clear_list (Symbolic.regs ms) tra
   = Some [hseq tra; Other; t0'; t2'; t3'; t5'; t6'; t7';
           t16'; t17'; t18'; t19'].
-{ rewrite /Symbolic.reg_clear_list /=.
-  by rewrite HA1c /= HA0c /= HA2c /= HA3c /= HA5c /= HA6c /= HA7c /=
-             HA16c /= HA17c /= HA18c /= HA19c /=. }
+{ exact: (reg_clear_listE _ HA1c HA0c HA2c HA3c HA5c HA6c HA7c
+                          HA16c HA17c HA18c HA19c). }
 move: Hdec => /= Hdec.
 rewrite Hlp in Hdec.
 have Ecast : @swcast (imm_size mt) (word_size mt)
@@ -3709,9 +3732,8 @@ have HA19c : Symbolic.regs ms (word.as_word (ssrint.Posz 19))
 have Hclear : Symbolic.reg_clear_list (Symbolic.regs ms) (Ret n)
   = Some [hseq Ret n; Other; t0'; t2'; t3'; t5'; t6'; t7';
           t16'; t17'; t18'; t19'].
-{ rewrite /Symbolic.reg_clear_list /=.
-  by rewrite HA1c /= HA0c /= HA2c /= HA3c /= HA5c /= HA6c /= HA7c /=
-             HA16c /= HA17c /= HA18c /= HA19c /=. }
+{ exact: (reg_clear_listE _ HA1c HA0c HA2c HA3c HA5c HA6c HA7c
+                          HA16c HA17c HA18c HA19c). }
 have Hbf : (Pointer.component tpc == Pointer.component pc') = false.
 { apply/negbTE/eqP => E'. apply: Hneq. by rewrite E'. }
 have HBra : setm (Symbolic.regs ms) (ra : reg mt)

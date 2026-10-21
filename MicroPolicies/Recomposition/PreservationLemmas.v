@@ -2658,3 +2658,7 @@ Qed.
   End PCCM.
 
 End Preservation.
+
+Module Type PresT (S: RecompositionContext).
+  Include Preservation S.
+End PresT.

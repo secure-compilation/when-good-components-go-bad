@@ -95,6 +95,6 @@ Module RSC_DC_MD_MicroPolicies (In : MicroPoliciesInput).
           /\ trace_finpref_prefix m' In.fm
           /\ undef_in m' (prog_interface In.p)).
   Proof. exact: M.rsc_dc_md_me_mp_faithful. Qed.
-  Print Assumptions RSC_DC_MD_MicroPolicies.
+  (* Print Assumptions RSC_DC_MD_MicroPolicies. *)
 
 End RSC_DC_MD_MicroPolicies.

@@ -65,8 +65,6 @@ Proof.
   exact: (H s Hin).
 Qed.
 
-
-
 Definition ext_levels (S : seq ra_slot) : seq nat :=
   pmap (fun s => if ra_tag s is Ret n then Some n else None) S.
 

@@ -380,8 +380,6 @@ Proof.
     by apply: TInv.tag_inv_setreg.
 Qed.
 
-
-
 End WithCode.
 
 End TMacros.

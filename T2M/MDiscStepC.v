@@ -4191,7 +4191,7 @@ Proof.
   * have Hlv := di_level HI.
     rewrite Hlv Echain /= Hwin /=.
     rewrite /Transitional.dec_pc_tag /=.
-    congr (Transitional.Level _). by lia.
+    congr (Transitional.Level _). by rewrite Nat.sub_0_r.
   * exact: (di_flag HI).
   * move=> w0; rewrite Ewp => -[<-] Hekw.
     have Hek' : sv_ek (asv A) = true.
@@ -4418,7 +4418,7 @@ Proof.
   * exact: (di_dom HI).
   * rewrite Epct /= Hiw /= En.
     rewrite /Transitional.inc_pc_tag /=.
-    congr (Transitional.Level _). by lia.
+    congr (Transitional.Level _). by rewrite Nat.add_comm.
   * exact: (di_flag HI).
   * move=> w0; rewrite EvT => -[<-]. by [].
   * move=> i0 X HX Hnwx.

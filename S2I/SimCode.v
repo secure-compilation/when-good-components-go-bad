@@ -1297,8 +1297,6 @@ Proof.
     + by move=> _.
 Qed.
 
-
-
 Lemma compile_procedures_aux_inv C lbp scr plm
       (ps : list (Procedure.id * expr)) acc s out s' P0 cd0 :
   compile_procedures_aux C lbp scr plm acc ps s = Some (out, s') ->

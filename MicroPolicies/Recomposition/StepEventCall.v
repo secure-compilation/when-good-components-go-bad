@@ -38,11 +38,10 @@ Require Import MicroPolicies.Recomposition.Definitions.
 Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
 Import TraceBracket(reg_index_neq).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
-Require Import MicroPolicies.Recomposition.StepSilentWeak2.
 
-Module StepEventCall (S: RecompositionContext).
+Module StepEventCall (S: RecompositionContext) (P: PresT S).
 
-  Include StepWeak2 S.
+  Include P.
 
   Lemma running_comp_valid_call m w d c :
     color_in_memory m -> m w = Some d -> get_tni_color (Some (taga d)) = Some c ->

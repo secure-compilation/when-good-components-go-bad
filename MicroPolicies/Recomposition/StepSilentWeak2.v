@@ -38,9 +38,9 @@ Import TraceBracket(switch_val_color, switch_val_iscode, setm_self).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepSilentWeak.
 
-Module StepWeak2 (S: RecompositionContext).
+Module StepWeak2 (S: RecompositionContext) (P: PresT S).
 
-  Include StepWeak S.
+  Include StepWeak S P.
   Import PCCM.
 
   Lemma weak2_step1 : forall s2 s2', Step sem' s2 E0 s2' -> step_me (NC:=NC) s2 s2' None.

@@ -893,6 +893,6 @@ Module ChainMP (In : ChainMPInput).
     exact: Hor.
   Qed.
 
-  Print Assumptions RSC_DC_MD_CompilationChainMP.
+  (* Print Assumptions RSC_DC_MD_CompilationChainMP. *)
 
 End ChainMP.

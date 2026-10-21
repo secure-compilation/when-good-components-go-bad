@@ -577,7 +577,7 @@ have Hnc1 : encode_code cde pc0 (cellw NC Y 1) = None.
 have Hc3 : code_in cde pc0 m3.
 { apply: code_in_setm Hnc1. exact: code_in_setm Hncf. }
 have EG : nG L P C PI PB t Y (Apre Y) = (nPu L P C PI PB t Y (Apre Y)).+4.+2.
-{ rewrite /nG /=. lia. }
+{ rewrite /nG /=. by rewrite addnC. }
 have Hbg := blk_after_push Hsplit. rewrite EG in Hbg.
 have [_ Hbd] := blk_cons Hbg.
 have S3 := step_goto_blk NC Hbound Hcs (size (pend pre)).+1 Hc3 Hbg (blk_nxt Hbd erefl)
@@ -730,7 +730,7 @@ have Hc3 : code_in cde pc0 m3.
 { apply: code_in_setm (code_not_region HY (Hrg 1 H1b)).
   exact: code_in_setm (code_not_region HY (Hrg 2 H2b)). }
 have EG : nG L P C PI PB t Y (Apre Y) = (nPu L P C PI PB t Y (Apre Y)).+4.+2.
-{ rewrite /nG /=. lia. }
+{ rewrite /nG /=. by rewrite addnC. }
 have Hbg := blk_after_push Hsplit. rewrite EG in Hbg.
 have [_ Hbd] := blk_cons Hbg.
 have S3 := step_goto_blk NC Hbound Hcs (size (pend pre)).+1 Hc3 Hbg (blk_nxt Hbd erefl)
@@ -871,7 +871,7 @@ have Hcap : pcw (pc0 + ((nCk L P C PI PB t X (Apre X) k).+4
     rewrite /retpos.
     rewrite Hnth.
     rewrite Ez.
-    lia. }
+    by rewrite addn4. }
   exact: (f_equal (fun x => pcw (pc0 + x) : mword mt) Er). }
 have Hzone_m1 : forall w, ~~ zone X w -> m1 w = m w.
 { move=> w Hw. exact: setm_out _ _ HzX Hw. }

@@ -358,8 +358,6 @@ case: Hpc => cseg Hside Hseg Hle Hw.
     by lia.
 Qed.
 
-
-
 Lemma bloc_key_val (m : {fmap mword mt -> atom (mword mt) mem_tag})
     (c0 len n : nat) :
   1 + c0 < 2 ^ NC ->
@@ -465,8 +463,6 @@ case: ifP => [Hneg|Hneg].
   by congr Some.
 Qed.
 
-
-
 Lemma region_end_le (c0 : nat) :
   1 + c0 < 2 ^ NC ->
   (2 + c0) * 2 ^ (word_size mt - NC) <= 2 ^ word_size mt.
@@ -547,8 +543,6 @@ have Ekey : word.addw (maxaddr m c0) (word.as_word (ssrint.Posz (n + 1)))
   exact: (eq_trans (eq_trans Ek Emid) (esym Er)). }
 by rewrite Ekey.
 Qed.
-
-
 
 Lemma sim_alloc (amap : amap_t)
     (tmem : Transitional.Memory.t) (tregs : Transitional.Register.t)
@@ -938,10 +932,8 @@ split; last split; last split; last split; last split; last split;
   have Hclear : Symbolic.reg_clear_list regs2 tra2
     = Some [hseq tra2; trc; t0'; t2'; t3'; t5'; t6'; t7';
             t16'; Other; t18'; tra].
-  { rewrite /Symbolic.reg_clear_list.
-    cbv beta iota zeta delta [Symbolic.reg_clear_list_aux Symbolic.reg_list].
-    rewrite Hs1 Hs0 Hs2 Hs3 Hs5 Hs6 Hs7 Hs16 Hs17 Hs18 Hs19.
-    by []. }
+  { exact: (reg_clear_listE _ Hs1 Hs0 Hs2 Hs3 Hs5 Hs6 Hs7
+                            Hs16 Hs17 Hs18 Hs19). }
   move: Hd2 => /= Hd2.
   rewrite code_label_pos_alloc in Hd2.
   have Ecast : @swcast (imm_size mt) (word_size mt)

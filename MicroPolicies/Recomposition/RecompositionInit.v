@@ -40,11 +40,10 @@ Require Import MicroPolicies.Recomposition.BufferLayout.
 Require Import MicroPolicies.Recomposition.BufferShape.
 Require Import MicroPolicies.Recomposition.Definitions.
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
-Require Import MicroPolicies.Recomposition.StepEventReturn.
 
-Module RecInit (S: RecompositionContext) (A: AlignmentFacts S).
+Module RecInit (S: RecompositionContext) (A: AlignmentFacts S) (P: PresT S).
 
-  Include StepEventReturn S.
+  Include P.
 
   Lemma linearize_buf_tag: forall pb c b n vt,
     nth_error (linearize_buf pb c b) n = Some vt ->

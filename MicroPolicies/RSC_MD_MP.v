@@ -1154,6 +1154,6 @@ Module RSC_MP (K : MPCompilerSig) (X : RSC_MP_Input K).
     exact: Hor.
   Qed.
 
-  Print Assumptions RSC_DC_MD_MP.
+  (* Print Assumptions RSC_DC_MD_MP. *)
 
 End RSC_MP.

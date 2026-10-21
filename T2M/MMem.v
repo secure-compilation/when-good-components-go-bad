@@ -419,11 +419,13 @@ have Hbu : uniq (unzip1 (Maps.elementsm bmap)).
 { apply: sorted_uniq Hbsort; [exact: (@Ord.lt_trans _) | exact: (@Ord.ltxx _)]. }
 have HbuB1 : uniq (unzip1 B1).
 { move: Hbu. rewrite Eb /unzip1 map_cat cat_uniq => /and3P [H _ _].
-  exact: H. }have HinnerL1 : forall s : nat * seq (nat * (nat + seq value)),
+  exact: H. }
+have HinnerL1 : forall s : nat * seq (nat * (nat + seq value)),
     List.In s L1 ->
     exists bmx, pb s.1 = Some bmx /\ s.2 = Maps.elementsm bmx.
 { move=> s Hs. apply: olist_inner_sorted.
-  rewrite -/olist Eo. apply: List.in_or_app. by left. }have Hdecl1 : forall s a, List.In s L1 -> List.In a s.2 ->
+  rewrite -/olist Eo. apply: List.in_or_app. by left. }
+have Hdecl1 : forall s a, List.In s L1 -> List.In a s.2 ->
     exists bmx, pb s.1 = Some bmx
            /\ (bmx : {fmap Block.id -> nat + seq value}) a.1 = Some a.2.
 { move=> s a Hs Ha.
@@ -435,7 +437,8 @@ have Hdecl2 : forall a, List.In a B1 ->
     (bmap : {fmap Block.id -> nat + seq value}) a.1 = Some a.2.
 { move=> a Ha.
   apply/In_elementsm. rewrite -surjective_pairing Eb.
-  apply: List.in_or_app. by left. }have Hcount : bl_base pb c b
+  apply: List.in_or_app. by left. }
+have Hcount : bl_base pb c b
     = sumn [seq size (linearize_buf pb t.1 t.2) | t <- part1 ++ part2].
 { have Epart2 : part2 = [seq (c, y0) | y0 <- [seq a.1 | a <- B1]].
   { by rewrite /part2; elim: (B1) => //= a t ->. }
@@ -482,7 +485,7 @@ have Hdecl2 : forall a, List.In a B1 ->
           exfalso. case: HIn => [Emid | HIn2].
           - case: Emid => Exc _. by move: Hxc; rewrite Exc ltnn.
           - have Hgt := all_In Ha2 HIn2. move: Hgt => /= Hgt.
-            by move: Hxc Hgt; lia. }
+            by move: (ltn_trans Hxc Hgt); rewrite ltnn. }
         apply: (introT (pairs_flatten_mem _ _ _)).
         exists (x, Maps.elementsm bmx), (y, bfy).
         split=> //=.
@@ -497,12 +500,13 @@ have Hdecl2 : forall a, List.In a B1 ->
           exfalso. case: HIn => [Emid | HIn2].
           - case: Emid => Eyb _. by move: Hyb; rewrite Eyb ltnn.
           - have Hgt := all_In Hb2 HIn2. move: Hgt => /= Hgt.
-            by move: Hyb Hgt; lia. }
+            by move: (ltn_trans Hyb Hgt); rewrite ltnn. }
         rewrite Epart2. apply/mapP.
         exists y.
         -- apply: (introT (unzip1_mem_In _ _)).
            by exists (y, bfy).
-        -- by rewrite Exc. }rewrite Hcount map_cat sumn_cat.
+        -- by rewrite Exc. }
+rewrite Hcount map_cat sumn_cat.
 have Hsum2 : sumn [seq size (linearize_buf pb t.1 t.2) | t <- part2]
              = sumn [seq bsize a.2 | a <- B1].
 { rewrite /part2 -map_comp.
@@ -517,7 +521,7 @@ have Hsum1 : sumn [seq size (linearize_buf pb t.1 t.2) | t <- part1]
   have [bmx [Hbx Hax]] := Hdecl1 _ _ Hs Ha.
   exact: (size_linearize_buf Hbx Hax). }
 rewrite Hsum1 Hsum2.
-by lia.
+by rewrite addn0 addnC.
 Qed.
 
 End Keystone.

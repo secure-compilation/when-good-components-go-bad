@@ -38,9 +38,9 @@ Import TraceBracket(nsu_silent_extract, switch_val_color).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.RecompositionInit.
 
-Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S).
+Module RecPcColor (S: RecompositionContext) (A: AlignmentFacts S) (P: PresT S).
 
-  Module Init := RecInit S A.
+  Module Init := RecInit S A P.
   Include Init.
   Import PCCM.
 

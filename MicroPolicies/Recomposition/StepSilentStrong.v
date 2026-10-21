@@ -36,11 +36,9 @@ Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBra
 Import TraceBracket(jal_do_updates_result, jump_do_updates_result).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 
-Module StepStrong (S: RecompositionContext).
+Module StepStrong (S: RecompositionContext) (P: PresT S).
 
-  Module Defs := RecompositionDefinitions S.
-  Module Pres := Preservation S.
-  Include Pres.
+  Include P.
 
   Opaque andw shlw as_word word_of_nat.
   Opaque mask component_memory_prefix.

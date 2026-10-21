@@ -36,11 +36,17 @@ Require Import MicroPolicies.Recomposition.Definitions.
 Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBracket.
 Import TraceBracket(jal_do_updates_result, jump_do_updates_result).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
-Require Import MicroPolicies.Recomposition.StepSilentStrong.
 
-Module StepStrong2 (S: RecompositionContext).
+Module StepStrong2 (S: RecompositionContext) (P: PresT S).
 
-  Include StepStrong S.
+  Include P.
+
+  Ltac word_ac :=
+    match goal with
+    | |- (addw (addw ?a ?b) ?c) = _ =>
+        exact (eq_trans (esym (addwA a b c))
+                 (eq_trans (f_equal (addw a) (addwC b c)) (addwA a c b)))
+    end.
 
   Lemma side_right_in_ic : forall (m: @memory mt) w d c,
       color_in_memory m -> m w = Some d -> color (taga d) = c ->

@@ -64,7 +64,8 @@ have EF : forall k : nat * nat * nat,
 { move=> [[c0 b0] o0]. rewrite /F /=.
   rewrite encode_int_of_nat /=.
   congr word.as_word. congr ssrint.Posz. congr addn.
-  rewrite size_length. exact: (base_filterm pb c0 b0). }have EENC : forall x : value * mem_tag,
+  rewrite size_length. exact: (base_filterm pb c0 b0). }
+have EENC : forall x : value * mem_tag,
     ENC x = {| vala := me_encode_val pb x.1; taga := x.2 |}.
 { move=> [v tg]. rewrite /ENC /=.
   case: v => [z|ptr|] //=.

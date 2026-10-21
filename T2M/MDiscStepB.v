@@ -346,7 +346,8 @@ Proof.
       rewrite tget_set_eq /= Ec Esg.
       rewrite Esig size_rcons.
       have -> : (Z.of_nat (size (rev rest)).+1 - 1)%Z
-                = Z.of_nat (size (rev rest)) by lia.
+                = Z.of_nat (size (rev rest))
+        by rewrite Nat2Z.inj_succ Z.sub_1_r Z.pred_succ.
       by [].
     * move=> w0; rewrite Ew => -[<-]. by rewrite Eph'.
     * move=> w0 b0; rewrite Ew => -[<-].

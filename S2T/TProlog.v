@@ -150,8 +150,6 @@ Proof.
     exact: (TStack.tag_inv_alloc Halloc Hnoblk Htag).
 Qed.
 
-
-
 Lemma push_data_run C fb sp r cap a mem m rs pc pct L tl :
   TMacros.code_at_I cde C pc (push r ++ tl) ->
   tl <> [::] ->

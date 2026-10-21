@@ -36,11 +36,10 @@ Require MicroPolicies.Recomposition.TraceWF MicroPolicies.Recomposition.TraceBra
 Import TraceWF(ndsu_mem_noM, jal_head_tret, mem_unchanged_jal).
 Import TraceBracket(jal_do_updates_result, jump_do_updates_result, nsu_silent_extract, mkfmap_const_val, check_belong_color, store_transfer, load_transfer, load_guard, switch_val_color, switch_val_iscode, switch_val_entry, switch_val_vtag, setm_reg_nonret, ndsu_nil_updts, const_transfer, bnz_transfer, mov_transfer, binop_transfer, switch_val_snd, jump_transfer, jal_transfer, setm_self).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
-Require Import MicroPolicies.Recomposition.StepSilentStrong2.
 
-Module StepWeak (S: RecompositionContext).
+Module StepWeak (S: RecompositionContext) (P: PresT S).
 
-  Include StepStrong2 S.
+  Include P.
   Import PCCM.
 
   Lemma weak1_step2 : forall s1 s1', Step sem s1 E0 s1' -> step2 tt s1 E0 s1'.
@@ -343,8 +342,6 @@ Module StepWeak (S: RecompositionContext).
       + exact: Hpcc1.
       + exact: wpcc2.
   Qed.
-
-
 
   Lemma ndsu1_regs_domm : forall (st st' : state) (tk : tag_kind) (tag : tag_type lrc_tags tk) updt,
     next_state_do_update st tag updt = Some st' -> domm (regs st') = domm (regs st).

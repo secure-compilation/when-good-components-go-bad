@@ -336,8 +336,6 @@ Proof.
     + exact: Htag'.
 Qed.
 
-
-
 Lemma diagram_binop_eval a scrs C stk mem k v1 v2 arg ret rtag Sl tmem tregs
       pct pc fb prot temps plm rest cap op :
   val_inv a scrs C stk mem (Kbinop2 op v1 k) v2 arg ret rtag Sl tmem tregs pct
@@ -464,8 +462,6 @@ Proof.
       exact: HtagA.
 Qed.
 
-
-
 Lemma diagram_deref_eval a scrs C stk mem k arg ret rtag Sl tmem tregs pct pc fb
       prot temps plm rest cap bp op' v :
   val_inv a scrs C stk mem (Kderef k) (Ptr (C, bp, op')) arg ret rtag Sl tmem
@@ -560,8 +556,6 @@ Proof.
       * by [].
       * exact: TMatch.vi_tag HI.
 Qed.
-
-
 
 Lemma diagram_assign_eval a scrs C stk mem mem' k v arg ret rtag Sl tmem tregs
       pct pc fb prot temps plm rest cap bp op' :
@@ -747,8 +741,6 @@ Proof.
       exact: HtagB.
 Qed.
 
-
-
 Lemma diagram_if2 a scrs C stk mem k arg ret rtag Sl tmem tregs pct pc fb prot
       temps plm rest cap e2 e3 e i :
   val_inv a scrs C stk mem (Kif e2 e3 k) (Int i) arg ret rtag Sl tmem tregs pct
@@ -868,8 +860,6 @@ Proof.
       * exact: TMatch.vi_stack HI.
       * exact: TMatch.vi_tag HI.
 Qed.
-
-
 
 Lemma diagram_alloc_eval a scrs C stk mem mem' k arg ret rtag Sl tmem tregs pct
       pc fb prot temps plm rest cap size bs :
@@ -999,8 +989,6 @@ Proof.
       by case: (Hfresh (Pointer.offset q) w);
          rewrite -EC -EB -TStack.ptr_expand.
 Qed.
-
-
 
 Lemma diagram_return_int a scrs C stk mem k' v oldarg arg ret rtag Sl tmem
       tregs pct pc fb prot temps plm rest cap :
@@ -1161,8 +1149,6 @@ Proof.
         lia.
     + by move: Htag2; rewrite /TMatch.ledger_at Ets Etg.
 Qed.
-
-
 
 Lemma diagram_return_ext a scrs C Cf stk mem k'' i oldarg arg ret rtag Sl tmem
       tregs pct pc fb prot temps plm rest cap :
@@ -1591,8 +1577,6 @@ Proof.
     + exact: Hsm3.
     + by move: Htag3; rewrite /TMatch.ledger_at EtR2 Etag2.
 Qed.
-
-
 
 Lemma diagram_call_int a scrs C stk mem k P v arg ret rtag Sl tmem tregs pct pc
       fb prot temps plm rest cap P_expr :
@@ -2998,8 +2982,6 @@ Proof.
   eapply plus_trans with (t1 := E0) (t2 := E0); [exact: Pe | | by []].
   exact: Ph.
 Qed.
-
-
 
 Lemma expr_descend a scrs C stk mem k k' e e' arg ret Sl tmem tregs pct pc fb
       prot temps plm c c1 rest rest' s1 s2 sA sB cap :

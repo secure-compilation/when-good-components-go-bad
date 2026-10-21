@@ -39,11 +39,9 @@ Import TraceBracket(reg_index_neq).
 Require Import MicroPolicies.Recomposition.PreservationLemmas.
 Require Import MicroPolicies.Recomposition.StepEventCall.
 
+Module StepEventReturn (S: RecompositionContext) (P: PresT S).
 
-
-Module StepEventReturn (S: RecompositionContext).
-
-  Include StepEventCall S.
+  Include StepEventCall S P.
 
   Local Opaque pc_code_color.
 
@@ -289,8 +287,6 @@ Module StepEventReturn (S: RecompositionContext).
             by rewrite /word_of_nat. }
           rewrite Hpres3 //. by move=> Hwst; move/dommPn: Hwd; rewrite Hwst.
   Qed.
-
-
 
   Lemma combined_codes_mem_cong :
     forall (i : side) (s s' t t' : state),
